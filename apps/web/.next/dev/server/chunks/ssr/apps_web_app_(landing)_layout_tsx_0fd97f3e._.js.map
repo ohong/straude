@@ -1,6 +1,0 @@
-{
-  "version": 3,
-  "sources": [],
-  "sections": [
-    {"offset": {"line": 4, "column": 0}, "map": {"version":3,"sources":["file:///Users/ohong/dev/straude/apps/web/app/%28landing%29/layout.tsx"],"sourcesContent":["import type { Metadata } from \"next\";\n\nexport const metadata: Metadata = {\n  title: \"Straude — Strava for Claude Code\",\n  description:\n    \"Track your Claude Code usage, share your wins, and compete on the leaderboard. The social platform for AI-assisted coding.\",\n};\n\nexport default function LandingLayout({\n  children,\n}: {\n  children: React.ReactNode;\n}) {\n  return <>{children}</>;\n}\n"],"names":[],"mappings":";;;;;;;;AAEO,MAAM,WAAqB;IAChC,OAAO;IACP,aACE;AACJ;AAEe,SAAS,cAAc,EACpC,QAAQ,EAGT;IACC,qBAAO;kBAAG;;AACZ"}}]
-}

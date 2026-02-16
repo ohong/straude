@@ -8,39 +8,39 @@ vi.mock("node:child_process", () => ({
 import { execFileSync } from "node:child_process";
 const mockExecFileSync = vi.mocked(execFileSync);
 
+/** Build a valid ccusage v18 JSON string. */
 function validOutput() {
   return JSON.stringify({
-    type: "daily",
-    data: [
+    daily: [
       {
         date: "2025-06-01",
-        models: ["claude-sonnet-4-5-20250514"],
+        modelsUsed: ["claude-sonnet-4-5-20250514"],
         inputTokens: 1000,
         outputTokens: 500,
         cacheCreationTokens: 200,
         cacheReadTokens: 100,
         totalTokens: 1800,
-        costUSD: 0.05,
+        totalCost: 0.05,
       },
     ],
-    summary: {
-      totalInputTokens: 1000,
-      totalOutputTokens: 500,
-      totalCacheCreationTokens: 200,
-      totalCacheReadTokens: 100,
+    totals: {
+      inputTokens: 1000,
+      outputTokens: 500,
+      cacheCreationTokens: 200,
+      cacheReadTokens: 100,
       totalTokens: 1800,
-      totalCostUSD: 0.05,
+      totalCost: 0.05,
     },
   });
 }
 
 describe("parseCcusageOutput", () => {
-  it("parses valid ccusage JSON", () => {
+  it("parses valid ccusage v18 JSON and normalizes fields", () => {
     const result = parseCcusageOutput(validOutput());
-    expect(result.type).toBe("daily");
     expect(result.data).toHaveLength(1);
     expect(result.data[0]!.date).toBe("2025-06-01");
     expect(result.data[0]!.costUSD).toBe(0.05);
+    expect(result.data[0]!.models).toEqual(["claude-sonnet-4-5-20250514"]);
   });
 
   it("rejects non-JSON input", () => {
@@ -49,76 +49,88 @@ describe("parseCcusageOutput", () => {
     );
   });
 
-  it("rejects output with wrong type", () => {
-    const bad = JSON.stringify({ type: "monthly", data: [] });
+  it("rejects output without daily array", () => {
+    const bad = JSON.stringify({ something: "else" });
     expect(() => parseCcusageOutput(bad)).toThrow(
       "Unexpected ccusage output format",
     );
   });
 
-  it("rejects output without data array", () => {
-    const bad = JSON.stringify({ type: "daily", data: "not an array" });
+  it("rejects output where daily is not an array", () => {
+    const bad = JSON.stringify({ daily: "not an array", totals: {} });
     expect(() => parseCcusageOutput(bad)).toThrow(
       "Unexpected ccusage output format",
     );
+  });
+
+  it("returns empty data for empty array", () => {
+    const result = parseCcusageOutput("[]");
+    expect(result.data).toEqual([]);
   });
 
   it("rejects entry with missing date", () => {
     const bad = JSON.stringify({
-      type: "daily",
-      data: [{ costUSD: 1, totalTokens: 0, inputTokens: 0, outputTokens: 0 }],
-      summary: {},
+      daily: [
+        { totalCost: 1, modelsUsed: [], totalTokens: 0, inputTokens: 0, outputTokens: 0, cacheCreationTokens: 0, cacheReadTokens: 0 },
+      ],
+      totals: {},
     });
     expect(() => parseCcusageOutput(bad)).toThrow("Invalid entry");
   });
 
-  it("rejects entry with non-numeric costUSD", () => {
+  it("rejects entry with non-numeric cost", () => {
     const bad = JSON.stringify({
-      type: "daily",
-      data: [
+      daily: [
         {
           date: "2025-06-01",
-          costUSD: "not a number",
+          totalCost: "not a number",
+          modelsUsed: [],
           totalTokens: 0,
           inputTokens: 0,
           outputTokens: 0,
+          cacheCreationTokens: 0,
+          cacheReadTokens: 0,
         },
       ],
-      summary: {},
+      totals: {},
     });
     expect(() => parseCcusageOutput(bad)).toThrow("Invalid entry");
   });
 
   it("rejects entry with negative cost", () => {
     const bad = JSON.stringify({
-      type: "daily",
-      data: [
+      daily: [
         {
           date: "2025-06-01",
-          costUSD: -1,
+          totalCost: -1,
+          modelsUsed: [],
           totalTokens: 0,
           inputTokens: 0,
           outputTokens: 0,
+          cacheCreationTokens: 0,
+          cacheReadTokens: 0,
         },
       ],
-      summary: {},
+      totals: {},
     });
     expect(() => parseCcusageOutput(bad)).toThrow("Negative cost");
   });
 
   it("rejects entry with negative token counts", () => {
     const bad = JSON.stringify({
-      type: "daily",
-      data: [
+      daily: [
         {
           date: "2025-06-01",
-          costUSD: 1,
+          totalCost: 1,
+          modelsUsed: [],
           totalTokens: -1,
           inputTokens: 0,
           outputTokens: 0,
+          cacheCreationTokens: 0,
+          cacheReadTokens: 0,
         },
       ],
-      summary: {},
+      totals: {},
     });
     expect(() => parseCcusageOutput(bad)).toThrow("Negative token count");
   });

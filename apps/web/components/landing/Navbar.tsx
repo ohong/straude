@@ -20,8 +20,10 @@ export function Navbar() {
   return (
     <nav
       className={cn(
-        "fixed top-0 left-0 right-0 z-50 transition-colors duration-200",
-        scrolled ? "bg-white border-b border-[#E5E5E5]" : "bg-transparent"
+        "fixed top-0 left-0 right-0 z-50 transition-all duration-300",
+        scrolled
+          ? "bg-black/95 backdrop-blur-md border-b border-white/10"
+          : "bg-transparent"
       )}
     >
       <div className="mx-auto flex max-w-[1280px] items-center justify-between px-6 py-4 md:px-8">
@@ -33,20 +35,22 @@ export function Navbar() {
               clipPath: "polygon(20% 0%, 80% 0%, 100% 100%, 0% 100%)",
             }}
           />
-          <span className="text-lg font-semibold tracking-tight">STRAUDE</span>
+          <span className="text-lg font-semibold tracking-tight text-white">
+            STRAUDE
+          </span>
         </Link>
 
         {/* Desktop nav */}
         <div className="hidden items-center gap-4 md:flex">
           <Link
             href="/login"
-            className="text-sm font-medium text-foreground hover:text-accent"
+            className="text-sm font-medium text-white/80 hover:text-white transition-colors"
           >
             Log in
           </Link>
           <Link
             href="/signup"
-            className="rounded-lg bg-accent px-5 py-2.5 text-sm font-semibold text-white hover:opacity-90"
+            className="rounded-lg bg-accent px-5 py-2.5 text-sm font-semibold text-white hover:brightness-110 transition-all"
           >
             Get Started
           </Link>
@@ -54,7 +58,7 @@ export function Navbar() {
 
         {/* Mobile hamburger */}
         <button
-          className="md:hidden"
+          className="md:hidden text-white"
           onClick={() => setMobileOpen(!mobileOpen)}
           aria-label="Toggle menu"
         >
@@ -64,11 +68,11 @@ export function Navbar() {
 
       {/* Mobile menu */}
       {mobileOpen && (
-        <div className="border-t border-[#E5E5E5] bg-white px-6 pb-6 pt-4 md:hidden">
+        <div className="border-t border-white/10 bg-black/95 backdrop-blur-md px-6 pb-6 pt-4 md:hidden">
           <div className="flex flex-col gap-4">
             <Link
               href="/login"
-              className="text-base font-medium text-foreground"
+              className="text-base font-medium text-white/80"
               onClick={() => setMobileOpen(false)}
             >
               Log in

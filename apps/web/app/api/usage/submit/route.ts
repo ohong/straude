@@ -1,17 +1,10 @@
 import { NextResponse } from "next/server";
 import { createClient } from "@/lib/supabase/server";
-import { createClient as createServiceClient } from "@supabase/supabase-js";
 import { verifyCliToken } from "@/lib/api/cli-auth";
+import { getServiceClient } from "@/lib/supabase/service";
 import type { UsageSubmitRequest, UsageSubmitResponse, CcusageDailyEntry } from "@/types";
 
 const MAX_BACKFILL_DAYS = 7;
-
-function getServiceClient() {
-  return createServiceClient(
-    process.env.NEXT_PUBLIC_SUPABASE_URL!,
-    process.env.SUPABASE_SECRET_KEY!,
-  );
-}
 
 function isValidDate(dateStr: string): boolean {
   const match = dateStr.match(/^(\d{4})-(\d{2})-(\d{2})$/);

@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 import { randomBytes } from "node:crypto";
-import { createClient } from "@/lib/supabase/server";
+import { getServiceClient } from "@/lib/supabase/service";
 
 function generateCode(): string {
   const chars = "ABCDEFGHJKLMNPQRSTUVWXYZ23456789"; // no I/O/0/1 for readability
@@ -15,7 +15,7 @@ function generateCode(): string {
 }
 
 export async function POST() {
-  const supabase = await createClient();
+  const supabase = getServiceClient();
   const code = generateCode();
   const expiresAt = new Date(Date.now() + 10 * 60 * 1000).toISOString();
 

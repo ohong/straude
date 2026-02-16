@@ -33,8 +33,8 @@ function sleep(ms: number): Promise<void> {
   return new Promise((resolve) => setTimeout(resolve, ms));
 }
 
-export async function loginCommand(): Promise<void> {
-  const apiUrl = DEFAULT_API_URL;
+export async function loginCommand(apiUrlOverride?: string): Promise<void> {
+  const apiUrl = apiUrlOverride ?? DEFAULT_API_URL;
 
   console.log("Opening browser for authentication...");
 

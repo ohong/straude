@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import { useRouter } from "next/navigation";
 import { createClient } from "@/lib/supabase/client";
 import Link from "next/link";
 import type { User } from "@/types";
@@ -8,8 +9,10 @@ import { Input } from "@/components/ui/Input";
 import { Textarea } from "@/components/ui/Textarea";
 import { Button } from "@/components/ui/Button";
 import { Avatar } from "@/components/ui/Avatar";
+import { LogOut } from "lucide-react";
 
 export default function SettingsPage() {
+  const router = useRouter();
   const [profile, setProfile] = useState<User | null>(null);
   const [saving, setSaving] = useState(false);
   const [saved, setSaved] = useState(false);
@@ -214,6 +217,21 @@ export default function SettingsPage() {
         <Button type="submit" disabled={saving} className="w-full py-3">
           {saving ? "Saving..." : "Save Changes"}
         </Button>
+
+        <div className="border-t border-border pt-6">
+          <button
+            type="button"
+            onClick={async () => {
+              const supabase = createClient();
+              await supabase.auth.signOut();
+              router.push("/");
+            }}
+            className="flex items-center gap-2 text-sm text-muted hover:text-foreground"
+          >
+            <LogOut size={16} />
+            Log out
+          </button>
+        </div>
       </form>
     </>
   );

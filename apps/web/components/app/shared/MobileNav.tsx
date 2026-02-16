@@ -21,7 +21,8 @@ export function MobileNav({ username }: { username: string | null }) {
       style={{ paddingBottom: "env(safe-area-inset-bottom)" }}
     >
       {ITEMS.map(({ href, label, icon: Icon }) => {
-        const resolvedHref = label === "Profile" && username ? `/u/${username}` : href;
+        const resolvedHref =
+          label === "Profile" ? (username ? `/u/${username}` : "/settings") : href;
         const isActive =
           label === "Profile"
             ? pathname.startsWith("/u/")

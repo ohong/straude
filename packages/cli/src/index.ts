@@ -42,6 +42,8 @@ function parseArgs(args: string[]): { command: string; options: Record<string, s
       options.date = args[++i]!;
     } else if (arg === "--days" && i + 1 < args.length) {
       options.days = args[++i]!;
+    } else if (arg === "--api-url" && i + 1 < args.length) {
+      options.apiUrl = args[++i]!;
     } else if (arg === "--help" || arg === "-h") {
       options.help = true;
     } else if (arg === "--version" || arg === "-v") {
@@ -68,7 +70,7 @@ async function main(): Promise<void> {
 
   switch (command) {
     case "login":
-      await loginCommand();
+      await loginCommand(options.apiUrl as string | undefined);
       break;
     case "push":
       await pushCommand({

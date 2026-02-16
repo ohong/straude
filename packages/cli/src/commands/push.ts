@@ -1,7 +1,7 @@
 import { createHash } from "node:crypto";
 import { requireAuth } from "../lib/auth.js";
 import { apiRequest } from "../lib/api.js";
-import { runCcusage, runCcusageRaw } from "../lib/ccusage.js";
+import { runCcusageRaw, parseCcusageOutput } from "../lib/ccusage.js";
 import type { CcusageDailyEntry } from "../lib/ccusage.js";
 import { MAX_BACKFILL_DAYS } from "../config.js";
 
@@ -110,22 +110,20 @@ export async function pushCommand(options: PushOptions): Promise<void> {
     process.exit(1);
   }
 
-  // Parse the data
-  let parsed;
+  // Parse and normalize the data
+  let entries: CcusageDailyEntry[];
   try {
-    parsed = JSON.parse(rawJson);
-  } catch {
-    console.error("Failed to parse ccusage output.");
+    const output = parseCcusageOutput(rawJson);
+    entries = output.data;
+  } catch (err) {
+    console.error((err as Error).message);
     process.exit(1);
   }
 
-  const data = parsed as { data?: CcusageDailyEntry[] };
-  if (!data.data || data.data.length === 0) {
+  if (entries.length === 0) {
     console.log("No usage data found for the specified period.");
     return;
   }
-
-  const entries = data.data;
 
   // Print summary for each day
   for (const entry of entries) {

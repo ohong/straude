@@ -1,5 +1,6 @@
 import { execFileSync } from "node:child_process";
 
+/** Normalized entry used throughout the CLI and sent to the API. */
 export interface CcusageDailyEntry {
   date: string;
   models: string[];
@@ -11,17 +12,32 @@ export interface CcusageDailyEntry {
   costUSD: number;
 }
 
-export interface CcusageOutput {
-  type: "daily";
-  data: CcusageDailyEntry[];
-  summary: {
-    totalInputTokens: number;
-    totalOutputTokens: number;
-    totalCacheCreationTokens: number;
-    totalCacheReadTokens: number;
+/** Raw shape returned by ccusage v18+ (`ccusage daily --json`). */
+interface CcusageV18Entry {
+  date: string;
+  modelsUsed: string[];
+  inputTokens: number;
+  outputTokens: number;
+  cacheCreationTokens: number;
+  cacheReadTokens: number;
+  totalTokens: number;
+  totalCost: number;
+}
+
+interface CcusageV18Output {
+  daily: CcusageV18Entry[];
+  totals: {
+    inputTokens: number;
+    outputTokens: number;
+    cacheCreationTokens: number;
+    cacheReadTokens: number;
     totalTokens: number;
-    totalCostUSD: number;
+    totalCost: number;
   };
+}
+
+export interface CcusageOutput {
+  data: CcusageDailyEntry[];
 }
 
 /**
@@ -53,6 +69,20 @@ export function runCcusage(sinceDate: string, untilDate: string): CcusageOutput 
   return parseCcusageOutput(stdout);
 }
 
+/** Normalize a v18 entry into our canonical format. */
+function normalizeEntry(raw: CcusageV18Entry): CcusageDailyEntry {
+  return {
+    date: raw.date,
+    models: raw.modelsUsed,
+    inputTokens: raw.inputTokens,
+    outputTokens: raw.outputTokens,
+    cacheCreationTokens: raw.cacheCreationTokens,
+    cacheReadTokens: raw.cacheReadTokens,
+    totalTokens: raw.totalTokens,
+    costUSD: raw.totalCost,
+  };
+}
+
 export function parseCcusageOutput(raw: string): CcusageOutput {
   let parsed: unknown;
   try {
@@ -61,12 +91,19 @@ export function parseCcusageOutput(raw: string): CcusageOutput {
     throw new Error("Failed to parse ccusage output as JSON");
   }
 
-  const output = parsed as CcusageOutput;
-  if (output.type !== "daily" || !Array.isArray(output.data)) {
-    throw new Error("Unexpected ccusage output format");
+  // ccusage returns `[]` when there's no data for the period
+  if (Array.isArray(parsed) && (parsed as unknown[]).length === 0) {
+    return { data: [] };
   }
 
-  for (const entry of output.data) {
+  const v18 = parsed as CcusageV18Output;
+  if (!Array.isArray(v18.daily)) {
+    throw new Error("Unexpected ccusage output format (expected 'daily' array)");
+  }
+
+  const data = v18.daily.map(normalizeEntry);
+
+  for (const entry of data) {
     if (!entry.date || typeof entry.costUSD !== "number") {
       throw new Error(`Invalid entry in ccusage output for date: ${entry.date}`);
     }
@@ -78,7 +115,7 @@ export function parseCcusageOutput(raw: string): CcusageOutput {
     }
   }
 
-  return output;
+  return { data };
 }
 
 /**

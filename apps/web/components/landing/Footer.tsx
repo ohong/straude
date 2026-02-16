@@ -2,8 +2,8 @@ import Link from "next/link";
 
 export function Footer() {
   return (
-    <footer className="bg-white py-12">
-      <div className="mx-auto flex max-w-[1280px] flex-col items-center gap-6 px-6 md:flex-row md:justify-between md:px-8">
+    <footer className="bg-[#0A0A0A] py-16">
+      <div className="mx-auto flex max-w-[1280px] flex-col items-center gap-8 px-6 md:flex-row md:justify-between md:px-8">
         {/* Brand */}
         <div className="flex items-center gap-2">
           <div
@@ -12,29 +12,31 @@ export function Footer() {
               clipPath: "polygon(20% 0%, 80% 0%, 100% 100%, 0% 100%)",
             }}
           />
-          <span className="text-sm font-semibold tracking-tight">STRAUDE</span>
+          <span className="text-sm font-semibold tracking-tight text-white">
+            STRAUDE
+          </span>
         </div>
 
         {/* Links */}
-        <div className="flex items-center gap-6 text-sm text-muted">
-          <Link href="/privacy" className="hover:text-foreground">
+        <div className="flex items-center gap-6 text-sm text-white/40">
+          <Link href="/privacy" className="hover:text-white transition-colors">
             Privacy
           </Link>
-          <Link href="/terms" className="hover:text-foreground">
+          <Link href="/terms" className="hover:text-white transition-colors">
             Terms
           </Link>
           <a
             href="https://github.com/ohong/straude"
             target="_blank"
             rel="noopener noreferrer"
-            className="hover:text-foreground"
+            className="hover:text-white transition-colors"
           >
             GitHub
           </a>
         </div>
 
-        {/* Copyright + badge */}
-        <div className="flex flex-col items-center gap-1 text-xs text-muted md:items-end">
+        {/* Copyright */}
+        <div className="flex flex-col items-center gap-1 text-xs text-white/30 md:items-end">
           <span>Built with Claude Code</span>
           <span>&copy; 2026 Straude</span>
         </div>

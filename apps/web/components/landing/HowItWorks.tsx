@@ -1,53 +1,101 @@
-import { Terminal, Rss, TrendingUp } from "lucide-react";
+"use client";
+
+import { useEffect, useRef, useState } from "react";
+
+function useInView(threshold = 0.2) {
+  const ref = useRef<HTMLDivElement>(null);
+  const [inView, setInView] = useState(false);
+
+  useEffect(() => {
+    if (!ref.current) return;
+    const observer = new IntersectionObserver(
+      ([entry]) => {
+        if (entry.isIntersecting) setInView(true);
+      },
+      { threshold }
+    );
+    observer.observe(ref.current);
+    return () => observer.disconnect();
+  }, [threshold]);
+
+  return { ref, inView };
+}
 
 const steps = [
   {
-    icon: Terminal,
-    step: "01",
-    title: "Install & push",
+    step: "1",
+    title: "Push your usage",
     code: "npx straude@latest push",
-    description: "One command. No install needed.",
+    description:
+      "One command. No install. Scans your local Claude Code usage and posts it to your profile.",
   },
   {
-    icon: Rss,
-    step: "02",
+    step: "2",
     title: "Your post goes live",
     code: null,
-    description: "Usage stats are automatically shared with your followers.",
+    description:
+      "Usage stats, cost, models, and session count — automatically shared with your followers.",
   },
   {
-    icon: TrendingUp,
-    step: "03",
+    step: "3",
     title: "Climb the ranks",
     code: null,
-    description: "Track your streak, compete on the leaderboard, get kudos.",
+    description:
+      "Track your streak, compete on global and regional leaderboards, get kudos from the community.",
   },
 ];
 
 export function HowItWorks() {
-  return (
-    <section className="bg-black py-20 text-white md:py-28">
-      <div className="mx-auto max-w-[1280px] px-6 md:px-8">
-        <h2 className="mb-16 text-center text-[clamp(2rem,4vw,3rem)] font-semibold tracking-[-0.02em]">
-          How it works
-        </h2>
+  const { ref, inView } = useInView(0.15);
 
-        <div className="grid gap-12 md:grid-cols-3 md:gap-8">
-          {steps.map((s) => (
-            <div key={s.step} className="flex flex-col items-center text-center md:items-start md:text-left">
-              <div className="flex h-14 w-14 items-center justify-center rounded-2xl bg-white/10">
-                <s.icon size={28} className="text-accent" />
+  return (
+    <section className="bg-[#0A0A0A] py-24 text-white md:py-32 relative overflow-hidden">
+      {/* Subtle radial glow */}
+      <div
+        className="pointer-events-none absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-[600px] h-[600px]"
+        style={{
+          background:
+            "radial-gradient(ellipse at center, rgba(223,86,31,0.05) 0%, transparent 70%)",
+        }}
+      />
+
+      <div ref={ref} className="relative z-10 mx-auto max-w-[1280px] px-6 md:px-8">
+        <div className="flex flex-col items-center text-center mb-16">
+          <span className="font-[family-name:var(--font-mono)] text-xs tracking-[0.2em] uppercase text-accent mb-4">
+            How it works
+          </span>
+          <h2 className="text-[clamp(2rem,4vw,3.5rem)] font-bold tracking-[-0.03em]">
+            Three steps. Zero friction.
+          </h2>
+        </div>
+
+        <div className="grid gap-8 md:grid-cols-3">
+          {steps.map((s, i) => (
+            <div
+              key={s.step}
+              className={`flex flex-col rounded-2xl border border-white/10 bg-white/[0.03] p-8 transition-all duration-600 hover:border-accent/30 hover:bg-white/[0.05] ${
+                inView
+                  ? "opacity-100 translate-y-0"
+                  : "opacity-0 translate-y-8"
+              }`}
+              style={{ transitionDelay: `${i * 150}ms` }}
+            >
+              {/* Step number */}
+              <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-accent text-sm font-bold text-white">
+                {s.step}
               </div>
-              <span className="mt-6 font-mono text-xs tracking-widest text-accent">
-                STEP {s.step}
-              </span>
-              <h3 className="mt-2 text-xl font-semibold">{s.title}</h3>
+
+              <h3 className="mt-6 text-xl font-bold tracking-tight">
+                {s.title}
+              </h3>
+
               {s.code && (
-                <code className="mt-3 inline-block rounded-lg bg-white/10 px-4 py-2 font-mono text-sm text-white/90">
+                <code className="mt-4 inline-block self-start rounded-lg bg-white/10 px-4 py-2.5 font-[family-name:var(--font-mono)] text-sm text-white/80">
                   {s.code}
                 </code>
               )}
-              <p className="mt-3 text-base leading-relaxed text-white/60">
+
+              <p className="mt-4 text-base leading-relaxed text-white/50">
                 {s.description}
               </p>
             </div>

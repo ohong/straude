@@ -1,9 +1,10 @@
 "use client";
 
 import Link from "next/link";
-import { usePathname } from "next/navigation";
-import { Home, Trophy, User, Settings } from "lucide-react";
+import { usePathname, useRouter } from "next/navigation";
+import { Home, Trophy, User, Settings, LogOut } from "lucide-react";
 import { cn } from "@/lib/utils/cn";
+import { createClient } from "@/lib/supabase/client";
 
 const NAV_ITEMS = [
   { href: "/feed", label: "Feed", icon: Home },
@@ -14,6 +15,13 @@ const NAV_ITEMS = [
 
 export function Sidebar({ username }: { username: string | null }) {
   const pathname = usePathname();
+  const router = useRouter();
+
+  async function handleLogout() {
+    const supabase = createClient();
+    await supabase.auth.signOut();
+    router.push("/");
+  }
 
   return (
     <>
@@ -32,7 +40,8 @@ export function Sidebar({ username }: { username: string | null }) {
       <nav>
         <ul>
           {NAV_ITEMS.map(({ href, label, icon: Icon }) => {
-            const resolvedHref = label === "Profile" && username ? `/u/${username}` : href;
+            const resolvedHref =
+              label === "Profile" ? (username ? `/u/${username}` : "/settings") : href;
             const isActive =
               label === "Profile"
                 ? pathname.startsWith("/u/")
@@ -67,6 +76,13 @@ export function Sidebar({ username }: { username: string | null }) {
           0
         </p>
         <p className="mt-1 text-sm">Days streaked</p>
+        <button
+          onClick={handleLogout}
+          className="mt-6 flex items-center gap-2 text-sm text-muted hover:text-foreground"
+        >
+          <LogOut size={16} />
+          Log out
+        </button>
       </div>
     </>
   );
