@@ -1,0 +1,702 @@
+<html lang="en" vid="0"><head vid="1">
+    <meta charset="UTF-8" vid="2">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" vid="3">
+    <title vid="4">Straude | Social Coding Network</title>
+    <style vid="5">
+        :root {
+            
+            --color-bg: #FFFFFF;
+            --color-text: #000000;
+            --color-accent: #DF561F; 
+            --color-secondary-blue: #7BD0E8; 
+            --color-secondary-yellow: #FDFFA4; 
+            --color-border: #000000;
+            
+            
+            --border-width: 1px;
+            --spacing-unit: 1rem;
+            --font-main: 'Helvetica Neue', Helvetica, Arial, sans-serif;
+            --font-mono: 'SFMono-Regular', Consolas, 'Liberation Mono', Menlo, monospace;
+        }
+
+        * {
+            box-sizing: border-box;
+            margin: 0;
+            padding: 0;
+        }
+
+        body {
+            background-color: var(--color-bg);
+            color: var(--color-text);
+            font-family: var(--font-main);
+            line-height: 1.4;
+            -webkit-font-smoothing: antialiased;
+            overflow-x: hidden;
+            height: 100vh;
+            display: flex;
+            flex-direction: column;
+        }
+
+        
+        h1, h2, h3, h4 {
+            font-weight: 500;
+            letter-spacing: -0.02em;
+        }
+
+        .text-label {
+            font-size: 0.75rem;
+            text-transform: uppercase;
+            letter-spacing: 0.05em;
+            font-weight: 600;
+        }
+
+        .text-huge {
+            font-size: 2.5rem;
+            line-height: 1;
+            letter-spacing: -0.03em;
+        }
+
+        .text-body {
+            font-size: 1rem;
+            font-weight: 400;
+        }
+
+        .text-mono {
+            font-family: var(--font-mono);
+            font-size: 0.875rem;
+        }
+
+        
+        .app-container {
+            display: grid;
+            grid-template-columns: 240px 1fr 320px;
+            height: 100%;
+            width: 100%;
+            max-width: 1600px;
+            margin: 0 auto;
+            border-left: var(--border-width) solid var(--color-border);
+            border-right: var(--border-width) solid var(--color-border);
+        }
+
+        
+        .nav-sidebar {
+            border-right: var(--border-width) solid var(--color-border);
+            display: flex;
+            flex-direction: column;
+        }
+
+        .brand-header {
+            padding: var(--spacing-unit);
+            border-bottom: var(--border-width) solid var(--color-border);
+            height: 64px;
+            display: flex;
+            align-items: center;
+        }
+
+        .brand-header span {
+            font-size: 1.25rem;
+            font-weight: 600;
+        }
+
+        .nav-list {
+            list-style: none;
+        }
+
+        .nav-item {
+            border-bottom: var(--border-width) solid var(--color-border);
+        }
+
+        .nav-link {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            padding: var(--spacing-unit);
+            text-decoration: none;
+            color: var(--color-text);
+            font-size: 1.1rem;
+            transition: background 0.2s;
+        }
+
+        .nav-link:hover {
+            background-color: #f5f5f5;
+        }
+
+        .nav-link.active {
+            border-left: 4px solid var(--color-accent);
+            padding-left: calc(var(--spacing-unit) - 4px);
+        }
+
+        
+        .main-feed {
+            overflow-y: auto;
+            
+            scrollbar-width: none; 
+        }
+        .main-feed::-webkit-scrollbar { display: none; }
+
+        .feed-header {
+            padding: var(--spacing-unit);
+            border-bottom: var(--border-width) solid var(--color-border);
+            height: 64px;
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            background: var(--color-bg);
+            position: sticky;
+            top: 0;
+            z-index: 10;
+        }
+
+        .feed-filter {
+            display: flex;
+            gap: 1rem;
+        }
+
+        .filter-btn {
+            background: none;
+            border: 1px solid transparent;
+            font-size: 0.875rem;
+            cursor: pointer;
+            padding: 0.25rem 0.5rem;
+            border-radius: 4px;
+        }
+        
+        .filter-btn.active {
+            border-color: var(--color-border);
+        }
+
+        
+        .activity-card {
+            border-bottom: var(--border-width) solid var(--color-border);
+            padding: 1.5rem;
+            display: flex;
+            flex-direction: column;
+            gap: 1rem;
+        }
+
+        .activity-header {
+            display: flex;
+            align-items: center;
+            gap: 0.75rem;
+        }
+
+        .avatar-shape {
+            width: 40px;
+            height: 40px;
+            background: var(--color-text);
+            border-radius: 50%; 
+        }
+        
+        .avatar-shape.poly {
+            clip-path: polygon(20% 0%, 80% 0%, 100% 20%, 100% 80%, 80% 100%, 20% 100%, 0% 80%, 0% 20%);
+            border-radius: 0;
+        }
+
+        .user-meta {
+            display: flex;
+            flex-direction: column;
+        }
+
+        .user-name {
+            font-weight: 600;
+            font-size: 1rem;
+        }
+
+        .activity-time {
+            font-size: 0.75rem;
+            color: #666;
+        }
+
+        .activity-title {
+            font-size: 1.25rem;
+            font-weight: 500;
+        }
+
+        .code-block {
+            background: #f4f4f4;
+            padding: 1rem;
+            border-left: 2px solid var(--color-accent);
+            font-family: var(--font-mono);
+            font-size: 0.85rem;
+            color: #333;
+            margin-top: 0.5rem;
+            white-space: pre;
+            overflow-x: auto;
+        }
+
+        .stats-grid {
+            display: grid;
+            grid-template-columns: repeat(3, 1fr);
+            gap: 1rem;
+            margin-top: 0.5rem;
+        }
+
+        .stat-item .label {
+            font-size: 0.7rem;
+            text-transform: uppercase;
+            color: #666;
+            margin-bottom: 2px;
+        }
+
+        .stat-item .value {
+            font-size: 1.1rem;
+            font-weight: 500;
+        }
+
+        .activity-actions {
+            display: flex;
+            gap: 1.5rem;
+            margin-top: 0.5rem;
+            padding-top: 1rem;
+            border-top: 1px dashed #ddd;
+        }
+
+        .action-btn {
+            background: none;
+            border: none;
+            cursor: pointer;
+            font-size: 0.875rem;
+            font-weight: 600;
+            display: flex;
+            align-items: center;
+            gap: 0.5rem;
+        }
+
+        .action-btn:hover {
+            color: var(--color-accent);
+        }
+
+        
+        .widgets-sidebar {
+            border-left: var(--border-width) solid var(--color-border);
+            background: var(--color-bg);
+            display: flex;
+            flex-direction: column;
+        }
+
+        
+        .widget-card {
+            border-bottom: var(--border-width) solid var(--color-border);
+            padding: 1.5rem;
+            position: relative;
+            overflow: hidden;
+        }
+
+        .widget-card.highlight-yellow {
+            background-color: var(--color-secondary-yellow);
+        }
+
+        .widget-card.highlight-blue {
+            background-color: var(--color-secondary-blue);
+        }
+        
+        .widget-card.highlight-accent {
+            background-color: var(--color-accent);
+            color: white; 
+        }
+        
+        .widget-card.highlight-accent .widget-link,
+        .widget-card.highlight-accent .text-label {
+             color: white;
+             border-color: white;
+        }
+        
+        .widget-card.highlight-accent .geo-shape {
+            background-color: #000; 
+        }
+
+        .widget-header {
+            margin-bottom: 3rem;
+        }
+
+        .geo-shape {
+            width: 60px;
+            height: 60px;
+            background-color: var(--color-text);
+            position: absolute;
+            top: 1.5rem;
+            right: 1.5rem;
+        }
+
+        .geo-shape.circle-split {
+            border-radius: 50%;
+            background: linear-gradient(to bottom, transparent 48%, var(--color-bg) 48%, var(--color-bg) 52%, transparent 52%), var(--color-text);
+        }
+        
+        .geo-shape.polygon {
+             clip-path: polygon(50% 0%, 100% 38%, 82% 100%, 18% 100%, 0% 38%);
+        }
+
+        .widget-content h3 {
+            font-size: 1.5rem;
+            margin-bottom: 0.5rem;
+            max-width: 80%;
+        }
+        
+        .widget-content p {
+            font-size: 0.9rem;
+            opacity: 0.8;
+            margin-bottom: 1.5rem;
+        }
+
+        .widget-link {
+            display: inline-flex;
+            align-items: center;
+            justify-content: space-between;
+            width: 100%;
+            padding-top: 1rem;
+            border-top: 1px solid rgba(0,0,0,0.1);
+            font-size: 0.75rem;
+            text-transform: uppercase;
+            font-weight: 700;
+            text-decoration: none;
+            color: inherit;
+        }
+
+        .widget-link::after {
+            content: "→";
+            font-size: 1.2rem;
+            font-weight: 300;
+        }
+
+        
+        .icon {
+            width: 16px;
+            height: 16px;
+            display: inline-block;
+            background: currentColor;
+        }
+        
+        .icon-logo {
+            width: 24px;
+            height: 24px;
+            background: var(--color-accent);
+            margin-right: 0.75rem;
+            clip-path: polygon(20% 0%, 80% 0%, 100% 100%, 0% 100%);
+        }
+
+        
+        @media (max-width: 1024px) {
+            .app-container {
+                grid-template-columns: 80px 1fr 280px;
+            }
+            .brand-header span, .nav-link span {
+                display: none;
+            }
+            .nav-link {
+                justify-content: center;
+                padding: 1.5rem 0;
+            }
+            .nav-link.active {
+                border-left: none;
+                border-bottom: 4px solid var(--color-accent);
+                padding-left: 0;
+            }
+        }
+        
+        @media (max-width: 768px) {
+             .app-container {
+                grid-template-columns: 1fr;
+                border: none;
+            }
+            .nav-sidebar, .widgets-sidebar {
+                display: none;
+            }
+            .brand-header {
+                display: flex;
+                padding: 0 1rem;
+            }
+            
+            .mobile-nav {
+                display: flex;
+                position: fixed;
+                bottom: 0;
+                left: 0;
+                right: 0;
+                background: white;
+                border-top: 1px solid black;
+                height: 60px;
+                z-index: 100;
+                justify-content: space-around;
+                align-items: center;
+            }
+            
+            
+            .header-menu-btn {
+                display: block;
+            }
+        }
+        
+        @media (min-width: 769px) {
+            .mobile-nav { display: none; }
+            .header-menu-btn { display: none; }
+        }
+
+    </style>
+</head>
+<body vid="6">
+
+    <div class="app-container" vid="7">
+        
+        
+        <aside class="nav-sidebar" vid="8">
+            <div class="brand-header" vid="9">
+                <div class="icon-logo" vid="10"></div>
+                <span vid="11">STRAUDE</span>
+            </div>
+            
+            <ul class="nav-list" vid="12">
+                <li class="nav-item" vid="13">
+                    <a href="#" class="nav-link active" vid="14">
+                        <span vid="15">Dashboard</span>
+                        <span vid="16">→</span>
+                    </a>
+                </li>
+                <li class="nav-item" vid="17">
+                    <a href="#" class="nav-link" vid="18">
+                        <span vid="19">My Activities</span>
+                    </a>
+                </li>
+                <li class="nav-item" vid="20">
+                    <a href="#" class="nav-link" vid="21">
+                        <span vid="22">Clubs</span>
+                    </a>
+                </li>
+                <li class="nav-item" vid="23">
+                    <a href="#" class="nav-link" vid="24">
+                        <span vid="25">Challenges</span>
+                    </a>
+                </li>
+                <li class="nav-item" vid="26">
+                    <a href="#" class="nav-link" vid="27">
+                        <span vid="28">Settings</span>
+                    </a>
+                </li>
+            </ul>
+
+            <div style="margin-top: auto; padding: 1.5rem; border-top: 1px solid black;" vid="29">
+                <div class="text-label" style="margin-bottom: 0.5rem;" vid="30">Current Goal</div>
+                <div class="text-huge" vid="31">420</div>
+                <div class="text-body" style="font-size: 0.875rem; margin-top: 0.25rem;" vid="32">Lines optimized this week</div>
+            </div>
+        </aside>
+
+        
+        <main class="main-feed" vid="33">
+            <header class="feed-header" vid="34">
+                <h3 vid="35">Following</h3>
+                <div class="feed-filter" vid="36">
+                    <button class="filter-btn active" vid="37">All</button>
+                    <button class="filter-btn" vid="38">Refactors</button>
+                    <button class="filter-btn" vid="39">New Features</button>
+                </div>
+            </header>
+
+            
+            <article class="activity-card" vid="40">
+                <div class="activity-header" vid="41">
+                    <div class="avatar-shape poly" vid="42"></div>
+                    <div class="user-meta" vid="43">
+                        <span class="user-name" vid="44">Sarah Jenkins</span>
+                        <span class="activity-time" vid="45">2h ago • Claude 3.5 Sonnet</span>
+                    </div>
+                </div>
+                
+                <div class="activity-body" vid="46">
+                    <h2 class="activity-title" vid="47">Refactoring the Auth Middleware</h2>
+                    <div class="code-block" vid="48">
+// Before: 45 lines of callback hell
+// After: clean async/await implementation
+const validateSession = async (token) =&gt; {
+  const session = await db.sessions.findUnique({
+    where: { token },
+    include: { user: true }
+  });
+  return session?.isValid ?? false;
+};
+                    </div>
+                    
+                    <div class="stats-grid" vid="49">
+                        <div class="stat-item" vid="50">
+                            <div class="label" vid="51">Diff</div>
+                            <div class="value" style="color: var(--color-accent);" vid="52">-124 lines</div>
+                        </div>
+                        <div class="stat-item" vid="53">
+                            <div class="label" vid="54">Time Saved</div>
+                            <div class="value" vid="55">45ms</div>
+                        </div>
+                        <div class="stat-item" vid="56">
+                            <div class="label" vid="57">Complexity</div>
+                            <div class="value" vid="58">Low</div>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="activity-actions" vid="59">
+                    <button class="action-btn" vid="60">
+                        <span style="font-size: 1.2rem;" vid="61">⚡</span> Kudos (24)
+                    </button>
+                    <button class="action-btn" vid="62">
+                        <span style="font-size: 1.2rem;" vid="63">💬</span> Comment (3)
+                    </button>
+                    <button class="action-btn" style="margin-left: auto;" vid="64">
+                        Share →
+                    </button>
+                </div>
+            </article>
+
+            
+            <article class="activity-card" vid="65">
+                <div class="activity-header" vid="66">
+                    <div class="avatar-shape" style="background: var(--color-accent);" vid="67"></div>
+                    <div class="user-meta" vid="68">
+                        <span class="user-name" vid="69">Marcus Chen</span>
+                        <span class="activity-time" vid="70">4h ago • Claude 3 Haiku</span>
+                    </div>
+                </div>
+                
+                <div class="activity-body" vid="71">
+                    <h2 class="activity-title" vid="72">Quick hotfix for production</h2>
+                    <p style="margin-top: 0.5rem; font-size: 0.95rem;" vid="73">Caught a race condition in the payment webhook. Haiku helped me patch it in under 2 minutes.</p>
+                    
+                    <div class="stats-grid" vid="74">
+                        <div class="stat-item" vid="75">
+                            <div class="label" vid="76">Files</div>
+                            <div class="value" vid="77">2</div>
+                        </div>
+                        <div class="stat-item" vid="78">
+                            <div class="label" vid="79">Deploy Time</div>
+                            <div class="value" vid="80">3m 12s</div>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="activity-actions" vid="81">
+                    <button class="action-btn" vid="82">
+                        <span style="font-size: 1.2rem;" vid="83">⚡</span> Kudos (12)
+                    </button>
+                    <button class="action-btn" vid="84">
+                        <span style="font-size: 1.2rem;" vid="85">💬</span> Comment (0)
+                    </button>
+                    <button class="action-btn" style="margin-left: auto;" vid="86">
+                        Share →
+                    </button>
+                </div>
+            </article>
+
+            
+            <article class="activity-card" vid="87">
+                <div class="activity-header" vid="88">
+                    <div class="avatar-shape poly" style="background: var(--color-secondary-blue);" vid="89"></div>
+                    <div class="user-meta" vid="90">
+                        <span class="user-name" vid="91">Elena Rodriguez</span>
+                        <span class="activity-time" vid="92">6h ago • Claude 3.5 Sonnet</span>
+                    </div>
+                </div>
+                
+                <div class="activity-body" vid="93">
+                    <h2 class="activity-title" vid="94">Unit Test Generation Sprint</h2>
+                    <p style="margin-top: 0.5rem; font-size: 0.95rem;" vid="95">Generated comprehensive test suite for the legacy billing engine.</p>
+                    
+                    <div class="stats-grid" vid="96">
+                        <div class="stat-item" vid="97">
+                            <div class="label" vid="98">Tests Added</div>
+                            <div class="value" vid="99">+48</div>
+                        </div>
+                        <div class="stat-item" vid="100">
+                            <div class="label" vid="101">Coverage</div>
+                            <div class="value" vid="102">94%</div>
+                        </div>
+                         <div class="stat-item" vid="103">
+                            <div class="label" vid="104">Tokens</div>
+                            <div class="value" vid="105">12k</div>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="activity-actions" vid="106">
+                    <button class="action-btn" vid="107">
+                        <span style="font-size: 1.2rem;" vid="108">⚡</span> Kudos (56)
+                    </button>
+                    <button class="action-btn" vid="109">
+                        <span style="font-size: 1.2rem;" vid="110">💬</span> Comment (8)
+                    </button>
+                    <button class="action-btn" style="margin-left: auto;" vid="111">
+                        Share →
+                    </button>
+                </div>
+            </article>
+        </main>
+
+        
+        <aside class="widgets-sidebar" vid="112">
+            
+            
+            <div class="widget-card" vid="113">
+                <div class="text-label" style="margin-bottom: 0.5rem;" vid="114">Your Week</div>
+                <div class="geo-shape circle-split" style="width: 40px; height: 40px; top: 1.5rem; right: 1.5rem;" vid="115"></div>
+                <div class="widget-content" vid="116">
+                    <div class="text-huge" vid="117">8.5k</div>
+                    <p style="margin-bottom: 0;" vid="118">Tokens Generated</p>
+                    <div style="margin-top: 1rem; display: flex; gap: 0.5rem;" vid="119">
+                         <span style="font-size:0.75rem; background: #eee; padding: 2px 6px;" vid="120">Top 10%</span>
+                    </div>
+                </div>
+            </div>
+
+            
+            <div class="widget-card highlight-blue" vid="121">
+                <div class="text-label" vid="122">New Challenge</div>
+                <div class="geo-shape polygon" vid="123"></div>
+                <div class="widget-content" vid="124">
+                    <h3 style="margin-top: 1rem;" vid="125">The 10k LoC Refactor Month</h3>
+                    <p vid="126">Clean up your codebase with Claude.</p>
+                </div>
+                <a href="#" class="widget-link" vid="127">
+                    Join Challenge
+                </a>
+            </div>
+
+            
+            <div class="widget-card highlight-yellow" vid="128">
+                <div class="text-label" vid="129">Beta Feature</div>
+                <div class="geo-shape" style="border-radius: 50%;" vid="130"></div>
+                <div class="widget-content" vid="131">
+                    <h3 style="margin-top: 1rem;" vid="132">Automated PR Reviews</h3>
+                    <p vid="133">Let Claude review before you merge.</p>
+                </div>
+                <a href="#" class="widget-link" vid="134">
+                    Enable Now
+                </a>
+            </div>
+
+            
+            <div class="widget-card highlight-accent" vid="135">
+                <div class="text-label" style="color: rgba(255,255,255,0.8);" vid="136">Pro Membership</div>
+                <div class="geo-shape" style="background: black;" vid="137"></div>
+                <div class="widget-content" vid="138">
+                    <h3 style="margin-top: 1rem;" vid="139">Unlimited Context Window</h3>
+                    <p style="opacity: 0.9;" vid="140">Upgrade to Straude Pro.</p>
+                </div>
+                <a href="#" class="widget-link" style="border-top-color: rgba(255,255,255,0.3);" vid="141">
+                    Subscribe
+                </a>
+            </div>
+
+            <footer style="padding: 1.5rem; font-size: 0.75rem; color: #999;" vid="142">
+                © 2024 Straude Inc.<br vid="143">
+                Privacy • Terms • API
+            </footer>
+        </aside>
+
+    </div>
+
+    
+    <nav class="mobile-nav" vid="144">
+        <div style="font-weight: 700;" vid="145">Home</div>
+        <div vid="146">Stats</div>
+        <div vid="147">Profile</div>
+    </nav>
+
+
+</body></html>

@@ -1,0 +1,15 @@
+{
+  "/(app)/feed/page": "app/(app)/feed/page.js",
+  "/(app)/leaderboard/page": "app/(app)/leaderboard/page.js",
+  "/(auth)/callback/route": "app/(auth)/callback/route.js",
+  "/(auth)/login/page": "app/(auth)/login/page.js",
+  "/(auth)/signup/page": "app/(auth)/signup/page.js",
+  "/(landing)/page": "app/(landing)/page.js",
+  "/_not-found/page": "app/_not-found/page.js",
+  "/api/auth/cli/init/route": "app/api/auth/cli/init/route.js",
+  "/api/feed/route": "app/api/feed/route.js",
+  "/api/leaderboard/route": "app/api/leaderboard/route.js",
+  "/api/search/route": "app/api/search/route.js",
+  "/api/usage/submit/route": "app/api/usage/submit/route.js",
+  "/cli/verify/page": "app/cli/verify/page.js"
+}

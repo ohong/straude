@@ -1,0 +1,3 @@
+{
+  "/api/auth/cli/poll/route": "app/api/auth/cli/poll/route.js"
+}

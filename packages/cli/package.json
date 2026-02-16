@@ -1,0 +1,23 @@
+{
+  "name": "straude",
+  "version": "0.1.0",
+  "description": "CLI for pushing Claude Code usage stats to Straude",
+  "bin": {
+    "straude": "./dist/index.js"
+  },
+  "files": ["dist"],
+  "type": "module",
+  "engines": {
+    "node": ">=18"
+  },
+  "scripts": {
+    "build": "tsc",
+    "dev": "tsc --watch",
+    "test": "vitest run"
+  },
+  "devDependencies": {
+    "@types/node": "^20",
+    "typescript": "^5",
+    "vitest": "^4.0.18"
+  }
+}

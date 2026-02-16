@@ -1,36 +1,40 @@
-This is a [Next.js](https://nextjs.org) project bootstrapped with [`create-next-app`](https://nextjs.org/docs/app/api-reference/cli/create-next-app).
+# Straude
 
-## Getting Started
+**Strava for Claude Code.**
 
-First, run the development server:
+Track your Claude Code usage. Share your sessions. Climb the leaderboard.
+
+![Hero — peak performance](apps/web/public/images/hero.jpg)
+
+## Why?
+
+Running used to be solitary. Then Strava made it social. Vibe coding with Claude Code is the new solitary grind — people are [spending thousands](https://www.wsj.com/tech/ai/anthropic-claude-code-ai-7a46460e) building with AI, but there's no way to share the journey. Straude changes that.
+
+## How it works
+
+Push your stats with a single command — no install needed:
 
 ```bash
-npm run dev
-# or
-yarn dev
-# or
-pnpm dev
-# or
-bun dev
+npx straude@latest push
 ```
 
-Open [http://localhost:3000](http://localhost:3000) with your browser to see the result.
+The CLI reads your local [ccusage](https://github.com/ryoppippi/ccusage) data (cost, tokens, models, sessions), uploads it to Straude, and auto-creates a post on your feed. Login once with `npx straude@latest login`, then `push` daily. Use `npx straude@latest status` to check your streak and rank.
 
-You can start editing the page by modifying `app/page.tsx`. The page auto-updates as you edit the file.
+## Features
 
-This project uses [`next/font`](https://nextjs.org/docs/app/building-your-application/optimizing/fonts) to automatically optimize and load [Geist](https://vercel.com/font), a new font family for Vercel.
+- **Track** — Cost, tokens, models, and sessions in one place.
+- **Share** — Auto-posted sessions with optional screenshots and AI-generated captions.
+- **Compete** — Global and regional leaderboards (daily/weekly/monthly/all-time).
+- **Streak** — Code with Claude every day. Your streak is your badge of honor.
 
-## Learn More
+## Privacy
 
-To learn more about Next.js, take a look at the following resources:
+Go public and compete on the leaderboard, or stay private and share only with followers.
 
-- [Next.js Documentation](https://nextjs.org/docs) - learn about Next.js features and API.
-- [Learn Next.js](https://nextjs.org/learn) - an interactive Next.js tutorial.
+## Hackathon
 
-You can check out [the Next.js GitHub repository](https://github.com/vercel/next.js) - your feedback and contributions are welcome!
+Straude is an entry in [**Built with Opus 4.6: a Claude Code hackathon**](https://cerebralvalley.ai/e/claude-code-hackathon) under **Problem Statement One: Build a Tool That Should Exist**. The entire project was built by Claude Opus 4.6, with special help from the experimental *Agent Teams* feature.
 
-## Deploy on Vercel
+## Get started
 
-The easiest way to deploy your Next.js app is to use the [Vercel Platform](https://vercel.com/new?utm_medium=default-template&filter=next.js&utm_source=create-next-app&utm_campaign=create-next-app-readme) from the creators of Next.js.
-
-Check out our [Next.js deployment documentation](https://nextjs.org/docs/app/building-your-application/deploying) for more details.
+> [straude.com](https://straude.com)
