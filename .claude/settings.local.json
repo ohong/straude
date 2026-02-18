@@ -3,7 +3,13 @@
     "allow": [
       "Bash(bun run test:*)",
       "Bash(bun run build:*)",
-      "Bash(chmod:*)"
+      "Bash(chmod:*)",
+      "Bash(cat:*)",
+      "Bash(ls:*)",
+      "Bash(bun run:*)",
+      "Bash(bunx vitest run:*)",
+      "Bash(git add:*)",
+      "Bash(git commit:*)"
     ]
   }
 }
