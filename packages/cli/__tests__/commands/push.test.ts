@@ -2,6 +2,7 @@ import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
 
 vi.mock("../../src/lib/auth.js", () => ({
   requireAuth: vi.fn(),
+  updateLastPushDate: vi.fn(),
 }));
 
 vi.mock("../../src/lib/api.js", () => ({

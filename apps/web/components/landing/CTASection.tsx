@@ -39,16 +39,16 @@ export function CTASection() {
           className="text-[clamp(2rem,5vw,3.5rem)] font-bold leading-tight tracking-[-0.03em] text-white"
           style={{ textWrap: "balance" }}
         >
-          Ready to show the world what you&apos;re building?
+          Your move.
         </h2>
         <p className="mt-4 text-lg text-white/70 max-w-md">
-          Join hundreds of developers tracking their AI-assisted coding journey.
+          Join hundreds of developers who log every session.
         </p>
         <Link
           href="/signup"
           className="group mt-10 inline-flex items-center gap-2 rounded-lg bg-white px-8 py-4 text-base font-bold text-accent transition-all hover:shadow-lg hover:shadow-black/10 md:text-lg"
         >
-          Create Your Account
+          Start Your Streak
           <svg
             className="w-4 h-4 transition-transform group-hover:translate-x-0.5"
             fill="none"

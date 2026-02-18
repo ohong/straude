@@ -3,9 +3,11 @@
   "version": "0.1.0",
   "description": "CLI for pushing Claude Code usage stats to Straude",
   "bin": {
-    "straude": "./dist/index.js"
+    "straude": "dist/index.js"
   },
-  "files": ["dist"],
+  "files": [
+    "dist"
+  ],
   "type": "module",
   "engines": {
     "node": ">=18"

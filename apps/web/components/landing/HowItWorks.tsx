@@ -24,10 +24,10 @@ function useInView(threshold = 0.2) {
 const steps = [
   {
     step: "1",
-    title: "Push your usage",
-    code: "npx straude@latest push",
+    title: "Log your session",
+    code: "bunx straude",
     description:
-      "One command. No install. Scans your local Claude Code usage and posts it to your profile.",
+      "One command. No install required. Scans your local Claude Code usage and posts it to your profile.",
   },
   {
     step: "2",

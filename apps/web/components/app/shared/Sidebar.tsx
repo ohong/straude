@@ -1,20 +1,32 @@
 "use client";
 
 import Link from "next/link";
-import { usePathname, useRouter } from "next/navigation";
-import { Home, Trophy, User, Settings, LogOut } from "lucide-react";
-import { cn } from "@/lib/utils/cn";
+import { useRouter } from "next/navigation";
+import { LogOut, Flame } from "lucide-react";
+import { Avatar } from "@/components/ui/Avatar";
 import { createClient } from "@/lib/supabase/client";
 
-const NAV_ITEMS = [
-  { href: "/feed", label: "Feed", icon: Home },
-  { href: "/leaderboard", label: "Leaderboard", icon: Trophy },
-  { href: "/profile", label: "Profile", icon: User },
-  { href: "/settings", label: "Settings", icon: Settings },
-];
+interface SidebarProps {
+  username: string | null;
+  avatarUrl: string | null;
+  displayName: string | null;
+  followingCount: number;
+  followersCount: number;
+  postsCount: number;
+  streak: number;
+  latestPost: { title: string; date: string } | null;
+}
 
-export function Sidebar({ username }: { username: string | null }) {
-  const pathname = usePathname();
+export function Sidebar({
+  username,
+  avatarUrl,
+  displayName,
+  followingCount,
+  followersCount,
+  postsCount,
+  streak,
+  latestPost,
+}: SidebarProps) {
   const router = useRouter();
 
   async function handleLogout() {
@@ -23,67 +35,77 @@ export function Sidebar({ username }: { username: string | null }) {
     router.push("/");
   }
 
+  const profileHref = username ? `/u/${username}` : "/settings";
+
   return (
-    <>
-      {/* Brand */}
-      <div className="flex h-16 items-center border-b border-border px-4">
-        <Link href="/feed" className="inline-flex items-center gap-2 text-xl font-semibold tracking-tight">
-          <span
-            className="inline-block h-6 w-6 bg-accent"
-            style={{ clipPath: "polygon(20% 0%, 80% 0%, 100% 100%, 0% 100%)" }}
+    <div className="flex h-full flex-col">
+      {/* Profile header */}
+      <div className="border-b border-border p-6">
+        <Link href={profileHref} className="block">
+          <Avatar
+            src={avatarUrl}
+            alt={displayName ?? username ?? ""}
+            size="lg"
+            fallback={displayName ?? username ?? "?"}
           />
-          STRAUDE
+          {displayName && (
+            <p className="mt-3 text-base font-semibold">{displayName}</p>
+          )}
+          {username && (
+            <p className="text-sm text-muted">@{username}</p>
+          )}
         </Link>
       </div>
 
-      {/* Nav */}
-      <nav>
-        <ul>
-          {NAV_ITEMS.map(({ href, label, icon: Icon }) => {
-            const resolvedHref =
-              label === "Profile" ? (username ? `/u/${username}` : "/settings") : href;
-            const isActive =
-              label === "Profile"
-                ? pathname.startsWith("/u/")
-                : pathname.startsWith(href);
+      {/* Stats row */}
+      <div className="flex justify-between border-b border-border px-6 py-4">
+        <Link href={profileHref} className="flex flex-col items-center">
+          <span className="text-base font-semibold">{followingCount}</span>
+          <span className="text-[11px] uppercase tracking-wider text-muted">
+            Following
+          </span>
+        </Link>
+        <Link href={profileHref} className="flex flex-col items-center">
+          <span className="text-base font-semibold">{followersCount}</span>
+          <span className="text-[11px] uppercase tracking-wider text-muted">
+            Followers
+          </span>
+        </Link>
+        <Link href={profileHref} className="flex flex-col items-center">
+          <span className="text-base font-semibold">{postsCount}</span>
+          <span className="text-[11px] uppercase tracking-wider text-muted">
+            Activities
+          </span>
+        </Link>
+      </div>
 
-            return (
-              <li key={href} className="border-b border-border">
-                <Link
-                  href={resolvedHref}
-                  className={cn(
-                    "flex items-center justify-between px-4 py-4 text-[1.1rem] hover:bg-subtle",
-                    isActive && "border-l-4 border-l-accent pl-[calc(1rem-4px)]"
-                  )}
-                >
-                  <span className="flex items-center gap-3">
-                    <Icon size={20} />
-                    {label}
-                  </span>
-                </Link>
-              </li>
-            );
-          })}
-        </ul>
-      </nav>
+      {/* Streak */}
+      <div className="flex items-center gap-2 border-b border-border px-6 py-4 text-sm">
+        <Flame size={16} className={streak > 0 ? "text-accent" : undefined} />
+        {streak > 0 ? `${streak} day streak` : "No active streak"}
+      </div>
 
-      {/* Spacer + bottom stat */}
-      <div className="mt-auto border-t border-border p-6">
-        <p className="mb-1 text-xs font-semibold uppercase tracking-widest text-muted">
-          Current Goal
-        </p>
-        <p className="font-[family-name:var(--font-mono)] text-[2.5rem] leading-none tracking-tight" style={{ letterSpacing: "-0.03em" }}>
-          0
-        </p>
-        <p className="mt-1 text-sm">Days streaked</p>
+      {/* Latest Activity */}
+      {latestPost && (
+        <div className="border-b border-border px-6 py-4">
+          <p className="mb-1 text-xs font-semibold uppercase tracking-widest text-muted">
+            Latest Activity
+          </p>
+          <p className="truncate text-sm font-medium">{latestPost.title}</p>
+          <p className="text-xs text-muted">{latestPost.date}</p>
+        </div>
+      )}
+
+      {/* Spacer + Log out */}
+      <div className="mt-auto p-6">
         <button
           onClick={handleLogout}
-          className="mt-6 flex items-center gap-2 text-sm text-muted hover:text-foreground"
+          className="flex items-center gap-2 text-sm text-muted hover:text-foreground"
         >
           <LogOut size={16} />
           Log out
         </button>
       </div>
-    </>
+    </div>
   );
 }

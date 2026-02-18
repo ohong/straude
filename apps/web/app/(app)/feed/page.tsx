@@ -61,10 +61,6 @@ export default async function FeedPage() {
 
   return (
     <>
-      <header className="sticky top-0 z-10 flex h-16 items-center border-b border-border bg-background px-6">
-        <h3 className="text-lg font-medium">Following</h3>
-      </header>
-
       {posts.length > 0 ? (
         <FeedList initialPosts={posts} userId={user!.id} />
       ) : (

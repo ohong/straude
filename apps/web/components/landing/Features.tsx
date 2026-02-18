@@ -25,21 +25,21 @@ function useInView(threshold = 0.2) {
 const features = [
   {
     icon: Activity,
-    title: "Track your usage",
+    title: "Log your output",
     description:
-      "See exactly how much Claude Code you're using. Tokens, cost, models — all in one place.",
+      "Tokens, cost, models, sessions. Your complete training log for every day you ship.",
   },
   {
     icon: Share2,
-    title: "Share your wins",
+    title: "Share your sessions",
     description:
-      "Post your daily coding sessions. Add screenshots, write about what you built.",
+      "Post your daily output to the feed. Show what you shipped, not just what you spent.",
   },
   {
     icon: Trophy,
-    title: "Compete on the leaderboard",
+    title: "Chase the leaderboard",
     description:
-      "See how you stack up globally and regionally. Daily, weekly, monthly rankings.",
+      "Daily, weekly, monthly rankings. Global and regional. See where you stand.",
   },
 ];
 
@@ -50,12 +50,8 @@ export function Features() {
     <section className="bg-white py-24 md:py-32">
       <div ref={ref} className="mx-auto max-w-[1280px] px-6 md:px-8">
         <div className="flex flex-col items-center text-center mb-16">
-          <span className="font-[family-name:var(--font-mono)] text-xs tracking-[0.2em] uppercase text-accent mb-4">
-            Features
-          </span>
           <h2 className="text-[clamp(2rem,4vw,3.5rem)] font-bold tracking-[-0.03em] leading-tight">
-            Everything you need to{" "}
-            <span className="text-accent">flex your usage</span>
+            Built for the daily grind
           </h2>
         </div>
 

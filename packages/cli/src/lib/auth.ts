@@ -5,6 +5,7 @@ export interface StraudeConfig {
   token: string;
   username: string;
   api_url: string;
+  last_push_date?: string;
 }
 
 export function loadConfig(): StraudeConfig | null {
@@ -17,6 +18,7 @@ export function loadConfig(): StraudeConfig | null {
       token: parsed.token,
       username: parsed.username ?? "",
       api_url: parsed.api_url ?? DEFAULT_API_URL,
+      last_push_date: parsed.last_push_date ?? undefined,
     };
   } catch {
     return null;
@@ -28,6 +30,13 @@ export function saveConfig(config: StraudeConfig): void {
     mkdirSync(CONFIG_DIR, { recursive: true });
   }
   writeFileSync(CONFIG_FILE, JSON.stringify(config, null, 2) + "\n", "utf-8");
+}
+
+export function updateLastPushDate(date: string): void {
+  const config = loadConfig();
+  if (!config) return;
+  config.last_push_date = date;
+  saveConfig(config);
 }
 
 export function requireAuth(): StraudeConfig {

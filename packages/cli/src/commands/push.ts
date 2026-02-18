@@ -1,5 +1,6 @@
 import { createHash } from "node:crypto";
-import { requireAuth } from "../lib/auth.js";
+import { requireAuth, updateLastPushDate } from "../lib/auth.js";
+import type { StraudeConfig } from "../lib/auth.js";
 import { apiRequest } from "../lib/api.js";
 import { runCcusageRaw, parseCcusageOutput } from "../lib/ccusage.js";
 import type { CcusageDailyEntry } from "../lib/ccusage.js";
@@ -63,8 +64,8 @@ function formatCost(n: number): string {
   return `$${n.toFixed(2)}`;
 }
 
-export async function pushCommand(options: PushOptions): Promise<void> {
-  const config = requireAuth();
+export async function pushCommand(options: PushOptions, configOverride?: StraudeConfig): Promise<void> {
+  const config = configOverride ?? requireAuth();
   const today = new Date();
 
   let sinceDate: Date;
@@ -162,6 +163,13 @@ export async function pushCommand(options: PushOptions): Promise<void> {
     console.error(`\nFailed to submit: ${(err as Error).message}`);
     process.exit(1);
   }
+
+  // Track last pushed date for incremental sync
+  const latestDate = entries.reduce(
+    (latest, e) => (e.date > latest ? e.date : latest),
+    entries[0]!.date,
+  );
+  updateLastPushDate(latestDate);
 
   console.log("");
   for (const result of response.results) {

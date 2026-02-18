@@ -3,13 +3,15 @@
 import { loginCommand } from "./commands/login.js";
 import { pushCommand } from "./commands/push.js";
 import { statusCommand } from "./commands/status.js";
+import { syncCommand } from "./commands/sync.js";
 import { CLI_VERSION } from "./config.js";
 
 const HELP = `
 straude v${CLI_VERSION} — Push your Claude Code usage to Straude
 
 Usage:
-  straude <command> [options]
+  straude                Sync latest stats (login if needed)
+  straude <command>      Run a specific command
 
 Commands:
   login              Authenticate with Straude via browser
@@ -22,19 +24,16 @@ Push options:
   --dry-run          Preview without posting
 
 Examples:
-  straude login
-  straude push
-  straude push --date 2026-02-15
-  straude push --days 7
-  straude push --dry-run
+  npx straude@latest
+  straude push --days 3
   straude status
 `.trim();
 
-function parseArgs(args: string[]): { command: string; options: Record<string, string | boolean> } {
-  const command = args[0] ?? "help";
+function parseArgs(args: string[]): { command: string | null; options: Record<string, string | boolean> } {
   const options: Record<string, string | boolean> = {};
+  let command: string | null = null;
 
-  for (let i = 1; i < args.length; i++) {
+  for (let i = 0; i < args.length; i++) {
     const arg = args[i]!;
     if (arg === "--dry-run") {
       options.dryRun = true;
@@ -48,6 +47,8 @@ function parseArgs(args: string[]): { command: string; options: Record<string, s
       options.help = true;
     } else if (arg === "--version" || arg === "-v") {
       options.version = true;
+    } else if (!arg.startsWith("-") && !command) {
+      command = arg;
     }
   }
 
@@ -68,17 +69,35 @@ async function main(): Promise<void> {
     return;
   }
 
+  // No command → smart sync (login if needed, then push new stats)
+  if (!command) {
+    await syncCommand(options.apiUrl as string | undefined);
+    return;
+  }
+
   switch (command) {
     case "login":
       await loginCommand(options.apiUrl as string | undefined);
       break;
-    case "push":
-      await pushCommand({
-        date: options.date as string | undefined,
-        days: options.days ? parseInt(options.days as string, 10) : undefined,
-        dryRun: options.dryRun === true,
-      });
+    case "push": {
+      // Allow --api-url to override stored config for push
+      const apiUrl = options.apiUrl as string | undefined;
+      let pushConfig: import("./lib/auth.js").StraudeConfig | undefined;
+      if (apiUrl) {
+        const { loadConfig } = await import("./lib/auth.js");
+        const cfg = loadConfig();
+        if (cfg) pushConfig = { ...cfg, api_url: apiUrl };
+      }
+      await pushCommand(
+        {
+          date: options.date as string | undefined,
+          days: options.days ? parseInt(options.days as string, 10) : undefined,
+          dryRun: options.dryRun === true,
+        },
+        pushConfig,
+      );
       break;
+    }
     case "status":
       await statusCommand();
       break;

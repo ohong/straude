@@ -99,13 +99,11 @@ export function ActivityCard({ post }: { post: Post }) {
       </div>
 
       {/* Body */}
-      <div className="mt-4">
+      <Link href={`/post/${post.id}`} className="mt-4 block">
         {post.title && (
-          <Link href={`/post/${post.id}`}>
-            <h2 className="text-xl font-medium hover:underline" style={{ letterSpacing: "-0.02em" }}>
-              {post.title}
-            </h2>
-          </Link>
+          <h2 className="text-xl font-medium hover:underline" style={{ letterSpacing: "-0.02em" }}>
+            {post.title}
+          </h2>
         )}
         {post.description && (
           <div className="mt-2 text-[0.95rem] leading-relaxed [&_a]:text-accent [&_a]:underline [&_code]:bg-subtle [&_code]:px-1 [&_code]:py-0.5 [&_code]:font-[family-name:var(--font-mono)] [&_code]:text-sm [&_pre]:mt-2 [&_pre]:overflow-x-auto [&_pre]:border-l-2 [&_pre]:border-l-accent [&_pre]:bg-subtle [&_pre]:p-3 [&_pre]:font-[family-name:var(--font-mono)] [&_pre]:text-sm">
@@ -134,10 +132,10 @@ export function ActivityCard({ post }: { post: Post }) {
                 src={url}
                 alt=""
                 className={cn(
-                  "w-full object-cover",
+                  "w-full rounded object-cover",
+                  post.images.length === 1 ? "max-h-[500px]" : "max-h-[400px]",
                   post.images.length === 3 && i === 0 && "row-span-2"
                 )}
-                style={{ maxHeight: 300 }}
               />
             ))}
           </div>
@@ -153,20 +151,20 @@ export function ActivityCard({ post }: { post: Post }) {
               </p>
             </div>
             <div>
-              <p className="text-[0.7rem] uppercase tracking-widest text-muted">Tokens</p>
+              <p className="text-[0.7rem] uppercase tracking-widest text-muted">Input</p>
               <p className="font-[family-name:var(--font-mono)] text-[1.1rem] font-medium tabular-nums">
-                {formatTokens(Number(usage.total_tokens))}
+                {formatTokens(Number(usage.input_tokens))}
               </p>
             </div>
             <div>
-              <p className="text-[0.7rem] uppercase tracking-widest text-muted">Sessions</p>
+              <p className="text-[0.7rem] uppercase tracking-widest text-muted">Output</p>
               <p className="font-[family-name:var(--font-mono)] text-[1.1rem] font-medium tabular-nums">
-                {usage.session_count}
+                {formatTokens(Number(usage.output_tokens))}
               </p>
             </div>
           </div>
         )}
-      </div>
+      </Link>
 
       {/* Actions */}
       <div className="mt-4 flex gap-6 border-t border-dashed border-muted/30 pt-4">

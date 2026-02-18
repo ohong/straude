@@ -1,20 +1,33 @@
 "use client";
 
 import { useState, useRef } from "react";
-import { Pencil, X, Sparkles, Upload, Loader2 } from "lucide-react";
+import { useRouter } from "next/navigation";
+import { Pencil, X, Sparkles, Upload, Loader2, Trash2 } from "lucide-react";
 import { Button } from "@/components/ui/Button";
 import { Input } from "@/components/ui/Input";
 import { Textarea } from "@/components/ui/Textarea";
 import type { Post } from "@/types";
 
 export function PostEditor({ post }: { post: Post }) {
+  const router = useRouter();
   const [editing, setEditing] = useState(false);
   const [title, setTitle] = useState(post.title ?? "");
   const [description, setDescription] = useState(post.description ?? "");
   const [images, setImages] = useState<string[]>(post.images ?? []);
   const [saving, setSaving] = useState(false);
   const [generating, setGenerating] = useState(false);
+  const [deleting, setDeleting] = useState(false);
   const fileRef = useRef<HTMLInputElement>(null);
+
+  async function handleDelete() {
+    if (!confirm("Delete this post? This cannot be undone.")) return;
+    setDeleting(true);
+    const res = await fetch(`/api/posts/${post.id}`, { method: "DELETE" });
+    if (res.ok) {
+      router.push("/feed");
+    }
+    setDeleting(false);
+  }
 
   async function handleSave() {
     setSaving(true);
@@ -88,10 +101,14 @@ export function PostEditor({ post }: { post: Post }) {
 
   if (!editing) {
     return (
-      <div className="flex justify-end px-6 py-3 border-b border-dashed border-muted/30">
+      <div className="flex justify-end gap-2 px-6 py-3 border-b border-dashed border-muted/30">
         <Button variant="ghost" size="sm" onClick={() => setEditing(true)}>
           <Pencil size={14} className="mr-1.5" />
           Edit post
+        </Button>
+        <Button variant="ghost" size="sm" onClick={handleDelete} disabled={deleting}>
+          <Trash2 size={14} className="mr-1.5" />
+          {deleting ? "Deleting..." : "Delete"}
         </Button>
       </div>
     );

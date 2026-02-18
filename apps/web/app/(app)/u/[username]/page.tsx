@@ -1,11 +1,17 @@
 import { createClient } from "@/lib/supabase/server";
 import { notFound } from "next/navigation";
 import Link from "next/link";
-import { MapPin, LinkIcon, Github, Flame } from "lucide-react";
+import { MapPin, LinkIcon, Github, Flame, Zap } from "lucide-react";
 import { ContributionGraph } from "@/components/app/profile/ContributionGraph";
 import { FeedList } from "@/components/app/feed/FeedList";
 import { FollowButton } from "@/components/app/profile/FollowButton";
 import type { Metadata } from "next";
+
+function formatTokens(n: number): string {
+  if (n >= 1_000_000) return `${(n / 1_000_000).toFixed(1)}M`;
+  if (n >= 1_000) return `${(n / 1_000).toFixed(1)}k`;
+  return String(n);
+}
 
 export async function generateMetadata({
   params,
@@ -70,12 +76,13 @@ export default async function ProfilePage({
     p_user_id: profile.id,
   });
 
-  // Total spend
+  // Total spend + lifetime output tokens
   const { data: totalSpendRows } = await supabase
     .from("daily_usage")
-    .select("cost_usd")
+    .select("cost_usd, output_tokens")
     .eq("user_id", profile.id);
   const totalSpend = totalSpendRows?.reduce((s, r) => s + Number(r.cost_usd), 0) ?? 0;
+  const lifetimeOutputTokens = totalSpendRows?.reduce((s, r) => s + Number(r.output_tokens), 0) ?? 0;
 
   // Contribution data (last 52 weeks)
   const endDate = new Date();
@@ -230,12 +237,19 @@ export default async function ProfilePage({
         </div>
 
         {/* Stats row */}
-        <div className="mt-6 grid grid-cols-2 gap-4 sm:grid-cols-4">
+        <div className="mt-6 grid grid-cols-3 gap-4 sm:grid-cols-4">
           <div>
             <p className="text-[0.7rem] uppercase tracking-widest text-muted">Streak</p>
             <p className="inline-flex items-center gap-1 font-[family-name:var(--font-mono)] text-lg font-medium tabular-nums">
               <Flame size={16} className="text-accent" />
               {streak ?? 0} days
+            </p>
+          </div>
+          <div>
+            <p className="text-[0.7rem] uppercase tracking-widest text-muted">Output Tokens</p>
+            <p className="inline-flex items-center gap-1 font-[family-name:var(--font-mono)] text-lg font-medium tabular-nums">
+              <Zap size={16} className="text-accent" />
+              {formatTokens(lifetimeOutputTokens)}
             </p>
           </div>
           <div>

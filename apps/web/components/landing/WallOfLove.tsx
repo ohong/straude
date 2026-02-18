@@ -99,11 +99,8 @@ export function WallOfLove({ posts }: { posts: WallOfLovePost[] }) {
     <section className="bg-white py-24 md:py-32">
       <div ref={ref} className="mx-auto max-w-[1280px] px-6 md:px-8">
         <div className="flex flex-col items-center text-center mb-14">
-          <span className="font-[family-name:var(--font-mono)] text-xs tracking-[0.2em] uppercase text-accent mb-4">
-            Social proof
-          </span>
           <h2 className="text-[clamp(2rem,4vw,3.5rem)] font-bold tracking-[-0.03em]">
-            Everyone is Claudemaxxing
+            Everybody is Claudemaxxing. Are you?
           </h2>
         </div>
 
