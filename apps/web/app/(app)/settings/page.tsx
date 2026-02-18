@@ -217,17 +217,24 @@ export default function SettingsPage() {
           />
         </div>
 
-        <div className="flex items-center gap-3">
-          <input
-            type="checkbox"
-            checked={isPublic}
-            onChange={(e) => setIsPublic(e.target.checked)}
-            id="is_public"
-            className="accent-accent"
-          />
-          <label htmlFor="is_public" className="text-sm">
-            Public profile (visible on leaderboard)
-          </label>
+        <div className="space-y-1.5">
+          <div className="flex items-center gap-3">
+            <input
+              type="checkbox"
+              checked={isPublic}
+              onChange={(e) => setIsPublic(e.target.checked)}
+              id="is_public"
+              className="accent-accent"
+            />
+            <label htmlFor="is_public" className="text-sm font-medium">
+              Public profile
+            </label>
+          </div>
+          <p className="pl-7 text-xs text-muted">
+            {isPublic
+              ? "Your profile, posts, and stats are visible to everyone. You appear on the leaderboard."
+              : "Your profile and activity are only visible to your followers. You will not appear on the leaderboard."}
+          </p>
         </div>
 
         {error && <p className="text-sm text-error">{error}</p>}

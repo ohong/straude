@@ -6,7 +6,6 @@ import { useState, useEffect, useRef, useCallback } from "react";
 import {
   Bell,
   Plus,
-  Upload,
   User,
   Settings,
   LogOut,
@@ -69,11 +68,9 @@ export function TopHeader({ username, avatarUrl }: TopHeaderProps) {
   const pathname = usePathname();
   const router = useRouter();
 
-  const [plusOpen, setPlusOpen] = useState(false);
   const [profileOpen, setProfileOpen] = useState(false);
   const [notifOpen, setNotifOpen] = useState(false);
 
-  const plusRef = useRef<HTMLDivElement>(null);
   const profileRef = useRef<HTMLDivElement>(null);
   const notifRef = useRef<HTMLDivElement>(null);
 
@@ -84,8 +81,6 @@ export function TopHeader({ username, avatarUrl }: TopHeaderProps) {
   useEffect(() => {
     function handleClick(e: MouseEvent) {
       const target = e.target as Node;
-      if (plusOpen && plusRef.current && !plusRef.current.contains(target))
-        setPlusOpen(false);
       if (
         profileOpen &&
         profileRef.current &&
@@ -97,7 +92,7 @@ export function TopHeader({ username, avatarUrl }: TopHeaderProps) {
     }
     document.addEventListener("click", handleClick);
     return () => document.removeEventListener("click", handleClick);
-  }, [plusOpen, profileOpen, notifOpen]);
+  }, [profileOpen, notifOpen]);
 
   // Fetch notifications when bell dropdown opens
   const fetchNotifications = useCallback(async () => {
@@ -288,31 +283,14 @@ export function TopHeader({ username, avatarUrl }: TopHeaderProps) {
             )}
           </div>
 
-          {/* Plus menu */}
-          <div ref={plusRef} className="relative">
-            <button
-              type="button"
-              onClick={() => setPlusOpen((v) => !v)}
-              className="rounded p-1.5 text-muted hover:bg-subtle hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent focus-visible:ring-offset-2"
-              aria-label="Create new"
-              aria-expanded={plusOpen}
-            >
-              <Plus size={20} aria-hidden="true" />
-            </button>
-
-            {plusOpen && (
-              <div className="absolute right-0 top-full mt-1 w-48 rounded border border-border bg-background shadow-lg">
-                <Link
-                  href="/post/new"
-                  className="flex items-center gap-3 px-4 py-2.5 text-sm hover:bg-subtle"
-                  onClick={() => setPlusOpen(false)}
-                >
-                  <Upload size={16} aria-hidden="true" />
-                  Upload Activity
-                </Link>
-              </div>
-            )}
-          </div>
+          {/* Create post */}
+          <Link
+            href="/post/new"
+            className="rounded p-1.5 text-muted hover:bg-subtle hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent focus-visible:ring-offset-2"
+            aria-label="Create post"
+          >
+            <Plus size={20} aria-hidden="true" />
+          </Link>
         </div>
       </div>
     </header>

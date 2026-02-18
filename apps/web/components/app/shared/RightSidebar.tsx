@@ -21,13 +21,31 @@ export async function RightSidebar({ userId }: { userId: string }) {
   const followingIds = following?.map((f) => f.following_id) ?? [];
   const excludeIds = [userId, ...followingIds];
 
-  const { data: suggested } = await supabase
-    .from("users")
-    .select("id, username, avatar_url, bio")
-    .eq("is_public", true)
-    .not("username", "is", null)
-    .not("id", "in", `(${excludeIds.join(",")})`)
-    .limit(5);
+  // Always pin the site owner as the first suggestion (if not already followed/self)
+  const PINNED_USERNAME = "ohong";
+  const [{ data: pinnedUser }, { data: otherSuggested }] = await Promise.all([
+    supabase
+      .from("users")
+      .select("id, username, avatar_url, bio")
+      .eq("username", PINNED_USERNAME)
+      .eq("is_public", true)
+      .maybeSingle(),
+    supabase
+      .from("users")
+      .select("id, username, avatar_url, bio")
+      .eq("is_public", true)
+      .not("username", "is", null)
+      .not("username", "eq", PINNED_USERNAME)
+      .not("id", "in", `(${excludeIds.join(",")})`)
+      .limit(4),
+  ]);
+
+  const isPinnedExcluded =
+    !pinnedUser || excludeIds.includes(pinnedUser.id);
+  const suggested = [
+    ...(isPinnedExcluded ? [] : [pinnedUser]),
+    ...(otherSuggested ?? []).filter((u) => !excludeIds.includes(u.id)),
+  ].slice(0, 5);
 
   return (
     <div className="flex flex-col">

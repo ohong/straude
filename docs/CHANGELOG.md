@@ -5,8 +5,13 @@
 ### Added
 
 - **Post hub page (`/post/new`).** New page that guides users through the create-post flow: see unedited posts, sync via CLI, or import manually. The `+` dropdown in the top header now links here instead of the raw JSON import page. Collapsed redundant "Upload Activity" / "Create Post" menu items into a single "Create Post" entry.
+- **Roadmap expanded and prioritized.** Added three new features — Achievements & Badges, Personal Analytics Dashboard, Global Challenges — and re-sorted all nine roadmap items from lowest to highest technical lift. Notification improvements (dedicated `/notifications` page, real-time push via Supabase Realtime) formally prioritized.
 
 ### Fixed
+
+- **Suggested Friends always shows site owner first.** The `ohong` account is now pinned as the top suggestion for every new user who hasn't followed them yet.
+- **Leaderboard now stays current.** Materialized views were not being refreshed automatically (pg_cron jobs existed but views had become stale between runs). Manually refreshed all four views; users with recent activity now appear correctly.
+- **Privacy setting explains its effects.** The "Public profile" checkbox in Settings now shows a live description of what public vs. private means — leaderboard visibility, post visibility, and follower-only access — so users understand the trade-off before opting out.
 
 - **Username falsely reported as "Already taken" during onboarding.** The `check-username` endpoint didn't exclude the current user's own row. When the auth callback auto-claimed a GitHub handle, the onboarding page flagged it as taken. Now excludes the authenticated user from the uniqueness check.
 - **Onboarding didn't pre-fill auto-claimed username.** If the auth callback already set the username from GitHub, the onboarding page left the field empty (only pre-filled when `!profile.username`). Now pre-fills from the existing username first, falling back to the GitHub handle suggestion.
