@@ -14,34 +14,45 @@ export async function GET(request: NextRequest) {
   const { searchParams } = request.nextUrl;
   const cursor = searchParams.get("cursor");
   const limit = Math.min(Number(searchParams.get("limit") ?? 20), 50);
+  const type = searchParams.get("type") ?? "global";
 
-  // Get IDs of users the current user follows
-  const { data: followData } = await supabase
-    .from("follows")
-    .select("following_id")
-    .eq("follower_id", user.id);
+  const baseFields = `
+    daily_usage:daily_usage!posts_daily_usage_id_fkey(*),
+    kudos_count:kudos(count),
+    comment_count:comments(count)
+  `;
 
-  const followingIds = (followData ?? []).map((f) => f.following_id);
+  let query;
 
-  if (followingIds.length === 0) {
-    return NextResponse.json({ posts: [], next_cursor: undefined });
+  if (type === "global") {
+    // Use !inner join to filter posts where the user is public
+    query = supabase
+      .from("posts")
+      .select(`*, user:users!posts_user_id_fkey!inner(*), ${baseFields}`)
+      .eq("user.is_public", true)
+      .order("created_at", { ascending: false })
+      .limit(limit);
+  } else {
+    query = supabase
+      .from("posts")
+      .select(`*, user:users!posts_user_id_fkey(*), ${baseFields}`)
+      .order("created_at", { ascending: false })
+      .limit(limit);
+
+    if (type === "mine") {
+      query = query.eq("user_id", user.id);
+    } else {
+      // following: own posts + posts from followed users
+      const { data: followData } = await supabase
+        .from("follows")
+        .select("following_id")
+        .eq("follower_id", user.id);
+
+      const followingIds = (followData ?? []).map((f) => f.following_id);
+      const feedUserIds = [user.id, ...followingIds];
+      query = query.in("user_id", feedUserIds);
+    }
   }
-
-  // Get posts from followed users
-  let query = supabase
-    .from("posts")
-    .select(
-      `
-      *,
-      user:users!posts_user_id_fkey(*),
-      daily_usage:daily_usage!posts_daily_usage_id_fkey(*),
-      kudos_count:kudos(count),
-      comment_count:comments(count)
-    `
-    )
-    .in("user_id", followingIds)
-    .order("created_at", { ascending: false })
-    .limit(limit);
 
   if (cursor) {
     query = query.lt("created_at", cursor);

@@ -4,6 +4,7 @@
 
 ### Added
 
+- **Feed tabs: Global / Following / My Sessions.** The feed now defaults to a global view showing all public users' posts, so new users see activity immediately. A tab selector at the top lets users switch between Global, Following (previous default), and My Sessions. Tabs switch client-side for speed; URL updates to `?tab=` for shareability.
 - **Post hub page (`/post/new`).** New page that guides users through the create-post flow: see unedited posts, sync via CLI, or import manually. The `+` dropdown in the top header now links here instead of the raw JSON import page. Collapsed redundant "Upload Activity" / "Create Post" menu items into a single "Create Post" entry.
 - **Roadmap expanded and prioritized.** Added three new features — Achievements & Badges, Personal Analytics Dashboard, Global Challenges — and re-sorted all nine roadmap items from lowest to highest technical lift. Notification improvements (dedicated `/notifications` page, real-time push via Supabase Realtime) formally prioritized.
 

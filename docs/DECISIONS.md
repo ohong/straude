@@ -1,5 +1,15 @@
 # Architecture & Design Decisions
 
+## Feed Tabs — Client-Side Switching (2026-02-18)
+
+**Decision:** Tab switching fetches data client-side via `/api/feed?type=X` and uses `router.replace` to update the URL, rather than triggering a full server-side page reload.
+
+**Alternatives considered:**
+1. **Server-side only (router.push with `?tab=`)** — simpler, but causes a full page reload on every tab switch, making the UX feel sluggish.
+2. **Client-side fetch + router.replace** (chosen) — instant tab switch with no page reload. URL still updates for shareability. SSR provides the correct initial data on direct navigation.
+
+**Global as default:** New users previously saw an empty feed with a "find users to follow" prompt — a poor first experience. The global feed (all public users' posts) is now the default, ensuring every user sees content immediately.
+
 ## Security Headers in next.config.ts (2026-02-18)
 
 **Decision:** Added `X-Content-Type-Options`, `X-Frame-Options`, `Strict-Transport-Security`, `Referrer-Policy`, and `Permissions-Policy` headers to all routes via `next.config.ts`.

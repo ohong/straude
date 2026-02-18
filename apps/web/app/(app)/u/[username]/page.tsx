@@ -277,7 +277,7 @@ export default async function ProfilePage({
           </p>
         </div>
         {normalizedPosts.length > 0 ? (
-          <FeedList initialPosts={normalizedPosts} userId={authUser?.id ?? ""} />
+          <FeedList initialPosts={normalizedPosts} userId={authUser?.id ?? ""} showTabs={false} />
         ) : (
           <div className="px-6 py-12 text-center text-sm text-muted">
             No activities yet.
