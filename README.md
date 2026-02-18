@@ -4,7 +4,7 @@
 
 Track your Claude Code usage. Share your sessions. Climb the leaderboard.
 
-![Hero — peak performance](apps/web/public/images/hero.jpg)
+[![Watch the demo](https://img.youtube.com/vi/NTI_-jRtW2g/maxresdefault.jpg)](https://www.youtube.com/watch?v=NTI_-jRtW2g)
 
 ## Why?
 
@@ -12,13 +12,15 @@ Running used to be solitary. Then Strava made it social. Agentic engineering wit
 
 ## How it works
 
-Push your stats with a single command — no install needed:
+Sync your stats with a single command — no install needed:
 
 ```bash
-npx straude@latest push
+npx straude@latest
 ```
 
-The CLI reads your local [ccusage](https://github.com/ryoppippi/ccusage) data (cost, tokens, models, sessions), uploads it to Straude, and auto-creates a post on your feed. Login once with `npx straude@latest login`, then `push` daily. Use `npx straude@latest status` to check your streak and rank.
+The CLI reads your local [ccusage](https://github.com/ryoppippi/ccusage) data (cost, tokens, models, sessions), uploads it to Straude, and auto-creates a post on your feed. First run opens a browser login; after that, just run `npx straude@latest` daily. It automatically pushes new stats since your last sync.
+
+Options: `--date YYYY-MM-DD` to push a specific date, `--days N` to backfill the last N days (max 7), `--dry-run` to preview without posting. Run `npx straude@latest status` to check your streak and rank.
 
 ## Features
 
@@ -34,6 +36,16 @@ Go public and compete on the leaderboard, or stay private and share only with fo
 ## Hackathon
 
 Straude is an entry in [**Built with Opus 4.6: a Claude Code hackathon**](https://cerebralvalley.ai/e/claude-code-hackathon) under **Problem Statement One: Build a Tool That Should Exist**. The entire project was built by Claude Opus 4.6, with special help from the experimental *Agent Teams* feature.
+
+## Docs
+
+| Document | Description |
+|----------|-------------|
+| [Changelog](docs/CHANGELOG.md) | Release history and what changed |
+| [Decisions](docs/DECISIONS.md) | Architecture and design decisions with rationale |
+| [Roadmap](docs/ROADMAP.md) | Planned features and future work |
+| [Security](docs/SECURITY.md) | Security audit findings and status |
+| [Specs](docs/straude-specs-v1.md) | Original v1 product specification |
 
 ## Get started
 
