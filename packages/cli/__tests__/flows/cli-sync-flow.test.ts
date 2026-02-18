@@ -569,7 +569,7 @@ describe("ccusage failures during flow", () => {
 
     await expect(syncCommand()).rejects.toThrow(ExitError);
     expect(console.error).toHaveBeenCalledWith(
-      expect.stringContaining("ccusage is not installed"),
+      expect.stringContaining("ccusage failed"),
     );
   });
 

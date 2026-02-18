@@ -129,6 +129,15 @@ export default async function AppLayout({
 
       {/* Mobile bottom nav */}
       <MobileNav username={profile?.username} />
+
+      <a
+        href="https://x.com/oscrhong"
+        target="_blank"
+        rel="noopener noreferrer"
+        className="fixed bottom-3 right-3 hidden text-sm text-muted hover:text-foreground lg:block"
+      >
+        Feedback? DM us.
+      </a>
     </div>
   );
 }

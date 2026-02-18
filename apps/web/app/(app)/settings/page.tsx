@@ -10,6 +10,7 @@ import { Textarea } from "@/components/ui/Textarea";
 import { Button } from "@/components/ui/Button";
 import { Avatar } from "@/components/ui/Avatar";
 import { LogOut } from "lucide-react";
+import { COUNTRIES, countryFlag } from "@/lib/constants/regions";
 
 export default function SettingsPage() {
   const router = useRouter();
@@ -164,17 +165,23 @@ export default function SettingsPage() {
 
         <div className="border-b border-border pb-6">
           <label htmlFor="settings-country" className="mb-1 block text-xs font-semibold uppercase tracking-widest text-muted">
-            Country (ISO code)
+            Country
           </label>
-          <Input
+          <select
             id="settings-country"
             name="country"
             autoComplete="country"
             value={country}
-            onChange={(e) => setCountry(e.target.value.toUpperCase())}
-            placeholder="US"
-            maxLength={2}
-          />
+            onChange={(e) => setCountry(e.target.value)}
+            className="w-full rounded-[4px] border border-border bg-white px-4 py-3 text-base text-foreground outline-none transition-[border-color,box-shadow] duration-150 focus:border-accent focus:ring-3 focus:ring-accent/15"
+          >
+            <option value="">Select a country</option>
+            {COUNTRIES.map((c) => (
+              <option key={c.code} value={c.code}>
+                {countryFlag(c.code)} {c.name}
+              </option>
+            ))}
+          </select>
         </div>
 
         <div className="border-b border-border pb-6">

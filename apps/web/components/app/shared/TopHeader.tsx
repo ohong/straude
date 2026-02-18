@@ -207,7 +207,20 @@ export function TopHeader({ username, avatarUrl }: TopHeaderProps) {
                       <Link
                         key={n.id}
                         href={notificationHref(n)}
-                        onClick={() => setNotifOpen(false)}
+                        onClick={() => {
+                          setNotifOpen(false);
+                          if (!n.read) {
+                            setNotifications((prev) =>
+                              prev.map((x) => x.id === n.id ? { ...x, read: true } : x),
+                            );
+                            setUnreadCount((c) => Math.max(0, c - 1));
+                            fetch("/api/notifications", {
+                              method: "PATCH",
+                              headers: { "Content-Type": "application/json" },
+                              body: JSON.stringify({ ids: [n.id] }),
+                            });
+                          }
+                        }}
                         className={cn(
                           "flex items-start gap-3 px-4 py-3 hover:bg-subtle",
                           !n.read && "bg-subtle/50",

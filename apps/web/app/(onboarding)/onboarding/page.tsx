@@ -7,9 +7,7 @@ import { Check, X, Loader2, ArrowRight } from "lucide-react";
 import { Button } from "@/components/ui/Button";
 import { Input } from "@/components/ui/Input";
 import { Textarea } from "@/components/ui/Textarea";
-import { COUNTRY_TO_REGION } from "@/lib/constants/regions";
-
-const COUNTRY_OPTIONS = Object.keys(COUNTRY_TO_REGION).sort();
+import { COUNTRIES, countryFlag } from "@/lib/constants/regions";
 
 type UsernameStatus = "idle" | "checking" | "available" | "taken" | "invalid";
 
@@ -289,13 +287,12 @@ export default function OnboardingPage() {
             autoComplete="country"
             value={country}
             onChange={(e) => setCountry(e.target.value)}
-            className="w-full border border-border bg-background px-4 py-2.5 text-sm outline-none focus:border-accent focus:ring-3 focus:ring-accent/15 focus-visible:ring-2 focus-visible:ring-accent focus-visible:ring-offset-2"
-            style={{ borderRadius: 4 }}
+            className="w-full rounded-[4px] border border-border bg-white px-4 py-3 text-base text-foreground outline-none transition-[border-color,box-shadow] duration-150 focus:border-accent focus:ring-3 focus:ring-accent/15"
           >
             <option value="">Select a country</option>
-            {COUNTRY_OPTIONS.map((code) => (
-              <option key={code} value={code}>
-                {code}
+            {COUNTRIES.map((c) => (
+              <option key={c.code} value={c.code}>
+                {countryFlag(c.code)} {c.name}
               </option>
             ))}
           </select>

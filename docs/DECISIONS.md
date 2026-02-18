@@ -1,5 +1,26 @@
 # Architecture & Design Decisions
 
+## Leaderboard: Regular Views Over Materialized Views (2026-02-18)
+
+**Decision:** Converted all four leaderboard materialized views to regular Postgres views and removed the `pg_cron` refresh jobs.
+
+**Problem:** Leaderboard data was up to 15 minutes stale. Users who pushed a session wouldn't see their rank update immediately — bad for a product built around dopamine feedback loops.
+
+**Alternatives considered:**
+1. **Increase refresh frequency (e.g., every 1 minute)** — still not real-time, adds unnecessary cron load.
+2. **Supabase Realtime subscriptions** — over-engineered for current scale; requires client-side state management.
+3. **Regular views** (chosen) — queries compute on every request, but the dataset is small (~36 users, ~93 daily_usage rows). The JOIN + GROUP BY + SUM runs in under 1ms.
+
+**When to revisit:** If `daily_usage` exceeds ~100k rows or query time exceeds ~50ms, switch back to materialized views with a shorter refresh interval.
+
+## ccusage npx Fallback (2026-02-18)
+
+**Decision:** When the `ccusage` binary isn't found on PATH or in well-known directories, the CLI falls back to `npx --yes ccusage` before erroring.
+
+**Problem:** Users running `npx straude@latest` for the first time don't have `ccusage` installed globally. The CLI errored with "ccusage is not installed" — a poor first-run experience.
+
+**Tradeoff:** The npx fallback is slower on first run (~5-10s to download ccusage) and subsequent runs still have npx overhead (~200-300ms). Users who install ccusage globally get the fast path automatically.
+
 ## ccusage Binary Resolution and Error Diagnostics (2026-02-18)
 
 **Decision:** The CLI now resolves the `ccusage` binary via `which` first, then probes well-known global bin directories as a fallback. Error messages include diagnostic metadata (resolved path, error code, exit status, signal, PATH snippet).

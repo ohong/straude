@@ -2,10 +2,18 @@
 
 ## Unreleased
 
-### Fixed
+### Changed
 
-- **CLI: "ccusage failed: unknown error" no longer happens.** The error handler now detects all ways the binary can fail to launch (`ENOENT`, exit 127, `EACCES`, timeout/`SIGTERM`). Every error message includes diagnostic context — resolved binary path, exit code, signal, and a PATH snippet — so users can paste the output directly into bug reports.
-- **CLI: ccusage discovered even when not on inherited PATH.** The CLI now probes well-known global bin directories (nvm, volta, fnm, Homebrew, bun, pnpm) so users who installed ccusage via these tools no longer need to manually fix their PATH.
+- **Leaderboard updates in real-time.** Converted all four leaderboard materialized views (`leaderboard_daily`, `_weekly`, `_monthly`, `_all_time`) to regular views and removed the `pg_cron` refresh jobs. Rankings now reflect the latest data the moment a user pushes a session — no more 15-minute staleness.
+- **CLI: ccusage runs via npx — no global install required.** Removed all binary resolution logic (PATH probing, nvm/volta/homebrew candidates, `which` calls). The CLI now always runs `npx --yes ccusage`, which auto-downloads ccusage if needed. This eliminates the entire class of "ccusage not installed" errors. Source trimmed from 287 to 131 lines.
+- **Country selector is now a dropdown with flags.** Both settings and onboarding pages show a `<select>` with flag emoji and country name (e.g. "🇺🇸 United States") instead of a raw ISO code text input. Dropdown styling matches the `Input` component (`rounded-[4px]`, `border-border`, `bg-white`, same focus ring).
+- **Suggested friends shows up to 5 users.** Bumped the query limit from 4 to 5 non-pinned candidates so the sidebar fills all 5 slots with real users.
+
+### Added
+
+- **Feedback link.** Fixed-position "Feedback? DM us." link in the bottom-right corner of the app layout, linking to the project's X/Twitter DMs. Hidden on mobile.
+
+### Fixed
 
 ### Added
 

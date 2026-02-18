@@ -37,7 +37,7 @@ export async function RightSidebar({ userId }: { userId: string }) {
       .not("username", "is", null)
       .not("username", "eq", PINNED_USERNAME)
       .not("id", "in", `(${excludeIds.join(",")})`)
-      .limit(4),
+      .limit(5),
   ]);
 
   const isPinnedExcluded =
