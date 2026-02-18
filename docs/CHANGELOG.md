@@ -2,6 +2,13 @@
 
 ## Unreleased
 
+### Security
+
+- **Fixed open redirect in auth callback.** The `next` query parameter in `/callback` was used in a redirect without validation. An attacker could craft a URL like `?next=//evil.com` to redirect users to a phishing page after login. Now validates that `next` is a relative path.
+- **Added security headers.** `next.config.ts` now sets `X-Content-Type-Options: nosniff`, `X-Frame-Options: DENY`, `Referrer-Policy: strict-origin-when-cross-origin`, `Strict-Transport-Security` (2-year HSTS with preload), and `Permissions-Policy` (deny camera/mic/geo).
+- **Fixed mutable search_path on `calculate_streaks_batch`.** Supabase security advisor flagged the function as vulnerable to search_path manipulation. Now pinned to `public`.
+- **Fixed RLS performance on notifications.** Replaced `auth.uid()` with `(select auth.uid())` in notification policies to prevent per-row re-evaluation.
+
 ### Added (Insights-Driven Improvements)
 
 - **Post-edit TypeScript hook.** `.claude/settings.json` now runs `tsc --noEmit` after every Edit/Write, catching type errors immediately instead of at build time.

@@ -54,13 +54,13 @@ export function Sidebar({
 
       {/* Stats row — stacked for readability */}
       <div className="grid grid-cols-3 border-b border-border py-4">
-        <Link href={profileHref} className="flex flex-col items-center gap-1 px-2">
+        <Link href={username ? `/u/${username}/follows?tab=following` : profileHref} className="flex flex-col items-center gap-1 px-2">
           <span className="text-base font-semibold">{followingCount}</span>
           <span className="text-[10px] uppercase tracking-wider text-muted">
             Following
           </span>
         </Link>
-        <Link href={profileHref} className="flex flex-col items-center gap-1 border-x border-border px-2">
+        <Link href={username ? `/u/${username}/follows?tab=followers` : profileHref} className="flex flex-col items-center gap-1 border-x border-border px-2">
           <span className="text-base font-semibold">{followersCount}</span>
           <span className="text-[10px] uppercase tracking-wider text-muted">
             Followers

@@ -135,7 +135,7 @@ export function TopHeader({ username, avatarUrl }: TopHeaderProps) {
   }
 
   return (
-    <header className="sticky top-0 z-20 hidden border-b border-border bg-background lg:block">
+    <header className="z-20 hidden shrink-0 border-b border-border bg-background lg:block">
       <div className="mx-auto flex h-14 max-w-[1600px] items-center justify-between px-4 lg:px-6">
         {/* Left — Brand */}
         <Link

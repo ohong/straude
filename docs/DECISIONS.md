@@ -1,5 +1,24 @@
 # Architecture & Design Decisions
 
+## Security Headers in next.config.ts (2026-02-18)
+
+**Decision:** Added `X-Content-Type-Options`, `X-Frame-Options`, `Strict-Transport-Security`, `Referrer-Policy`, and `Permissions-Policy` headers to all routes via `next.config.ts`.
+
+**Why no CSP yet:** A strict Content-Security-Policy requires auditing all inline scripts, style sources, and third-party origins (Supabase, Vercel Analytics, any CDN images). Adding a CSP that's too restrictive breaks the app; adding one that's too permissive (`unsafe-inline`) provides little value. Deferred to a follow-up where each source can be inventoried and nonce-based CSP applied.
+
+**Alternatives considered:**
+1. **Custom proxy.ts headers** — ties security to auth middleware; headers should apply to all routes unconditionally.
+2. **Vercel vercel.json headers** — platform-specific; `next.config.ts` is portable.
+3. **next.config.ts `headers()`** (chosen) — standard Next.js approach, applies at build time, works on all deploy targets.
+
+## Open Redirect Prevention in Auth Callback (2026-02-18)
+
+**Decision:** The `next` query parameter in `/callback` is validated to ensure it starts with `/` and does not contain `//` before use in a redirect.
+
+**Problem:** `NextResponse.redirect(\`${origin}${next}\`)` with an unvalidated `next` parameter allows an attacker to craft `?next=//evil.com`, which some browsers interpret as a protocol-relative URL redirect.
+
+**Fix:** Simple allowlist check — must start with `/` and must not start with `//`. Falls back to `/feed` on failure.
+
 ## SSRF Prevention: Image URL Allowlisting (2026-02-18)
 
 **Decision:** The `/api/ai/generate-caption` endpoint validates that all image URLs belong to the project's Supabase storage origin before passing them to the Anthropic API.

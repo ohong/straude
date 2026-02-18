@@ -47,7 +47,7 @@ export default function SearchPage() {
             name="q"
             value={query}
             onChange={(e) => setQuery(e.target.value)}
-            placeholder="Search users\u2026"
+            placeholder="Search ThariqS, adocomplete, lydiahallie"
             autoFocus
             aria-label="Search users"
             className="flex-1 bg-transparent text-base outline-none placeholder:text-muted"

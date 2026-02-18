@@ -12,6 +12,14 @@ The notifications system is built but uses polling (fetch on dropdown open + ini
 
 The dropdown shows the 20 most recent notifications. A dedicated `/notifications` page with pagination and filtering (by type) would be useful for users with high activity.
 
+## Content Security Policy (CSP)
+
+Add a strict CSP header with nonce-based script/style sources. Requires auditing all script sources (Vercel Analytics, Supabase JS client), inline styles (Tailwind), and image origins (Supabase Storage). Deferred from the security audit because a misconfigured CSP breaks the app — needs careful per-source inventory.
+
+## Rate Limiting on Data Creation Endpoints
+
+The CLI auth init endpoint has rate limiting (5 req/min/IP), but other write endpoints (comments, follows, kudos, upload, usage submit) do not. Consider per-user rate limiting via a shared utility or Supabase Edge Function middleware. Priority: `/api/upload` (file creation), `/api/usage/submit` (data creation), then social actions.
+
 ## Session Time Tracking
 
 Track time spent per Claude Code session and display it per-post alongside input/output tokens and cost.

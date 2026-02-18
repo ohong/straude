@@ -84,7 +84,7 @@ export default async function AppLayout({
   }));
 
   return (
-    <div className="flex h-screen flex-col overflow-hidden">
+    <div className="fixed inset-0 flex flex-col overflow-hidden">
       <TopHeader
         username={profile?.username ?? null}
         avatarUrl={profile?.avatar_url ?? null}
@@ -92,7 +92,7 @@ export default async function AppLayout({
 
       <div className="mx-auto flex min-h-0 w-full max-w-[1600px] flex-1 border-x border-border">
         {/* Left sidebar — hidden below lg */}
-        <aside className="hidden w-60 shrink-0 overflow-y-auto border-r border-border lg:flex lg:flex-col">
+        <aside className="hidden w-60 shrink-0 overflow-y-auto overscroll-contain border-r border-border lg:flex lg:flex-col">
           <Sidebar
             username={profile?.username ?? null}
             avatarUrl={profile?.avatar_url ?? null}
@@ -108,14 +108,14 @@ export default async function AppLayout({
         </aside>
 
         {/* Main content */}
-        <main className="min-w-0 flex-1 overflow-y-auto" style={{ scrollbarWidth: "none" }}>
+        <main className="min-w-0 flex-1 overflow-y-auto" style={{ scrollbarWidth: "none", overscrollBehavior: "contain" }}>
           <div className="pb-[60px] lg:pb-0">
             {children}
           </div>
         </main>
 
         {/* Right sidebar — hidden below xl */}
-        <aside className="hidden w-80 shrink-0 overflow-y-auto border-l border-border xl:flex xl:flex-col">
+        <aside className="hidden w-80 shrink-0 overflow-y-auto overscroll-contain border-l border-border xl:flex xl:flex-col">
           <RightSidebar userId={user.id} />
         </aside>
       </div>

@@ -220,14 +220,14 @@ export default async function ProfilePage({
               )}
             </div>
             <div className="mt-3 flex gap-6 text-sm">
-              <span>
+              <Link href={`/u/${username}/follows?tab=following`} className="hover:underline">
                 <strong>{followingCount ?? 0}</strong>{" "}
                 <span className="text-muted">Following</span>
-              </span>
-              <span>
+              </Link>
+              <Link href={`/u/${username}/follows?tab=followers`} className="hover:underline">
                 <strong>{followersCount ?? 0}</strong>{" "}
                 <span className="text-muted">Followers</span>
-              </span>
+              </Link>
               <span>
                 <strong>{postsCount ?? 0}</strong>{" "}
                 <span className="text-muted">Activities</span>
