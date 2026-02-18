@@ -5,8 +5,12 @@ import { Zap, MessageCircle, Share2, CheckCircle } from "lucide-react";
 import { cn } from "@/lib/utils/cn";
 import { formatTokens } from "@/lib/utils/format";
 import type { Post } from "@/types";
-import ReactMarkdown from "react-markdown";
+import dynamic from "next/dynamic";
 import { useState } from "react";
+
+const ReactMarkdown = dynamic(() => import("react-markdown"), {
+  loading: () => null,
+});
 
 function timeAgo(dateStr: string) {
   const diff = Date.now() - new Date(dateStr).getTime();
@@ -59,7 +63,7 @@ export function ActivityCard({ post }: { post: Post }) {
       <div className="flex items-center gap-3">
         <Link href={user?.username ? `/u/${user.username}` : "#"}>
           {user?.avatar_url ? (
-            <img src={user.avatar_url} alt="" className="h-10 w-10 rounded-full object-cover" />
+            <img src={user.avatar_url} alt="" width={40} height={40} className="h-10 w-10 rounded-full object-cover" />
           ) : (
             <span className="flex h-10 w-10 items-center justify-center rounded-full bg-foreground text-sm font-semibold text-background">
               {user?.username?.[0]?.toUpperCase() ?? "?"}
@@ -76,7 +80,7 @@ export function ActivityCard({ post }: { post: Post }) {
             </Link>
           </div>
           <div className="flex items-center gap-2 text-xs text-muted">
-            <span>{timeAgo(post.created_at)}</span>
+            <span suppressHydrationWarning>{timeAgo(post.created_at)}</span>
             {usage?.models && usage.models.length > 0 && (
               <>
                 <span>&middot;</span>
@@ -124,9 +128,11 @@ export function ActivityCard({ post }: { post: Post }) {
                 key={i}
                 src={url}
                 alt=""
+                width={600}
+                height={400}
+                loading="lazy"
                 className={cn(
-                  "w-full rounded object-cover",
-                  post.images.length === 1 ? "max-h-[500px]" : "max-h-[400px]",
+                  "w-full rounded",
                   post.images.length === 3 && i === 0 && "row-span-2"
                 )}
               />
@@ -172,7 +178,7 @@ export function ActivityCard({ post }: { post: Post }) {
             className={cn("inline-block transition-transform", animating && "scale-120")}
             style={{ transitionDuration: "200ms" }}
           >
-            <Zap size={16} fill={kudosed ? "currentColor" : "none"} />
+            <Zap size={16} fill={kudosed ? "currentColor" : "none"} aria-hidden="true" />
           </span>
           Kudos ({kudosCount})
         </button>
@@ -180,14 +186,15 @@ export function ActivityCard({ post }: { post: Post }) {
           href={`/post/${post.id}`}
           className="flex items-center gap-2 text-sm font-semibold hover:text-accent"
         >
-          <MessageCircle size={16} />
+          <MessageCircle size={16} aria-hidden="true" />
           Comment ({post.comment_count ?? 0})
         </Link>
         <button
           onClick={handleShare}
           className="ml-auto flex items-center gap-2 text-sm font-semibold hover:text-accent"
         >
-          Share <Share2 size={16} />
+          <span className="sr-only">Copy link to post</span>
+          Share <Share2 size={16} aria-hidden="true" />
         </button>
       </div>
     </article>

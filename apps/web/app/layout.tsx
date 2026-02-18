@@ -1,4 +1,4 @@
-import type { Metadata } from "next";
+import type { Metadata, Viewport } from "next";
 import { Inter, JetBrains_Mono } from "next/font/google";
 import { Analytics } from "@vercel/analytics/next";
 import { Agentation } from "agentation";
@@ -17,11 +17,25 @@ const jetbrainsMono = JetBrains_Mono({
 });
 
 export const metadata: Metadata = {
+  metadataBase: new URL("https://straude.com"),
   title: {
     default: "Straude",
     template: "%s | Straude",
   },
-  description: "The social platform for AI-assisted coding. Track your Claude Code usage, share your wins, compete on the leaderboard.",
+  description:
+    "Strava for Claude Code. Track your AI-assisted coding sessions, share your wins, and compete on the leaderboard.",
+  openGraph: {
+    type: "website",
+    siteName: "Straude",
+    locale: "en_US",
+  },
+  twitter: {
+    card: "summary_large_image",
+  },
+};
+
+export const viewport: Viewport = {
+  themeColor: "#000000",
 };
 
 export default function RootLayout({

@@ -15,10 +15,6 @@ export default async function LeaderboardPage({
     data: { user },
   } = await supabase.auth.getUser();
 
-  // Fetch leaderboard data from API
-  const params = new URLSearchParams({ period, limit: "50" });
-  if (region) params.set("region", region);
-
   // We'll use the materialized view directly for SSR
   const viewName = `leaderboard_${period === "all_time" ? "all_time" : period === "month" ? "monthly" : period === "day" ? "daily" : "weekly"}`;
 
@@ -32,22 +28,35 @@ export default async function LeaderboardPage({
     query = query.eq("region", region);
   }
 
-  const { data: entries } = await query;
+  // Fetch leaderboard + profile in parallel (avoid waterfall)
+  const [{ data: entries }, { data: profile }] = await Promise.all([
+    query,
+    supabase
+      .from("users")
+      .select("country, region")
+      .eq("id", user!.id)
+      .single(),
+  ]);
 
-  // Get current user's profile for highlighting
-  const { data: profile } = await supabase
-    .from("users")
-    .select("country, region")
-    .eq("id", user!.id)
-    .single();
+  // Fetch streaks for all leaderboard users in a single RPC call
+  const userIds = (entries ?? []).map((e: any) => e.user_id);
+  const { data: streakRows } = userIds.length > 0
+    ? await supabase.rpc("calculate_streaks_batch", { p_user_ids: userIds })
+    : { data: [] };
 
-  // Add rank numbers
+  const streakMap = new Map<string, number>();
+  for (const row of streakRows ?? []) {
+    streakMap.set(row.user_id, row.streak);
+  }
+
+  // Add rank numbers and streaks
   const ranked =
-    entries?.map((e, i) => ({
+    entries?.map((e: any, i: number) => ({
       ...e,
       rank: i + 1,
       total_cost: Number(e.total_cost),
-      total_tokens: Number(e.total_tokens),
+      total_output_tokens: Number(e.total_output_tokens),
+      streak: streakMap.get(e.user_id) ?? 0,
     })) ?? [];
 
   return (

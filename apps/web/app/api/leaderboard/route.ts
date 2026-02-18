@@ -49,10 +49,22 @@ export async function GET(request: NextRequest) {
     return NextResponse.json({ error: error.message }, { status: 500 });
   }
 
-  // Assign ranks
+  // Fetch streaks for all returned users in a single RPC call
+  const userIds = (entries ?? []).map((e) => e.user_id);
+  const { data: streakRows } = userIds.length > 0
+    ? await supabase.rpc("calculate_streaks_batch", { p_user_ids: userIds })
+    : { data: [] };
+
+  const streakMap = new Map<string, number>();
+  for (const row of streakRows ?? []) {
+    streakMap.set(row.user_id, row.streak);
+  }
+
+  // Assign ranks and streaks
   const ranked = (entries ?? []).map((entry, i) => ({
     ...entry,
     rank: i + 1,
+    streak: streakMap.get(entry.user_id) ?? 0,
   }));
 
   // Find current user's rank

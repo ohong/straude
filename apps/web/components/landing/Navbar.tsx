@@ -20,7 +20,7 @@ export function Navbar() {
   return (
     <nav
       className={cn(
-        "fixed top-0 left-0 right-0 z-50 transition-all duration-300",
+        "fixed top-0 left-0 right-0 z-50 transition-[background-color,border-color,backdrop-filter] duration-300",
         scrolled
           ? "bg-black/95 backdrop-blur-md border-b border-white/10"
           : "bg-transparent"
@@ -44,13 +44,13 @@ export function Navbar() {
         <div className="hidden items-center gap-4 md:flex">
           <Link
             href="/login"
-            className="text-sm font-medium text-white/80 hover:text-white transition-colors"
+            className="text-sm font-medium text-white/80 hover:text-white transition-colors rounded focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white focus-visible:ring-offset-2 focus-visible:ring-offset-black"
           >
             Log in
           </Link>
           <Link
             href="/signup"
-            className="rounded-lg bg-accent px-5 py-2.5 text-sm font-semibold text-white hover:brightness-110 transition-all"
+            className="rounded-lg bg-accent px-5 py-2.5 text-sm font-semibold text-white hover:brightness-110 transition-[filter] duration-150 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white focus-visible:ring-offset-2 focus-visible:ring-offset-black"
           >
             Get Started
           </Link>

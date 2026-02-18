@@ -37,8 +37,9 @@ export function MobileNav({ username }: { username: string | null }) {
               isActive && "text-accent"
             )}
           >
-            <Icon size={24} />
+            <Icon size={24} aria-hidden="true" />
             <span className="text-[10px] font-semibold">{label}</span>
+
           </Link>
         );
       })}

@@ -8,7 +8,7 @@ Track your Claude Code usage. Share your sessions. Climb the leaderboard.
 
 ## Why?
 
-Running used to be solitary. Then Strava made it social. Vibe coding with Claude Code is the new solitary grind — people are [spending thousands](https://www.wsj.com/tech/ai/anthropic-claude-code-ai-7a46460e) building with AI, but there's no way to share the journey. Straude changes that.
+Running used to be solitary. Then Strava made it social. Agentic engineering with Claude Code is the new solitary grind — people are [spending thousands](https://www.wsj.com/tech/ai/anthropic-claude-code-ai-7a46460e) building with AI, but there's no way to share the journey. Straude changes that.
 
 ## How it works
 

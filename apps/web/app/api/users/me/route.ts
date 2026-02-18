@@ -12,7 +12,31 @@ const ALLOWED_FIELDS = [
   "timezone",
   "avatar_url",
   "github_username",
+  "onboarding_completed",
 ] as const;
+
+export async function GET() {
+  const supabase = await createClient();
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
+
+  if (!user) {
+    return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  }
+
+  const { data: profile, error } = await supabase
+    .from("users")
+    .select("*")
+    .eq("id", user.id)
+    .single();
+
+  if (error || !profile) {
+    return NextResponse.json({ error: "Profile not found" }, { status: 404 });
+  }
+
+  return NextResponse.json(profile);
+}
 
 export async function PATCH(request: NextRequest) {
   const supabase = await createClient();

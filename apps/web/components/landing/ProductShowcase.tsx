@@ -212,7 +212,7 @@ export function ProductShowcase() {
     <section className="bg-[#F7F5F0] py-24 md:py-32 overflow-hidden">
       <div ref={ref} className="mx-auto max-w-[1400px] px-6 md:px-8">
         <div className="flex flex-col items-center text-center mb-16">
-          <h2 className="text-[clamp(2rem,4vw,3.5rem)] font-bold tracking-[-0.03em] leading-tight max-w-2xl">
+          <h2 className="text-[clamp(2rem,4vw,3.5rem)] font-bold tracking-[-0.03em] leading-tight max-w-2xl text-balance">
             Your sessions, visualized
           </h2>
           <p className="mt-4 text-lg text-muted max-w-lg">

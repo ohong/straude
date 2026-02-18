@@ -96,7 +96,7 @@ export function CommentThread({
                 >
                   {comment.user?.username ?? "anonymous"}
                 </Link>
-                <span className="text-xs text-muted">{timeAgo(comment.created_at)}</span>
+                <span suppressHydrationWarning className="text-xs text-muted">{timeAgo(comment.created_at)}</span>
               </div>
               {editingId === comment.id ? (
                 <div className="mt-1 flex gap-2">

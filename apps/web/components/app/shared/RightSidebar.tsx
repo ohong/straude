@@ -5,18 +5,18 @@ import { FollowButton } from "@/components/app/profile/FollowButton";
 export async function RightSidebar({ userId }: { userId: string }) {
   const supabase = await createClient();
 
-  // Top 5 leaderboard preview
-  const { data: topUsers } = await supabase
-    .from("leaderboard_weekly")
-    .select("user_id, username, avatar_url, total_cost")
-    .order("total_cost", { ascending: false })
-    .limit(5);
-
-  // Suggested users (popular users not yet followed)
-  const { data: following } = await supabase
-    .from("follows")
-    .select("following_id")
-    .eq("follower_id", userId);
+  // Start independent queries in parallel (avoid waterfall)
+  const [{ data: topUsers }, { data: following }] = await Promise.all([
+    supabase
+      .from("leaderboard_weekly")
+      .select("user_id, username, avatar_url, total_cost")
+      .order("total_cost", { ascending: false })
+      .limit(5),
+    supabase
+      .from("follows")
+      .select("following_id")
+      .eq("follower_id", userId),
+  ]);
 
   const followingIds = following?.map((f) => f.following_id) ?? [];
   const excludeIds = [userId, ...followingIds];
@@ -45,6 +45,9 @@ export async function RightSidebar({ userId }: { userId: string }) {
                     <img
                       src={u.avatar_url}
                       alt=""
+                      width={32}
+                      height={32}
+                      loading="lazy"
                       className="h-8 w-8 rounded-full object-cover"
                     />
                   ) : (
@@ -87,6 +90,9 @@ export async function RightSidebar({ userId }: { userId: string }) {
                   <img
                     src={u.avatar_url}
                     alt=""
+                    width={32}
+                    height={32}
+                    loading="lazy"
                     className="h-8 w-8 rounded-full object-cover"
                   />
                 ) : (

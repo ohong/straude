@@ -1,5 +1,6 @@
 import { createClient } from "@/lib/supabase/server";
 import { FeedList } from "@/components/app/feed/FeedList";
+import Link from "next/link";
 import type { Metadata } from "next";
 
 export const metadata: Metadata = { title: "Feed" };
@@ -69,13 +70,12 @@ export default async function FeedPage() {
           <p className="mt-2 text-sm text-muted">
             Follow some builders to see their posts here.
           </p>
-          <a
+          <Link
             href="/search"
-            className="mt-4 inline-block bg-accent px-4 py-2 text-sm font-semibold text-white"
-            style={{ borderRadius: 4 }}
+            className="mt-4 inline-block rounded bg-accent px-4 py-2 text-sm font-semibold text-white"
           >
             Find users to follow
-          </a>
+          </Link>
         </div>
       )}
     </>

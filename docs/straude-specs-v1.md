@@ -42,14 +42,14 @@ Straude is a social platform for tracking and sharing Claude Code usage. Users i
 
 ### 1.3 Target Users
 
-- Claude Code power users (professional software engineers, indie hackers, vibe coders)
+- Claude Code power users (professional software engineers, indie hackers, agentic engineers)
 - Developers who want social accountability and visibility for their AI-assisted coding
 
 ### 1.4 Core Value Proposition
 
 - Transform solitary AI-assisted coding into a social, competitive experience
 - Provide bragging rights and social proof for Claude Code usage
-- Create community around the emerging "vibe coding" phenomenon
+- Create community around the emerging "agentic engineering" movement
 
 ---
 
@@ -392,7 +392,7 @@ A single-page scroll landing page at `/` (the root route). Converts visitors int
 
 ### 5.5 Wall of Love
 
-Social proof section showing real X (Twitter) posts from users praising Claude Code or the vibe coding movement.
+Social proof section showing real X (Twitter) posts from users praising Claude Code or the agentic engineering movement.
 
 **Data source:** A markdown file at `content/wall-of-love.md` containing a list of X post URLs. This file is read at build time.
 

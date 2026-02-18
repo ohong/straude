@@ -46,6 +46,9 @@ function WallOfLoveCard({
           <img
             src={post.author_avatar}
             alt=""
+            width={44}
+            height={44}
+            loading="lazy"
             className="h-11 w-11 shrink-0 rounded-full object-cover"
           />
         ) : (
@@ -86,7 +89,7 @@ export function WallOfLove({ posts }: { posts: WallOfLovePost[] }) {
     <section className="bg-white py-24 md:py-32">
       <div ref={ref} className="mx-auto max-w-[1280px] px-6 md:px-8">
         <div className="flex flex-col items-center text-center mb-14">
-          <h2 className="text-[clamp(2rem,4vw,3.5rem)] font-bold tracking-[-0.03em]">
+          <h2 className="text-[clamp(2rem,4vw,3.5rem)] font-bold tracking-[-0.03em] text-balance">
             Everybody is Claudemaxxing. Are you?
           </h2>
         </div>

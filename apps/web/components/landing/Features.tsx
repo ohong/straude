@@ -31,7 +31,7 @@ export function Features() {
     <section className="bg-white py-24 md:py-32">
       <div ref={ref} className="mx-auto max-w-[1280px] px-6 md:px-8">
         <div className="flex flex-col items-center text-center mb-16">
-          <h2 className="text-[clamp(2rem,4vw,3.5rem)] font-bold tracking-[-0.03em] leading-tight">
+          <h2 className="text-[clamp(2rem,4vw,3.5rem)] font-bold tracking-[-0.03em] leading-tight text-balance">
             Built for the daily grind
           </h2>
         </div>
@@ -50,7 +50,7 @@ export function Features() {
               }}
             >
               <div className="flex h-14 w-14 items-center justify-center rounded-2xl bg-accent/8 transition-colors group-hover:bg-accent/15">
-                <f.icon size={26} className="text-accent" />
+                <f.icon size={26} className="text-accent" aria-hidden="true" />
               </div>
               <h3 className="text-xl font-bold tracking-tight">{f.title}</h3>
               <p className="text-[1.0625rem] leading-relaxed text-muted">

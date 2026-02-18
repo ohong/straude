@@ -84,8 +84,8 @@ export interface LeaderboardEntry {
   country: string | null;
   region: string | null;
   total_cost: number;
-  total_tokens: number;
-  streak?: number;
+  total_output_tokens: number;
+  streak: number;
   rank: number;
 }
 

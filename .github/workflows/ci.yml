@@ -1,0 +1,63 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+jobs:
+  ci:
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: latest
+
+      - name: Install dependencies
+        run: bun install
+        env:
+          BUN_INSTALL_CACHE_DIR: ~/.bun/install/cache
+
+      - uses: actions/cache@v4
+        with:
+          path: ~/.bun/install/cache
+          key: ${{ runner.os }}-bun-${{ hashFiles('bun.lockb') }}
+          restore-keys: |
+            ${{ runner.os }}-bun-
+
+      - name: Build
+        run: bun run build
+
+      - name: Test (web)
+        run: bun run test
+        working-directory: apps/web
+
+      - name: Test (cli)
+        run: bun run test
+        working-directory: packages/cli
+
+      - name: Install Playwright Chromium
+        run: bunx playwright install --with-deps chromium
+        working-directory: apps/web
+
+      - name: Start production server
+        run: bun run start &
+        working-directory: apps/web
+        env:
+          PORT: 3000
+
+      - name: Wait for server
+        run: |
+          for i in $(seq 1 30); do
+            curl -s http://localhost:3000 > /dev/null && break
+            sleep 1
+          done
+
+      - name: E2E tests
+        run: bun run test:e2e
+        working-directory: apps/web
+        env:
+          BASE_URL: http://localhost:3000

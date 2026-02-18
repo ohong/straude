@@ -2,6 +2,66 @@
 
 ## Unreleased
 
+### Added (Insights-Driven Improvements)
+
+- **Post-edit TypeScript hook.** `.claude/settings.json` now runs `tsc --noEmit` after every Edit/Write, catching type errors immediately instead of at build time.
+- **CLAUDE.md guardrails.** Added Scope, Security, and Design System sections to prevent recurring friction: scope creep, hardcoded keys, and design guideline violations.
+- **`/ui-review` custom command.** `.claude/commands/ui-review.md` — checks modified components against the design system before committing.
+- **CLI test suite.** `packages/cli/__tests__/` — tests for arg parsing, sync command, push command, and auth/config management.
+- **CLI README.** `packages/cli/README.md` — usage docs for npm.
+- **GitHub Actions CI.** `.github/workflows/ci.yml` — runs build, vitest, and Playwright on push/PR.
+- **Turbo `test` task.** `turbo.json` now includes test in the task graph.
+- **Committable pre-push hook.** `.githooks/pre-push` — runs test suite before push. Enable via `git config core.hooksPath .githooks`.
+
+### Fixed (Insights-Driven Improvements)
+
+- **`suppressHydrationWarning` on timeAgo timestamps.** ActivityCard, TopHeader, and CommentThread timestamp elements no longer risk hydration mismatches from `Date.now()` drift.
+
+### Added
+
+- **Open Graph & Twitter Card metadata.** Shareable links now render a rich preview with "STRAUDE" and "Strava for Claude Code" over the hero background. Includes `og:title`, `og:description`, `og:image` (1200x630), `og:type`, `og:site_name`, `og:locale`, `twitter:card=summary_large_image`, and `twitter:image`.
+- **`opengraph-image.tsx` and `twitter-image.tsx`** — statically generated at build time via Next.js `ImageResponse` with Inter Bold/Medium fonts and the `hero-bg.jpg` background.
+- **`apple-icon.tsx`** — 180x180 apple-touch-icon with the orange trapezoid on black.
+- **`metadataBase`** set to `https://straude.com` so all OG image URLs resolve as absolute.
+- **`viewport` export** for `themeColor` (moved from deprecated `metadata.themeColor`).
+
+### Fixed
+
+- Landing page `<title>` no longer duplicates "Straude" (`Straude — Strava for Claude Code | Straude` → `Straude — Strava for Claude Code`).
+
+### Changed
+
+- **Leaderboard shows output tokens, not total tokens.** All four materialized views (`leaderboard_daily`, `_weekly`, `_monthly`, `_all_time`) now sum `output_tokens` instead of `total_tokens`. Column renamed from `total_tokens` to `total_output_tokens`. Header label changed from "Tokens" to "Output".
+- **Leaderboard shows live streak for each user.** New `calculate_streaks_batch(UUID[])` SQL function computes streaks for all visible users in a single RPC call. Streak column now shows actual day counts (e.g. "8d") instead of null/"-".
+
+#### Web Interface Guidelines Compliance
+- **prefers-reduced-motion support.** All animations and transitions now respect `prefers-reduced-motion: reduce`. Users who prefer reduced motion see instant state changes.
+- **Replaced all `transition-all` with specific properties.** Navbar, Hero CTA, copy button, CTA section link all now transition only the properties that change (filter, box-shadow, border-color, background-color, color).
+- **`text-wrap: balance` on all landing headings.** ProductShowcase, Features, HowItWorks, WallOfLove headings now balanced.
+- **`tabular-nums` on numeric displays.** Stats counters, sidebar totals, leaderboard costs, and ActivityCard usage stats now use tabular figures for alignment.
+- **Proper ellipsis characters.** All loading states (`Loading…`, `Saving…`, `Searching…`, `Checking availability…`) and placeholders now use `…` instead of `...`.
+- **Search query reflected in URL.** `/search?q=term` enables deep-linking and back-button support.
+- **Feed empty state uses `<Link>`.** Replaced `<a>` with Next.js `<Link>` for client-side navigation.
+
+#### Accessibility Fixes
+- **aria-labels on all icon-only buttons.** TopHeader bell ("Notifications"), profile ("Profile menu"), plus ("Create new"). All with `aria-expanded` for dropdown state.
+- **aria-hidden on decorative icons.** All lucide-react icons that accompany text labels, Hero/CTA arrow SVGs, MobileNav icons, ActivityCard action icons.
+- **focus-visible ring on all interactive elements.** Button component, landing page links/CTAs, TopHeader dropdowns, onboarding select. Uses `focus-visible:ring-2 focus-visible:ring-accent`.
+- **Form labels connected to inputs.** All settings and onboarding form fields now have `htmlFor`/`id` pairs, `name` attributes, and appropriate `autocomplete` values.
+- **Search input typed as `type="search"`** with `name="q"` and `aria-label="Search users"`.
+
+#### React Performance Optimization
+- **Dynamic import for react-markdown.** ActivityCard no longer loads the markdown parser in the initial bundle. Loaded on demand via `next/dynamic`.
+- **Parallelized API waterfalls.** `GET /api/posts/[id]` now fetches post + kudos status in parallel. RightSidebar fetches leaderboard + following list in parallel. Leaderboard page fetches entries + user profile in parallel.
+- **Stable FeedList infinite scroll.** Replaced `loading` state dependency in `loadMore` callback with a ref, preventing IntersectionObserver teardown/recreation on every load.
+
+#### Image Optimization
+- **Explicit width/height on all `<img>` tags.** ActivityCard avatars (40x40), post images (600x400), WallOfLove avatars (44x44), RightSidebar avatars (32x32).
+- **`loading="lazy"` on below-fold images.** Post images, testimonial avatars, and sidebar avatars lazy-loaded.
+
+#### Metadata
+- **`color-scheme: light` and `theme-color` meta tags** added to root layout for native UI theming.
+
 ### Added
 
 - **Notifications system.** Backend: `notifications` table with RLS (select/update own), indexes, and `follow`/`kudos`/`comment` types. API routes (`GET /api/notifications`, `PATCH /api/notifications`). Frontend: bell icon dropdown in top header with unread badge, notification list with actor avatars, time-ago timestamps, and mark-all-read. Notifications inserted from existing follow, kudos, and comment API routes (self-notifications skipped).
@@ -24,7 +84,7 @@
 - **Simplified image grid logic in ActivityCard.** Redundant identical conditionals collapsed.
 
 #### Security Fixes
-- **Fixed service client env var** (`SUPABASE_SECRET_KEY` → `SUPABASE_SERVICE_ROLE_KEY`). Service-role DB operations were silently failing.
+- **Fixed service client env var** to match `.env.local` (`SUPABASE_SECRET_KEY`). The new Supabase key model uses publishable + secret keys, not the legacy `anon`/`service_role` keys.
 - **Fixed private user data leak** in `/api/users/[username]/contributions`. Any caller could read any user's full contribution graph regardless of `is_public`.
 - **Fixed SSRF in `/api/ai/generate-caption`**. Arbitrary URLs were passed to Anthropic; now validates against Supabase storage origin.
 - **Added rate limiting** on `/api/auth/cli/init` (5 req/min per IP).

@@ -18,13 +18,19 @@ export function FeedList({
       : null
   );
   const [loading, setLoading] = useState(false);
+  const cursorRef = useRef(cursor);
+  const loadingRef = useRef(false);
   const sentinel = useRef<HTMLDivElement>(null);
 
+  // Keep ref in sync with state
+  cursorRef.current = cursor;
+
   const loadMore = useCallback(async () => {
-    if (!cursor || loading) return;
+    if (!cursorRef.current || loadingRef.current) return;
+    loadingRef.current = true;
     setLoading(true);
 
-    const res = await fetch(`/api/feed?cursor=${encodeURIComponent(cursor)}&limit=20`);
+    const res = await fetch(`/api/feed?cursor=${encodeURIComponent(cursorRef.current)}&limit=20`);
     const data = await res.json();
 
     if (data.posts?.length) {
@@ -33,8 +39,9 @@ export function FeedList({
     } else {
       setCursor(null);
     }
+    loadingRef.current = false;
     setLoading(false);
-  }, [cursor, loading]);
+  }, []);
 
   useEffect(() => {
     if (!sentinel.current) return;
@@ -55,7 +62,7 @@ export function FeedList({
       ))}
       {cursor && (
         <div ref={sentinel} className="flex justify-center py-8">
-          {loading && <span className="text-sm text-muted">Loading...</span>}
+          {loading && <span className="text-sm text-muted">Loading&hellip;</span>}
         </div>
       )}
     </div>

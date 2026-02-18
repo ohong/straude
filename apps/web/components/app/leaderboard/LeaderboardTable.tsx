@@ -101,7 +101,7 @@ export function LeaderboardTable({
               <th className="px-6 py-3 font-semibold">Rank</th>
               <th className="px-6 py-3 font-semibold">User</th>
               <th className="px-6 py-3 text-right font-semibold">Cost</th>
-              <th className="px-6 py-3 text-right font-semibold">Tokens</th>
+              <th className="px-6 py-3 text-right font-semibold">Output</th>
               <th className="px-6 py-3 text-right font-semibold">Streak</th>
             </tr>
           </thead>
@@ -139,10 +139,10 @@ export function LeaderboardTable({
                   ${entry.total_cost.toFixed(2)}
                 </td>
                 <td className="px-6 py-3 text-right font-mono tabular-nums">
-                  {formatTokens(entry.total_tokens)}
+                  {formatTokens(entry.total_output_tokens)}
                 </td>
                 <td className="px-6 py-3 text-right font-mono tabular-nums">
-                  {entry.streak != null ? `${entry.streak}d` : "-"}
+                  {entry.streak > 0 ? `${entry.streak}d` : "-"}
                 </td>
               </tr>
             ))}
@@ -187,7 +187,7 @@ export function LeaderboardTable({
                 ${entry.total_cost.toFixed(2)}
               </p>
               <p className="font-mono text-xs tabular-nums text-muted">
-                {formatTokens(entry.total_tokens)}
+                {formatTokens(entry.total_output_tokens)}
               </p>
             </div>
           </Link>

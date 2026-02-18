@@ -45,7 +45,7 @@ export function HowItWorks() {
           <span className="font-[family-name:var(--font-mono)] text-xs tracking-[0.2em] uppercase text-accent mb-4">
             How it works
           </span>
-          <h2 className="text-[clamp(2rem,4vw,3.5rem)] font-bold tracking-[-0.03em]">
+          <h2 className="text-[clamp(2rem,4vw,3.5rem)] font-bold tracking-[-0.03em] text-balance">
             Three steps. Zero friction.
           </h2>
         </div>

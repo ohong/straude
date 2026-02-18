@@ -87,7 +87,7 @@ export default function SettingsPage() {
   }
 
   if (!profile) {
-    return <div className="p-6 text-sm text-muted">Loading...</div>;
+    return <div className="p-6 text-sm text-muted">Loading&hellip;</div>;
   }
 
   return (
@@ -117,10 +117,13 @@ export default function SettingsPage() {
         </div>
 
         <div className="border-b border-border pb-6">
-          <label className="mb-1 block text-xs font-semibold uppercase tracking-widest text-muted">
+          <label htmlFor="settings-username" className="mb-1 block text-xs font-semibold uppercase tracking-widest text-muted">
             Username
           </label>
           <Input
+            id="settings-username"
+            name="username"
+            autoComplete="username"
             value={username}
             onChange={(e) => setUsername(e.target.value)}
             placeholder="your_username"
@@ -131,20 +134,25 @@ export default function SettingsPage() {
         </div>
 
         <div className="border-b border-border pb-6">
-          <label className="mb-1 block text-xs font-semibold uppercase tracking-widest text-muted">
+          <label htmlFor="settings-display-name" className="mb-1 block text-xs font-semibold uppercase tracking-widest text-muted">
             Display Name
           </label>
           <Input
+            id="settings-display-name"
+            name="display_name"
+            autoComplete="name"
             value={displayName}
             onChange={(e) => setDisplayName(e.target.value)}
           />
         </div>
 
         <div className="border-b border-border pb-6">
-          <label className="mb-1 block text-xs font-semibold uppercase tracking-widest text-muted">
+          <label htmlFor="settings-bio" className="mb-1 block text-xs font-semibold uppercase tracking-widest text-muted">
             Bio
           </label>
           <Textarea
+            id="settings-bio"
+            name="bio"
             value={bio}
             onChange={(e) => setBio(e.target.value)}
             maxLength={160}
@@ -155,10 +163,13 @@ export default function SettingsPage() {
         </div>
 
         <div className="border-b border-border pb-6">
-          <label className="mb-1 block text-xs font-semibold uppercase tracking-widest text-muted">
+          <label htmlFor="settings-country" className="mb-1 block text-xs font-semibold uppercase tracking-widest text-muted">
             Country (ISO code)
           </label>
           <Input
+            id="settings-country"
+            name="country"
+            autoComplete="country"
             value={country}
             onChange={(e) => setCountry(e.target.value.toUpperCase())}
             placeholder="US"
@@ -167,10 +178,14 @@ export default function SettingsPage() {
         </div>
 
         <div className="border-b border-border pb-6">
-          <label className="mb-1 block text-xs font-semibold uppercase tracking-widest text-muted">
+          <label htmlFor="settings-website" className="mb-1 block text-xs font-semibold uppercase tracking-widest text-muted">
             Website
           </label>
           <Input
+            id="settings-website"
+            name="url"
+            type="url"
+            autoComplete="url"
             value={link}
             onChange={(e) => setLink(e.target.value)}
             placeholder="https://example.com"
@@ -179,20 +194,24 @@ export default function SettingsPage() {
         </div>
 
         <div className="border-b border-border pb-6">
-          <label className="mb-1 block text-xs font-semibold uppercase tracking-widest text-muted">
+          <label htmlFor="settings-github" className="mb-1 block text-xs font-semibold uppercase tracking-widest text-muted">
             GitHub Username
           </label>
           <Input
+            id="settings-github"
+            name="github_username"
             value={githubUsername}
             onChange={(e) => setGithubUsername(e.target.value)}
           />
         </div>
 
         <div className="border-b border-border pb-6">
-          <label className="mb-1 block text-xs font-semibold uppercase tracking-widest text-muted">
+          <label htmlFor="settings-timezone" className="mb-1 block text-xs font-semibold uppercase tracking-widest text-muted">
             Timezone
           </label>
           <Input
+            id="settings-timezone"
+            name="timezone"
             value={timezone}
             onChange={(e) => setTimezone(e.target.value)}
           />
@@ -215,7 +234,7 @@ export default function SettingsPage() {
         {saved && <p className="text-sm text-accent">Saved successfully.</p>}
 
         <Button type="submit" disabled={saving} className="w-full py-3">
-          {saving ? "Saving..." : "Save Changes"}
+          {saving ? "Saving\u2026" : "Save Changes"}
         </Button>
 
         <div className="border-t border-border pt-6">

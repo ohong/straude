@@ -1,0 +1,9 @@
+#!/usr/bin/env bash
+# Run the test suite before pushing.
+# Enable with: git config core.hooksPath .githooks
+
+set -e
+
+echo "Running tests before push..."
+bunx turbo run test
+echo "All tests passed."

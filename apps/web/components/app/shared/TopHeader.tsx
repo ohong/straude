@@ -179,9 +179,11 @@ export function TopHeader({ username, avatarUrl }: TopHeaderProps) {
             <button
               type="button"
               onClick={() => setNotifOpen((v) => !v)}
-              className="relative text-muted hover:text-foreground"
+              className="relative text-muted hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent focus-visible:ring-offset-2 rounded"
+              aria-label="Notifications"
+              aria-expanded={notifOpen}
             >
-              <Bell size={20} />
+              <Bell size={20} aria-hidden="true" />
               {unreadCount > 0 && (
                 <span className="absolute -top-1 -right-1 h-2 w-2 rounded-full bg-accent" />
               )}
@@ -226,7 +228,7 @@ export function TopHeader({ username, avatarUrl }: TopHeaderProps) {
                           <p className="text-sm leading-snug">
                             {notificationMessage(n)}
                           </p>
-                          <p className="mt-0.5 text-xs text-muted">
+                          <p suppressHydrationWarning className="mt-0.5 text-xs text-muted">
                             {timeAgo(n.created_at)}
                           </p>
                         </div>
@@ -246,6 +248,9 @@ export function TopHeader({ username, avatarUrl }: TopHeaderProps) {
             <button
               type="button"
               onClick={() => setProfileOpen((v) => !v)}
+              aria-label="Profile menu"
+              aria-expanded={profileOpen}
+              className="rounded focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent focus-visible:ring-offset-2"
             >
               <Avatar
                 src={avatarUrl}
@@ -261,7 +266,7 @@ export function TopHeader({ username, avatarUrl }: TopHeaderProps) {
                   className="flex items-center gap-3 px-4 py-2.5 text-sm hover:bg-subtle"
                   onClick={() => setProfileOpen(false)}
                 >
-                  <User size={16} />
+                  <User size={16} aria-hidden="true" />
                   View Profile
                 </Link>
                 <Link
@@ -269,7 +274,7 @@ export function TopHeader({ username, avatarUrl }: TopHeaderProps) {
                   className="flex items-center gap-3 px-4 py-2.5 text-sm hover:bg-subtle"
                   onClick={() => setProfileOpen(false)}
                 >
-                  <Settings size={16} />
+                  <Settings size={16} aria-hidden="true" />
                   Settings
                 </Link>
                 <button
@@ -277,7 +282,7 @@ export function TopHeader({ username, avatarUrl }: TopHeaderProps) {
                   onClick={handleLogout}
                   className="flex w-full items-center gap-3 px-4 py-2.5 text-sm text-muted hover:bg-subtle hover:text-foreground"
                 >
-                  <LogOut size={16} />
+                  <LogOut size={16} aria-hidden="true" />
                   Log out
                 </button>
               </div>
@@ -289,9 +294,11 @@ export function TopHeader({ username, avatarUrl }: TopHeaderProps) {
             <button
               type="button"
               onClick={() => setPlusOpen((v) => !v)}
-              className="rounded p-1.5 text-muted hover:bg-subtle hover:text-foreground"
+              className="rounded p-1.5 text-muted hover:bg-subtle hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent focus-visible:ring-offset-2"
+              aria-label="Create new"
+              aria-expanded={plusOpen}
             >
-              <Plus size={20} />
+              <Plus size={20} aria-hidden="true" />
             </button>
 
             {plusOpen && (
@@ -301,7 +308,7 @@ export function TopHeader({ username, avatarUrl }: TopHeaderProps) {
                   className="flex items-center gap-3 px-4 py-2.5 text-sm hover:bg-subtle"
                   onClick={() => setPlusOpen(false)}
                 >
-                  <Upload size={16} />
+                  <Upload size={16} aria-hidden="true" />
                   Upload Activity
                 </Link>
                 <Link
@@ -309,7 +316,7 @@ export function TopHeader({ username, avatarUrl }: TopHeaderProps) {
                   className="flex items-center gap-3 px-4 py-2.5 text-sm hover:bg-subtle"
                   onClick={() => setPlusOpen(false)}
                 >
-                  <PenSquare size={16} />
+                  <PenSquare size={16} aria-hidden="true" />
                   Create Post
                 </Link>
               </div>

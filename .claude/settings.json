@@ -3,5 +3,18 @@
     "allow": [
       "*"
     ]
+  },
+  "hooks": {
+    "PostToolUse": [
+      {
+        "matcher": "Edit|Write",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "cd /Users/ohong/dev/straude/apps/web && bun run tsc --noEmit 2>&1 | grep 'error TS' | head -5"
+          }
+        ]
+      }
+    ]
   }
 }

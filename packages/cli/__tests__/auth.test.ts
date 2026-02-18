@@ -75,6 +75,7 @@ describe("saveConfig", () => {
     saveConfig({ token: "tok-abc", username: "alice", api_url: "https://straude.com" });
     expect(mockMkdirSync).toHaveBeenCalledWith(expect.stringContaining(".straude"), {
       recursive: true,
+      mode: 0o700,
     });
   });
 
@@ -91,7 +92,7 @@ describe("saveConfig", () => {
     expect(mockWriteFileSync).toHaveBeenCalledWith(
       expect.stringContaining("config.json"),
       JSON.stringify(config, null, 2) + "\n",
-      "utf-8",
+      { encoding: "utf-8", mode: 0o600 },
     );
   });
 });

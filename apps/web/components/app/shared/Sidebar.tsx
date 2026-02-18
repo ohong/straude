@@ -76,7 +76,7 @@ export function Sidebar({
 
       {/* Streak */}
       <div className="flex items-center gap-2 border-b border-border px-6 py-4 text-sm">
-        <Flame size={16} className={streak > 0 ? "text-accent" : undefined} />
+        <Flame size={16} className={streak > 0 ? "text-accent" : undefined} aria-hidden="true" />
         {streak > 0 ? `${streak} day streak` : "No active streak"}
       </div>
 
@@ -105,7 +105,7 @@ export function Sidebar({
           All Time
         </p>
         <p
-          className="font-[family-name:var(--font-mono)] text-[2rem] leading-none tracking-tight"
+          className="font-[family-name:var(--font-mono)] text-[2rem] leading-none tracking-tight tabular-nums"
           style={{ letterSpacing: "-0.03em" }}
         >
           {formatTokens(totalOutputTokens)}

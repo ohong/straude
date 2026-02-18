@@ -62,7 +62,7 @@ function StatCard({
       ref={ref}
       className="flex flex-col items-center rounded-2xl border border-[#E5E5E5] bg-[#FAFAFA] p-8 text-center transition-shadow hover:shadow-[0_4px_24px_rgba(0,0,0,0.04)]"
     >
-      <span className="font-[family-name:var(--font-mono)] text-[clamp(2.5rem,5vw,4rem)] font-bold leading-none tracking-tighter text-foreground">
+      <span className="font-[family-name:var(--font-mono)] text-[clamp(2.5rem,5vw,4rem)] font-bold leading-none tracking-tighter text-foreground tabular-nums">
         {display}
         <span className="text-accent">{suffix}</span>
       </span>

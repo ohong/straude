@@ -10,7 +10,8 @@ export async function GET(_request: NextRequest, context: RouteContext) {
     data: { user },
   } = await supabase.auth.getUser();
 
-  const { data: post, error } = await supabase
+  // Start post + kudos queries in parallel (avoid waterfall)
+  const postPromise = supabase
     .from("posts")
     .select(
       `
@@ -24,26 +25,29 @@ export async function GET(_request: NextRequest, context: RouteContext) {
     .eq("id", id)
     .single();
 
+  const kudosPromise = user
+    ? supabase
+        .from("kudos")
+        .select("id")
+        .eq("user_id", user.id)
+        .eq("post_id", id)
+        .maybeSingle()
+    : Promise.resolve({ data: null });
+
+  const [{ data: post, error }, { data: kudos }] = await Promise.all([
+    postPromise,
+    kudosPromise,
+  ]);
+
   if (error || !post) {
     return NextResponse.json({ error: "Post not found" }, { status: 404 });
-  }
-
-  let has_kudosed = false;
-  if (user) {
-    const { data: kudos } = await supabase
-      .from("kudos")
-      .select("id")
-      .eq("user_id", user.id)
-      .eq("post_id", id)
-      .maybeSingle();
-    has_kudosed = !!kudos;
   }
 
   return NextResponse.json({
     ...post,
     kudos_count: post.kudos_count?.[0]?.count ?? 0,
     comment_count: post.comment_count?.[0]?.count ?? 0,
-    has_kudosed,
+    has_kudosed: !!kudos,
   });
 }
 
@@ -62,7 +66,7 @@ export async function PATCH(request: NextRequest, context: RouteContext) {
   const updates: Record<string, unknown> = {};
 
   if (body.title !== undefined) {
-    if (typeof body.title !== "string" || body.title.length > 100) {
+    if (body.title !== null && (typeof body.title !== "string" || body.title.length > 100)) {
       return NextResponse.json(
         { error: "Title must be a string of at most 100 characters" },
         { status: 400 }
@@ -71,7 +75,7 @@ export async function PATCH(request: NextRequest, context: RouteContext) {
     updates.title = body.title;
   }
   if (body.description !== undefined) {
-    if (typeof body.description !== "string" || body.description.length > 500) {
+    if (body.description !== null && (typeof body.description !== "string" || body.description.length > 500)) {
       return NextResponse.json(
         { error: "Description must be a string of at most 500 characters" },
         { status: 400 }
