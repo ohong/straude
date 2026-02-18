@@ -20,13 +20,12 @@ export async function GET(request: NextRequest) {
     );
   }
 
-  // Search by username or github_username
+  // Search by username, display name, or github_username
   const { data: users, error } = await supabase
     .from("users")
     .select(PUBLIC_USER_FIELDS)
-    .not("username", "is", null)
     .eq("is_public", true)
-    .or(`username.ilike.%${q}%,github_username.ilike.%${q}%`)
+    .or(`username.ilike.%${q}%,display_name.ilike.%${q}%,github_username.ilike.%${q}%`)
     .limit(limit);
 
   if (error) {

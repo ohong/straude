@@ -7,7 +7,6 @@ import {
   Bell,
   Plus,
   Upload,
-  PenSquare,
   User,
   Settings,
   LogOut,
@@ -304,20 +303,12 @@ export function TopHeader({ username, avatarUrl }: TopHeaderProps) {
             {plusOpen && (
               <div className="absolute right-0 top-full mt-1 w-48 rounded border border-border bg-background shadow-lg">
                 <Link
-                  href="/settings/import"
+                  href="/post/new"
                   className="flex items-center gap-3 px-4 py-2.5 text-sm hover:bg-subtle"
                   onClick={() => setPlusOpen(false)}
                 >
                   <Upload size={16} aria-hidden="true" />
                   Upload Activity
-                </Link>
-                <Link
-                  href="/settings/import"
-                  className="flex items-center gap-3 px-4 py-2.5 text-sm hover:bg-subtle"
-                  onClick={() => setPlusOpen(false)}
-                >
-                  <PenSquare size={16} aria-hidden="true" />
-                  Create Post
                 </Link>
               </div>
             )}

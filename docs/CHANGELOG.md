@@ -2,6 +2,10 @@
 
 ## Unreleased
 
+### Added
+
+- **Post hub page (`/post/new`).** New page that guides users through the create-post flow: see unedited posts, sync via CLI, or import manually. The `+` dropdown in the top header now links here instead of the raw JSON import page. Collapsed redundant "Upload Activity" / "Create Post" menu items into a single "Create Post" entry.
+
 ### Fixed
 
 - **Username falsely reported as "Already taken" during onboarding.** The `check-username` endpoint didn't exclude the current user's own row. When the auth callback auto-claimed a GitHub handle, the onboarding page flagged it as taken. Now excludes the authenticated user from the uniqueness check.
