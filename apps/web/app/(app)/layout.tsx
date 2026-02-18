@@ -26,45 +26,58 @@ export default async function AppLayout({
     .single();
 
   // Fetch sidebar data in parallel
-  const [followingRes, followersRes, postsRes, latestPostRes, streakRes] =
-    await Promise.all([
-      supabase
-        .from("follows")
-        .select("id", { count: "exact", head: true })
-        .eq("follower_id", user.id),
-      supabase
-        .from("follows")
-        .select("id", { count: "exact", head: true })
-        .eq("following_id", user.id),
-      supabase
-        .from("posts")
-        .select("id", { count: "exact", head: true })
-        .eq("user_id", user.id),
-      supabase
-        .from("posts")
-        .select("title, created_at")
-        .eq("user_id", user.id)
-        .order("created_at", { ascending: false })
-        .limit(1),
-      supabase.rpc("calculate_user_streak", { p_user_id: user.id }),
-    ]);
+  const [
+    followingRes,
+    followersRes,
+    postsRes,
+    latestPostRes,
+    streakRes,
+    allTimeUsageRes,
+  ] = await Promise.all([
+    supabase
+      .from("follows")
+      .select("id", { count: "exact", head: true })
+      .eq("follower_id", user.id),
+    supabase
+      .from("follows")
+      .select("id", { count: "exact", head: true })
+      .eq("following_id", user.id),
+    supabase
+      .from("posts")
+      .select("id", { count: "exact", head: true })
+      .eq("user_id", user.id),
+    supabase
+      .from("posts")
+      .select("id, title, created_at")
+      .eq("user_id", user.id)
+      .order("created_at", { ascending: false })
+      .limit(3),
+    supabase.rpc("calculate_user_streak", { p_user_id: user.id }),
+    supabase
+      .from("daily_usage")
+      .select("cost_usd, output_tokens")
+      .eq("user_id", user.id),
+  ]);
 
   const followingCount = followingRes.count ?? 0;
   const followersCount = followersRes.count ?? 0;
   const postsCount = postsRes.count ?? 0;
   const streak = Number(streakRes.data) || 0;
 
-  const latestPostRow = latestPostRes.data?.[0] ?? null;
-  const latestPost = latestPostRow
-    ? {
-        title: latestPostRow.title ?? "Untitled",
-        date: new Date(latestPostRow.created_at).toLocaleDateString("en-US", {
-          month: "short",
-          day: "numeric",
-          year: "numeric",
-        }),
-      }
-    : null;
+  const totalOutputTokens =
+    allTimeUsageRes.data?.reduce((s, r) => s + Number(r.output_tokens), 0) ?? 0;
+  const totalCost =
+    allTimeUsageRes.data?.reduce((s, r) => s + Number(r.cost_usd), 0) ?? 0;
+
+  const latestPosts = (latestPostRes.data ?? []).map((row) => ({
+    id: row.id,
+    title: row.title ?? "Untitled",
+    date: new Date(row.created_at).toLocaleDateString("en-US", {
+      month: "short",
+      day: "numeric",
+      year: "numeric",
+    }),
+  }));
 
   return (
     <>
@@ -84,7 +97,9 @@ export default async function AppLayout({
             followersCount={followersCount}
             postsCount={postsCount}
             streak={streak}
-            latestPost={latestPost}
+            latestPosts={latestPosts}
+            totalOutputTokens={totalOutputTokens}
+            totalCost={totalCost}
           />
         </aside>
 

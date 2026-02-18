@@ -21,6 +21,33 @@ export async function POST(request: NextRequest) {
     );
   }
 
+  if (images.length > 4) {
+    return NextResponse.json(
+      { error: "Maximum 4 images allowed" },
+      { status: 400 }
+    );
+  }
+
+  // Only allow images hosted on our own Supabase storage to prevent SSRF
+  const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
+  const allowedOrigin = supabaseUrl ? new URL(supabaseUrl).origin : null;
+  for (const url of images) {
+    if (typeof url !== "string") {
+      return NextResponse.json({ error: "Invalid image URL" }, { status: 400 });
+    }
+    try {
+      const parsed = new URL(url);
+      if (!allowedOrigin || parsed.origin !== allowedOrigin) {
+        return NextResponse.json(
+          { error: "Images must be hosted on Straude storage" },
+          { status: 400 }
+        );
+      }
+    } catch {
+      return NextResponse.json({ error: "Invalid image URL" }, { status: 400 });
+    }
+  }
+
   const apiKey = process.env.ANTHROPIC_API_KEY;
   if (!apiKey) {
     return NextResponse.json(
@@ -36,17 +63,19 @@ export async function POST(request: NextRequest) {
     source: { type: "url" as const, url },
   }));
 
-  const response = await anthropic.messages.create({
-    model: "claude-sonnet-4-5-20250929",
-    max_tokens: 300,
-    messages: [
-      {
-        role: "user",
-        content: [
-          ...imageContent,
-          {
-            type: "text",
-            text: `You are writing a short social post caption for a developer sharing their Claude Code usage stats on Straude (like Strava for coding).
+  let response: Awaited<ReturnType<typeof anthropic.messages.create>>;
+  try {
+    response = await anthropic.messages.create({
+      model: "claude-sonnet-4-5-20250929",
+      max_tokens: 300,
+      messages: [
+        {
+          role: "user",
+          content: [
+            ...imageContent,
+            {
+              type: "text",
+              text: `You are writing a short social post caption for a developer sharing their Claude Code usage stats on Straude (like Strava for coding).
 
 Usage stats for today:
 - Cost: $${usage?.costUSD ?? 0}
@@ -59,11 +88,17 @@ Based on the screenshots of what they were working on and the usage stats, write
 2. A short description (max 500 chars) — casual, developer-friendly. Mention what was accomplished based on the screenshots. Keep it brief like a Strava caption.
 
 Return as JSON: { "title": "...", "description": "..." }`,
-          },
-        ],
-      },
-    ],
-  });
+            },
+          ],
+        },
+      ],
+    });
+  } catch {
+    return NextResponse.json(
+      { error: "AI service unavailable" },
+      { status: 503 }
+    );
+  }
 
   // Extract JSON from the response
   const text =

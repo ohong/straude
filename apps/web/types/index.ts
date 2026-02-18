@@ -150,6 +150,18 @@ export interface LeaderboardResponse {
   next_cursor?: string;
 }
 
+export interface Notification {
+  id: string;
+  user_id: string;
+  actor_id: string;
+  type: "follow" | "kudos" | "comment";
+  post_id: string | null;
+  comment_id: string | null;
+  read: boolean;
+  created_at: string;
+  actor?: Pick<User, "username" | "avatar_url">;
+}
+
 export interface WallOfLovePost {
   url: string;
   author_name: string;

@@ -60,9 +60,38 @@ export async function PATCH(request: NextRequest, context: RouteContext) {
 
   const body = await request.json();
   const updates: Record<string, unknown> = {};
-  if (body.title !== undefined) updates.title = body.title;
-  if (body.description !== undefined) updates.description = body.description;
-  if (body.images !== undefined) updates.images = body.images;
+
+  if (body.title !== undefined) {
+    if (typeof body.title !== "string" || body.title.length > 100) {
+      return NextResponse.json(
+        { error: "Title must be a string of at most 100 characters" },
+        { status: 400 }
+      );
+    }
+    updates.title = body.title;
+  }
+  if (body.description !== undefined) {
+    if (typeof body.description !== "string" || body.description.length > 500) {
+      return NextResponse.json(
+        { error: "Description must be a string of at most 500 characters" },
+        { status: 400 }
+      );
+    }
+    updates.description = body.description;
+  }
+  if (body.images !== undefined) {
+    if (!Array.isArray(body.images) || body.images.length > 4) {
+      return NextResponse.json(
+        { error: "Images must be an array of at most 4 URLs" },
+        { status: 400 }
+      );
+    }
+    updates.images = body.images;
+  }
+
+  if (Object.keys(updates).length === 0) {
+    return NextResponse.json({ error: "No fields to update" }, { status: 400 });
+  }
 
   const { data: post, error } = await supabase
     .from("posts")

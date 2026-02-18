@@ -1,5 +1,19 @@
 # Architecture & Design Decisions
 
+## SSRF Prevention: Image URL Allowlisting (2026-02-18)
+
+**Decision:** The `/api/ai/generate-caption` endpoint validates that all image URLs belong to the project's Supabase storage origin before passing them to the Anthropic API.
+
+**Problem:** The endpoint accepted arbitrary URLs from the client and forwarded them to Anthropic's vision API. An attacker could pass internal network URLs or attacker-controlled hosts, using the server as a proxy (SSRF).
+
+**Why allowlist over blocklist:** Blocklists (e.g., blocking `localhost`, `169.254.x.x`) are easily bypassed via DNS rebinding, IPv6, or URL encoding tricks. Allowlisting the known Supabase storage domain is the only reliable defense.
+
+## Next.js 16: proxy.ts Not middleware.ts (2026-02-18)
+
+**Decision:** This project uses `proxy.ts` for request interception, not `middleware.ts`. Next.js 16 introduced the proxy file convention; having both files causes a hard build failure.
+
+**Implication:** Any auth guards, redirects, or request transforms must be added to `apps/web/proxy.ts`. Never create a `middleware.ts` file.
+
 ## Deterministic Render Data for SSR Components (2026-02-17)
 
 **Decision:** Landing page components that need varied visual data (e.g., contribution graphs) use hardcoded static arrays instead of `Math.random()`.
@@ -41,6 +55,28 @@
 **Why option 3:** Users see their own profile/stats at a glance (streak, follower counts, latest activity) without navigating away from the feed. The top header is a well-understood pattern for site-wide navigation. Mobile stays unchanged (bottom nav).
 
 **Data fetching:** Sidebar data (follower/following counts, streak, latest post) is fetched in `Promise.all` in the app layout alongside the existing profile query, keeping server-side data loading parallel.
+
+## Streak RPC: UTC Date Fallback (2026-02-17)
+
+**Decision:** `calculate_user_streak` checks `CURRENT_DATE` first; if no usage exists, falls back to `CURRENT_DATE - 1` before returning 0.
+
+**Problem:** Supabase runs in UTC. A user in UTC-8 who logged activity at 10pm local time (6am UTC next day) would have no usage for the current UTC date until their next session. The streak function returned 0 despite 8 consecutive days of data.
+
+**Alternatives considered:**
+1. **Pass user timezone to the RPC** — more accurate but adds complexity and requires the client to always supply timezone.
+2. **Check yesterday as fallback** (chosen) — simple, handles the common case where the user hasn't pushed yet today.
+
+**Why option 2:** The one-day grace period covers the UTC offset gap for all timezones (max offset is UTC+14/UTC-12). No client changes needed. If the user truly hasn't logged in 2+ days, it correctly returns 0.
+
+## Notifications: Table + API Route Pattern (2026-02-17)
+
+**Decision:** Notifications are inserted from existing API routes (follow, kudos, comments) rather than using database triggers.
+
+**Alternatives considered:**
+1. **Database triggers** — auto-insert on `follows`/`kudos`/`comments` insert. Decoupled but harder to debug, can't skip self-notifications cleanly.
+2. **Application-level inserts in API routes** (chosen) — explicit, easy to add conditions (skip self-notifications), fire-and-forget.
+
+**Why option 2:** The API routes already have the auth context needed to determine actor and target. Self-notification skipping is a simple `if` check. Notification inserts are non-blocking (fire-and-forget) so they don't slow down the primary operation. Triggers would require plpgsql logic for the self-notification check and are harder to test.
 
 ## CLI Default Command: Smart Sync (2026-02-17)
 
@@ -95,3 +131,17 @@
 **Decision:** Added `__tests__/flows/cli-sync-flow.test.ts` that mocks only at boundaries (fetch, fs, child_process) rather than at module boundaries.
 
 **Why:** The existing unit tests mock `apiRequest`, `requireAuth`, etc. — which means they never exercise the actual HTTP URL construction, header assembly, or config-to-API wiring. The flow tests caught the `--api-url` override bug and verify exact endpoint paths, preventing silent 404s.
+
+## "Already Synced" Stats Preview (2026-02-18)
+
+**Decision:** When the user has already synced today, the CLI still runs `ccusage` and prints today's stats before showing "Already synced today."
+
+**Why:** Users run `bunx straude` to see their stats as much as to push them. Silently exiting with just a message gives no feedback on current usage. Showing the stats makes the CLI useful as a dashboard command even when there's nothing new to push. The ccusage call is best-effort — failures are silently caught so the "already synced" message always appears.
+
+## npm Publish: `main` Field Required for ESM Bin Packages (2026-02-18)
+
+**Decision:** Added `"main": "dist/index.js"` to `package.json` alongside the `bin` entry.
+
+**Bug:** npm 11 silently strips the `bin` entry during publish for ESM packages (`"type": "module"`) that lack a `main` field, with the warning `"bin[straude]" script name was invalid and removed`. The published package had no binary, so `npx straude` failed.
+
+**Fix:** Adding `main` pointing to the same entrypoint satisfies npm's validation. The `main` field is redundant for a CLI-only package but harmless.

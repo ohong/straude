@@ -3,6 +3,7 @@
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { cn } from "@/lib/utils/cn";
+import { formatTokens } from "@/lib/utils/format";
 import { Avatar } from "@/components/ui/Avatar";
 import { Badge } from "@/components/ui/Badge";
 import type { LeaderboardEntry } from "@/types";
@@ -30,12 +31,6 @@ function rankVariant(rank: number): "rank-1" | "rank-2" | "rank-3" | "rank-top10
   if (rank === 3) return "rank-3";
   if (rank <= 10) return "rank-top10";
   return "default";
-}
-
-function formatTokens(n: number): string {
-  if (n >= 1_000_000) return `${(n / 1_000_000).toFixed(1)}M`;
-  if (n >= 1_000) return `${(n / 1_000).toFixed(1)}k`;
-  return String(n);
 }
 
 export function LeaderboardTable({

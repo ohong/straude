@@ -5,21 +5,6 @@ import { FollowButton } from "@/components/app/profile/FollowButton";
 export async function RightSidebar({ userId }: { userId: string }) {
   const supabase = await createClient();
 
-  // Get user's weekly stats
-  const now = new Date();
-  const weekStart = new Date(now);
-  weekStart.setDate(now.getDate() - now.getDay());
-  weekStart.setHours(0, 0, 0, 0);
-
-  const { data: weeklyUsage } = await supabase
-    .from("daily_usage")
-    .select("cost_usd, total_tokens")
-    .eq("user_id", userId)
-    .gte("date", weekStart.toISOString().split("T")[0]);
-
-  const weekTokens = weeklyUsage?.reduce((s, r) => s + Number(r.total_tokens), 0) ?? 0;
-  const weekCost = weeklyUsage?.reduce((s, r) => s + Number(r.cost_usd), 0) ?? 0;
-
   // Top 5 leaderboard preview
   const { data: topUsers } = await supabase
     .from("leaderboard_weekly")
@@ -43,12 +28,6 @@ export async function RightSidebar({ userId }: { userId: string }) {
     .not("username", "is", null)
     .not("id", "in", `(${excludeIds.join(",")})`)
     .limit(5);
-
-  function formatTokens(n: number) {
-    if (n >= 1_000_000) return `${(n / 1_000_000).toFixed(1)}M`;
-    if (n >= 1_000) return `${(n / 1_000).toFixed(1)}k`;
-    return String(n);
-  }
 
   return (
     <div className="flex flex-col">
@@ -137,20 +116,6 @@ export async function RightSidebar({ userId }: { userId: string }) {
         </Link>
       </div>
 
-      {/* Your Week */}
-      <div className="border-b border-border p-6">
-        <p className="mb-1 text-xs font-semibold uppercase tracking-widest text-muted">
-          Your Week
-        </p>
-        <p className="font-[family-name:var(--font-mono)] text-[2.5rem] leading-none tracking-tight" style={{ letterSpacing: "-0.03em" }}>
-          {formatTokens(weekTokens)}
-        </p>
-        <p className="mt-1 text-sm text-muted">Tokens generated</p>
-        <p className="mt-3 font-[family-name:var(--font-mono)] text-lg font-medium text-accent">
-          ${weekCost.toFixed(2)}
-        </p>
-        <p className="text-xs text-muted">This week's spend</p>
-      </div>
     </div>
   );
 }

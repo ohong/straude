@@ -7,7 +7,6 @@ import type { ContributionDay } from "@/types";
 const CELL_SIZE = 12;
 const GAP = 3;
 const STEP = CELL_SIZE + GAP;
-const WEEKS = 52;
 const DAYS = 7;
 const MONTH_LABEL_HEIGHT = 16;
 
@@ -56,47 +55,56 @@ export function ContributionGraph({ data, onCellClick, className }: Contribution
     lookup.set(entry.date, entry);
   }
 
-  // Build grid: 52 weeks x 7 days, most recent week on right, Sunday at top (day 0)
+  // Build grid for the current year: Jan 1 – Dec 31
+  const year = new Date().getFullYear();
+  const jan1 = new Date(year, 0, 1);
+  const dec31 = new Date(year, 11, 31);
   const today = new Date();
   today.setHours(0, 0, 0, 0);
 
-  // Start from Sunday, 51 weeks ago
-  const startDate = new Date(today);
-  startDate.setDate(today.getDate() - today.getDay() - 51 * 7);
+  // Grid starts on the Sunday of the week containing Jan 1
+  const gridStart = new Date(jan1);
+  gridStart.setDate(jan1.getDate() - jan1.getDay());
 
-  type CellData = { date: Date; key: string; weekIndex: number; dayIndex: number };
+  // Calculate total weeks needed to cover through Dec 31
+  const totalDays = Math.ceil((dec31.getTime() - gridStart.getTime()) / (24 * 60 * 60 * 1000)) + 1;
+  const numWeeks = Math.ceil(totalDays / 7);
+
+  type CellData = { date: Date; key: string; weekIndex: number; dayIndex: number; inYear: boolean };
   const cells: CellData[] = [];
   const monthLabels: { label: string; x: number }[] = [];
   let lastMonth = -1;
 
-  const cursor = new Date(startDate);
-  while (cursor <= today) {
-    const weekIndex = Math.floor(
-      (cursor.getTime() - startDate.getTime()) / (7 * 24 * 60 * 60 * 1000),
-    );
-    const dayIndex = cursor.getDay(); // 0=Sunday
+  const cursor = new Date(gridStart);
+  for (let i = 0; i < numWeeks * 7; i++) {
+    const weekIndex = Math.floor(i / 7);
+    const dayIndex = i % 7;
+    const inYear = cursor >= jan1 && cursor <= dec31;
 
-    cells.push({
-      date: new Date(cursor),
-      key: formatDateKey(cursor),
-      weekIndex,
-      dayIndex,
-    });
-
-    // Track month labels (first occurrence of a new month)
-    const month = cursor.getMonth();
-    if (month !== lastMonth) {
-      monthLabels.push({
-        label: SHORT_MONTHS[month]!,
-        x: weekIndex * STEP,
+    if (inYear) {
+      cells.push({
+        date: new Date(cursor),
+        key: formatDateKey(cursor),
+        weekIndex,
+        dayIndex,
+        inYear,
       });
-      lastMonth = month;
+
+      // Track month labels (first occurrence in year)
+      const month = cursor.getMonth();
+      if (month !== lastMonth) {
+        monthLabels.push({
+          label: SHORT_MONTHS[month]!,
+          x: weekIndex * STEP,
+        });
+        lastMonth = month;
+      }
     }
 
     cursor.setDate(cursor.getDate() + 1);
   }
 
-  const svgWidth = (WEEKS + 1) * STEP;
+  const svgWidth = numWeeks * STEP;
   const svgHeight = DAYS * STEP + MONTH_LABEL_HEIGHT;
 
   const handleMouseEnter = useCallback(
@@ -115,15 +123,20 @@ export function ContributionGraph({ data, onCellClick, className }: Contribution
   const handleMouseLeave = useCallback(() => setTooltip(null), []);
 
   return (
-    <div className={cn("relative overflow-x-auto", className)} style={{ scrollbarWidth: "none" }}>
-      <svg width={svgWidth} height={svgHeight} className="block">
+    <div className={cn("relative", className)}>
+      <svg
+        viewBox={`0 0 ${svgWidth} ${svgHeight}`}
+        className="block w-full"
+        style={{ height: "auto" }}
+      >
         {/* Month labels */}
         {monthLabels.map((m, i) => (
           <text
             key={`${m.label}-${i}`}
             x={m.x}
             y={11}
-            className="fill-muted text-[10px]"
+            className="fill-muted"
+            fontSize={10}
           >
             {m.label}
           </text>
@@ -134,6 +147,7 @@ export function ContributionGraph({ data, onCellClick, className }: Contribution
           const entry = lookup.get(cell.key);
           const cost = entry?.cost_usd ?? 0;
           const hasPost = entry?.has_post ?? false;
+          const isFuture = cell.date > today;
 
           return (
             <rect
@@ -143,7 +157,7 @@ export function ContributionGraph({ data, onCellClick, className }: Contribution
               width={CELL_SIZE}
               height={CELL_SIZE}
               rx={2}
-              fill={getCellColor(cost)}
+              fill={isFuture ? "#F5F5F5" : getCellColor(cost)}
               stroke={hasPost ? "#999" : "none"}
               strokeWidth={hasPost ? 1 : 0}
               className={cn(onCellClick && hasPost && "cursor-pointer")}

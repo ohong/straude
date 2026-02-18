@@ -33,6 +33,22 @@ export async function POST(request: NextRequest, context: RouteContext) {
     return NextResponse.json({ error: error.message }, { status: 500 });
   }
 
+  // Insert comment notification (skip self-comment)
+  const { data: post } = await supabase
+    .from("posts")
+    .select("user_id")
+    .eq("id", id)
+    .single();
+  if (post && post.user_id !== user.id) {
+    await supabase.from("notifications").insert({
+      user_id: post.user_id,
+      actor_id: user.id,
+      type: "comment",
+      post_id: id,
+      comment_id: comment.id,
+    });
+  }
+
   return NextResponse.json(comment, { status: 201 });
 }
 

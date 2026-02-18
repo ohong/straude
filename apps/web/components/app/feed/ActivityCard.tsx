@@ -3,6 +3,7 @@
 import Link from "next/link";
 import { Zap, MessageCircle, Share2, CheckCircle } from "lucide-react";
 import { cn } from "@/lib/utils/cn";
+import { formatTokens } from "@/lib/utils/format";
 import type { Post } from "@/types";
 import ReactMarkdown from "react-markdown";
 import { useState } from "react";
@@ -17,12 +18,6 @@ function timeAgo(dateStr: string) {
   const days = Math.floor(hrs / 24);
   if (days < 7) return `${days}d ago`;
   return new Date(dateStr).toLocaleDateString("en-US", { month: "short", day: "numeric" });
-}
-
-function formatTokens(n: number) {
-  if (n >= 1_000_000) return `${(n / 1_000_000).toFixed(1)}M`;
-  if (n >= 1_000) return `${(n / 1_000).toFixed(1)}k`;
-  return String(n);
 }
 
 function formatModel(models: string[]) {
@@ -121,9 +116,7 @@ export function ActivityCard({ post }: { post: Post }) {
           <div
             className={cn(
               "mt-3 grid gap-2",
-              post.images.length === 1 && "grid-cols-1",
-              post.images.length === 2 && "grid-cols-2",
-              post.images.length >= 3 && "grid-cols-2"
+              post.images.length > 1 ? "grid-cols-2" : "grid-cols-1"
             )}
           >
             {post.images.map((url, i) => (

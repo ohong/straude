@@ -21,6 +21,7 @@ export async function POST(request: Request) {
     .from("cli_auth_codes")
     .select("*")
     .eq("code", code)
+    .neq("status", "expired")
     .single();
 
   if (error || !authCode) {

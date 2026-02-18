@@ -1,7 +1,7 @@
 "use client";
 
 import type { WallOfLovePost } from "@/types";
-import { useEffect, useRef, useState } from "react";
+import { useInView } from "@/lib/hooks/useInView";
 
 function XIcon({ className }: { className?: string }) {
   return (
@@ -78,20 +78,7 @@ function WallOfLoveCard({
 }
 
 export function WallOfLove({ posts }: { posts: WallOfLovePost[] }) {
-  const ref = useRef<HTMLDivElement>(null);
-  const [inView, setInView] = useState(false);
-
-  useEffect(() => {
-    if (!ref.current) return;
-    const observer = new IntersectionObserver(
-      ([entry]) => {
-        if (entry.isIntersecting) setInView(true);
-      },
-      { threshold: 0.1 }
-    );
-    observer.observe(ref.current);
-    return () => observer.disconnect();
-  }, []);
+  const { ref, inView } = useInView(0.1);
 
   if (posts.length === 0) return null;
 

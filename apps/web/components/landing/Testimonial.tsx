@@ -1,22 +1,9 @@
 "use client";
 
-import { useEffect, useRef, useState } from "react";
+import { useInView } from "@/lib/hooks/useInView";
 
 export function Testimonial() {
-  const ref = useRef<HTMLDivElement>(null);
-  const [inView, setInView] = useState(false);
-
-  useEffect(() => {
-    if (!ref.current) return;
-    const observer = new IntersectionObserver(
-      ([entry]) => {
-        if (entry.isIntersecting) setInView(true);
-      },
-      { threshold: 0.3 }
-    );
-    observer.observe(ref.current);
-    return () => observer.disconnect();
-  }, []);
+  const { ref, inView } = useInView(0.3);
 
   return (
     <section className="bg-[#F7F5F0] py-24 md:py-32">

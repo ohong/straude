@@ -12,6 +12,11 @@ vi.mock("../../src/commands/push.js", () => ({
   pushCommand: vi.fn(),
 }));
 
+vi.mock("../../src/lib/ccusage.js", () => ({
+  runCcusageRaw: vi.fn(),
+  parseCcusageOutput: vi.fn(),
+}));
+
 vi.mock("../../src/config.js", async (importOriginal) => {
   const actual = await importOriginal<typeof import("../../src/config.js")>();
   return { ...actual };
@@ -21,10 +26,13 @@ import { syncCommand } from "../../src/commands/sync.js";
 import { loadConfig } from "../../src/lib/auth.js";
 import { loginCommand } from "../../src/commands/login.js";
 import { pushCommand } from "../../src/commands/push.js";
+import { runCcusageRaw, parseCcusageOutput } from "../../src/lib/ccusage.js";
 
 const mockLoadConfig = vi.mocked(loadConfig);
 const mockLoginCommand = vi.mocked(loginCommand);
 const mockPushCommand = vi.mocked(pushCommand);
+const mockRunCcusageRaw = vi.mocked(runCcusageRaw);
+const mockParseCcusageOutput = vi.mocked(parseCcusageOutput);
 
 const fakeConfig = { token: "tok", username: "alice", api_url: "https://straude.com" };
 
@@ -91,13 +99,32 @@ describe("syncCommand", () => {
     expect(mockPushCommand).toHaveBeenCalledWith({}, fakeConfig);
   });
 
-  it("shows already synced when last_push_date is today", async () => {
+  it("shows today's stats then already synced when last_push_date is today", async () => {
     mockLoadConfig.mockReturnValue({ ...fakeConfig, last_push_date: todayStr() });
+    mockRunCcusageRaw.mockReturnValue("{}");
+    mockParseCcusageOutput.mockReturnValue({
+      data: [
+        {
+          date: todayStr(),
+          models: ["claude-sonnet-4-6"],
+          inputTokens: 1000,
+          outputTokens: 500,
+          cacheCreationTokens: 0,
+          cacheReadTokens: 0,
+          totalTokens: 1500,
+          costUSD: 0.05,
+        },
+      ],
+    });
 
     await syncCommand();
 
     expect(mockPushCommand).not.toHaveBeenCalled();
-    expect(console.log).toHaveBeenCalledWith("Already synced today.");
+    expect(console.log).toHaveBeenCalledWith(`  ${todayStr()}:`);
+    expect(console.log).toHaveBeenCalledWith("    Cost: $0.05");
+    expect(console.log).toHaveBeenCalledWith(
+      expect.stringContaining("Already synced today."),
+    );
   });
 
   it("pushes diff days when last_push_date is in the past", async () => {

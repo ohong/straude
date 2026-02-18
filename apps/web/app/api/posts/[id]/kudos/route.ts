@@ -23,6 +23,23 @@ export async function POST(_request: NextRequest, context: RouteContext) {
     return NextResponse.json({ error: error.message }, { status: 500 });
   }
 
+  // Insert kudos notification (skip self-kudos)
+  if (!error) {
+    const { data: post } = await supabase
+      .from("posts")
+      .select("user_id")
+      .eq("id", id)
+      .single();
+    if (post && post.user_id !== user.id) {
+      await supabase.from("notifications").insert({
+        user_id: post.user_id,
+        actor_id: user.id,
+        type: "kudos",
+        post_id: id,
+      });
+    }
+  }
+
   const { count } = await supabase
     .from("kudos")
     .select("*", { count: "exact", head: true })

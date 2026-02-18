@@ -207,14 +207,21 @@ describe("sync flow", () => {
     expect(saved.last_push_date).toBe(today);
   });
 
-  it("returning user already synced today: no API calls", async () => {
+  it("returning user already synced today: shows stats, no API calls", async () => {
     seedConfig({ last_push_date: todayStr() });
+    const today = todayStr();
+    mockExecFileSync.mockReturnValue(ccusageJson([today]));
 
     await syncCommand();
 
     expect(mockFetch).not.toHaveBeenCalled();
-    expect(mockExecFileSync).not.toHaveBeenCalled();
-    expect(console.log).toHaveBeenCalledWith("Already synced today.");
+    // ccusage IS called to show today's stats preview
+    expect(mockExecFileSync).toHaveBeenCalledTimes(1);
+    expect(console.log).toHaveBeenCalledWith(`  ${today}:`);
+    expect(console.log).toHaveBeenCalledWith("    Cost: $0.05");
+    expect(console.log).toHaveBeenCalledWith(
+      expect.stringContaining("Already synced today."),
+    );
   });
 
   it("returning user with stale last_push_date: pushes diff days", async () => {

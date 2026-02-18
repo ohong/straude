@@ -27,9 +27,10 @@ export function loadConfig(): StraudeConfig | null {
 
 export function saveConfig(config: StraudeConfig): void {
   if (!existsSync(CONFIG_DIR)) {
-    mkdirSync(CONFIG_DIR, { recursive: true });
+    mkdirSync(CONFIG_DIR, { recursive: true, mode: 0o700 });
   }
-  writeFileSync(CONFIG_FILE, JSON.stringify(config, null, 2) + "\n", "utf-8");
+  // mode 0o600: only the owner can read/write (protects the auth token)
+  writeFileSync(CONFIG_FILE, JSON.stringify(config, null, 2) + "\n", { encoding: "utf-8", mode: 0o600 });
 }
 
 export function updateLastPushDate(date: string): void {

@@ -4,9 +4,13 @@
 
 Add a dedicated `/post/new` page for composing posts directly in the app (title, description, images, model selection). Currently the "Create Post" button in the header dropdown links to `/settings/import` as a placeholder.
 
-## Notifications System
+## Real-time Notifications
 
-The bell icon in the top header links to `/notifications` but there's no notifications page or backend yet. Build a notifications system for follows, kudos, and comments.
+The notifications system is built but uses polling (fetch on dropdown open + initial load). Consider adding Supabase Realtime subscriptions to push new notifications to the client without requiring a page refresh or dropdown toggle.
+
+## Notifications Page
+
+The dropdown shows the 20 most recent notifications. A dedicated `/notifications` page with pagination and filtering (by type) would be useful for users with high activity.
 
 ## Session Time Tracking
 

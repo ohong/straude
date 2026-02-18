@@ -84,17 +84,17 @@ export default async function ProfilePage({
   const totalSpend = totalSpendRows?.reduce((s, r) => s + Number(r.cost_usd), 0) ?? 0;
   const lifetimeOutputTokens = totalSpendRows?.reduce((s, r) => s + Number(r.output_tokens), 0) ?? 0;
 
-  // Contribution data (last 52 weeks)
-  const endDate = new Date();
-  const startDate = new Date();
-  startDate.setDate(endDate.getDate() - 364);
+  // Contribution data (current year)
+  const currentYear = new Date().getFullYear();
+  const yearStart = `${currentYear}-01-01`;
+  const yearEnd = `${currentYear}-12-31`;
 
   const { data: contributions } = await supabase
     .from("daily_usage")
     .select("date, cost_usd")
     .eq("user_id", profile.id)
-    .gte("date", startDate.toISOString().split("T")[0])
-    .lte("date", endDate.toISOString().split("T")[0]);
+    .gte("date", yearStart)
+    .lte("date", yearEnd);
 
   const { data: postDates } = await supabase
     .from("posts")

@@ -1,6 +1,9 @@
 import { NextResponse, type NextRequest } from "next/server";
 import { createClient } from "@/lib/supabase/server";
 
+// Safe public fields only — never expose email, private settings, etc.
+const PUBLIC_USER_FIELDS = "id, username, display_name, bio, avatar_url, is_public";
+
 export async function GET(request: NextRequest) {
   const supabase = await createClient();
 
@@ -19,8 +22,9 @@ export async function GET(request: NextRequest) {
 
   const { data: users, error } = await supabase
     .from("users")
-    .select("*")
+    .select(PUBLIC_USER_FIELDS)
     .not("username", "is", null)
+    .eq("is_public", true)
     .ilike("username", `%${q}%`)
     .limit(limit);
 

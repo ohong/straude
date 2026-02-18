@@ -1,10 +1,9 @@
 "use client";
 
 import Link from "next/link";
-import { useRouter } from "next/navigation";
-import { LogOut, Flame } from "lucide-react";
+import { Flame } from "lucide-react";
+import { formatTokens } from "@/lib/utils/format";
 import { Avatar } from "@/components/ui/Avatar";
-import { createClient } from "@/lib/supabase/client";
 
 interface SidebarProps {
   username: string | null;
@@ -14,7 +13,9 @@ interface SidebarProps {
   followersCount: number;
   postsCount: number;
   streak: number;
-  latestPost: { title: string; date: string } | null;
+  latestPosts: { id: string; title: string; date: string }[];
+  totalOutputTokens: number;
+  totalCost: number;
 }
 
 export function Sidebar({
@@ -25,16 +26,10 @@ export function Sidebar({
   followersCount,
   postsCount,
   streak,
-  latestPost,
+  latestPosts,
+  totalOutputTokens,
+  totalCost,
 }: SidebarProps) {
-  const router = useRouter();
-
-  async function handleLogout() {
-    const supabase = createClient();
-    await supabase.auth.signOut();
-    router.push("/");
-  }
-
   const profileHref = username ? `/u/${username}` : "/settings";
 
   return (
@@ -57,23 +52,23 @@ export function Sidebar({
         </Link>
       </div>
 
-      {/* Stats row */}
-      <div className="flex justify-between border-b border-border px-6 py-4">
-        <Link href={profileHref} className="flex flex-col items-center">
+      {/* Stats row — stacked for readability */}
+      <div className="grid grid-cols-3 border-b border-border py-4">
+        <Link href={profileHref} className="flex flex-col items-center gap-1 px-2">
           <span className="text-base font-semibold">{followingCount}</span>
-          <span className="text-[11px] uppercase tracking-wider text-muted">
+          <span className="text-[10px] uppercase tracking-wider text-muted">
             Following
           </span>
         </Link>
-        <Link href={profileHref} className="flex flex-col items-center">
+        <Link href={profileHref} className="flex flex-col items-center gap-1 border-x border-border px-2">
           <span className="text-base font-semibold">{followersCount}</span>
-          <span className="text-[11px] uppercase tracking-wider text-muted">
+          <span className="text-[10px] uppercase tracking-wider text-muted">
             Followers
           </span>
         </Link>
-        <Link href={profileHref} className="flex flex-col items-center">
+        <Link href={profileHref} className="flex flex-col items-center gap-1 px-2">
           <span className="text-base font-semibold">{postsCount}</span>
-          <span className="text-[11px] uppercase tracking-wider text-muted">
+          <span className="text-[10px] uppercase tracking-wider text-muted">
             Activities
           </span>
         </Link>
@@ -85,27 +80,43 @@ export function Sidebar({
         {streak > 0 ? `${streak} day streak` : "No active streak"}
       </div>
 
-      {/* Latest Activity */}
-      {latestPost && (
-        <div className="border-b border-border px-6 py-4">
-          <p className="mb-1 text-xs font-semibold uppercase tracking-widest text-muted">
-            Latest Activity
+      {/* Latest Activities — clickable */}
+      {latestPosts.length > 0 && (
+        <div className="border-b border-border">
+          <p className="px-6 pt-4 pb-2 text-xs font-semibold uppercase tracking-widest text-muted">
+            Latest Activities
           </p>
-          <p className="truncate text-sm font-medium">{latestPost.title}</p>
-          <p className="text-xs text-muted">{latestPost.date}</p>
+          {latestPosts.map((post) => (
+            <Link
+              key={post.id}
+              href={`/post/${post.id}`}
+              className="block px-6 py-2 hover:bg-subtle"
+            >
+              <p className="truncate text-sm font-medium">{post.title}</p>
+              <p className="text-xs text-muted">{post.date}</p>
+            </Link>
+          ))}
         </div>
       )}
 
-      {/* Spacer + Log out */}
-      <div className="mt-auto p-6">
-        <button
-          onClick={handleLogout}
-          className="flex items-center gap-2 text-sm text-muted hover:text-foreground"
+      {/* All-time stats — above log out */}
+      <div className="mt-auto border-t border-border p-6">
+        <p className="mb-1 text-xs font-semibold uppercase tracking-widest text-muted">
+          All Time
+        </p>
+        <p
+          className="font-[family-name:var(--font-mono)] text-[2rem] leading-none tracking-tight"
+          style={{ letterSpacing: "-0.03em" }}
         >
-          <LogOut size={16} />
-          Log out
-        </button>
+          {formatTokens(totalOutputTokens)}
+        </p>
+        <p className="mt-1 text-xs text-muted">Output tokens</p>
+        <p className="mt-3 font-[family-name:var(--font-mono)] text-lg font-medium text-accent">
+          ${totalCost.toFixed(2)}
+        </p>
+        <p className="text-xs text-muted">Total spend</p>
       </div>
+
     </div>
   );
 }

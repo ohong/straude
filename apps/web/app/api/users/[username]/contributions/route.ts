@@ -7,15 +7,37 @@ export async function GET(_request: NextRequest, context: RouteContext) {
   const { username } = await context.params;
   const supabase = await createClient();
 
+  const {
+    data: { user: authUser },
+  } = await supabase.auth.getUser();
+
   // Look up user
   const { data: profile } = await supabase
     .from("users")
-    .select("id")
+    .select("id, is_public")
     .eq("username", username)
     .single();
 
   if (!profile) {
     return NextResponse.json({ error: "User not found" }, { status: 404 });
+  }
+
+  // For private profiles, only the owner or followers can view contribution data
+  if (!profile.is_public) {
+    if (!authUser) {
+      return NextResponse.json({ error: "Forbidden" }, { status: 403 });
+    }
+    if (authUser.id !== profile.id) {
+      const { data: follow } = await supabase
+        .from("follows")
+        .select("id")
+        .eq("follower_id", authUser.id)
+        .eq("following_id", profile.id)
+        .maybeSingle();
+      if (!follow) {
+        return NextResponse.json({ error: "Forbidden" }, { status: 403 });
+      }
+    }
   }
 
   // Last 52 weeks of data

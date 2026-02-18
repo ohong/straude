@@ -1,7 +1,8 @@
 {
   "name": "straude",
-  "version": "0.1.0",
+  "version": "0.1.1",
   "description": "CLI for pushing Claude Code usage stats to Straude",
+  "main": "dist/index.js",
   "bin": {
     "straude": "dist/index.js"
   },
