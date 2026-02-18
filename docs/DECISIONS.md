@@ -1,5 +1,20 @@
 # Architecture & Design Decisions
 
+## ccusage Binary Resolution and Error Diagnostics (2026-02-18)
+
+**Decision:** The CLI now resolves the `ccusage` binary via `which` first, then probes well-known global bin directories as a fallback. Error messages include diagnostic metadata (resolved path, error code, exit status, signal, PATH snippet).
+
+**Problem:** Users reported "ccusage failed: unknown error" even with ccusage installed globally. Root cause: `execFileSync` without a shell throws `ENOENT` (a Node `SystemError` with `code: "ENOENT"`) when the binary isn't found — it does NOT set `status: 127` or populate `stderr`. The old error handler only checked `status === 127` and `stderr.includes("not found")`, so ENOENT errors fell through to the generic `error.stderr ?? "unknown error"` path. Since ENOENT errors have no `stderr`, the user saw "unknown error" with no actionable information.
+
+**Secondary cause:** `execFileSync` inherits the Node process's PATH, which may not include directories added by nvm/volta/fnm/Homebrew in the user's shell profile (`.zshrc`). The binary exists but the CLI can't find it.
+
+**Alternatives considered:**
+1. **Spawn with `shell: true`** — would use the user's shell and source their profile, but introduces shell injection risk and portability issues.
+2. **Require users to pass `--ccusage-path`** — bad UX; most users expect global installs to just work.
+3. **`which` + fallback probe** (chosen) — `which` covers the common case; the probe list handles nvm/volta/fnm/Homebrew/bun/pnpm global installs.
+
+**Error detection now covers:** `ENOENT` code, exit status 127, stderr "not found", ENOENT in message string, `EACCES` (permission denied), timeout (`killed`/`SIGTERM`). Diagnostic context is appended to every error so users can paste the full output in bug reports.
+
 ## Feed Tabs — Client-Side Switching (2026-02-18)
 
 **Decision:** Tab switching fetches data client-side via `/api/feed?type=X` and uses `router.replace` to update the URL, rather than triggering a full server-side page reload.

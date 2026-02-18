@@ -2,6 +2,11 @@
 
 ## Unreleased
 
+### Fixed
+
+- **CLI: "ccusage failed: unknown error" no longer happens.** The error handler now detects all ways the binary can fail to launch (`ENOENT`, exit 127, `EACCES`, timeout/`SIGTERM`). Every error message includes diagnostic context — resolved binary path, exit code, signal, and a PATH snippet — so users can paste the output directly into bug reports.
+- **CLI: ccusage discovered even when not on inherited PATH.** The CLI now probes well-known global bin directories (nvm, volta, fnm, Homebrew, bun, pnpm) so users who installed ccusage via these tools no longer need to manually fix their PATH.
+
 ### Added
 
 - **Feed tabs: Global / Following / My Sessions.** The feed now defaults to a global view showing all public users' posts, so new users see activity immediately. A tab selector at the top lets users switch between Global, Following (previous default), and My Sessions. Tabs switch client-side for speed; URL updates to `?tab=` for shareability.
