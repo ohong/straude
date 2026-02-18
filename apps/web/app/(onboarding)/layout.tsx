@@ -27,7 +27,7 @@ export default async function OnboardingLayout({
     .eq("id", user.id)
     .single();
 
-  if (profile?.onboarding_completed && profile?.username) {
+  if (profile?.onboarding_completed) {
     redirect("/feed");
   }
 

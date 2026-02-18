@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, useEffect, useRef } from "react";
+import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { Check, X, Loader2, ArrowRight } from "lucide-react";
 import { Button } from "@/components/ui/Button";
@@ -42,16 +43,19 @@ export default function OnboardingPage() {
         const profile = await res.json();
         if (profile.github_username) {
           setGithubUsername(profile.github_username);
-          // Pre-fill username from GitHub handle if not already set
-          if (!profile.username) {
-            const suggested = profile.github_username
-              .toLowerCase()
-              .replace(/[^a-z0-9_]/g, "_")
-              .replace(/^_+|_+$/g, "")
-              .slice(0, 20);
-            if (/^[a-z0-9_]{3,20}$/.test(suggested)) {
-              setUsername(suggested);
-            }
+        }
+        // Pre-fill username: use existing username (e.g. auto-claimed from GitHub),
+        // otherwise suggest from GitHub handle
+        if (profile.username) {
+          setUsername(profile.username);
+        } else if (profile.github_username) {
+          const suggested = profile.github_username
+            .toLowerCase()
+            .replace(/[^a-z0-9_]/g, "_")
+            .replace(/^_+|_+$/g, "")
+            .slice(0, 20);
+          if (/^[a-z0-9_]{3,20}$/.test(suggested)) {
+            setUsername(suggested);
           }
         }
         if (profile.display_name) setDisplayName(profile.display_name);
@@ -98,10 +102,10 @@ export default function OnboardingPage() {
     setError(null);
 
     const body: Record<string, unknown> = {
-      username,
       timezone,
       onboarding_completed: true,
     };
+    if (username) body.username = username;
     if (displayName) body.display_name = displayName;
     if (bio) body.bio = bio;
     if (country) body.country = country;
@@ -123,7 +127,9 @@ export default function OnboardingPage() {
     router.push("/feed");
   }
 
-  const canProceed = usernameStatus === "available";
+  // Allow proceeding if username is valid+available, or if left empty (optional)
+  const canProceed =
+    usernameStatus === "available" || (!username && usernameStatus === "idle");
 
   if (step === 1) {
     return (
@@ -151,7 +157,7 @@ export default function OnboardingPage() {
         <div className="space-y-4">
           <div>
             <label htmlFor="onboard-username" className="mb-1 block text-xs font-semibold uppercase tracking-widest text-muted">
-              Username
+              Username <span className="normal-case tracking-normal text-muted">(optional)</span>
             </label>
             <div className="relative">
               <Input
@@ -217,6 +223,12 @@ export default function OnboardingPage() {
             Continue
             <ArrowRight size={16} className="ml-1.5" />
           </Button>
+        </div>
+
+        <div className="mt-3 text-center">
+          <Link href="/feed" className="text-sm text-muted hover:text-foreground">
+            Skip for now
+          </Link>
         </div>
 
         <div className="mt-4 flex justify-center gap-1.5">
@@ -320,6 +332,12 @@ export default function OnboardingPage() {
         >
           {saving ? "Setting up\u2026" : "Start logging"}
         </Button>
+      </div>
+
+      <div className="mt-3 text-center">
+        <Link href="/feed" className="text-sm text-muted hover:text-foreground">
+          Skip for now
+        </Link>
       </div>
 
       <div className="mt-4 flex justify-center gap-1.5">

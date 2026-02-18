@@ -2,6 +2,17 @@
 
 ## Unreleased
 
+### Fixed
+
+- **Username falsely reported as "Already taken" during onboarding.** The `check-username` endpoint didn't exclude the current user's own row. When the auth callback auto-claimed a GitHub handle, the onboarding page flagged it as taken. Now excludes the authenticated user from the uniqueness check.
+- **Onboarding didn't pre-fill auto-claimed username.** If the auth callback already set the username from GitHub, the onboarding page left the field empty (only pre-filled when `!profile.username`). Now pre-fills from the existing username first, falling back to the GitHub handle suggestion.
+- **Users stuck on onboarding with no way out.** The app layout hard-redirected to `/onboarding` if username was missing or onboarding incomplete. Removed the hard redirect; users can now access the app at any time.
+
+### Changed
+
+- **Username is now optional during onboarding.** Users can proceed without choosing a username. The field defaults to their GitHub handle if signed in with GitHub.
+- **Onboarding is now skippable.** Both steps show a "Skip for now" link to `/feed`. A banner in the app layout prompts users to complete onboarding when incomplete.
+
 ### Security
 
 - **Fixed open redirect in auth callback.** The `next` query parameter in `/callback` was used in a redirect without validation. An attacker could craft a URL like `?next=//evil.com` to redirect users to a phishing page after login. Now validates that `next` is a relative path.

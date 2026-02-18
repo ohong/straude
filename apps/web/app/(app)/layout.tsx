@@ -1,3 +1,4 @@
+import Link from "next/link";
 import { createClient } from "@/lib/supabase/server";
 import { redirect } from "next/navigation";
 import { TopHeader } from "@/components/app/shared/TopHeader";
@@ -25,9 +26,7 @@ export default async function AppLayout({
     .eq("id", user.id)
     .single();
 
-  if (!profile?.onboarding_completed || !profile?.username) {
-    redirect("/onboarding");
-  }
+  const onboardingIncomplete = !profile?.onboarding_completed;
 
   // Fetch sidebar data in parallel
   const [
@@ -85,6 +84,14 @@ export default async function AppLayout({
 
   return (
     <div className="fixed inset-0 flex flex-col overflow-hidden">
+      {onboardingIncomplete && (
+        <div className="flex items-center justify-center gap-2 border-b border-border bg-accent/5 px-4 py-2 text-sm">
+          <span className="text-muted">Finish setting up your profile</span>
+          <Link href="/onboarding" className="font-medium text-accent hover:underline">
+            Complete onboarding
+          </Link>
+        </div>
+      )}
       <TopHeader
         username={profile?.username ?? null}
         avatarUrl={profile?.avatar_url ?? null}

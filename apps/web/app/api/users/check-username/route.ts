@@ -9,11 +9,22 @@ export async function GET(request: NextRequest) {
   }
 
   const supabase = await createClient();
-  const { data } = await supabase
+
+  // Get current user so we can exclude their own row
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
+
+  let query = supabase
     .from("users")
     .select("id")
-    .eq("username", username)
-    .maybeSingle();
+    .eq("username", username);
+
+  if (user) {
+    query = query.neq("id", user.id);
+  }
+
+  const { data } = await query.maybeSingle();
 
   return NextResponse.json({ available: !data });
 }
