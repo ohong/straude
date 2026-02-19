@@ -6,7 +6,7 @@ import Image from "next/image";
 import { Pencil, X, Sparkles, Upload, Loader2, Trash2 } from "lucide-react";
 import { Button } from "@/components/ui/Button";
 import { Input } from "@/components/ui/Input";
-import { Textarea } from "@/components/ui/Textarea";
+import { MentionInput } from "@/components/app/shared/MentionInput";
 import type { Post } from "@/types";
 
 export function PostEditor({ post }: { post: Post }) {
@@ -133,11 +133,13 @@ export function PostEditor({ post }: { post: Post }) {
           placeholder="Post title (optional)"
           maxLength={100}
         />
-        <Textarea
+        <MentionInput
           value={description}
-          onChange={(e) => setDescription(e.target.value)}
-          placeholder="Describe what you built..."
+          onChange={setDescription}
+          placeholder="Describe what you built, @ to mention"
           maxLength={500}
+          multiline
+          className="w-full border border-border px-3 py-2 text-sm outline-none placeholder:text-muted focus:border-accent"
         />
         <p className="text-xs text-muted">
           Markdown supported — **bold**, *italic*, `code`, lists, and blockquotes

@@ -3,7 +3,6 @@ import { Hero } from "@/components/landing/Hero";
 import { Stats } from "@/components/landing/Stats";
 import { ProductShowcase } from "@/components/landing/ProductShowcase";
 import { Features } from "@/components/landing/Features";
-import { HowItWorks } from "@/components/landing/HowItWorks";
 import { WallOfLove } from "@/components/landing/WallOfLove";
 import { CTASection } from "@/components/landing/CTASection";
 import { Footer } from "@/components/landing/Footer";
@@ -25,7 +24,6 @@ export default function LandingPage() {
         <Stats />
         <ProductShowcase />
         <Features />
-        <HowItWorks />
         <WallOfLove posts={wallOfLovePosts} />
         <CTASection />
       </main>

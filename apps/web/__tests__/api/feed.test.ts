@@ -197,10 +197,10 @@ describe("GET /api/feed", () => {
           const c = buildChain();
           c.select.mockReturnValue(c);
           c.eq.mockReturnValue(c);
-          c.in.mockResolvedValue({
-            data: [{ post_id: "post-1" }],
-            error: null,
-          });
+          c.in.mockReturnValue(c);
+          c.order.mockReturnValue(c);
+          c.then = (resolve: any) =>
+            resolve({ data: [{ post_id: "post-1" }], error: null });
           return c;
         }
         return buildChain();
@@ -260,7 +260,10 @@ describe("GET /api/feed", () => {
           const c = buildChain();
           c.select.mockReturnValue(c);
           c.eq.mockReturnValue(c);
-          c.in.mockResolvedValue({ data: [], error: null });
+          c.in.mockReturnValue(c);
+          c.order.mockReturnValue(c);
+          c.then = (resolve: any) =>
+            resolve({ data: [], error: null });
           return c;
         }
         return buildChain();
@@ -313,7 +316,10 @@ describe("GET /api/feed", () => {
           const c = buildChain();
           c.select.mockReturnValue(c);
           c.eq.mockReturnValue(c);
-          c.in.mockResolvedValue({ data: [], error: null });
+          c.in.mockReturnValue(c);
+          c.order.mockReturnValue(c);
+          c.then = (resolve: any) =>
+            resolve({ data: [], error: null });
           return c;
         }
         return buildChain();

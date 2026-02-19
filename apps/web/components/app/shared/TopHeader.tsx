@@ -47,6 +47,8 @@ function notificationMessage(n: Notification): string {
       return `${actor} gave kudos to your post`;
     case "comment":
       return `${actor} commented on your post`;
+    case "mention":
+      return `${actor} mentioned you in a ${n.comment_id ? "comment" : "post"}`;
     default:
       return `${actor} interacted with you`;
   }
@@ -58,6 +60,7 @@ function notificationHref(n: Notification): string {
       return `/u/${n.actor?.username ?? ""}`;
     case "kudos":
     case "comment":
+    case "mention":
       return `/post/${n.post_id ?? ""}`;
     default:
       return "/notifications";

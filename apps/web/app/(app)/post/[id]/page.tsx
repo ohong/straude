@@ -62,6 +62,14 @@ export default async function PostDetailPage({
     hasKudosed = !!k;
   }
 
+  // Fetch recent kudos users (up to 3 for avatar display)
+  const { data: recentKudos } = await supabase
+    .from("kudos")
+    .select("user:users!kudos_user_id_fkey(avatar_url, username)")
+    .eq("post_id", id)
+    .order("created_at", { ascending: false })
+    .limit(3);
+
   // Get first page of comments
   const { data: comments } = await supabase
     .from("comments")
@@ -73,6 +81,7 @@ export default async function PostDetailPage({
   const normalizedPost = {
     ...post,
     kudos_count: (post.kudos_count as any)?.[0]?.count ?? 0,
+    kudos_users: (recentKudos ?? []).map((k) => k.user as any),
     comment_count: (post.comment_count as any)?.[0]?.count ?? 0,
     has_kudosed: hasKudosed,
   };

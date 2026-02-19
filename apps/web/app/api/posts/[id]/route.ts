@@ -1,5 +1,6 @@
 import { NextResponse, type NextRequest } from "next/server";
 import { createClient } from "@/lib/supabase/server";
+import { parseMentions } from "@/lib/utils/mentions";
 
 type RouteContext = { params: Promise<{ id: string }> };
 
@@ -34,10 +35,15 @@ export async function GET(_request: NextRequest, context: RouteContext) {
         .maybeSingle()
     : Promise.resolve({ data: null });
 
-  const [{ data: post, error }, { data: kudos }] = await Promise.all([
-    postPromise,
-    kudosPromise,
-  ]);
+  const kudosUsersPromise = supabase
+    .from("kudos")
+    .select("user:users!kudos_user_id_fkey(avatar_url, username)")
+    .eq("post_id", id)
+    .order("created_at", { ascending: false })
+    .limit(3);
+
+  const [{ data: post, error }, { data: kudos }, { data: recentKudos }] =
+    await Promise.all([postPromise, kudosPromise, kudosUsersPromise]);
 
   if (error || !post) {
     return NextResponse.json({ error: "Post not found" }, { status: 404 });
@@ -46,6 +52,7 @@ export async function GET(_request: NextRequest, context: RouteContext) {
   return NextResponse.json({
     ...post,
     kudos_count: post.kudos_count?.[0]?.count ?? 0,
+    kudos_users: (recentKudos ?? []).map((k) => k.user),
     comment_count: post.comment_count?.[0]?.count ?? 0,
     has_kudosed: !!kudos,
   });
@@ -110,6 +117,30 @@ export async function PATCH(request: NextRequest, context: RouteContext) {
       { error: "Post not found or not yours" },
       { status: 404 }
     );
+  }
+
+  // Mention notifications on description edit
+  if (post.description) {
+    const mentionedUsernames = parseMentions(post.description);
+    if (mentionedUsernames.length > 0) {
+      const { data: mentionedUsers } = await supabase
+        .from("users")
+        .select("id, username")
+        .in("username", mentionedUsernames);
+
+      const mentionNotifs = (mentionedUsers ?? [])
+        .filter((u) => u.id !== user.id)
+        .map((u) => ({
+          user_id: u.id,
+          actor_id: user.id,
+          type: "mention" as const,
+          post_id: id,
+        }));
+
+      if (mentionNotifs.length > 0) {
+        supabase.from("notifications").insert(mentionNotifs).then(() => {});
+      }
+    }
   }
 
   return NextResponse.json(post);

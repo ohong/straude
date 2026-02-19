@@ -49,7 +49,9 @@ export interface Post {
   user?: User;
   daily_usage?: DailyUsage;
   kudos_count?: number;
+  kudos_users?: Array<Pick<User, "avatar_url" | "username">>;
   comment_count?: number;
+  recent_comments?: Array<Comment>;
   has_kudosed?: boolean;
 }
 
@@ -147,7 +149,7 @@ export interface Notification {
   id: string;
   user_id: string;
   actor_id: string;
-  type: "follow" | "kudos" | "comment";
+  type: "follow" | "kudos" | "comment" | "mention";
   post_id: string | null;
   comment_id: string | null;
   read: boolean;

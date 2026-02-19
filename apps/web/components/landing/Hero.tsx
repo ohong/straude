@@ -92,7 +92,7 @@ function TerminalMockup() {
             </p>
             <p className="mt-1 flex items-center gap-2">
               <span className="text-accent">{">>>"}</span>
-              <span className="text-white/70">$4.82 across 2 models</span>
+              <span className="text-white/70">$48.20 across 2 models</span>
             </p>
             <p className="mt-1 flex items-center gap-2">
               <span className="text-accent">{">>>"}</span>

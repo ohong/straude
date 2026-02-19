@@ -67,21 +67,59 @@ export default async function FeedPage({
     posts = data ?? [];
   }
 
-  // Enrich with kudos status
+  // Enrich with kudos status + kudos users + recent comments
   if (posts.length > 0) {
     const postIds = posts.map((p: any) => p.id);
-    const { data: userKudos } = await supabase
-      .from("kudos")
-      .select("post_id")
-      .eq("user_id", user!.id)
-      .in("post_id", postIds);
+
+    const [{ data: userKudos }, { data: recentKudos }, { data: recentComments }] =
+      await Promise.all([
+        supabase
+          .from("kudos")
+          .select("post_id")
+          .eq("user_id", user!.id)
+          .in("post_id", postIds),
+        supabase
+          .from("kudos")
+          .select("post_id, user:users!kudos_user_id_fkey(avatar_url, username)")
+          .in("post_id", postIds)
+          .order("created_at", { ascending: false })
+          .limit(postIds.length * 3),
+        supabase
+          .from("comments")
+          .select("id, post_id, content, created_at, user:users!comments_user_id_fkey(username, avatar_url)")
+          .in("post_id", postIds)
+          .order("created_at", { ascending: false }),
+      ]);
 
     const kudosedSet = new Set(userKudos?.map((k) => k.post_id));
+
+    const kudosUsersMap = new Map<string, any[]>();
+    for (const k of recentKudos ?? []) {
+      const list = kudosUsersMap.get(k.post_id) ?? [];
+      if (list.length < 3) {
+        list.push(k.user);
+        kudosUsersMap.set(k.post_id, list);
+      }
+    }
+
+    const commentsMap = new Map<string, any[]>();
+    for (const c of recentComments ?? []) {
+      const list = commentsMap.get(c.post_id) ?? [];
+      if (list.length < 2) {
+        list.push(c);
+        commentsMap.set(c.post_id, list);
+      }
+    }
+    for (const [, list] of commentsMap) {
+      list.reverse();
+    }
 
     posts = posts.map((p: any) => ({
       ...p,
       kudos_count: p.kudos_count?.[0]?.count ?? 0,
+      kudos_users: kudosUsersMap.get(p.id) ?? [],
       comment_count: p.comment_count?.[0]?.count ?? 0,
+      recent_comments: commentsMap.get(p.id) ?? [],
       has_kudosed: kudosedSet.has(p.id),
     }));
   }

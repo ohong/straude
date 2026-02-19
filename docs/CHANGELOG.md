@@ -2,6 +2,32 @@
 
 ## Unreleased
 
+### Changed
+
+- **Redesigned kudos + comments engagement bar.** Merged the separate kudos avatar section and action buttons into a single row: `[avatar stack] ⚡ N kudos · 💬 N comments ... Share ↗`. Clicking the kudos area toggles kudos. Removed the standalone dashed-border kudos display.
+- **Inline comment previews show most recent 2.** Feed now shows the 2 most recent comments (was oldest 2). Each comment shows avatar, username, text, and relative timestamp.
+- **Comment input simplified.** Switched from multiline textarea to single-line input for a cleaner look. Added Cmd/Ctrl+Enter submit for multiline mode (used in edit flows). Input now fills full available width.
+
+### Fixed
+
+- **Kudos avatars missing from feed and profile pages.** The feed page (`/feed`) and profile page (`/u/[username]`) had their own server-side data fetching that never included `kudos_users` or `recent_comments`. Only the API route and post detail page enriched posts with this data. All three data paths now fetch kudos user avatars and recent comments consistently via `Promise.all`.
+
+### Added
+
+- **@mention tagging and notifications.** Type `@` in comments or post descriptions to mention users. Autocomplete dropdown shows followed users. Mentioned users receive in-app notifications. Mentions render as accent-colored links to user profiles. Post owners are de-duplicated (comment notification only, no redundant mention notification).
+- **Inline comment previews in feed.** Feed cards now show the first 2 comments inline with avatars. Posts with 3+ comments show a "See all N comments" link to the post detail page.
+- **Kudos avatar display.** Feed cards and post detail pages show up to 3 overlapping profile pictures of users who gave kudos, with "N kudos" (lowercase) text.
+- **Terms of Service page** (`/terms`) and **Privacy Policy page** (`/privacy`). Static pages matching the landing layout.
+
+### Changed
+
+- **Removed HowItWorks section from landing page.** WallOfLove now sits directly after Features.
+- **WallOfLove section switched to dark theme.** Background changed from white to `#0A0A0A` with light-on-dark text and card styling.
+- **"Claudemaxxing" highlighted in accent orange** in WallOfLove heading.
+- **10x'd all mock dollar amounts** across landing page (terminal: `$48.20`, feed cards: `$124.70`/`$98.20`, leaderboard: `$124.70`–`$69.10`, profile: `$1,420`).
+- **CTA paragraph text updated** to "Join motivated Claude Code builders whose work you'll love."
+- **Footer text changed** from "Built with Claude Code" to "Built by Claude Opus 4.6".
+
 ### Added
 
 - **Markdown support for post descriptions.** Expanded allowed elements from basic inline formatting to include lists (`ul`/`ol`), blockquotes, headings (`h3`/`h4`), horizontal rules, and strikethrough. Added hint text below the editor textarea.

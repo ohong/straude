@@ -76,10 +76,57 @@ export async function GET(request: NextRequest) {
 
   const kudosedSet = new Set((userKudos ?? []).map((k) => k.post_id));
 
+  // Fetch recent kudos users (up to 3 per post for avatar display)
+  const { data: recentKudos, error: kudosError } = postIds.length
+    ? await supabase
+        .from("kudos")
+        .select("post_id, user:users!kudos_user_id_fkey(avatar_url, username)")
+        .in("post_id", postIds)
+        .order("created_at", { ascending: false })
+        .limit(postIds.length * 3)
+    : { data: [], error: null };
+
+  if (kudosError) {
+    console.error("[feed] kudos users fetch error:", kudosError);
+  }
+
+  const kudosUsersMap = new Map<string, Array<{ avatar_url: string | null; username: string | null }>>();
+  for (const k of recentKudos ?? []) {
+    const list = kudosUsersMap.get(k.post_id) ?? [];
+    if (list.length < 3) {
+      list.push(k.user as any);
+      kudosUsersMap.set(k.post_id, list);
+    }
+  }
+
+  // Fetch recent comments (up to 2 per post for inline preview)
+  const { data: recentComments } = postIds.length
+    ? await supabase
+        .from("comments")
+        .select("id, post_id, content, created_at, user:users!comments_user_id_fkey(username, avatar_url)")
+        .in("post_id", postIds)
+        .order("created_at", { ascending: false })
+    : { data: [] };
+
+  const commentsMap = new Map<string, Array<any>>();
+  for (const c of recentComments ?? []) {
+    const list = commentsMap.get(c.post_id) ?? [];
+    if (list.length < 2) {
+      list.push(c);
+      commentsMap.set(c.post_id, list);
+    }
+  }
+  // Reverse to chronological order for display
+  for (const [, list] of commentsMap) {
+    list.reverse();
+  }
+
   const enriched = (posts ?? []).map((p) => ({
     ...p,
     kudos_count: p.kudos_count?.[0]?.count ?? 0,
+    kudos_users: kudosUsersMap.get(p.id) ?? [],
     comment_count: p.comment_count?.[0]?.count ?? 0,
+    recent_comments: commentsMap.get(p.id) ?? [],
     has_kudosed: kudosedSet.has(p.id),
   }));
 

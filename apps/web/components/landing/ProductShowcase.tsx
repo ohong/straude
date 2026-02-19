@@ -77,11 +77,11 @@ function FeedCard({
 /* ── Fake Leaderboard ── */
 function LeaderboardMockup() {
   const rows = [
-    { rank: 1, name: "sarah_codes", cost: "$12.47", tokens: "312K", flag: "US" },
-    { rank: 2, name: "mxtnr", cost: "$9.82", tokens: "245K", flag: "DE" },
-    { rank: 3, name: "0xkai", cost: "$8.15", tokens: "203K", flag: "JP" },
-    { rank: 4, name: "luna.dev", cost: "$7.63", tokens: "190K", flag: "BR" },
-    { rank: 5, name: "codeotter", cost: "$6.91", tokens: "172K", flag: "UK" },
+    { rank: 1, name: "sarah_codes", cost: "$124.70", tokens: "312K", flag: "US" },
+    { rank: 2, name: "mxtnr", cost: "$98.20", tokens: "245K", flag: "DE" },
+    { rank: 3, name: "0xkai", cost: "$81.50", tokens: "203K", flag: "JP" },
+    { rank: 4, name: "luna.dev", cost: "$76.30", tokens: "190K", flag: "BR" },
+    { rank: 5, name: "codeotter", cost: "$69.10", tokens: "172K", flag: "UK" },
   ];
 
   return (
@@ -170,7 +170,7 @@ function ProfileMockup() {
             <span className="text-[10px] text-[#999]">day streak</span>
           </div>
           <div>
-            <span className="block font-[family-name:var(--font-mono)] text-lg font-bold">$142</span>
+            <span className="block font-[family-name:var(--font-mono)] text-lg font-bold">$1,420</span>
             <span className="text-[10px] text-[#999]">this month</span>
           </div>
         </div>
@@ -246,7 +246,7 @@ export function ProductShowcase() {
               <FeedCard
                 name="Sarah"
                 handle="@sarah_codes"
-                cost="$12.47"
+                cost="$124.70"
                 tokens="312K"
                 models="3"
                 time="2h ago"
@@ -255,7 +255,7 @@ export function ProductShowcase() {
               <FeedCard
                 name="Max"
                 handle="@mxtnr"
-                cost="$9.82"
+                cost="$98.20"
                 tokens="245K"
                 models="2"
                 time="5h ago"

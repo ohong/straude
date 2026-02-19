@@ -33,18 +33,25 @@ export function Avatar({ src, alt = "", size = "md", fallback, className }: Avat
 
   if (src) {
     const isSvg = src.includes("/svg") || src.endsWith(".svg");
+    const imgClass = cn("rounded-full object-cover shrink-0", className);
+    const imgStyle = { width: px, height: px };
+
+    // SVGs break under Next.js Image optimization — use plain <img>
+    if (isSvg) {
+      return (
+        // eslint-disable-next-line @next/next/no-img-element
+        <img src={src} alt={alt} width={px} height={px} className={imgClass} style={imgStyle} />
+      );
+    }
+
     return (
       <Image
         src={src}
         alt={alt}
         width={px}
         height={px}
-        unoptimized={isSvg}
-        className={cn(
-          "rounded-full object-cover shrink-0",
-          className,
-        )}
-        style={{ width: px, height: px }}
+        className={imgClass}
+        style={imgStyle}
       />
     );
   }

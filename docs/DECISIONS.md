@@ -1,5 +1,16 @@
 # Architecture & Design Decisions
 
+## @Mention Tagging: Any User Mentionable, Autocomplete for Followed (2026-02-18)
+
+**Decision:** Any valid `@username` creates a mention notification. The autocomplete dropdown only suggests followed users (convenience, not enforcement).
+
+**Alternatives considered:**
+1. **Only followed users can be mentioned** — too restrictive, prevents cross-community interaction.
+2. **Global user search in autocomplete** — privacy concern (leaks usernames), heavier query load. Deferred to V2 if needed.
+3. **Diff old-vs-new mentions on description re-save** — prevents duplicate notifications on re-save but adds complexity. Accepted as V1 tradeoff.
+
+**De-duplication rule:** When a user comments on someone's post and also @mentions the post owner, the post owner gets only the "comment" notification (not a redundant "mention").
+
 ## Supabase Security Hardening: Defense-in-Depth Grants (2026-02-18)
 
 **Decision:** Revoked all excess table-level grants from `anon` and `authenticated` roles. `anon` is now SELECT-only on every table. `authenticated` gets only the specific privileges its RLS policies actually allow (e.g., `users` gets SELECT+UPDATE, `posts` gets SELECT+INSERT+UPDATE+DELETE).

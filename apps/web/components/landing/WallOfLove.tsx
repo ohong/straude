@@ -36,7 +36,7 @@ function WallOfLoveCard({
       href={post.url}
       target="_blank"
       rel="noopener noreferrer"
-      className={`block rounded-2xl border border-[#E5E5E5] bg-white p-6 transition-all duration-500 hover:shadow-[0_8px_32px_rgba(0,0,0,0.06)] hover:border-accent/20 ${
+      className={`block rounded-2xl border border-white/10 bg-white/[0.06] p-6 transition-all duration-500 hover:shadow-[0_8px_32px_rgba(0,0,0,0.2)] hover:border-accent/30 ${
         inView ? "opacity-100 translate-y-0" : "opacity-0 translate-y-8"
       }`}
       style={{ transitionDelay: `${index * 100}ms` }}
@@ -52,30 +52,30 @@ function WallOfLoveCard({
             className="h-11 w-11 shrink-0 rounded-full object-cover"
           />
         ) : (
-          <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-full bg-[#E5E5E5] text-xs font-semibold text-muted">
+          <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-full bg-white/10 text-xs font-semibold text-white/60">
             {initials}
           </div>
         )}
 
         <div className="min-w-0 flex-1">
-          <span className="block truncate text-[0.9375rem] font-bold leading-tight text-foreground">
+          <span className="block truncate text-[0.9375rem] font-bold leading-tight text-white">
             {post.author_name}
           </span>
-          <span className="block text-sm text-muted">
+          <span className="block text-sm text-white/40">
             {post.author_handle}
           </span>
         </div>
 
-        <XIcon className="h-5 w-5 shrink-0 text-foreground/30" />
+        <XIcon className="h-5 w-5 shrink-0 text-white/20" />
       </div>
 
       {/* Post text */}
-      <p className="mt-4 text-[0.9375rem] leading-relaxed text-foreground">
+      <p className="mt-4 text-[0.9375rem] leading-relaxed text-white/70">
         {post.text}
       </p>
 
       {/* Date */}
-      <p className="mt-4 text-xs text-muted">{post.date}</p>
+      <p className="mt-4 text-xs text-white/30">{post.date}</p>
     </a>
   );
 }
@@ -86,11 +86,11 @@ export function WallOfLove({ posts }: { posts: WallOfLovePost[] }) {
   if (posts.length === 0) return null;
 
   return (
-    <section className="bg-white py-24 md:py-32">
+    <section className="bg-[#0A0A0A] py-24 md:py-32">
       <div ref={ref} className="mx-auto max-w-[1280px] px-6 md:px-8">
         <div className="flex flex-col items-center text-center mb-14">
-          <h2 className="text-[clamp(2rem,4vw,3.5rem)] font-bold tracking-[-0.03em] text-balance">
-            Everybody is Claudemaxxing. Are you?
+          <h2 className="text-[clamp(2rem,4vw,3.5rem)] font-bold tracking-[-0.03em] text-balance text-white">
+            Everybody is <span className="text-accent">Claudemaxxing</span>. Are you?
           </h2>
         </div>
 

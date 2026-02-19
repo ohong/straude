@@ -30,6 +30,9 @@ jobs:
 
       - name: Build
         run: bun run build
+        env:
+          NEXT_PUBLIC_SUPABASE_URL: http://localhost:54321
+          NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY: sb_publishable_placeholder
 
       - name: Test (web)
         run: bun run test
@@ -43,21 +46,10 @@ jobs:
         run: bunx playwright install --with-deps chromium
         working-directory: apps/web
 
-      - name: Start production server
-        run: bun run start &
-        working-directory: apps/web
-        env:
-          PORT: 3000
-
-      - name: Wait for server
-        run: |
-          for i in $(seq 1 30); do
-            curl -s http://localhost:3000 > /dev/null && break
-            sleep 1
-          done
-
       - name: E2E tests
         run: bun run test:e2e
         working-directory: apps/web
         env:
           BASE_URL: http://localhost:3000
+          NEXT_PUBLIC_SUPABASE_URL: http://localhost:54321
+          NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY: sb_publishable_placeholder

@@ -1,6 +1,6 @@
 import { createClient } from "@/lib/supabase/server";
 import Link from "next/link";
-import Image from "next/image";
+import { Avatar } from "@/components/ui/Avatar";
 import { FollowButton } from "@/components/app/profile/FollowButton";
 
 export async function RightSidebar({ userId }: { userId: string }) {
@@ -60,19 +60,7 @@ export async function RightSidebar({ userId }: { userId: string }) {
             {suggested.map((u) => (
               <li key={u.id} className="flex items-center gap-3">
                 <Link href={`/u/${u.username}`} className="flex items-center gap-3 flex-1 min-w-0 hover:text-accent">
-                  {u.avatar_url ? (
-                    <Image
-                      src={u.avatar_url}
-                      alt=""
-                      width={32}
-                      height={32}
-                      className="h-8 w-8 rounded-full object-cover"
-                    />
-                  ) : (
-                    <span className="flex h-8 w-8 items-center justify-center rounded-full bg-foreground text-xs font-semibold text-background">
-                      {u.username?.[0]?.toUpperCase() ?? "?"}
-                    </span>
-                  )}
+                  <Avatar src={u.avatar_url} alt={u.username ?? ""} size="sm" fallback={u.username ?? "?"} />
                   <div className="flex-1 overflow-hidden">
                     <p className="truncate text-sm font-medium">{u.username}</p>
                     {u.bio && (
@@ -104,19 +92,7 @@ export async function RightSidebar({ userId }: { userId: string }) {
                 <span className="flex h-6 w-6 shrink-0 items-center justify-center text-xs font-semibold">
                   {i + 1}
                 </span>
-                {u.avatar_url ? (
-                  <Image
-                    src={u.avatar_url}
-                    alt=""
-                    width={32}
-                    height={32}
-                    className="h-8 w-8 rounded-full object-cover"
-                  />
-                ) : (
-                  <span className="flex h-8 w-8 items-center justify-center rounded-full bg-foreground text-xs font-semibold text-background">
-                    {u.username?.[0]?.toUpperCase() ?? "?"}
-                  </span>
-                )}
+                <Avatar src={u.avatar_url} alt={u.username ?? ""} size="sm" fallback={u.username ?? "?"} />
                 <span className="flex-1 truncate text-sm font-medium">
                   {u.username}
                 </span>

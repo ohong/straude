@@ -28,14 +28,14 @@ export function CTASection() {
         >
           Your move.
         </h2>
-        <p className="mt-4 text-lg text-white/70 max-w-md">
-          Join hundreds of developers who log every session.
+        <p className="mt-4 text-lg text-white/70 max-w-lg whitespace-nowrap">
+          Join motivated Claude Code builders whose work you'll love.
         </p>
         <Link
           href="/signup"
           className="group mt-10 inline-flex items-center gap-2 rounded-lg bg-white px-8 py-4 text-base font-bold text-accent transition-[box-shadow] duration-150 hover:shadow-lg hover:shadow-black/10 md:text-lg focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white focus-visible:ring-offset-2 focus-visible:ring-offset-accent"
         >
-          Start Your Streak
+          Log Your First Session
           <svg
             className="w-4 h-4 transition-transform group-hover:translate-x-0.5"
             fill="none"

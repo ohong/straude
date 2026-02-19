@@ -1,8 +1,8 @@
 import { createClient } from "@/lib/supabase/server";
 import { notFound } from "next/navigation";
 import Link from "next/link";
-import Image from "next/image";
 import { MapPin, LinkIcon, Github, Flame, Zap } from "lucide-react";
+import { Avatar } from "@/components/ui/Avatar";
 import { ContributionGraph } from "@/components/app/profile/ContributionGraph";
 import { FeedList } from "@/components/app/feed/FeedList";
 import { FollowButton } from "@/components/app/profile/FollowButton";
@@ -129,21 +129,60 @@ export default async function ProfilePage({
     .limit(20);
 
   let normalizedPosts: any[] = [];
-  if (posts) {
+  if (posts && posts.length > 0) {
     const postIds = posts.map((p: any) => p.id);
-    const { data: userKudos } = authUser
-      ? await supabase
+
+    const [{ data: userKudos }, { data: recentKudos }, { data: recentComments }] =
+      await Promise.all([
+        authUser
+          ? supabase
+              .from("kudos")
+              .select("post_id")
+              .eq("user_id", authUser.id)
+              .in("post_id", postIds)
+          : Promise.resolve({ data: [] as any[] }),
+        supabase
           .from("kudos")
-          .select("post_id")
-          .eq("user_id", authUser.id)
+          .select("post_id, user:users!kudos_user_id_fkey(avatar_url, username)")
           .in("post_id", postIds)
-      : { data: [] };
+          .order("created_at", { ascending: false })
+          .limit(postIds.length * 3),
+        supabase
+          .from("comments")
+          .select("id, post_id, content, created_at, user:users!comments_user_id_fkey(username, avatar_url)")
+          .in("post_id", postIds)
+          .order("created_at", { ascending: false }),
+      ]);
+
     const kudosedSet = new Set(userKudos?.map((k) => k.post_id));
+
+    const kudosUsersMap = new Map<string, any[]>();
+    for (const k of recentKudos ?? []) {
+      const list = kudosUsersMap.get(k.post_id) ?? [];
+      if (list.length < 3) {
+        list.push(k.user);
+        kudosUsersMap.set(k.post_id, list);
+      }
+    }
+
+    const commentsMap = new Map<string, any[]>();
+    for (const c of recentComments ?? []) {
+      const list = commentsMap.get(c.post_id) ?? [];
+      if (list.length < 2) {
+        list.push(c);
+        commentsMap.set(c.post_id, list);
+      }
+    }
+    for (const [, list] of commentsMap) {
+      list.reverse();
+    }
 
     normalizedPosts = posts.map((p: any) => ({
       ...p,
       kudos_count: p.kudos_count?.[0]?.count ?? 0,
+      kudos_users: kudosUsersMap.get(p.id) ?? [],
       comment_count: p.comment_count?.[0]?.count ?? 0,
+      recent_comments: commentsMap.get(p.id) ?? [],
       has_kudosed: kudosedSet.has(p.id),
     }));
   }
@@ -157,19 +196,7 @@ export default async function ProfilePage({
       {/* Profile header */}
       <div className="border-b border-border p-6">
         <div className="flex items-start gap-5">
-          {profile.avatar_url ? (
-            <Image
-              src={profile.avatar_url}
-              alt=""
-              width={80}
-              height={80}
-              className="h-20 w-20 rounded-full object-cover"
-            />
-          ) : (
-            <span className="flex h-20 w-20 items-center justify-center rounded-full bg-foreground text-2xl font-semibold text-background">
-              {profile.username?.[0]?.toUpperCase() ?? "?"}
-            </span>
-          )}
+          <Avatar src={profile.avatar_url} alt={profile.username ?? ""} size="lg" fallback={profile.username ?? "?"} />
           <div className="flex-1">
             <div className="flex items-center gap-3">
               <h1 className="text-2xl font-medium" style={{ letterSpacing: "-0.03em" }}>

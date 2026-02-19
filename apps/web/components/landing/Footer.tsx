@@ -37,7 +37,7 @@ export function Footer() {
 
         {/* Copyright */}
         <div className="flex flex-col items-center gap-1 text-xs text-white/30 md:items-end">
-          <span>Built with Claude Code</span>
+          <span>Built by Claude Opus 4.6</span>
           <span>&copy; 2026 Straude</span>
         </div>
       </div>

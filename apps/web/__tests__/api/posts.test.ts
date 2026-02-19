@@ -12,10 +12,14 @@ function buildChain(overrides: Record<string, any> = {}) {
   const chain: Record<string, any> = {
     select: vi.fn().mockReturnThis(),
     eq: vi.fn().mockReturnThis(),
+    in: vi.fn().mockReturnThis(),
+    order: vi.fn().mockReturnThis(),
+    limit: vi.fn().mockReturnThis(),
     update: vi.fn().mockReturnThis(),
     delete: vi.fn().mockReturnThis(),
     single: vi.fn().mockResolvedValue({ data: null, error: null }),
     maybeSingle: vi.fn().mockResolvedValue({ data: null, error: null }),
+    then: (resolve: any) => resolve({ data: null, error: null }),
     ...overrides,
   };
   return chain;

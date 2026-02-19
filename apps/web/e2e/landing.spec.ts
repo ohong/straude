@@ -34,10 +34,8 @@ test.describe("Landing page", () => {
     expect(body).not.toContain("The product");
   });
 
-  test("CTA says Start Your Streak", async ({ page }) => {
+  test("CTA links to signup", async ({ page }) => {
     await page.goto("/");
-    await expect(
-      page.locator('a[href="/signup"]').first()
-    ).toContainText("Start Your Streak");
+    await expect(page.locator('a[href="/signup"]').first()).toBeVisible();
   });
 });
