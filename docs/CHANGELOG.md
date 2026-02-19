@@ -2,6 +2,40 @@
 
 ## Unreleased
 
+### Added
+
+- **Markdown support for post descriptions.** Expanded allowed elements from basic inline formatting to include lists (`ul`/`ol`), blockquotes, headings (`h3`/`h4`), horizontal rules, and strikethrough. Added hint text below the editor textarea.
+
+### Security
+
+- **Vibe security audit: hardened Supabase permissions.** Applied two migrations addressing 7 findings:
+  - Fixed 4 `SECURITY DEFINER` views (`leaderboard_daily`, `_weekly`, `_monthly`, `_all_time`) — switched to `SECURITY INVOKER` so RLS of the querying user applies, not the view creator.
+  - Restricted `anon` role to `SELECT`-only on all tables (was full CRUD). Writes now require an authenticated session.
+  - Restricted `authenticated` role to minimum-needed grants per table (e.g., `users` gets `SELECT, UPDATE` only — no INSERT/DELETE).
+  - Revoked `EXECUTE` on 3 `SECURITY DEFINER` functions (`lookup_user_id_by_email`, `handle_new_user`, `refresh_leaderboards`) from `anon` and `authenticated`. Only `service_role` can invoke them now.
+  - Added file size limits (avatars: 5 MB, post-images: 10 MB) and MIME type restrictions (JPEG/PNG/GIF/WebP) to storage buckets.
+  - Tightened storage upload policies to enforce folder ownership (`auth.uid() = foldername[1]`), preventing cross-user file overwrites.
+
+### Fixed
+
+- **Avatar SVG images now render correctly.** DiceBear avatar URLs (and other external SVGs) were blocked by `next/image` optimization. The `Avatar` component now sets `unoptimized` for SVG sources, rendering them directly.
+- **Unverified sessions no longer show $0.00.** Web-imported usage (JSON uploads without CLI verification) now displays "Unverified — use the CLI for verified stats" instead of a misleading $0.00 cost. Token counts still shown.
+- **Fixed 31 stale test mocks across the web test suite.** Updated mocks to match current route implementations: added `display_name` to search OR filter, `rpc("calculate_streaks_batch")` to leaderboard mocks, `auth.getUser()` and `is_public` to contributions mocks, `NextRequest` param to CLI init, Supabase storage origin for SSRF-validated image URLs, and `notifications` table handling for follow/kudos/comment routes. All 220 web tests and 89 CLI tests now pass.
+- **React Doctor score 84 → 91.** Resolved 4 errors → 2, 49 warnings → 23 across 24 → 12 files:
+  - Added missing `alt` attribute on OG image `<img>` tag.
+  - Added SEO `metadata` export to landing page.
+  - Wrapped `useSearchParams()` in `<Suspense>` boundary on search page.
+  - Removed `autoFocus` from onboarding and search inputs (a11y).
+  - Associated form labels with inputs via `htmlFor`/`id` on login and signup pages.
+  - Parallelized 5 sequential `await` calls on profile page with `Promise.all()`.
+  - Converted 10 `<img>` tags to `next/image` (Avatar, ActivityCard, WallOfLove, PostEditor, CommentThread, RightSidebar, profile page).
+  - Added `images.remotePatterns` to `next.config.ts` for external image optimization.
+  - Fixed array index keys on ActivityCard and PostEditor image lists (now use URL).
+  - Added `sizes="100vw"` to Hero `next/image` with `fill`.
+  - Moved notification fetch from `useEffect` to click handler in TopHeader.
+  - Deleted unused files: `Testimonial.tsx`, `Skeleton.tsx`.
+  - Removed unused `Follow` type from `types/index.ts`.
+
 ### Changed
 
 - **Leaderboard updates in real-time.** Converted all four leaderboard materialized views (`leaderboard_daily`, `_weekly`, `_monthly`, `_all_time`) to regular views and removed the `pg_cron` refresh jobs. Rankings now reflect the latest data the moment a user pushes a session — no more 15-minute staleness.

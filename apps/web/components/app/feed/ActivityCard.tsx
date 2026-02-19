@@ -1,6 +1,7 @@
 "use client";
 
 import Link from "next/link";
+import Image from "next/image";
 import { Zap, MessageCircle, Share2, CheckCircle } from "lucide-react";
 import { cn } from "@/lib/utils/cn";
 import { formatTokens } from "@/lib/utils/format";
@@ -63,7 +64,7 @@ export function ActivityCard({ post }: { post: Post }) {
       <div className="flex items-center gap-3">
         <Link href={user?.username ? `/u/${user.username}` : "#"}>
           {user?.avatar_url ? (
-            <img src={user.avatar_url} alt="" width={40} height={40} className="h-10 w-10 rounded-full object-cover" />
+            <Image src={user.avatar_url} alt="" width={40} height={40} className="h-10 w-10 rounded-full object-cover" />
           ) : (
             <span className="flex h-10 w-10 items-center justify-center rounded-full bg-foreground text-sm font-semibold text-background">
               {user?.username?.[0]?.toUpperCase() ?? "?"}
@@ -105,9 +106,12 @@ export function ActivityCard({ post }: { post: Post }) {
           </h2>
         )}
         {post.description && (
-          <div className="mt-2 text-[0.95rem] leading-relaxed [&_a]:text-accent [&_a]:underline [&_code]:bg-subtle [&_code]:px-1 [&_code]:py-0.5 [&_code]:font-[family-name:var(--font-mono)] [&_code]:text-sm [&_pre]:mt-2 [&_pre]:overflow-x-auto [&_pre]:border-l-2 [&_pre]:border-l-accent [&_pre]:bg-subtle [&_pre]:p-3 [&_pre]:font-[family-name:var(--font-mono)] [&_pre]:text-sm">
+          <div className="mt-2 text-[0.95rem] leading-relaxed [&_a]:text-accent [&_a]:underline [&_code]:bg-subtle [&_code]:px-1 [&_code]:py-0.5 [&_code]:font-[family-name:var(--font-mono)] [&_code]:text-sm [&_pre]:mt-2 [&_pre]:overflow-x-auto [&_pre]:border-l-2 [&_pre]:border-l-accent [&_pre]:bg-subtle [&_pre]:p-3 [&_pre]:font-[family-name:var(--font-mono)] [&_pre]:text-sm [&_ul]:mt-1.5 [&_ul]:list-disc [&_ul]:pl-5 [&_ol]:mt-1.5 [&_ol]:list-decimal [&_ol]:pl-5 [&_li]:mt-0.5 [&_blockquote]:mt-2 [&_blockquote]:border-l-2 [&_blockquote]:border-l-muted [&_blockquote]:pl-3 [&_blockquote]:text-muted [&_h3]:mt-3 [&_h3]:text-base [&_h3]:font-semibold [&_h4]:mt-2 [&_h4]:text-sm [&_h4]:font-semibold [&_h4]:uppercase [&_h4]:tracking-wider [&_h4]:text-muted [&_hr]:my-3 [&_hr]:border-border [&_del]:text-muted [&_del]:line-through">
             <ReactMarkdown
-              allowedElements={["p", "strong", "em", "code", "pre", "a", "br"]}
+              allowedElements={[
+                "p", "strong", "em", "del", "code", "pre", "a", "br",
+                "ul", "ol", "li", "blockquote", "h3", "h4", "hr",
+              ]}
               unwrapDisallowed
             >
               {post.description}
@@ -124,13 +128,12 @@ export function ActivityCard({ post }: { post: Post }) {
             )}
           >
             {post.images.map((url, i) => (
-              <img
-                key={i}
+              <Image
+                key={url}
                 src={url}
                 alt=""
                 width={600}
                 height={400}
-                loading="lazy"
                 className={cn(
                   "w-full rounded",
                   post.images.length === 3 && i === 0 && "row-span-2"
@@ -142,13 +145,17 @@ export function ActivityCard({ post }: { post: Post }) {
 
         {/* Stats grid */}
         {usage && (
-          <div className="mt-4 grid grid-cols-3 gap-4">
-            <div>
-              <p className="text-[0.7rem] uppercase tracking-widest text-muted">Cost</p>
-              <p className="font-[family-name:var(--font-mono)] text-[1.1rem] font-medium tabular-nums text-accent">
-                ${Number(usage.cost_usd).toFixed(2)}
-              </p>
-            </div>
+          <div className={cn("mt-4 grid gap-4", usage.is_verified ? "grid-cols-3" : "grid-cols-2")}>
+            {usage.is_verified ? (
+              <div>
+                <p className="text-[0.7rem] uppercase tracking-widest text-muted">Cost</p>
+                <p className="font-[family-name:var(--font-mono)] text-[1.1rem] font-medium tabular-nums text-accent">
+                  ${Number(usage.cost_usd).toFixed(2)}
+                </p>
+              </div>
+            ) : (
+              <p className="col-span-2 text-xs text-muted">Unverified — use the CLI for verified stats</p>
+            )}
             <div>
               <p className="text-[0.7rem] uppercase tracking-widest text-muted">Input</p>
               <p className="font-[family-name:var(--font-mono)] text-[1.1rem] font-medium tabular-nums">

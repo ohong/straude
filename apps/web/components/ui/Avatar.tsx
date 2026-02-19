@@ -1,3 +1,4 @@
+import Image from "next/image";
 import { cn } from "@/lib/utils/cn";
 
 type AvatarSize = "xs" | "sm" | "md" | "lg" | "xl";
@@ -31,12 +32,14 @@ export function Avatar({ src, alt = "", size = "md", fallback, className }: Avat
   const initials = fallback ? getInitials(fallback) : "?";
 
   if (src) {
+    const isSvg = src.includes("/svg") || src.endsWith(".svg");
     return (
-      <img
+      <Image
         src={src}
         alt={alt}
         width={px}
         height={px}
+        unoptimized={isSvg}
         className={cn(
           "rounded-full object-cover shrink-0",
           className,

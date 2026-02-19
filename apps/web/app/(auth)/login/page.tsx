@@ -69,10 +69,11 @@ export default function LoginPage() {
       ) : (
         <>
           <form onSubmit={handleMagicLink} className="flex flex-col gap-3">
-            <label className="text-xs font-semibold uppercase tracking-widest text-muted">
+            <label htmlFor="login-email" className="text-xs font-semibold uppercase tracking-widest text-muted">
               Email
             </label>
             <input
+              id="login-email"
               type="email"
               value={email}
               onChange={(e) => setEmail(e.target.value)}

@@ -1,6 +1,7 @@
 import { createClient } from "@/lib/supabase/server";
 import { notFound } from "next/navigation";
 import Link from "next/link";
+import Image from "next/image";
 import { MapPin, LinkIcon, Github, Flame, Zap } from "lucide-react";
 import { ContributionGraph } from "@/components/app/profile/ContributionGraph";
 import { FeedList } from "@/components/app/feed/FeedList";
@@ -55,32 +56,32 @@ export default async function ProfilePage({
     isFollowing = !!f;
   }
 
-  // Counts
-  const { count: followersCount } = await supabase
-    .from("follows")
-    .select("*", { count: "exact", head: true })
-    .eq("following_id", profile.id);
-
-  const { count: followingCount } = await supabase
-    .from("follows")
-    .select("*", { count: "exact", head: true })
-    .eq("follower_id", profile.id);
-
-  const { count: postsCount } = await supabase
-    .from("posts")
-    .select("*", { count: "exact", head: true })
-    .eq("user_id", profile.id);
-
-  // Streak
-  const { data: streak } = await supabase.rpc("calculate_user_streak", {
-    p_user_id: profile.id,
-  });
-
-  // Total spend + lifetime output tokens
-  const { data: totalSpendRows } = await supabase
-    .from("daily_usage")
-    .select("cost_usd, output_tokens")
-    .eq("user_id", profile.id);
+  // Run independent queries in parallel
+  const [
+    { count: followersCount },
+    { count: followingCount },
+    { count: postsCount },
+    { data: streak },
+    { data: totalSpendRows },
+  ] = await Promise.all([
+    supabase
+      .from("follows")
+      .select("*", { count: "exact", head: true })
+      .eq("following_id", profile.id),
+    supabase
+      .from("follows")
+      .select("*", { count: "exact", head: true })
+      .eq("follower_id", profile.id),
+    supabase
+      .from("posts")
+      .select("*", { count: "exact", head: true })
+      .eq("user_id", profile.id),
+    supabase.rpc("calculate_user_streak", { p_user_id: profile.id }),
+    supabase
+      .from("daily_usage")
+      .select("cost_usd, output_tokens")
+      .eq("user_id", profile.id),
+  ]);
   const totalSpend = totalSpendRows?.reduce((s, r) => s + Number(r.cost_usd), 0) ?? 0;
   const lifetimeOutputTokens = totalSpendRows?.reduce((s, r) => s + Number(r.output_tokens), 0) ?? 0;
 
@@ -157,9 +158,11 @@ export default async function ProfilePage({
       <div className="border-b border-border p-6">
         <div className="flex items-start gap-5">
           {profile.avatar_url ? (
-            <img
+            <Image
               src={profile.avatar_url}
               alt=""
+              width={80}
+              height={80}
               className="h-20 w-20 rounded-full object-cover"
             />
           ) : (

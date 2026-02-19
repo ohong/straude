@@ -1,5 +1,17 @@
 # Architecture & Design Decisions
 
+## Supabase Security Hardening: Defense-in-Depth Grants (2026-02-18)
+
+**Decision:** Revoked all excess table-level grants from `anon` and `authenticated` roles. `anon` is now SELECT-only on every table. `authenticated` gets only the specific privileges its RLS policies actually allow (e.g., `users` gets SELECT+UPDATE, `posts` gets SELECT+INSERT+UPDATE+DELETE).
+
+**Problem:** Supabase's default schema grants `ALL PRIVILEGES` to `anon` and `authenticated` on every table, relying entirely on RLS policies for access control. This is a single layer of defense — one misconfigured or accidentally dropped policy exposes full CRUD access to the entire table.
+
+**Alternatives considered:**
+1. **Leave defaults, trust RLS** — works until it doesn't. The Moltbook breach (1.5M credentials exposed) was exactly this: Supabase defaults + missing RLS.
+2. **Restrict grants to match RLS policies** (chosen) — defense-in-depth. Even if a policy is dropped, the grant prevents unauthorized operations.
+
+**Also fixed:** Revoked EXECUTE on all SECURITY DEFINER functions from `anon`/`authenticated`. `lookup_user_id_by_email` was callable by unauthenticated users, allowing email-to-UUID enumeration via the `auth.users` table.
+
 ## Leaderboard: Regular Views Over Materialized Views (2026-02-18)
 
 **Decision:** Converted all four leaderboard materialized views to regular Postgres views and removed the `pg_cron` refresh jobs.

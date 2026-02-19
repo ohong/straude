@@ -2,6 +2,7 @@
 
 import { useState, useRef } from "react";
 import { useRouter } from "next/navigation";
+import Image from "next/image";
 import { Pencil, X, Sparkles, Upload, Loader2, Trash2 } from "lucide-react";
 import { Button } from "@/components/ui/Button";
 import { Input } from "@/components/ui/Input";
@@ -138,15 +139,20 @@ export function PostEditor({ post }: { post: Post }) {
           placeholder="Describe what you built..."
           maxLength={500}
         />
+        <p className="text-xs text-muted">
+          Markdown supported — **bold**, *italic*, `code`, lists, and blockquotes
+        </p>
 
         {/* Image uploads */}
         {images.length > 0 && (
           <div className="flex gap-2 flex-wrap">
             {images.map((url, i) => (
-              <div key={i} className="relative">
-                <img
+              <div key={url} className="relative">
+                <Image
                   src={url}
                   alt=""
+                  width={80}
+                  height={80}
                   className="h-20 w-20 rounded object-cover border border-border"
                 />
                 <button

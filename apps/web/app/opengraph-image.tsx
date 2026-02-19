@@ -33,6 +33,7 @@ export default async function Image() {
         {/* Background image */}
         <img
           src={bgBase64}
+          alt=""
           width={1200}
           height={630}
           style={{

@@ -177,7 +177,7 @@ describe("Flow: Web JSON Import", () => {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({
-        images: ["https://example.com/screenshot1.png"],
+        images: ["https://test.supabase.co/storage/v1/object/public/post-images/screenshot1.png"],
         usage: {
           costUSD: 0.25,
           totalTokens: 8500,

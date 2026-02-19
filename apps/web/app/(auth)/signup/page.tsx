@@ -69,10 +69,11 @@ export default function SignupPage() {
       ) : (
         <>
           <form onSubmit={handleMagicLink} className="flex flex-col gap-3">
-            <label className="text-xs font-semibold uppercase tracking-widest text-muted">
+            <label htmlFor="signup-email" className="text-xs font-semibold uppercase tracking-widest text-muted">
               Email
             </label>
             <input
+              id="signup-email"
               type="email"
               value={email}
               onChange={(e) => setEmail(e.target.value)}

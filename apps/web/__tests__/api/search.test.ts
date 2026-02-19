@@ -84,7 +84,7 @@ describe("GET /api/search", () => {
     expect(json.users).toHaveLength(1);
     expect(json.users[0].username).toBe("alice");
     expect(chain.or).toHaveBeenCalledWith(
-      "username.ilike.%alice%,github_username.ilike.%alice%"
+      "username.ilike.%alice%,display_name.ilike.%alice%,github_username.ilike.%alice%"
     );
   });
 
@@ -94,7 +94,7 @@ describe("GET /api/search", () => {
 
     await GET(makeRequest({ q: "bobgithub" }));
     expect(chain.or).toHaveBeenCalledWith(
-      "username.ilike.%bobgithub%,github_username.ilike.%bobgithub%"
+      "username.ilike.%bobgithub%,display_name.ilike.%bobgithub%,github_username.ilike.%bobgithub%"
     );
   });
 
@@ -198,8 +198,7 @@ describe("GET /api/search", () => {
 
     await GET(makeRequest({ q: "test_user" }));
 
-    // Verify .not("username", "is", null) and .eq("is_public", true) are called
-    expect(chain.not).toHaveBeenCalledWith("username", "is", null);
+    // Verify .eq("is_public", true) is called
     expect(chain.eq).toHaveBeenCalledWith("is_public", true);
   });
 });

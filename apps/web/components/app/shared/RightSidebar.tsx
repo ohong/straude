@@ -1,5 +1,6 @@
 import { createClient } from "@/lib/supabase/server";
 import Link from "next/link";
+import Image from "next/image";
 import { FollowButton } from "@/components/app/profile/FollowButton";
 
 export async function RightSidebar({ userId }: { userId: string }) {
@@ -60,12 +61,11 @@ export async function RightSidebar({ userId }: { userId: string }) {
               <li key={u.id} className="flex items-center gap-3">
                 <Link href={`/u/${u.username}`} className="flex items-center gap-3 flex-1 min-w-0 hover:text-accent">
                   {u.avatar_url ? (
-                    <img
+                    <Image
                       src={u.avatar_url}
                       alt=""
                       width={32}
                       height={32}
-                      loading="lazy"
                       className="h-8 w-8 rounded-full object-cover"
                     />
                   ) : (
@@ -105,12 +105,11 @@ export async function RightSidebar({ userId }: { userId: string }) {
                   {i + 1}
                 </span>
                 {u.avatar_url ? (
-                  <img
+                  <Image
                     src={u.avatar_url}
                     alt=""
                     width={32}
                     height={32}
-                    loading="lazy"
                     className="h-8 w-8 rounded-full object-cover"
                   />
                 ) : (

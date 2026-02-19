@@ -123,6 +123,7 @@ export function Hero() {
         alt=""
         fill
         priority
+        sizes="100vw"
         className="object-cover object-center"
         quality={90}
       />

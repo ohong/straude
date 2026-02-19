@@ -168,7 +168,6 @@ export default function OnboardingPage() {
                 }
                 placeholder="your_handle"
                 maxLength={20}
-                autoFocus
               />
               <div className="absolute right-3 top-1/2 -translate-y-1/2">
                 {usernameStatus === "checking" && (

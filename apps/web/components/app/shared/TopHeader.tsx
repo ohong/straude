@@ -94,7 +94,6 @@ export function TopHeader({ username, avatarUrl }: TopHeaderProps) {
     return () => document.removeEventListener("click", handleClick);
   }, [profileOpen, notifOpen]);
 
-  // Fetch notifications when bell dropdown opens
   const fetchNotifications = useCallback(async () => {
     const res = await fetch("/api/notifications");
     if (!res.ok) return;
@@ -102,10 +101,6 @@ export function TopHeader({ username, avatarUrl }: TopHeaderProps) {
     setNotifications(data.notifications ?? []);
     setUnreadCount(data.unread_count ?? 0);
   }, []);
-
-  useEffect(() => {
-    if (notifOpen) fetchNotifications();
-  }, [notifOpen, fetchNotifications]);
 
   // Initial unread count fetch
   useEffect(() => {
@@ -172,7 +167,12 @@ export function TopHeader({ username, avatarUrl }: TopHeaderProps) {
           <div ref={notifRef} className="relative">
             <button
               type="button"
-              onClick={() => setNotifOpen((v) => !v)}
+              onClick={() => {
+                setNotifOpen((v) => {
+                  if (!v) fetchNotifications();
+                  return !v;
+                });
+              }}
               className="relative text-muted hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent focus-visible:ring-offset-2 rounded"
               aria-label="Notifications"
               aria-expanded={notifOpen}

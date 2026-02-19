@@ -2,6 +2,7 @@
 
 import { useState } from "react";
 import Link from "next/link";
+import Image from "next/image";
 import type { Comment } from "@/types";
 
 function timeAgo(dateStr: string) {
@@ -81,7 +82,7 @@ export function CommentThread({
           <div key={comment.id} className="flex gap-3 border-b border-dashed border-muted/30 px-6 py-4">
             <Link href={comment.user?.username ? `/u/${comment.user.username}` : "#"}>
               {comment.user?.avatar_url ? (
-                <img src={comment.user.avatar_url} alt="" className="h-6 w-6 rounded-full object-cover" />
+                <Image src={comment.user.avatar_url} alt="" width={24} height={24} className="h-6 w-6 rounded-full object-cover" />
               ) : (
                 <span className="flex h-6 w-6 items-center justify-center rounded-full bg-foreground text-[10px] font-semibold text-background">
                   {comment.user?.username?.[0]?.toUpperCase() ?? "?"}

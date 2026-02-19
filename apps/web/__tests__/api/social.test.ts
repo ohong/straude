@@ -70,6 +70,11 @@ describe("POST /api/follow/[username]", () => {
             insert: vi.fn().mockResolvedValue({ error: null }),
           };
         }
+        if (table === "notifications") {
+          return {
+            insert: vi.fn().mockResolvedValue({ error: null }),
+          };
+        }
         return {};
       }),
     };
@@ -199,6 +204,7 @@ describe("DELETE /api/follow/[username]", () => {
 
 describe("POST /api/posts/[id]/kudos", () => {
   it("creates a kudos", async () => {
+    let kudosCallCount = 0;
     const client: Record<string, any> = {
       auth: {
         getUser: vi.fn().mockResolvedValue({
@@ -208,12 +214,32 @@ describe("POST /api/posts/[id]/kudos", () => {
       },
       from: vi.fn().mockImplementation((table: string) => {
         if (table === "kudos") {
+          kudosCallCount++;
+          if (kudosCallCount === 1) {
+            // insert
+            return { insert: vi.fn().mockResolvedValue({ error: null }) };
+          }
+          // count query
           return {
-            insert: vi.fn().mockResolvedValue({ error: null }),
             select: vi.fn().mockReturnValue({
               eq: vi.fn().mockResolvedValue({ count: 5 }),
             }),
           };
+        }
+        if (table === "posts") {
+          return {
+            select: vi.fn().mockReturnValue({
+              eq: vi.fn().mockReturnValue({
+                single: vi.fn().mockResolvedValue({
+                  data: { user_id: "post-owner" },
+                  error: null,
+                }),
+              }),
+            }),
+          };
+        }
+        if (table === "notifications") {
+          return { insert: vi.fn().mockResolvedValue({ error: null }) };
         }
         return {};
       }),
@@ -332,15 +358,35 @@ describe("POST /api/posts/[id]/comments", () => {
           error: null,
         }),
       },
-      from: vi.fn().mockReturnValue({
-        insert: vi.fn().mockReturnValue({
-          select: vi.fn().mockReturnValue({
-            single: vi.fn().mockResolvedValue({
-              data: mockComment,
-              error: null,
+      from: vi.fn().mockImplementation((table: string) => {
+        if (table === "comments") {
+          return {
+            insert: vi.fn().mockReturnValue({
+              select: vi.fn().mockReturnValue({
+                single: vi.fn().mockResolvedValue({
+                  data: mockComment,
+                  error: null,
+                }),
+              }),
             }),
-          }),
-        }),
+          };
+        }
+        if (table === "posts") {
+          return {
+            select: vi.fn().mockReturnValue({
+              eq: vi.fn().mockReturnValue({
+                single: vi.fn().mockResolvedValue({
+                  data: { user_id: "post-owner" },
+                  error: null,
+                }),
+              }),
+            }),
+          };
+        }
+        if (table === "notifications") {
+          return { insert: vi.fn().mockResolvedValue({ error: null }) };
+        }
+        return {};
       }),
     };
     (createClient as any).mockResolvedValue(client);

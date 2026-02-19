@@ -1,13 +1,13 @@
 "use client";
 
-import { useState, useEffect, useRef } from "react";
+import { useState, useRef, Suspense } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import Link from "next/link";
 import { Search } from "lucide-react";
 import type { User } from "@/types";
 import { Avatar } from "@/components/ui/Avatar";
 
-export default function SearchPage() {
+function SearchContent() {
   const router = useRouter();
   const searchParams = useSearchParams();
   const [query, setQuery] = useState(searchParams.get("q") ?? "");
@@ -15,8 +15,10 @@ export default function SearchPage() {
   const [loading, setLoading] = useState(false);
   const timerRef = useRef<ReturnType<typeof setTimeout>>(undefined);
 
-  useEffect(() => {
-    if (query.length < 2) {
+  function handleSearch(value: string) {
+    setQuery(value);
+
+    if (value.length < 2) {
       setResults([]);
       return;
     }
@@ -24,18 +26,15 @@ export default function SearchPage() {
     clearTimeout(timerRef.current);
     timerRef.current = setTimeout(async () => {
       setLoading(true);
-      // Reflect search query in URL for deep-linking
-      const params = new URLSearchParams({ q: query });
+      const params = new URLSearchParams({ q: value });
       router.replace(`/search?${params.toString()}`, { scroll: false });
 
-      const res = await fetch(`/api/search?q=${encodeURIComponent(query)}&limit=20`);
+      const res = await fetch(`/api/search?q=${encodeURIComponent(value)}&limit=20`);
       const data = await res.json();
       setResults(data.users ?? []);
       setLoading(false);
     }, 300);
-
-    return () => clearTimeout(timerRef.current);
-  }, [query, router]);
+  }
 
   return (
     <>
@@ -46,9 +45,8 @@ export default function SearchPage() {
             type="search"
             name="q"
             value={query}
-            onChange={(e) => setQuery(e.target.value)}
+            onChange={(e) => handleSearch(e.target.value)}
             placeholder="Search ThariqS, adocomplete, lydiahallie"
-            autoFocus
             aria-label="Search users"
             className="flex-1 bg-transparent text-base outline-none placeholder:text-muted"
           />
@@ -109,5 +107,19 @@ export default function SearchPage() {
         })}
       </div>
     </>
+  );
+}
+
+export default function SearchPage() {
+  return (
+    <Suspense
+      fallback={
+        <div className="px-6 py-8 text-center text-sm text-muted">
+          Loading&hellip;
+        </div>
+      }
+    >
+      <SearchContent />
+    </Suspense>
   );
 }

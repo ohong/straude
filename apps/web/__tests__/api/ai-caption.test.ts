@@ -47,6 +47,7 @@ function makeRequest(body: any) {
 beforeEach(() => {
   vi.clearAllMocks();
   process.env.ANTHROPIC_API_KEY = "test-key";
+  process.env.NEXT_PUBLIC_SUPABASE_URL = "https://test.supabase.co";
 });
 
 describe("POST /api/ai/generate-caption", () => {
@@ -61,7 +62,7 @@ describe("POST /api/ai/generate-caption", () => {
 
     const res = await POST(
       makeRequest({
-        images: ["https://img.example.com/1.png"],
+        images: ["https://test.supabase.co/storage/v1/object/public/screenshots/1.png"],
         usage: { costUSD: 2.5, totalTokens: 10000 },
       })
     );
@@ -80,7 +81,7 @@ describe("POST /api/ai/generate-caption", () => {
 
     const res = await POST(
       makeRequest({
-        images: ["https://img.example.com/1.png"],
+        images: ["https://test.supabase.co/storage/v1/object/public/screenshots/1.png"],
         usage: { costUSD: 1 },
       })
     );
@@ -96,7 +97,7 @@ describe("POST /api/ai/generate-caption", () => {
 
     const res = await POST(
       makeRequest({
-        images: ["https://img.example.com/1.png"],
+        images: ["https://test.supabase.co/storage/v1/object/public/screenshots/1.png"],
         usage: {},
       })
     );
@@ -134,7 +135,7 @@ describe("POST /api/ai/generate-caption", () => {
 
     const res = await POST(
       makeRequest({
-        images: ["https://img.example.com/1.png"],
+        images: ["https://test.supabase.co/storage/v1/object/public/screenshots/1.png"],
         usage: {},
       })
     );
@@ -150,7 +151,7 @@ describe("POST /api/ai/generate-caption", () => {
 
     const res = await POST(
       makeRequest({
-        images: ["https://img.example.com/1.png"],
+        images: ["https://test.supabase.co/storage/v1/object/public/screenshots/1.png"],
         usage: {},
       })
     );
@@ -171,7 +172,7 @@ describe("POST /api/ai/generate-caption", () => {
 
     const res = await POST(
       makeRequest({
-        images: ["https://img.example.com/1.png"],
+        images: ["https://test.supabase.co/storage/v1/object/public/screenshots/1.png"],
         usage: {},
       })
     );

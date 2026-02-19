@@ -6,6 +6,7 @@ import { describe, it, expect, vi, beforeEach } from "vitest";
 const mockSupabase = {
   auth: { getUser: vi.fn() },
   from: vi.fn(),
+  rpc: vi.fn().mockResolvedValue({ data: [] }),
 };
 
 vi.mock("@/lib/supabase/server", () => ({
@@ -63,6 +64,7 @@ describe("Flow: Signup to Feed", () => {
   beforeEach(() => {
     vi.clearAllMocks();
     vi.stubEnv("NEXT_PUBLIC_APP_URL", "https://straude.com");
+    mockSupabase.rpc.mockResolvedValue({ data: [] });
   });
 
   it("new user lands on feed and sees empty results before following anyone", async () => {

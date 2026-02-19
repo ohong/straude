@@ -187,9 +187,12 @@ describe("Flow: Profile and Contributions", () => {
 
   it("GET /api/users/[username]/contributions returns graph data with streak", async () => {
     const userId = "user-profile-1";
+    mockSupabase.auth.getUser.mockResolvedValue({
+      data: { user: null },
+    });
 
     // Profile lookup
-    const profileChain = chainBuilder({ data: { id: userId }, error: null });
+    const profileChain = chainBuilder({ data: { id: userId, is_public: true }, error: null });
 
     // 5 consecutive days of usage
     const today = new Date();

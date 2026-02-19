@@ -1,5 +1,6 @@
 "use client";
 
+import Image from "next/image";
 import type { WallOfLovePost } from "@/types";
 import { useInView } from "@/lib/hooks/useInView";
 
@@ -43,12 +44,11 @@ function WallOfLoveCard({
       {/* Header: avatar + name + X icon */}
       <div className="flex items-start gap-3">
         {post.author_avatar ? (
-          <img
+          <Image
             src={post.author_avatar}
             alt=""
             width={44}
             height={44}
-            loading="lazy"
             className="h-11 w-11 shrink-0 rounded-full object-cover"
           />
         ) : (

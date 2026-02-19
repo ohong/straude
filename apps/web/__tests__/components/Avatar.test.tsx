@@ -7,7 +7,19 @@ describe("Avatar", () => {
     render(<Avatar src="https://example.com/avatar.png" alt="User" />);
     const img = screen.getByRole("img");
     expect(img).toBeInTheDocument();
-    expect(img).toHaveAttribute("src", "https://example.com/avatar.png");
+    // next/image rewrites src to /_next/image?url=... in jsdom
+    expect(img.getAttribute("src")).toContain("avatar.png");
+  });
+
+  it("sets unoptimized for SVG sources", () => {
+    const { container } = render(
+      <Avatar src="https://api.dicebear.com/9.x/notionists/svg?seed=test" alt="SVG avatar" />,
+    );
+    const img = container.querySelector("img")!;
+    // When unoptimized, next/image renders the raw src
+    expect(img.getAttribute("src")).toBe(
+      "https://api.dicebear.com/9.x/notionists/svg?seed=test"
+    );
   });
 
   it("shows fallback initials when no src", () => {

@@ -6,6 +6,7 @@ import { describe, it, expect, vi, beforeEach } from "vitest";
 const mockSupabase = {
   auth: { getUser: vi.fn() },
   from: vi.fn(),
+  rpc: vi.fn().mockResolvedValue({ data: [] }),
 };
 
 vi.mock("@/lib/supabase/server", () => ({
@@ -54,6 +55,7 @@ describe("Flow: Leaderboard Ranking", () => {
   beforeEach(() => {
     vi.clearAllMocks();
     vi.resetModules();
+    mockSupabase.rpc.mockResolvedValue({ data: [] });
   });
 
   it("returns users sorted by cost DESC with correct rank badges", async () => {

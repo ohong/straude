@@ -5,6 +5,11 @@ import { useState, Suspense } from "react";
 import { createClient } from "@/lib/supabase/client";
 import { Button } from "@/components/ui/Button";
 
+// metadata must be in a server component; for this client page, we use a
+// separate layout or rely on the parent layout. Adding a generateMetadata
+// export here would require splitting the file. Instead we embed a <title>.
+// See: the Suspense fallback already handles SSR.
+
 function VerifyContent() {
   const searchParams = useSearchParams();
   const code = searchParams.get("code");
@@ -55,6 +60,7 @@ function VerifyContent() {
   return (
     <div className="flex min-h-screen items-center justify-center">
       <div className="w-full max-w-sm space-y-6 text-center">
+        <title>Authorize CLI — Straude</title>
         <h1 className="text-2xl font-medium tracking-tight">Authorize CLI</h1>
 
         <div className="border border-border p-6">

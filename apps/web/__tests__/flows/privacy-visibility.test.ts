@@ -61,7 +61,11 @@ const PRIVATE_USER = {
 describe("Flow: Privacy and Visibility", () => {
   beforeEach(() => {
     vi.clearAllMocks();
-    mockSupabase.rpc.mockResolvedValue({ data: 0 });
+    // Default: return array for calculate_streaks_batch (leaderboard), number for calculate_user_streak (profile)
+    mockSupabase.rpc.mockImplementation((_fn: string) => {
+      if (_fn === "calculate_streaks_batch") return Promise.resolve({ data: [] });
+      return Promise.resolve({ data: 0 });
+    });
   });
 
   it("public user appears in leaderboard", async () => {

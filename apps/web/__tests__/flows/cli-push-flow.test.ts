@@ -73,7 +73,10 @@ describe("Flow: CLI Push", () => {
     });
 
     const { POST } = await import("@/app/api/auth/cli/init/route");
-    const res = await POST();
+    const req = makeRequest("http://localhost:3000/api/auth/cli/init", {
+      method: "POST",
+    });
+    const res = await POST(req as any);
     const data = await res.json();
 
     expect(res.status).toBe(200);
