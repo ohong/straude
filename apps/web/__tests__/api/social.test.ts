@@ -70,6 +70,11 @@ describe("POST /api/follow/[username]", () => {
             insert: vi.fn().mockResolvedValue({ error: null }),
           };
         }
+        if (table === "notifications") {
+          return {
+            insert: vi.fn().mockResolvedValue({ error: null }),
+          };
+        }
         return {};
       }),
     };
@@ -215,6 +220,23 @@ describe("POST /api/posts/[id]/kudos", () => {
             }),
           };
         }
+        if (table === "posts") {
+          return {
+            select: vi.fn().mockReturnValue({
+              eq: vi.fn().mockReturnValue({
+                single: vi.fn().mockResolvedValue({
+                  data: { user_id: "other-user" },
+                  error: null,
+                }),
+              }),
+            }),
+          };
+        }
+        if (table === "notifications") {
+          return {
+            insert: vi.fn().mockResolvedValue({ error: null }),
+          };
+        }
         return {};
       }),
     };
@@ -332,15 +354,37 @@ describe("POST /api/posts/[id]/comments", () => {
           error: null,
         }),
       },
-      from: vi.fn().mockReturnValue({
-        insert: vi.fn().mockReturnValue({
-          select: vi.fn().mockReturnValue({
-            single: vi.fn().mockResolvedValue({
-              data: mockComment,
-              error: null,
+      from: vi.fn().mockImplementation((table: string) => {
+        if (table === "comments") {
+          return {
+            insert: vi.fn().mockReturnValue({
+              select: vi.fn().mockReturnValue({
+                single: vi.fn().mockResolvedValue({
+                  data: mockComment,
+                  error: null,
+                }),
+              }),
             }),
-          }),
-        }),
+          };
+        }
+        if (table === "posts") {
+          return {
+            select: vi.fn().mockReturnValue({
+              eq: vi.fn().mockReturnValue({
+                single: vi.fn().mockResolvedValue({
+                  data: { user_id: "other-user" },
+                  error: null,
+                }),
+              }),
+            }),
+          };
+        }
+        if (table === "notifications") {
+          return {
+            insert: vi.fn().mockResolvedValue({ error: null }),
+          };
+        }
+        return {};
       }),
     };
     (createClient as any).mockResolvedValue(client);

@@ -1,5 +1,18 @@
 # Architecture & Design Decisions
 
+## Test Fix Strategy: Update Tests to Match Source, Not Vice Versa (2026-02-19)
+
+**Decision:** Fixed 31 failing tests by updating test mocks and assertions to match the current source code, rather than reverting source changes.
+
+**Problem:** Tests fell out of sync across multiple feature PRs. Security hardening (SSRF prevention, rate limiting, private profile access control), new features (notification inserts, streaks batch RPC, display_name search), and API signature changes (init route accepting NextRequest) were all shipped without corresponding test updates.
+
+**Alternatives considered:**
+1. **Revert source changes to match tests** — would undo security and feature work.
+2. **Delete failing tests** — reduces coverage; tests were testing real behavior.
+3. **Update test mocks to match current source** (chosen) — preserves all security and feature improvements while restoring full test coverage.
+
+**Pattern identified:** Most failures fell into two categories: (a) new Supabase table accesses (notifications, posts lookups) not mocked in tests, and (b) new function signatures/query patterns not reflected in mock chains. Adding a CI check that blocks PRs with test failures would prevent this drift.
+
 ## Leaderboard: Regular Views Over Materialized Views (2026-02-18)
 
 **Decision:** Converted all four leaderboard materialized views to regular Postgres views and removed the `pg_cron` refresh jobs.

@@ -2,6 +2,17 @@
 
 ## Unreleased
 
+### Fixed
+
+- **Fixed 31 failing CI tests across 12 test files.** Tests had fallen out of sync with source code after several feature additions:
+  - **Leaderboard tests** (6 tests): Added `rpc` mock for the new `calculate_streaks_batch` RPC call added with the streaks feature.
+  - **Search tests** (3 tests): Updated OR filter assertions to include `display_name` (added alongside username/github_username search). Removed stale `.not("username", "is", null)` assertion.
+  - **Social tests** (3 tests): Added `notifications` and `posts` table mocks for the fire-and-forget notification inserts added to follow/kudos/comment routes.
+  - **AI caption tests** (5 tests): Set `NEXT_PUBLIC_SUPABASE_URL` in test env and updated image URLs to match the Supabase storage origin (required after SSRF prevention was added).
+  - **Auth CLI tests** (7 tests): Added `neq` to the Supabase mock chain (poll route now filters expired codes) and passed `NextRequest` to `initPOST` (required after rate limiting was added).
+  - **Contributions tests** (2 tests): Added `is_public: true` to user profile mock and `auth` mock (required after private profile access control was added).
+  - **Flow tests** (5 tests): Propagated all the above fixes to integration-style flow tests (leaderboard-ranking, signup-to-feed, privacy-visibility, profile-and-contributions, cli-push-flow, web-import-flow).
+
 ### Changed
 
 - **Leaderboard updates in real-time.** Converted all four leaderboard materialized views (`leaderboard_daily`, `_weekly`, `_monthly`, `_all_time`) to regular views and removed the `pg_cron` refresh jobs. Rankings now reflect the latest data the moment a user pushes a session — no more 15-minute staleness.

@@ -15,6 +15,13 @@ vi.mock("@/lib/api/cli-auth", () => ({
 import { POST as initPOST } from "@/app/api/auth/cli/init/route";
 import { POST as pollPOST } from "@/app/api/auth/cli/poll/route";
 import { createCliToken } from "@/lib/api/cli-auth";
+import { NextRequest } from "next/server";
+
+function makeInitRequest() {
+  return new NextRequest(new URL("http://localhost/api/auth/cli/init"), {
+    method: "POST",
+  });
+}
 
 function mockChain(overrides = {}) {
   const chain: Record<string, any> = {
@@ -22,6 +29,7 @@ function mockChain(overrides = {}) {
     select: vi.fn().mockReturnThis(),
     update: vi.fn().mockReturnThis(),
     eq: vi.fn().mockReturnThis(),
+    neq: vi.fn().mockReturnThis(),
     single: vi.fn().mockResolvedValue({ data: null, error: null }),
     ...overrides,
   };
@@ -48,7 +56,7 @@ describe("POST /api/auth/cli/init", () => {
     const chain = mockChain();
     mockServiceClient.from.mockReturnValue(chain);
 
-    const res = await initPOST();
+    const res = await initPOST(makeInitRequest());
     const json = await res.json();
 
     expect(res.status).toBe(200);
@@ -64,7 +72,7 @@ describe("POST /api/auth/cli/init", () => {
     });
     mockServiceClient.from.mockReturnValue(chain);
 
-    const res = await initPOST();
+    const res = await initPOST(makeInitRequest());
     const json = await res.json();
 
     expect(res.status).toBe(500);

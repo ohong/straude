@@ -115,6 +115,7 @@ describe("GET /api/leaderboard", () => {
           }),
         }),
       }),
+      rpc: vi.fn().mockResolvedValue({ data: [] }),
     };
     (createClient as any).mockResolvedValue(client);
 
@@ -244,6 +245,7 @@ describe("GET /api/leaderboard", () => {
           }),
         }),
       }),
+      rpc: vi.fn().mockResolvedValue({ data: [] }),
     };
     (createClient as any).mockResolvedValue(client);
 
@@ -276,6 +278,7 @@ describe("GET /api/leaderboard", () => {
           }),
         }),
       }),
+      rpc: vi.fn().mockResolvedValue({ data: [] }),
     };
     (createClient as any).mockResolvedValue(client);
 

@@ -46,7 +46,7 @@ describe("GET /api/users/[username]/contributions", () => {
             select: vi.fn().mockReturnValue({
               eq: vi.fn().mockReturnValue({
                 single: vi.fn().mockResolvedValue({
-                  data: { id: "u-1" },
+                  data: { id: "u-1", is_public: true },
                   error: null,
                 }),
               }),
@@ -125,13 +125,19 @@ describe("GET /api/users/[username]/contributions", () => {
 
   it("returns empty data when user has no usage", async () => {
     const client: Record<string, any> = {
+      auth: {
+        getUser: vi.fn().mockResolvedValue({
+          data: { user: null },
+          error: null,
+        }),
+      },
       from: vi.fn().mockImplementation((table: string) => {
         if (table === "users") {
           return {
             select: vi.fn().mockReturnValue({
               eq: vi.fn().mockReturnValue({
                 single: vi.fn().mockResolvedValue({
-                  data: { id: "u-1" },
+                  data: { id: "u-1", is_public: true },
                   error: null,
                 }),
               }),

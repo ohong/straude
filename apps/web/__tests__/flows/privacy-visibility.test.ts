@@ -61,7 +61,7 @@ const PRIVATE_USER = {
 describe("Flow: Privacy and Visibility", () => {
   beforeEach(() => {
     vi.clearAllMocks();
-    mockSupabase.rpc.mockResolvedValue({ data: 0 });
+    mockSupabase.rpc.mockResolvedValue({ data: [] });
   });
 
   it("public user appears in leaderboard", async () => {
