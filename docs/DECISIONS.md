@@ -1,5 +1,33 @@
 # Architecture & Design Decisions
 
+## Image Gallery: 5-Image Preview Limit, No External Carousel (2026-02-21)
+
+**Decision:** The feed grid shows at most 5 images with a "+N" overlay for the remainder. The lightbox is a custom component using `createPortal`, not an external carousel library.
+
+**Alternatives considered:**
+1. **Show all images in the grid** — clutters the feed card, especially with 10 images. Strava caps at 5 visible.
+2. **External carousel library (Swiper, Embla)** — adds a dependency for a feature that only needs prev/next navigation and swipe. The custom lightbox is ~100 lines with keyboard, touch, and a11y support built in.
+3. **CSS scroll-snap gallery** — inline scrolling doesn't provide the full-screen immersive experience users expect from image lightboxes.
+
+**Why 5:** Mirrors Strava's pattern. The 5-image layout (tall left + 2x2 right) is visually balanced. The "+N" overlay creates curiosity to click through — good for engagement.
+
+## Email Notifications: React Email + Idempotency Keys (2026-02-21)
+
+**Decision:** Upgraded email templates from raw HTML strings to React Email components (`@react-email/components`). Extended notifications to cover both comments and @mentions. Added idempotency keys (`comment-notif/{commentId}`, `mention-notif/{commentId}/{userId}`, `mention-post/{postId}/{userId}`) and Resend tags for tracking. Using Resend's `react` parameter which auto-generates both HTML and plain text.
+
+**Why React Email over raw HTML:** Component-based, Tailwind-styled emails with `pixelBasedPreset` (rem→px). Resend SDK auto-generates plain text from the React tree — no manual `text` field needed. Easier to maintain and extend to new notification types.
+
+## Email Notifications: Fire-and-Forget with Stateless Unsubscribe (2026-02-20)
+
+**Decision:** Send notification emails directly from API routes via Resend, fire-and-forget (non-blocking). Unsubscribe tokens use HMAC-signed stateless tokens (no database lookup for verification).
+
+**Alternatives considered:**
+1. **Database-backed unsubscribe tokens** — requires a new table, token cleanup jobs, and lookup on every unsubscribe. Overkill for an idempotent toggle.
+2. **Email queue (BullMQ, Inngest)** — adds infrastructure for a feature that sends at most one email per comment. Deferred until volume justifies it.
+3. **Supabase database trigger** — harder to debug, can't access auth.users email easily, and the project convention is API-route-based notifications (per DECISIONS.md).
+
+**Token approach:** `base64url(userId).HMAC-SHA256(userId, UNSUBSCRIBE_SECRET)` — mirrors the CLI auth token pattern in `lib/api/cli-auth.ts`. No expiry needed because unsubscribe is idempotent and non-destructive.
+
 ## @Mention Tagging: Any User Mentionable, Autocomplete for Followed (2026-02-18)
 
 **Decision:** Any valid `@username` creates a mention notification. The autocomplete dropdown only suggests followed users (convenience, not enforcement).

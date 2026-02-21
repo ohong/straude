@@ -24,6 +24,7 @@ describe("type shapes", () => {
       github_username: "alice",
       is_public: true,
       timezone: "America/New_York",
+      email_notifications: true,
       created_at: "2025-01-01T00:00:00Z",
       updated_at: "2025-01-01T00:00:00Z",
     };
@@ -45,6 +46,7 @@ describe("type shapes", () => {
       github_username: null,
       is_public: false,
       timezone: "UTC",
+      email_notifications: true,
       created_at: "2025-01-01T00:00:00Z",
       updated_at: "2025-01-01T00:00:00Z",
     };

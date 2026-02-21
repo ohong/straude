@@ -13,6 +13,7 @@ const ALLOWED_FIELDS = [
   "avatar_url",
   "github_username",
   "onboarding_completed",
+  "email_notifications",
 ] as const;
 
 export async function GET() {

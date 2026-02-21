@@ -2,6 +2,13 @@
 
 ## Unreleased
 
+### Added
+
+- **10-image uploads with Strava-style masonry grid.** Posts now support up to 10 images (was 4). Feed cards display a masonry grid preview (1-5 visible) with a "+N" overlay when more images exist. Layout adapts: single full-width, side-by-side, tall-left+stacked-right, 2x2, or tall-left+2x2-right depending on count.
+- **Full-screen image lightbox gallery.** Clicking any image opens a full-screen modal with left/right navigation, keyboard support (ArrowLeft/ArrowRight/Escape), touch swipe, and image counter. Portal-rendered with body scroll lock and backdrop click to close.
+
+- **Email notifications for comments and @mentions.** When someone comments on your post or @mentions you in a post/comment, you receive an email via Resend. Built with React Email components (auto-generates HTML + plain text), idempotency keys to prevent duplicates, and Resend tags for tracking. Includes `List-Unsubscribe` headers for one-click unsubscribe. Users can toggle in /settings or via unsubscribe link.
+
 ### Changed
 
 - **Redesigned kudos + comments engagement bar.** Merged the separate kudos avatar section and action buttons into a single row: `[avatar stack] ⚡ N kudos · 💬 N comments ... Share ↗`. Clicking the kudos area toggles kudos. Removed the standalone dashed-border kudos display.

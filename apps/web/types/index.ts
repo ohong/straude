@@ -14,6 +14,7 @@ export interface User {
   github_username: string | null;
   is_public: boolean;
   timezone: string;
+  email_notifications: boolean;
   created_at: string;
   updated_at: string;
 }

@@ -1,6 +1,8 @@
 import { NextResponse, type NextRequest } from "next/server";
 import { createClient } from "@/lib/supabase/server";
+import { getServiceClient } from "@/lib/supabase/service";
 import { parseMentions } from "@/lib/utils/mentions";
+import { sendNotificationEmail } from "@/lib/email/send-comment-email";
 
 type RouteContext = { params: Promise<{ id: string }> };
 
@@ -91,9 +93,9 @@ export async function PATCH(request: NextRequest, context: RouteContext) {
     updates.description = body.description;
   }
   if (body.images !== undefined) {
-    if (!Array.isArray(body.images) || body.images.length > 4) {
+    if (!Array.isArray(body.images) || body.images.length > 10) {
       return NextResponse.json(
-        { error: "Images must be an array of at most 4 URLs" },
+        { error: "Images must be an array of at most 10 URLs" },
         { status: 400 }
       );
     }
@@ -128,17 +130,58 @@ export async function PATCH(request: NextRequest, context: RouteContext) {
         .select("id, username")
         .in("username", mentionedUsernames);
 
-      const mentionNotifs = (mentionedUsers ?? [])
-        .filter((u) => u.id !== user.id)
-        .map((u) => ({
-          user_id: u.id,
-          actor_id: user.id,
-          type: "mention" as const,
-          post_id: id,
-        }));
+      const toNotify = (mentionedUsers ?? []).filter(
+        (u) => u.id !== user.id,
+      );
+
+      const mentionNotifs = toNotify.map((u) => ({
+        user_id: u.id,
+        actor_id: user.id,
+        type: "mention" as const,
+        post_id: id,
+      }));
 
       if (mentionNotifs.length > 0) {
         supabase.from("notifications").insert(mentionNotifs).then(() => {});
+      }
+
+      // Fire mention emails
+      if (toNotify.length > 0) {
+        const db = getServiceClient();
+        const { data: actor } = await db
+          .from("users")
+          .select("username")
+          .eq("id", user.id)
+          .single();
+        const actorUsername = actor?.username ?? "Someone";
+
+        for (const u of toNotify) {
+          const sdb = getServiceClient();
+          Promise.all([
+            sdb
+              .from("users")
+              .select("email_notifications")
+              .eq("id", u.id)
+              .single(),
+            sdb.auth.admin.getUserById(u.id),
+          ])
+            .then(([profileRes, authRes]) => {
+              const email = authRes.data?.user?.email;
+              if (!profileRes.data?.email_notifications || !email) return;
+
+              return sendNotificationEmail({
+                recipientUserId: u.id,
+                recipientEmail: email,
+                actorUsername,
+                type: "mention",
+                content: post.description!,
+                postId: id,
+                postTitle: (post.title as string) ?? null,
+                idempotencyKey: `mention-post/${id}/${u.id}`,
+              });
+            })
+            .catch(() => {});
+        }
       }
     }
   }

@@ -26,6 +26,7 @@ export default function SettingsPage() {
   const [country, setCountry] = useState("");
   const [githubUsername, setGithubUsername] = useState("");
   const [isPublic, setIsPublic] = useState(true);
+  const [emailNotifications, setEmailNotifications] = useState(true);
   const [timezone, setTimezone] = useState("");
 
   useEffect(() => {
@@ -51,6 +52,7 @@ export default function SettingsPage() {
         setCountry(data.country ?? "");
         setGithubUsername(data.github_username ?? "");
         setIsPublic(data.is_public);
+        setEmailNotifications(data.email_notifications ?? true);
         setTimezone(data.timezone ?? Intl.DateTimeFormat().resolvedOptions().timeZone);
       }
     }
@@ -74,6 +76,7 @@ export default function SettingsPage() {
         country: country || undefined,
         github_username: githubUsername || undefined,
         is_public: isPublic,
+        email_notifications: emailNotifications,
         timezone,
       }),
     });
@@ -241,6 +244,26 @@ export default function SettingsPage() {
             {isPublic
               ? "Your profile, posts, and stats are visible to everyone. You appear on the leaderboard."
               : "Your profile and activity are only visible to your followers. You will not appear on the leaderboard."}
+          </p>
+        </div>
+
+        <div className="space-y-1.5">
+          <div className="flex items-center gap-3">
+            <input
+              type="checkbox"
+              checked={emailNotifications}
+              onChange={(e) => setEmailNotifications(e.target.checked)}
+              id="email_notifications"
+              className="accent-accent"
+            />
+            <label htmlFor="email_notifications" className="text-sm font-medium">
+              Email notifications
+            </label>
+          </div>
+          <p className="pl-7 text-xs text-muted">
+            {emailNotifications
+              ? "You\u2019ll receive an email when someone comments on your posts."
+              : "Email notifications for comments are turned off."}
           </p>
         </div>
 

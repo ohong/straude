@@ -1,8 +1,55 @@
 import { NextResponse, type NextRequest } from "next/server";
 import { createClient } from "@/lib/supabase/server";
+import { getServiceClient } from "@/lib/supabase/service";
 import { parseMentions } from "@/lib/utils/mentions";
+import { sendNotificationEmail } from "@/lib/email/send-comment-email";
 
 type RouteContext = { params: Promise<{ id: string }> };
+
+/**
+ * Fire-and-forget: look up a user's email preference and send a notification email.
+ * Never blocks the response or throws.
+ */
+function fireNotificationEmail(opts: {
+  recipientUserId: string;
+  actorUsername: string;
+  type: "comment" | "mention";
+  content: string;
+  postId: string;
+  idempotencyKey: string;
+}) {
+  // Defer getServiceClient() inside the promise to avoid calling it
+  // when env vars aren't set (e.g. in tests).
+  Promise.resolve()
+    .then(() => {
+      const db = getServiceClient();
+      return Promise.all([
+        db
+          .from("users")
+          .select("email_notifications")
+          .eq("id", opts.recipientUserId)
+          .single(),
+        db.auth.admin.getUserById(opts.recipientUserId),
+        db.from("posts").select("title").eq("id", opts.postId).single(),
+      ]);
+    })
+    .then(([profileRes, authRes, postRes]) => {
+      const email = authRes.data?.user?.email;
+      if (!profileRes.data?.email_notifications || !email) return;
+
+      return sendNotificationEmail({
+        recipientUserId: opts.recipientUserId,
+        recipientEmail: email,
+        actorUsername: opts.actorUsername,
+        type: opts.type,
+        content: opts.content,
+        postId: opts.postId,
+        postTitle: (postRes.data?.title as string) ?? null,
+        idempotencyKey: opts.idempotencyKey,
+      });
+    })
+    .catch(() => {});
+}
 
 export async function POST(request: NextRequest, context: RouteContext) {
   const { id } = await context.params;
@@ -48,6 +95,19 @@ export async function POST(request: NextRequest, context: RouteContext) {
       post_id: id,
       comment_id: comment.id,
     });
+
+    const commenterUsername =
+      (comment.user as Record<string, unknown>)?.username as string ??
+      "Someone";
+
+    fireNotificationEmail({
+      recipientUserId: post.user_id,
+      actorUsername: commenterUsername,
+      type: "comment",
+      content,
+      postId: id,
+      idempotencyKey: `comment-notif/${comment.id}`,
+    });
   }
 
   // Mention notifications (de-dup: skip self and post owner)
@@ -59,18 +119,34 @@ export async function POST(request: NextRequest, context: RouteContext) {
       .in("username", mentionedUsernames);
 
     const skipIds = new Set([user.id, post?.user_id].filter(Boolean));
-    const mentionNotifs = (mentionedUsers ?? [])
-      .filter((u) => !skipIds.has(u.id))
-      .map((u) => ({
-        user_id: u.id,
-        actor_id: user.id,
-        type: "mention" as const,
-        post_id: id,
-        comment_id: comment.id,
-      }));
+    const toNotify = (mentionedUsers ?? []).filter((u) => !skipIds.has(u.id));
+
+    const mentionNotifs = toNotify.map((u) => ({
+      user_id: u.id,
+      actor_id: user.id,
+      type: "mention" as const,
+      post_id: id,
+      comment_id: comment.id,
+    }));
 
     if (mentionNotifs.length > 0) {
       supabase.from("notifications").insert(mentionNotifs).then(() => {});
+    }
+
+    // Fire mention emails (fire-and-forget, one per mentioned user)
+    const actorUsername =
+      (comment.user as Record<string, unknown>)?.username as string ??
+      "Someone";
+
+    for (const u of toNotify) {
+      fireNotificationEmail({
+        recipientUserId: u.id,
+        actorUsername,
+        type: "mention",
+        content,
+        postId: id,
+        idempotencyKey: `mention-notif/${comment.id}/${u.id}`,
+      });
     }
   }
 
