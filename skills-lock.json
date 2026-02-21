@@ -1,0 +1,10 @@
+{
+  "version": 1,
+  "skills": {
+    "react-email": {
+      "source": "resend/react-email",
+      "sourceType": "github",
+      "computedHash": "e4334584500b10b86b95d02b1fcfc39e7245b00694672607eba33082fc0265ac"
+    }
+  }
+}

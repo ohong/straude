@@ -80,7 +80,7 @@ export function PostEditor({ post }: { post: Post }) {
     const files = e.target.files;
     if (!files) return;
 
-    const remaining = 4 - images.length;
+    const remaining = 10 - images.length;
     const toUpload = Array.from(files).slice(0, remaining);
 
     for (const file of toUpload) {
@@ -169,7 +169,7 @@ export function PostEditor({ post }: { post: Post }) {
         )}
 
         <div className="flex items-center gap-2">
-          {images.length < 4 && (
+          {images.length < 10 && (
             <>
               <input
                 ref={fileRef}

@@ -1,9 +1,10 @@
 "use client";
 
 import Link from "next/link";
-import Image from "next/image";
 import { Zap, MessageCircle, Share2, CheckCircle } from "lucide-react";
 import { Avatar } from "@/components/ui/Avatar";
+import { ImageGrid } from "@/components/app/shared/ImageGrid";
+import { ImageLightbox } from "@/components/app/shared/ImageLightbox";
 import { cn } from "@/lib/utils/cn";
 import { formatTokens } from "@/lib/utils/format";
 import { mentionsToMarkdownLinks } from "@/lib/utils/mentions";
@@ -40,6 +41,7 @@ export function ActivityCard({ post }: { post: Post }) {
   const [kudosed, setKudosed] = useState(post.has_kudosed ?? false);
   const [kudosCount, setKudosCount] = useState(post.kudos_count ?? 0);
   const [animating, setAnimating] = useState(false);
+  const [lightboxIndex, setLightboxIndex] = useState<number | null>(null);
 
   const commentCount = post.comment_count ?? 0;
   const recentComments = post.recent_comments ?? [];
@@ -124,26 +126,7 @@ export function ActivityCard({ post }: { post: Post }) {
 
         {/* Images */}
         {post.images && post.images.length > 0 && (
-          <div
-            className={cn(
-              "mt-3 grid gap-2",
-              post.images.length > 1 ? "grid-cols-2" : "grid-cols-1"
-            )}
-          >
-            {post.images.map((url, i) => (
-              <Image
-                key={url}
-                src={url}
-                alt=""
-                width={600}
-                height={400}
-                className={cn(
-                  "w-full rounded",
-                  post.images.length === 3 && i === 0 && "row-span-2"
-                )}
-              />
-            ))}
-          </div>
+          <ImageGrid images={post.images} onImageClick={setLightboxIndex} />
         )}
 
         {/* Stats grid */}
@@ -225,6 +208,15 @@ export function ActivityCard({ post }: { post: Post }) {
           Share <Share2 size={16} aria-hidden="true" />
         </button>
       </div>
+
+      {/* Lightbox */}
+      {lightboxIndex !== null && post.images && (
+        <ImageLightbox
+          images={post.images}
+          initialIndex={lightboxIndex}
+          onClose={() => setLightboxIndex(null)}
+        />
+      )}
 
       {/* Inline comments preview */}
       {recentComments.length > 0 && (

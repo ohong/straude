@@ -36,9 +36,13 @@ async function resolveUserId(request: Request): Promise<string | null> {
   if (cliUserId) return cliUserId;
 
   // Fall back to Supabase session (web)
-  const supabase = await createClient();
-  const { data: { user } } = await supabase.auth.getUser();
-  return user?.id ?? null;
+  try {
+    const supabase = await createClient();
+    const { data: { user } } = await supabase.auth.getUser();
+    return user?.id ?? null;
+  } catch {
+    return null;
+  }
 }
 
 export async function POST(request: Request) {
@@ -81,7 +85,7 @@ export async function POST(request: Request) {
 
   const db = getServiceClient();
   const isVerified = body.source === "cli";
-  const appUrl = process.env.NEXT_PUBLIC_APP_URL ?? "https://straude.com";
+  const appUrl = (process.env.NEXT_PUBLIC_APP_URL ?? "https://straude.com").replace(/\/+$/, "");
   const results: UsageSubmitResponse["results"] = [];
 
   for (const entry of body.entries) {
