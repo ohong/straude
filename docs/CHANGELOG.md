@@ -4,6 +4,8 @@
 
 ### Added
 
+- **Shareable recap cards.** Generate branded usage summary images (weekly/monthly) for sharing on social media. Includes OG image generation for link previews (1200x630), downloadable square PNG (1080x1080) for Instagram, and a live card preview page at `/recap`. Stats include total spend, output tokens, active days, session count, streak, primary model, and a mini contribution strip. Public users get shareable URLs at `/recap/[username]`; private users can still view and download their own card.
+
 - **10-image uploads with Strava-style masonry grid.** Posts now support up to 10 images (was 4). Feed cards display a masonry grid preview (1-5 visible) with a "+N" overlay when more images exist. Layout adapts: single full-width, side-by-side, tall-left+stacked-right, 2x2, or tall-left+2x2-right depending on count.
 - **Full-screen image lightbox gallery.** Clicking any image opens a full-screen modal with left/right navigation, keyboard support (ArrowLeft/ArrowRight/Escape), touch swipe, and image counter. Portal-rendered with body scroll lock and backdrop click to close.
 

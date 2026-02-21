@@ -66,7 +66,7 @@ export async function POST(request: NextRequest) {
   let response: Awaited<ReturnType<typeof anthropic.messages.create>>;
   try {
     response = await anthropic.messages.create({
-      model: "claude-sonnet-4-5-20250929",
+      model: "claude-sonnet-4-6",
       max_tokens: 300,
       messages: [
         {

@@ -1,5 +1,16 @@
 # Architecture & Design Decisions
 
+## Shareable Recap Cards: Shared Utility + OG Image Pattern (2026-02-21)
+
+**Decision:** Recap data computation lives in a shared utility (`lib/utils/recap.ts`) used by both the API route and OG image generator. The OG image card JSX is a separate shared component (`lib/utils/recap-image.tsx`) reused across the landscape OG route and square download endpoint. The public recap page at `/recap/[username]` is outside the `(app)` route group so it doesn't require auth, while the card preview page at `/(app)/recap` is inside the auth-protected group.
+
+**Alternatives considered:**
+1. **Inline all stats computation in each route** — leads to duplicated date math and model resolution logic across 3+ files.
+2. **Single API route that generates both data and images** — OG images need to be on a specific file convention path (`opengraph-image.tsx`), so they need their own route regardless.
+3. **Canvas-based image generation (Puppeteer, Playwright)** — heavyweight dependency. `next/og` ImageResponse is already proven in this codebase and requires no extra infra.
+
+**Why service client for OG image:** The OG image route is hit by crawlers (Twitter, LinkedIn) without user auth cookies. Using the service client (`getServiceClient()`) allows fetching the public user's data without requiring a session.
+
 ## Image Gallery: 5-Image Preview Limit, No External Carousel (2026-02-21)
 
 **Decision:** The feed grid shows at most 5 images with a "+N" overlay for the remainder. The lightbox is a custom component using `createPortal`, not an external carousel library.

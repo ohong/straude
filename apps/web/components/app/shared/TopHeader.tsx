@@ -9,6 +9,7 @@ import {
   User,
   Settings,
   LogOut,
+  BarChart3,
 } from "lucide-react";
 import { Avatar } from "@/components/ui/Avatar";
 import { cn } from "@/lib/utils/cn";
@@ -278,6 +279,14 @@ export function TopHeader({ username, avatarUrl }: TopHeaderProps) {
                 >
                   <User size={16} aria-hidden="true" />
                   View Profile
+                </Link>
+                <Link
+                  href="/recap"
+                  className="flex items-center gap-3 px-4 py-2.5 text-sm hover:bg-subtle"
+                  onClick={() => setProfileOpen(false)}
+                >
+                  <BarChart3 size={16} aria-hidden="true" />
+                  Recap
                 </Link>
                 <Link
                   href="/settings"
