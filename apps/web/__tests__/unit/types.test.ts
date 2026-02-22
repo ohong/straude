@@ -171,10 +171,12 @@ describe("type shapes", () => {
           usage_id: "u1",
           post_id: "p1",
           post_url: "https://straude.com/p/p1",
+          action: "created",
         },
       ],
     };
     expect(res.results).toHaveLength(1);
     expect(res.results[0]!.post_url).toContain("straude.com");
+    expect(res.results[0]!.action).toBe("created");
   });
 });

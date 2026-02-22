@@ -1,4 +1,5 @@
 import { createClient } from "@/lib/supabase/server";
+import { formatTokens } from "@/lib/utils/format";
 import Link from "next/link";
 import { Avatar } from "@/components/ui/Avatar";
 import { FollowButton } from "@/components/app/profile/FollowButton";
@@ -7,7 +8,7 @@ export async function RightSidebar({ userId }: { userId: string }) {
   const supabase = await createClient();
 
   // Start independent queries in parallel (avoid waterfall)
-  const [{ data: topUsers }, { data: following }] = await Promise.all([
+  const [{ data: topUsers }, { data: following }, { data: userUsage }] = await Promise.all([
     supabase
       .from("leaderboard_weekly")
       .select("user_id, username, avatar_url, total_cost")
@@ -17,6 +18,10 @@ export async function RightSidebar({ userId }: { userId: string }) {
       .from("follows")
       .select("following_id")
       .eq("follower_id", userId),
+    supabase
+      .from("daily_usage")
+      .select("output_tokens")
+      .eq("user_id", userId),
   ]);
 
   const followingIds = following?.map((f) => f.following_id) ?? [];
@@ -48,6 +53,10 @@ export async function RightSidebar({ userId }: { userId: string }) {
     ...(otherSuggested ?? []).filter((u) => !excludeIds.includes(u.id)),
   ].slice(0, 5);
 
+  const userOutputTokens = userUsage?.reduce((s, r) => s + Number(r.output_tokens), 0) ?? 0;
+  const TARGET = 1_000_000_000;
+  const pct = Math.min((userOutputTokens / TARGET) * 100, 100);
+
   return (
     <div className="flex flex-col">
       {/* Suggested Friends */}
@@ -75,6 +84,25 @@ export async function RightSidebar({ userId }: { userId: string }) {
         ) : (
           <p className="text-sm text-muted">No suggestions</p>
         )}
+      </div>
+
+      {/* Featured Challenge */}
+      <div className="border-b border-border p-6">
+        <p className="mb-3 text-xs font-semibold uppercase tracking-widest text-muted">
+          Featured Challenge
+        </p>
+        <p className="text-sm font-semibold">The Three Comma Club</p>
+        <p className="mb-3 text-xs text-muted">First to one billion output tokens</p>
+        <div className="mb-1 flex items-center justify-between text-xs text-muted">
+          <span>{formatTokens(userOutputTokens)} ({pct < 0.01 ? '<0.01' : pct.toFixed(2)}%)</span>
+          <span>1B</span>
+        </div>
+        <div className="h-1.5 w-full overflow-hidden rounded-full bg-subtle">
+          <div
+            className="h-full rounded-full bg-accent"
+            style={{ width: `${pct}%` }}
+          />
+        </div>
       </div>
 
       {/* Leaderboard Preview */}

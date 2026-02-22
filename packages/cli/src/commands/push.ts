@@ -21,6 +21,7 @@ interface UsageSubmitResponse {
     usage_id: string;
     post_id: string;
     post_url: string;
+    action: "created" | "updated";
   }>;
 }
 
@@ -173,6 +174,7 @@ export async function pushCommand(options: PushOptions, configOverride?: Straude
 
   console.log("");
   for (const result of response.results) {
-    console.log(`Posted ${result.date}: ${result.post_url}`);
+    const verb = result.action === "updated" ? "Updated" : "Posted";
+    console.log(`${verb} ${result.date}: ${result.post_url}`);
   }
 }

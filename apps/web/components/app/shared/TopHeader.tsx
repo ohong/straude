@@ -128,7 +128,7 @@ export function TopHeader({ username, avatarUrl }: TopHeaderProps) {
   }
 
   return (
-    <header className="z-20 hidden shrink-0 border-b border-border bg-background lg:block">
+    <header className="z-20 shrink-0 border-b border-border bg-background">
       <div className="mx-auto flex h-14 max-w-[1600px] items-center justify-between px-4 lg:px-6">
         {/* Left — Brand */}
         <Link
@@ -145,7 +145,7 @@ export function TopHeader({ username, avatarUrl }: TopHeaderProps) {
         </Link>
 
         {/* Center — Nav */}
-        <nav className="flex items-center gap-6">
+        <nav className="hidden items-center gap-6 lg:flex">
           {navLinks.map(({ href, label }) => {
             const active = pathname === href;
             return (

@@ -132,6 +132,7 @@ export interface UsageSubmitResponse {
     usage_id: string;
     post_id: string;
     post_url: string;
+    action: "created" | "updated";
   }>;
 }
 
@@ -156,6 +157,13 @@ export interface Notification {
   read: boolean;
   created_at: string;
   actor?: Pick<User, "username" | "avatar_url">;
+}
+
+export interface UserAchievement {
+  id: string;
+  user_id: string;
+  achievement_slug: string;
+  earned_at: string;
 }
 
 export interface WallOfLovePost {

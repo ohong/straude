@@ -1,7 +1,8 @@
 "use client";
 
 import Link from "next/link";
-import { Zap, MessageCircle, Share2, CheckCircle } from "lucide-react";
+import { useRouter } from "next/navigation";
+import { Zap, MessageCircle, Share2, CheckCircle, Check } from "lucide-react";
 import { Avatar } from "@/components/ui/Avatar";
 import { ImageGrid } from "@/components/app/shared/ImageGrid";
 import { ImageLightbox } from "@/components/app/shared/ImageLightbox";
@@ -11,6 +12,7 @@ import { mentionsToMarkdownLinks } from "@/lib/utils/mentions";
 import type { Post, Comment } from "@/types";
 import dynamic from "next/dynamic";
 import { useState } from "react";
+import remarkBreaks from "remark-breaks";
 
 const ReactMarkdown = dynamic(() => import("react-markdown"), {
   loading: () => null,
@@ -38,10 +40,12 @@ function formatModel(models: string[]) {
 }
 
 export function ActivityCard({ post }: { post: Post }) {
+  const router = useRouter();
   const [kudosed, setKudosed] = useState(post.has_kudosed ?? false);
   const [kudosCount, setKudosCount] = useState(post.kudos_count ?? 0);
   const [animating, setAnimating] = useState(false);
   const [lightboxIndex, setLightboxIndex] = useState<number | null>(null);
+  const [copied, setCopied] = useState(false);
 
   const commentCount = post.comment_count ?? 0;
   const recentComments = post.recent_comments ?? [];
@@ -62,6 +66,8 @@ export function ActivityCard({ post }: { post: Post }) {
   async function handleShare() {
     const url = `${window.location.origin}/post/${post.id}`;
     await navigator.clipboard.writeText(url);
+    setCopied(true);
+    setTimeout(() => setCopied(false), 2000);
   }
 
   return (
@@ -103,8 +109,21 @@ export function ActivityCard({ post }: { post: Post }) {
         </div>
       </div>
 
-      {/* Body */}
-      <Link href={`/post/${post.id}`} className="mt-4 block">
+      {/* Body — clickable card, but not an <a> to avoid nesting with @mention links */}
+      <div
+        className="mt-4 cursor-pointer"
+        role="link"
+        tabIndex={0}
+        onClick={(e) => {
+          if ((e.target as HTMLElement).closest("a")) return;
+          router.push(`/post/${post.id}`);
+        }}
+        onKeyDown={(e) => {
+          if (e.key === "Enter" && !(e.target as HTMLElement).closest("a")) {
+            router.push(`/post/${post.id}`);
+          }
+        }}
+      >
         {post.title && (
           <h2 className="text-xl font-medium hover:underline" style={{ letterSpacing: "-0.02em" }}>
             {post.title}
@@ -113,6 +132,7 @@ export function ActivityCard({ post }: { post: Post }) {
         {post.description && (
           <div className="mt-2 text-[0.95rem] leading-relaxed [&_a]:text-accent [&_a]:underline [&_code]:bg-subtle [&_code]:px-1 [&_code]:py-0.5 [&_code]:font-[family-name:var(--font-mono)] [&_code]:text-sm [&_pre]:mt-2 [&_pre]:overflow-x-auto [&_pre]:border-l-2 [&_pre]:border-l-accent [&_pre]:bg-subtle [&_pre]:p-3 [&_pre]:font-[family-name:var(--font-mono)] [&_pre]:text-sm [&_ul]:mt-1.5 [&_ul]:list-disc [&_ul]:pl-5 [&_ol]:mt-1.5 [&_ol]:list-decimal [&_ol]:pl-5 [&_li]:mt-0.5 [&_blockquote]:mt-2 [&_blockquote]:border-l-2 [&_blockquote]:border-l-muted [&_blockquote]:pl-3 [&_blockquote]:text-muted [&_h1]:mt-4 [&_h1]:text-xl [&_h1]:font-semibold [&_h2]:mt-3.5 [&_h2]:text-lg [&_h2]:font-semibold [&_h3]:mt-3 [&_h3]:text-base [&_h3]:font-semibold [&_h4]:mt-2 [&_h4]:text-sm [&_h4]:font-semibold [&_h4]:uppercase [&_h4]:tracking-wider [&_h4]:text-muted [&_h5]:mt-2 [&_h5]:text-sm [&_h5]:font-semibold [&_h6]:mt-2 [&_h6]:text-xs [&_h6]:font-semibold [&_h6]:text-muted [&_hr]:my-3 [&_hr]:border-border [&_del]:text-muted [&_del]:line-through">
             <ReactMarkdown
+              remarkPlugins={[remarkBreaks]}
               allowedElements={[
                 "p", "strong", "em", "del", "code", "pre", "a", "br",
                 "ul", "ol", "li", "blockquote", "h1", "h2", "h3", "h4", "h5", "h6", "hr",
@@ -161,7 +181,7 @@ export function ActivityCard({ post }: { post: Post }) {
             </div>
           </div>
         )}
-      </Link>
+      </div>
 
       {/* Actions */}
       <div className="mt-4 flex items-center gap-6 border-t border-dashed border-muted/30 pt-4">
@@ -205,7 +225,8 @@ export function ActivityCard({ post }: { post: Post }) {
           onClick={handleShare}
           className="ml-auto flex items-center gap-2 text-sm font-semibold hover:text-accent"
         >
-          Share <Share2 size={16} aria-hidden="true" />
+          {copied ? "Copied!" : "Share"}{" "}
+          {copied ? <Check size={16} aria-hidden="true" /> : <Share2 size={16} aria-hidden="true" />}
         </button>
       </div>
 

@@ -4,6 +4,15 @@
 
 ### Added
 
+- **Achievements & Badges.** Milestone badges earned progressively and displayed on user profiles. Initial badges: First Sync, 7-Day Streak, 30-Day Streak, $100 Club, Big Spender ($500), 1M/10M/100M Output Tokens. Badges are never revoked. Achievement check runs fire-and-forget after each usage submit. Own profile shows locked (greyed-out) badges; other profiles show only earned badges.
+- **Featured Challenge card in right sidebar.** "The Three Comma Club" — race to 1 billion output tokens. Shows a progress bar based on the leader's total and the top 3 contributors with token counts. Displayed between Suggested Friends and Top This Week.
+
+### Changed
+
+- **CLI allows multiple syncs per day.** Running `straude` a second time on the same day now updates the existing post with latest usage data instead of printing "Already synced today" and exiting. The server response now includes an `action` field (`"created"` or `"updated"`) and the CLI output reflects this (`Posted` vs `Updated`).
+
+### Added
+
 - **Shareable recap cards.** Generate branded usage summary images (weekly/monthly) for sharing on social media. Includes OG image generation for link previews (1200x630), downloadable square PNG (1080x1080) for Instagram, and a live card preview page at `/recap`. Stats include total spend, output tokens, active days, session count, streak, primary model, and a mini contribution strip. Public users get shareable URLs at `/recap/[username]`; private users can still view and download their own card.
 
 - **10-image uploads with Strava-style masonry grid.** Posts now support up to 10 images (was 4). Feed cards display a masonry grid preview (1-5 visible) with a "+N" overlay when more images exist. Layout adapts: single full-width, side-by-side, tall-left+stacked-right, 2x2, or tall-left+2x2-right depending on count.

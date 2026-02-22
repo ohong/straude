@@ -186,7 +186,7 @@ export function MentionInput({
   return (
     <div className="relative flex-1">
       {multiline ? (
-        <textarea {...sharedProps} rows={2} />
+        <textarea {...sharedProps} rows={4} />
       ) : (
         <input {...(sharedProps as React.InputHTMLAttributes<HTMLInputElement>)} />
       )}

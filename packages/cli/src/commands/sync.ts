@@ -1,7 +1,6 @@
 import { loadConfig } from "../lib/auth.js";
 import { loginCommand } from "./login.js";
 import { pushCommand } from "./push.js";
-import { runCcusageRaw, parseCcusageOutput } from "../lib/ccusage.js";
 import { MAX_BACKFILL_DAYS } from "../config.js";
 
 function formatDate(d: Date): string {
@@ -9,23 +8,6 @@ function formatDate(d: Date): string {
   const m = String(d.getMonth() + 1).padStart(2, "0");
   const day = String(d.getDate()).padStart(2, "0");
   return `${y}-${m}-${day}`;
-}
-
-function formatDateCompact(d: Date): string {
-  const y = d.getFullYear();
-  const m = String(d.getMonth() + 1).padStart(2, "0");
-  const day = String(d.getDate()).padStart(2, "0");
-  return `${y}${m}${day}`;
-}
-
-function formatTokens(n: number): string {
-  if (n >= 1_000_000) return `${(n / 1_000_000).toFixed(1)}M`;
-  if (n >= 1_000) return `${Math.round(n / 1_000)}k`;
-  return String(n);
-}
-
-function formatCost(n: number): string {
-  return `$${n.toFixed(2)}`;
 }
 
 function daysBetween(dateStrA: string, dateStrB: string): number {
@@ -36,29 +18,6 @@ function daysBetween(dateStrA: string, dateStrB: string): number {
   const b = new Date(by!, bm! - 1, bd!);
   const msPerDay = 86_400_000;
   return Math.round((b.getTime() - a.getTime()) / msPerDay);
-}
-
-function printTodayStats(): void {
-  const now = new Date();
-  const compact = formatDateCompact(now);
-  try {
-    const raw = runCcusageRaw(compact, compact);
-    const { data: entries } = parseCcusageOutput(raw);
-    if (entries.length === 0) {
-      console.log("No usage data for today.");
-      return;
-    }
-    for (const entry of entries) {
-      console.log(`  ${entry.date}:`);
-      console.log(`    Cost: ${formatCost(entry.costUSD)}`);
-      console.log(
-        `    Tokens: ${formatTokens(entry.totalTokens)} (input: ${formatTokens(entry.inputTokens)}, output: ${formatTokens(entry.outputTokens)})`,
-      );
-      console.log(`    Models: ${entry.models.join(", ")}`);
-    }
-  } catch {
-    // Non-fatal — stats preview is best-effort
-  }
 }
 
 /**
@@ -88,9 +47,8 @@ export async function syncCommand(apiUrlOverride?: string): Promise<void> {
   // Determine how many days to push
   if (config.last_push_date) {
     if (config.last_push_date >= today) {
-      // Show today's stats even though already synced
-      printTodayStats();
-      console.log("\nAlready synced today.");
+      // Re-sync today with latest usage data
+      await pushCommand({ days: 1 }, config);
       return;
     }
 

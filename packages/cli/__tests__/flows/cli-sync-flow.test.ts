@@ -207,21 +207,19 @@ describe("sync flow", () => {
     expect(saved.last_push_date).toBe(today);
   });
 
-  it("returning user already synced today: shows stats, no API calls", async () => {
+  it("returning user already synced today: re-syncs with days=1", async () => {
     seedConfig({ last_push_date: todayStr() });
     const today = todayStr();
     mockExecFileSync.mockReturnValue(ccusageJson([today]));
+    mockSuccessfulSubmit([today]);
 
     await syncCommand();
 
-    expect(mockFetch).not.toHaveBeenCalled();
-    // ccusage IS called to show today's stats preview
+    // Re-syncs today's data (1 API call)
+    expect(mockFetch).toHaveBeenCalledTimes(1);
     expect(mockExecFileSync).toHaveBeenCalledTimes(1);
-    expect(console.log).toHaveBeenCalledWith(`  ${today}:`);
-    expect(console.log).toHaveBeenCalledWith("    Cost: $0.05");
-    expect(console.log).toHaveBeenCalledWith(
-      expect.stringContaining("Already synced today."),
-    );
+    const saved = readPersistedConfig();
+    expect(saved.last_push_date).toBe(today);
   });
 
   it("returning user with stale last_push_date: pushes diff days", async () => {
@@ -283,7 +281,7 @@ describe("API error handling during push", () => {
 
     await expect(pushCommand({})).rejects.toThrow(ExitError);
     expect(console.error).toHaveBeenCalledWith(
-      expect.stringContaining("HTTP 404"),
+      expect.stringContaining("Endpoint not found"),
     );
   });
 
@@ -300,7 +298,7 @@ describe("API error handling during push", () => {
 
     await expect(pushCommand({})).rejects.toThrow(ExitError);
     expect(console.error).toHaveBeenCalledWith(
-      expect.stringContaining("Unauthorized"),
+      expect.stringContaining("Session expired"),
     );
   });
 

@@ -3,6 +3,7 @@ import { notFound } from "next/navigation";
 import Link from "next/link";
 import { MapPin, LinkIcon, Github, Flame, Zap } from "lucide-react";
 import { Avatar } from "@/components/ui/Avatar";
+import { AchievementBadges } from "@/components/app/profile/AchievementBadges";
 import { ContributionGraph } from "@/components/app/profile/ContributionGraph";
 import { FeedList } from "@/components/app/feed/FeedList";
 import { FollowButton } from "@/components/app/profile/FollowButton";
@@ -63,6 +64,7 @@ export default async function ProfilePage({
     { count: postsCount },
     { data: streak },
     { data: totalSpendRows },
+    { data: achievements },
   ] = await Promise.all([
     supabase
       .from("follows")
@@ -80,6 +82,10 @@ export default async function ProfilePage({
     supabase
       .from("daily_usage")
       .select("cost_usd, output_tokens")
+      .eq("user_id", profile.id),
+    supabase
+      .from("user_achievements")
+      .select("*")
       .eq("user_id", profile.id),
   ]);
   const totalSpend = totalSpendRows?.reduce((s, r) => s + Number(r.cost_usd), 0) ?? 0;
@@ -289,6 +295,14 @@ export default async function ProfilePage({
             </p>
           </div>
         </div>
+
+        {/* Achievement badges */}
+        {(achievements && achievements.length > 0 || isOwn) && (
+          <div className="mt-6">
+            <p className="mb-2 text-[0.7rem] uppercase tracking-widest text-muted">Achievements</p>
+            <AchievementBadges earned={achievements ?? []} showLocked={isOwn} />
+          </div>
+        )}
       </div>
 
       {/* Contribution graph */}

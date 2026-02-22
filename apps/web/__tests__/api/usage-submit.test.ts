@@ -49,6 +49,11 @@ function mockServiceClient(overrides: Record<string, any> = {}) {
     from: vi.fn().mockReturnThis(),
     upsert: vi.fn().mockReturnThis(),
     select: vi.fn().mockReturnThis(),
+    eq: vi.fn().mockReturnThis(),
+    maybeSingle: vi.fn().mockResolvedValue({
+      data: null,
+      error: null,
+    }),
     single: vi.fn().mockResolvedValue({
       data: { id: "usage-1" },
       error: null,

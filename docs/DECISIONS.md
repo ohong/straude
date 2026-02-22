@@ -1,5 +1,26 @@
 # Architecture & Design Decisions
 
+## Achievements: Definitions in Code, Records in DB (2026-02-22)
+
+**Decision:** Achievement badge definitions (slug, title, emoji, threshold check function) live in a typed const array in `lib/achievements.ts`. Earned records are stored in `user_achievements` (user_id, achievement_slug, earned_at). The `checkAndAwardAchievements` function runs fire-and-forget after each usage submit, fetches the user's stats, and inserts any newly earned badges.
+
+**Alternatives considered:**
+1. **Definitions in DB** — a `badge_definitions` table with thresholds. More flexible but adds a table for data that changes with code deploys, not at runtime. Thresholds are tightly coupled to the check logic.
+2. **Cron-based batch check** — run a scheduled job to check all users. Unnecessary overhead when we already have the trigger point (usage submit). Users want instant feedback.
+3. **Supabase database trigger on `daily_usage`** — harder to test, can't access aggregate stats cleanly in a trigger, and the project convention is API-route-based side effects.
+
+**Why definitions in code:** Badge criteria change with feature releases, not runtime config. TypeScript gives us type-safe check functions. Adding a new badge is a single array entry — no migration needed. The DB table is just a ledger of earned records.
+
+**RLS:** SELECT-only for all users (achievements are public). No INSERT grant for `authenticated` — awards are inserted server-side via service client to prevent users from granting themselves badges.
+
+## Multiple CLI Syncs Per Day: Upsert Over Reject (2026-02-21)
+
+**Decision:** Removed the client-side "already synced today" guard in `sync.ts`. When `last_push_date >= today`, the CLI now re-pushes today's data (`days: 1`) instead of returning early. The server already uses upserts on both `daily_usage` (on `user_id,date`) and `posts` (on `daily_usage_id`), so re-submitting correctly updates the data. Added a pre-upsert existence check on the server to return `action: "created" | "updated"` in the response.
+
+**Alternatives considered:**
+1. **Keep the guard but add a `--force` flag** — adds CLI surface area for what should be the default behavior. Users expect later runs to have more accurate totals.
+2. **Detect data changes client-side and skip if unchanged** — unnecessary complexity. The upsert is cheap and the server is the source of truth.
+
 ## Shareable Recap Cards: Shared Utility + OG Image Pattern (2026-02-21)
 
 **Decision:** Recap data computation lives in a shared utility (`lib/utils/recap.ts`) used by both the API route and OG image generator. The OG image card JSX is a separate shared component (`lib/utils/recap-image.tsx`) reused across the landscape OG route and square download endpoint. The public recap page at `/recap/[username]` is outside the `(app)` route group so it doesn't require auth, while the card preview page at `/(app)/recap` is inside the auth-protected group.

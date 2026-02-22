@@ -84,9 +84,9 @@ export async function PATCH(request: NextRequest, context: RouteContext) {
     updates.title = body.title;
   }
   if (body.description !== undefined) {
-    if (body.description !== null && (typeof body.description !== "string" || body.description.length > 500)) {
+    if (body.description !== null && (typeof body.description !== "string" || body.description.length > 5000)) {
       return NextResponse.json(
-        { error: "Description must be a string of at most 500 characters" },
+        { error: "Description must be a string of at most 5000 characters" },
         { status: 400 }
       );
     }

@@ -137,7 +137,7 @@ export function PostEditor({ post }: { post: Post }) {
           value={description}
           onChange={setDescription}
           placeholder="Describe what you built, @ to mention"
-          maxLength={500}
+          maxLength={5000}
           multiline
           className="w-full border border-border px-3 py-2 text-sm outline-none placeholder:text-muted focus:border-accent"
         />

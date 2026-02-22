@@ -99,31 +99,15 @@ describe("syncCommand", () => {
     expect(mockPushCommand).toHaveBeenCalledWith({}, fakeConfig);
   });
 
-  it("shows today's stats then already synced when last_push_date is today", async () => {
+  it("re-syncs today when last_push_date is today", async () => {
     mockLoadConfig.mockReturnValue({ ...fakeConfig, last_push_date: todayStr() });
-    mockRunCcusageRaw.mockReturnValue("{}");
-    mockParseCcusageOutput.mockReturnValue({
-      data: [
-        {
-          date: todayStr(),
-          models: ["claude-sonnet-4-6"],
-          inputTokens: 1000,
-          outputTokens: 500,
-          cacheCreationTokens: 0,
-          cacheReadTokens: 0,
-          totalTokens: 1500,
-          costUSD: 0.05,
-        },
-      ],
-    });
+    mockPushCommand.mockResolvedValue(undefined);
 
     await syncCommand();
 
-    expect(mockPushCommand).not.toHaveBeenCalled();
-    expect(console.log).toHaveBeenCalledWith(`  ${todayStr()}:`);
-    expect(console.log).toHaveBeenCalledWith("    Cost: $0.05");
-    expect(console.log).toHaveBeenCalledWith(
-      expect.stringContaining("Already synced today."),
+    expect(mockPushCommand).toHaveBeenCalledWith(
+      { days: 1 },
+      expect.objectContaining({ token: "tok" }),
     );
   });
 

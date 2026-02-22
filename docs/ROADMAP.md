@@ -22,9 +22,9 @@ Add a strict CSP header with nonce-based script/style sources. Requires auditing
 
 The notifications system is built but uses polling (fetch on dropdown open + initial load). Consider adding Supabase Realtime subscriptions to push new notifications to the client without requiring a page refresh or dropdown toggle.
 
-## Achievements & Badges
+## ~~Achievements & Badges~~ (Implemented)
 
-Award milestone badges displayed on user profiles. Examples: First Sync, 7-Day Streak, 30-Day Streak, $100 Club, 1M Output Tokens, Night Owl (late-night sessions). Badges are earned progressively and never revoked. Requires a new `achievements` table, a check-and-award function that runs after each sync, and a badge display component on the profile page.
+Shipped in the 2026-02-22 release. Eight milestone badges (First Sync through 100M Output Tokens) earned progressively, displayed on profiles, checked after each usage submit. Featured Challenge ("The Three Comma Club") added to the right sidebar.
 
 ## Personal Analytics Dashboard
 

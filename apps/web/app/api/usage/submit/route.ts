@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { createClient } from "@/lib/supabase/server";
 import { verifyCliToken } from "@/lib/api/cli-auth";
 import { getServiceClient } from "@/lib/supabase/service";
+import { checkAndAwardAchievements } from "@/lib/achievements";
 import type { UsageSubmitRequest, UsageSubmitResponse, CcusageDailyEntry } from "@/types";
 
 const MAX_BACKFILL_DAYS = 7;
@@ -89,6 +90,16 @@ export async function POST(request: Request) {
   const results: UsageSubmitResponse["results"] = [];
 
   for (const entry of body.entries) {
+    // Check if a record already exists to determine create vs update
+    const { data: existing } = await db
+      .from("daily_usage")
+      .select("id")
+      .eq("user_id", userId)
+      .eq("date", entry.date)
+      .maybeSingle();
+
+    const action: "created" | "updated" = existing ? "updated" : "created";
+
     const { data: usage, error: usageError } = await db
       .from("daily_usage")
       .upsert(
@@ -144,8 +155,11 @@ export async function POST(request: Request) {
       usage_id: usage.id,
       post_id: post.id,
       post_url: `${appUrl}/post/${post.id}`,
+      action,
     });
   }
+
+  checkAndAwardAchievements(userId).catch(() => {});
 
   return NextResponse.json({ results } satisfies UsageSubmitResponse);
 }

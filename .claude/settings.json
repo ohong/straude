@@ -16,5 +16,8 @@
         ]
       }
     ]
+  },
+  "enabledPlugins": {
+    "review-loop@hamel-review": true
   }
 }
