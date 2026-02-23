@@ -8,6 +8,11 @@
 
 ### Changed
 
+- **Country selector expanded to all 193 UN member states** (was ~109). Previously missing Turkey, Iran, Iraq, Afghanistan, and ~85 other countries. Also added Palestine, and kept existing territories (Hong Kong, Taiwan, Puerto Rico). All new countries added to `COUNTRY_TO_REGION` for leaderboard filtering.
+- **Country selector is now a searchable combobox.** Replaced the native `<select>` dropdown (197 countries is too long to scroll) with a `CountryPicker` component: click to open, type to filter, click to select. Shows flag + name for the selected country with a clear button. Used on both onboarding and settings pages.
+- **CLI: 3-tier ccusage binary resolution for faster syncs.** Tries direct `ccusage` binary first (globally installed, ~0.3s), then `bunx` (detected via `process.versions.bun`, no subprocess), then `npx` fallback. Prints a one-time install tip when using the slow path.
+- **Suggested friends now shows real users only.** Replaced the unordered user query with two targeted queries: recently active users (have pushed usage data, ordered by most recent activity) and newest signups. Dummy/inactive users without any usage data are deprioritized. Priority order: pinned site owner, recently active users, new signups.
+
 - **Achievement stats aggregation moved to Supabase RPC.** Replaced client-side `SELECT * FROM daily_usage` + `.reduce()` calls with a single `get_achievement_stats` RPC that returns pre-aggregated stats. Reduces data transfer and computation on the server round-trip.
 - **Collapsible achievements view.** Replaced flat badge pill list with a collapsed/expanded toggle. Collapsed shows earned emoji pills with a count (e.g. 3/8); expanded shows a responsive grid with emoji, title, and description. Locked badges still shown dimmed on own profile. Addresses #2.
 

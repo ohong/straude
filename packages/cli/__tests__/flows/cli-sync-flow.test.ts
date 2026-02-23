@@ -49,6 +49,7 @@ import { execFileSync } from "node:child_process";
 import { syncCommand } from "../../src/commands/sync.js";
 import { pushCommand } from "../../src/commands/push.js";
 import { CONFIG_FILE } from "../../src/config.js";
+import { _resetCcusageResolver } from "../../src/lib/ccusage.js";
 
 const mockExecFileSync = vi.mocked(execFileSync);
 
@@ -137,6 +138,7 @@ function mockSuccessfulSubmit(dates: string[]) {
 
 beforeEach(() => {
   vi.clearAllMocks();
+  _resetCcusageResolver();
   configStore = {};
   vi.spyOn(console, "log").mockImplementation(() => {});
   vi.spyOn(console, "error").mockImplementation(() => {});
@@ -217,7 +219,8 @@ describe("sync flow", () => {
 
     // Re-syncs today's data (1 API call)
     expect(mockFetch).toHaveBeenCalledTimes(1);
-    expect(mockExecFileSync).toHaveBeenCalledTimes(1);
+    // 2 execFileSync calls: ccusage --version probe + actual ccusage daily
+    expect(mockExecFileSync).toHaveBeenCalledTimes(2);
     const saved = readPersistedConfig();
     expect(saved.last_push_date).toBe(today);
   });
@@ -232,8 +235,8 @@ describe("sync flow", () => {
 
     await syncCommand();
 
-    // Verify ccusage was called with the right date range (--days 3)
-    expect(mockExecFileSync).toHaveBeenCalledTimes(1);
+    // 2 execFileSync calls: ccusage --version probe + actual ccusage daily
+    expect(mockExecFileSync).toHaveBeenCalledTimes(2);
     expect(mockFetch).toHaveBeenCalledTimes(1);
 
     const saved = readPersistedConfig();
@@ -249,9 +252,10 @@ describe("sync flow", () => {
 
     await syncCommand();
 
-    // Should pass days=7 (MAX_BACKFILL_DAYS) to pushCommand
-    expect(mockExecFileSync).toHaveBeenCalledTimes(1);
-    const args = mockExecFileSync.mock.calls[0]!;
+    // 2 execFileSync calls: ccusage --version probe + actual ccusage daily
+    expect(mockExecFileSync).toHaveBeenCalledTimes(2);
+    // calls[0] = version probe, calls[1] = actual ccusage daily
+    const args = mockExecFileSync.mock.calls[1]!;
     // ccusage is called with: ["daily", "--json", "--since", ..., "--until", ...]
     const sinceIdx = (args[1] as string[]).indexOf("--since");
     const sinceDate = (args[1] as string[])[sinceIdx + 1]!;

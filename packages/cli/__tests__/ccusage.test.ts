@@ -3,6 +3,7 @@ import {
   parseCcusageOutput,
   runCcusage,
   runCcusageRaw,
+  _resetCcusageResolver,
 } from "../src/lib/ccusage.js";
 
 vi.mock("node:child_process", () => ({
@@ -151,21 +152,47 @@ describe("parseCcusageOutput", () => {
 describe("runCcusage", () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    _resetCcusageResolver();
     mockExecFileSync.mockReturnValue(validOutput() as never);
   });
 
-  it("calls bunx with correct arguments", () => {
+  it("calls ccusage directly when globally installed", () => {
     runCcusage("20250601", "20250601");
-    // First call is the bunx --version check
+    // First call is the ccusage --version probe
     expect(mockExecFileSync).toHaveBeenCalledWith(
-      "bunx",
+      "ccusage",
       ["--version"],
+      expect.objectContaining({ stdio: "pipe", timeout: 3_000 }),
+    );
+    // Second call is the actual ccusage invocation (direct, no bunx wrapper)
+    expect(mockExecFileSync).toHaveBeenCalledWith(
+      "ccusage",
+      ["daily", "--json", "--since", "20250601", "--until", "20250601"],
       expect.objectContaining({ encoding: "utf-8" }),
     );
-    // Second call is the actual ccusage invocation
-    expect(mockExecFileSync).toHaveBeenCalledWith(
-      "bunx",
-      ["--bun", "ccusage", "daily", "--json", "--since", "20250601", "--until", "20250601"],
+  });
+
+  it("falls back to package runner when ccusage is not globally installed", () => {
+    // Version probe fails, rest succeed
+    mockExecFileSync
+      .mockImplementationOnce(() => { throw new Error("not found"); })
+      .mockReturnValue(validOutput() as never);
+
+    runCcusage("20250601", "20250601");
+
+    // First call: version probe (fails)
+    expect(mockExecFileSync).toHaveBeenNthCalledWith(
+      1,
+      "ccusage",
+      ["--version"],
+      expect.objectContaining({ stdio: "pipe" }),
+    );
+    // Second call: npx fallback (process.versions.bun is undefined in Vitest env;
+    // bunx path is exercised when the CLI actually runs under bun)
+    expect(mockExecFileSync).toHaveBeenNthCalledWith(
+      2,
+      "npx",
+      ["--yes", "ccusage", "daily", "--json", "--since", "20250601", "--until", "20250601"],
       expect.objectContaining({ encoding: "utf-8" }),
     );
   });
@@ -209,6 +236,7 @@ describe("runCcusage", () => {
 describe("runCcusageRaw", () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    _resetCcusageResolver();
     mockExecFileSync.mockReturnValue(validOutput() as never);
   });
 

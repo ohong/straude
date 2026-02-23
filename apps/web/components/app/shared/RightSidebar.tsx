@@ -29,29 +29,58 @@ export async function RightSidebar({ userId }: { userId: string }) {
 
   // Always pin the site owner as the first suggestion (if not already followed/self)
   const PINNED_USERNAME = "ohong";
-  const [{ data: pinnedUser }, { data: otherSuggested }] = await Promise.all([
-    supabase
-      .from("users")
-      .select("id, username, avatar_url, bio")
-      .eq("username", PINNED_USERNAME)
-      .eq("is_public", true)
-      .maybeSingle(),
-    supabase
-      .from("users")
-      .select("id, username, avatar_url, bio")
-      .eq("is_public", true)
-      .not("username", "is", null)
-      .not("username", "eq", PINNED_USERNAME)
-      .not("id", "in", `(${excludeIds.join(",")})`)
-      .limit(5),
-  ]);
 
-  const isPinnedExcluded =
-    !pinnedUser || excludeIds.includes(pinnedUser.id);
-  const suggested = [
-    ...(isPinnedExcluded ? [] : [pinnedUser]),
-    ...(otherSuggested ?? []).filter((u) => !excludeIds.includes(u.id)),
-  ].slice(0, 5);
+  // Fetch pinned user, recently active users (have daily_usage), and newest signups
+  const [{ data: pinnedUser }, { data: recentlyActive }, { data: newSignups }] =
+    await Promise.all([
+      supabase
+        .from("users")
+        .select("id, username, avatar_url, bio")
+        .eq("username", PINNED_USERNAME)
+        .eq("is_public", true)
+        .maybeSingle(),
+      // Users with recent activity (have pushed usage data)
+      supabase
+        .from("daily_usage")
+        .select("user_id, users!inner(id, username, avatar_url, bio, is_public)")
+        .eq("users.is_public", true)
+        .not("users.username", "is", null)
+        .not("user_id", "in", `(${excludeIds.join(",")})`)
+        .order("date", { ascending: false })
+        .limit(20),
+      // New signups who completed onboarding (have a username)
+      supabase
+        .from("users")
+        .select("id, username, avatar_url, bio")
+        .eq("is_public", true)
+        .not("username", "is", null)
+        .not("id", "in", `(${excludeIds.join(",")})`)
+        .order("created_at", { ascending: false })
+        .limit(10),
+    ]);
+
+  // Deduplicate active users (may appear on multiple days)
+  const seenIds = new Set<string>();
+  const activeUsers: Array<{ id: string; username: string; avatar_url: string | null; bio: string | null }> = [];
+  for (const row of recentlyActive ?? []) {
+    const u = row.users as unknown as { id: string; username: string; avatar_url: string | null; bio: string | null; is_public: boolean };
+    if (!seenIds.has(u.id) && u.username !== PINNED_USERNAME) {
+      seenIds.add(u.id);
+      activeUsers.push({ id: u.id, username: u.username, avatar_url: u.avatar_url, bio: u.bio });
+    }
+  }
+
+  // Merge: pinned first, then active users, then new signups (deduped)
+  const isPinnedExcluded = !pinnedUser || excludeIds.includes(pinnedUser.id);
+  const merged: typeof activeUsers = [];
+  if (!isPinnedExcluded) merged.push(pinnedUser);
+  for (const u of activeUsers) {
+    if (!merged.some((m) => m.id === u.id)) merged.push(u);
+  }
+  for (const u of newSignups ?? []) {
+    if (!merged.some((m) => m.id === u.id) && u.username !== PINNED_USERNAME) merged.push(u);
+  }
+  const suggested = merged.slice(0, 5);
 
   const userOutputTokens = userUsage?.reduce((s, r) => s + Number(r.output_tokens), 0) ?? 0;
   const TARGET = 1_000_000_000;

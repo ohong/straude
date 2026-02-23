@@ -9,27 +9,49 @@ interface ExecError extends Error {
   killed?: boolean;
 }
 
-/** Detect whether bunx is available on PATH. Cached after first check. */
-let _hasBunx: boolean | undefined;
-function hasBunx(): boolean {
-  if (_hasBunx === undefined) {
-    try {
-      execFileSync("bunx", ["--version"], { encoding: "utf-8", timeout: 5_000, stdio: "pipe" });
-      _hasBunx = true;
-    } catch {
-      _hasBunx = false;
-    }
+/** Resolved ccusage command. Cached after first resolution. */
+let _resolved: { cmd: string; args: string[] } | undefined;
+
+/**
+ * Resolve the fastest available way to run ccusage.
+ * 1. Direct `ccusage` binary on PATH (globally installed) — fastest
+ * 2. `bunx` if running under Bun — no subprocess needed to detect
+ * 3. `npx` fallback
+ */
+function resolveCcusageCommand(): { cmd: string; args: string[] } {
+  if (_resolved) return _resolved;
+
+  // 1. Try direct ccusage binary (globally installed)
+  try {
+    execFileSync("ccusage", ["--version"], { stdio: "pipe", timeout: 3_000 });
+    _resolved = { cmd: "ccusage", args: [] };
+    return _resolved;
+  } catch { /* not installed globally */ }
+
+  // 2. Prefer bunx if running under Bun
+  if (process.versions.bun !== undefined) {
+    _resolved = { cmd: "bunx", args: ["--bun"] };
+  } else {
+    // 3. Fallback to npx
+    _resolved = { cmd: "npx", args: ["--yes"] };
   }
-  return _hasBunx;
+
+  console.error(
+    "Tip: Install ccusage globally for faster syncs: bun add -g ccusage",
+  );
+
+  return _resolved;
 }
 
-/** Run ccusage via bunx (preferred) or npx fallback. No global install required. */
+/** Reset resolver cache — for testing only. */
+export function _resetCcusageResolver(): void {
+  _resolved = undefined;
+}
+
+/** Run ccusage via the resolved binary. */
 function execCcusage(args: string[]): string {
-  const useBunx = hasBunx();
-  const cmd = useBunx ? "bunx" : "npx";
-  const cmdArgs = useBunx
-    ? ["--bun", "ccusage", ...args]
-    : ["--yes", "ccusage", ...args];
+  const { cmd, args: prefix } = resolveCcusageCommand();
+  const cmdArgs = cmd === "ccusage" ? args : [...prefix, "ccusage", ...args];
 
   try {
     return execFileSync(cmd, cmdArgs, {
@@ -41,8 +63,11 @@ function execCcusage(args: string[]): string {
     const error = err as ExecError;
 
     if (error.killed || error.signal === "SIGTERM") {
+      const hint = cmd === "ccusage"
+        ? "ccusage daily --json"
+        : `${cmd} ${prefix.join(" ")} ccusage daily --json`;
       throw new Error(
-        `ccusage timed out. Try running \`${cmd} ccusage daily --json\` directly to verify it works.`,
+        `ccusage timed out. Try running \`${hint}\` directly to verify it works.`,
       );
     }
 

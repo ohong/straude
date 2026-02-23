@@ -7,7 +7,7 @@ import { Check, X, Loader2, ArrowRight } from "lucide-react";
 import { Button } from "@/components/ui/Button";
 import { Input } from "@/components/ui/Input";
 import { Textarea } from "@/components/ui/Textarea";
-import { COUNTRIES, countryFlag } from "@/lib/constants/regions";
+import { CountryPicker } from "@/components/ui/CountryPicker";
 
 type UsernameStatus = "idle" | "checking" | "available" | "taken" | "invalid";
 
@@ -280,21 +280,12 @@ export default function OnboardingPage() {
           <label htmlFor="onboard-country" className="mb-1 block text-xs font-semibold uppercase tracking-widest text-muted">
             Country
           </label>
-          <select
+          <CountryPicker
             id="onboard-country"
             name="country"
-            autoComplete="country"
             value={country}
-            onChange={(e) => setCountry(e.target.value)}
-            className="w-full rounded-[4px] border border-border bg-white px-4 py-3 text-base text-foreground outline-none transition-[border-color,box-shadow] duration-150 focus:border-accent focus:ring-3 focus:ring-accent/15"
-          >
-            <option value="">Select a country</option>
-            {COUNTRIES.map((c) => (
-              <option key={c.code} value={c.code}>
-                {countryFlag(c.code)} {c.name}
-              </option>
-            ))}
-          </select>
+            onChange={setCountry}
+          />
         </div>
 
         <div>
