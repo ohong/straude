@@ -13,6 +13,19 @@
 
 **Bug fixed:** The PR's `verifiedSyncCount` incorrectly summed `session_count` for verified rows. The RPC uses `COUNT(*) FILTER (WHERE is_verified)`, which correctly counts the number of verified daily_usage rows.
 
+## OG Font Loading: new URL() + Protocol Detection (2026-02-23)
+
+**Decision:** Font files for OG image generation are referenced via `new URL("../assets/Inter-Bold.ttf", import.meta.url)` and loaded through a shared `lib/og-fonts.ts` module. The loader detects `file://` protocol (local dev) and uses `readFile(fileURLToPath(url))`, while production uses `fetch()`.
+
+**Problem:** The original approach used `readFile(join(process.cwd(), "assets/..."))` which fails on Vercel because serverless functions don't bundle files referenced by `process.cwd()` paths. Switching to `fetch(new URL(...))` fixed production but broke local dev — Node.js `fetch()` doesn't support `file://` URLs.
+
+**Alternatives considered:**
+1. **`readFile` with `process.cwd()`** — doesn't work on Vercel (files not bundled into serverless function).
+2. **`fetch(new URL(..., import.meta.url))` only** — works on Vercel (http:// URLs) but throws "not implemented" on local dev (file:// URLs).
+3. **Protocol detection with dual loaders** (chosen) — `file://` uses `readFile`, `http(s)://` uses `fetch`. Works in both environments.
+
+**Why `new URL()` matters:** Next.js file tracing only bundles assets referenced via `new URL("...", import.meta.url)`. This is what tells the bundler to include the .ttf files in the serverless function output.
+
 ## Landing Page: Motion for React over Custom useInView (2026-02-22)
 
 **Decision:** Replaced the custom `useInView` hook and CSS `transition` classes with Motion for React (`motion/react`) for all landing page scroll animations. The custom `useInView` hook remains in the codebase for non-landing components (e.g. `HowItWorks.tsx`).

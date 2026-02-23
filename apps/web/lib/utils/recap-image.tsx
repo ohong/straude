@@ -49,17 +49,16 @@ function fillContributionDays(
  * Renders the recap card JSX for use in next/og ImageResponse.
  * Supports both landscape (1200x630) and square (1080x1080) formats.
  *
- * `backgroundImageSrc` should be a data URI (base64) or absolute URL for the
- * background image. The caller fetches the image and encodes it.
+ * `backgroundCss` should be a CSS gradient string for the background.
  */
 export function RecapCardImage({
   data,
   format = "landscape",
-  backgroundImageSrc,
+  backgroundCss,
 }: {
   data: RecapData;
   format?: "landscape" | "square";
-  backgroundImageSrc?: string;
+  backgroundCss?: string;
 }) {
   const isSquare = format === "square";
   const width = isSquare ? 1080 : 1200;
@@ -91,22 +90,17 @@ export function RecapCardImage({
           position: "relative",
         }}
       >
-        {/* Background image */}
-        {backgroundImageSrc && (
-          <img
-            src={backgroundImageSrc}
-            width={width}
-            height={height}
-            style={{
-              position: "absolute",
-              top: 0,
-              left: 0,
-              width,
-              height,
-              objectFit: "cover",
-            }}
-          />
-        )}
+        {/* Background gradient */}
+        <div
+          style={{
+            position: "absolute",
+            top: 0,
+            left: 0,
+            width,
+            height,
+            background: backgroundCss ?? "#fff",
+          }}
+        />
         {/* White overlay */}
         <div
           style={{
@@ -115,7 +109,7 @@ export function RecapCardImage({
             left: 0,
             width,
             height,
-            backgroundColor: backgroundImageSrc
+            backgroundColor: backgroundCss
               ? "rgba(255,255,255,0.78)"
               : "#fff",
           }}
@@ -179,7 +173,7 @@ export function RecapCardImage({
                 lineHeight: 1,
               }}
             >
-              ${data.total_cost.toFixed(2)}
+              {`$${data.total_cost.toFixed(2)}`}
             </div>
             <div
               style={{
@@ -264,7 +258,7 @@ export function RecapCardImage({
               fontWeight: 500,
             }}
           >
-            <div style={{ color: "#666" }}>@{data.username}</div>
+            <div style={{ color: "#666" }}>{`@${data.username}`}</div>
             <div style={{ color: "#999" }}>straude.com</div>
           </div>
         </div>
@@ -283,22 +277,17 @@ export function RecapCardImage({
         position: "relative",
       }}
     >
-      {/* Background image */}
-      {backgroundImageSrc && (
-        <img
-          src={backgroundImageSrc}
-          width={width}
-          height={height}
-          style={{
-            position: "absolute",
-            top: 0,
-            left: 0,
-            width,
-            height,
-            objectFit: "cover",
-          }}
-        />
-      )}
+      {/* Background gradient */}
+      <div
+        style={{
+          position: "absolute",
+          top: 0,
+          left: 0,
+          width,
+          height,
+          background: backgroundCss ?? "#fff",
+        }}
+      />
       {/* White overlay */}
       <div
         style={{
@@ -307,7 +296,7 @@ export function RecapCardImage({
           left: 0,
           width,
           height,
-          backgroundColor: backgroundImageSrc
+          backgroundColor: backgroundCss
             ? "rgba(255,255,255,0.78)"
             : "#fff",
         }}
@@ -349,7 +338,7 @@ export function RecapCardImage({
               marginTop: 16,
             }}
           >
-            ${data.total_cost.toFixed(2)}
+            {`$${data.total_cost.toFixed(2)}`}
           </div>
           <div
             style={{
@@ -373,7 +362,7 @@ export function RecapCardImage({
               marginTop: 16,
             }}
           >
-            Powered by {data.primary_model}
+            {`Powered by ${data.primary_model}`}
           </div>
         </div>
 
@@ -462,7 +451,7 @@ export function RecapCardImage({
           color: "#666",
         }}
       >
-        @{data.username}
+        {`@${data.username}`}
       </div>
       <div
         style={{

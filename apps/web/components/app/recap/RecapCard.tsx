@@ -61,11 +61,10 @@ export function RecapCard({
       className="relative overflow-hidden"
       style={{ borderRadius: 8 }}
     >
-      {/* Background image */}
-      <img
-        src={bg.src}
-        alt=""
-        className="absolute inset-0 h-full w-full object-cover"
+      {/* Background gradient */}
+      <div
+        className="absolute inset-0"
+        style={{ background: bg.css }}
       />
       {/* White overlay for legibility */}
       <div

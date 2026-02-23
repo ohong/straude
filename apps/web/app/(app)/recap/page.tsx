@@ -41,6 +41,9 @@ export default function RecapPage() {
       const res = await fetch(
         `/api/recap/image?period=${period}&format=square&bg=${backgroundId}`
       );
+      if (!res.ok) {
+        throw new Error(`Server returned ${res.status}`);
+      }
       const blob = await res.blob();
       const url = URL.createObjectURL(blob);
       const a = document.createElement("a");
@@ -50,6 +53,8 @@ export default function RecapPage() {
       a.click();
       document.body.removeChild(a);
       URL.revokeObjectURL(url);
+    } catch {
+      alert("Failed to generate image. Please try again.");
     } finally {
       setDownloading(false);
     }
@@ -111,10 +116,9 @@ export default function RecapPage() {
                 }}
                 title={bg.label}
               >
-                <img
-                  src={bg.src}
-                  alt={bg.label}
-                  className="h-full w-full object-cover"
+                <div
+                  className="h-full w-full"
+                  style={{ background: bg.css }}
                 />
               </button>
             ))}

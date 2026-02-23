@@ -20,7 +20,7 @@ function SyncCommandHint() {
   }
 
   return (
-    <div className="flex items-center gap-2.5">
+    <div className="hidden items-center gap-2.5 sm:flex">
       <span className="text-xs text-muted whitespace-nowrap">
         Sync your Claude sessions:
       </span>

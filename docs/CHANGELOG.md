@@ -18,11 +18,16 @@
 
 ### Fixed
 
+- **Recap background images broken in production.** The `recap-bg/` directory was empty — images were supposed to be generated via FLUX API but never were. Replaced image-file backgrounds with CSS gradients so backgrounds work everywhere without external assets. Removed dead `generate-recap-backgrounds.ts` script and empty `public/recap-bg/` directory.
+- **Download Card button crashing in production.** Font files loaded via `readFile(process.cwd())` weren't bundled into Vercel serverless functions. Switched to `new URL(..., import.meta.url)` pattern so Next.js traces and bundles the font assets. Extracted shared `lib/og-fonts.ts` (with `file://` protocol detection for local dev, `fetch()` for production) used by both the download route and OG image route. Added try/catch to the image route (returns 500 instead of crashing) and `res.ok` check on the client.
+- **Satori crash on recap image generation.** JSX like `$` + `{expr}` and `@` + `{username}` create two children in a `<div>`, violating Satori's requirement that multi-child divs have `display: "flex"`. Converted 5 locations in `recap-image.tsx` to template literals. Added a recursive tree-walker test (`recap-image-satori.test.tsx`) that validates the constraint on all formats.
+- **Downloaded recap image was square instead of landscape.** The download route rendered a 1080x1080 square image while the UI card shows a 1200x630 landscape layout. Changed the download endpoint to use `format="landscape"` with matching dimensions.
 - **Description save failing for long posts.** Database constraint was still 500 chars while API/UI had been bumped to 5000. Applied migration to align the DB constraint. Added character counter to PostEditor (amber at 4500, red past 5000) and disabled Save when over limit. Updated AI caption generator truncation to match.
 
 ### Changed
 
 - **Feed toolbar layout.** Moved "Sync your Claude sessions" command hint into the same row as the feed view selector dropdown, reducing vertical space.
+- **Sync command hint hidden on mobile.** The `npx straude@latest` hint in the feed toolbar is now `hidden sm:flex` — mobile users can't run CLI commands, so it's noise on small screens.
 
 ### Added
 

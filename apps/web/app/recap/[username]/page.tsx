@@ -66,11 +66,10 @@ export default async function PublicRecapPage({
         className="relative w-full max-w-[600px] overflow-hidden border border-border"
         style={{ borderRadius: 8 }}
       >
-        {/* Background image */}
-        <img
-          src={bg.src}
-          alt=""
-          className="absolute inset-0 h-full w-full object-cover"
+        {/* Background gradient */}
+        <div
+          className="absolute inset-0"
+          style={{ background: bg.css }}
         />
         {/* White overlay */}
         <div

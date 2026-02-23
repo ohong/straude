@@ -1,25 +1,13 @@
 import { ImageResponse } from "next/og";
-import { readFile } from "node:fs/promises";
-import { join } from "node:path";
 import { getServiceClient } from "@/lib/supabase/service";
 import { getRecapData } from "@/lib/utils/recap";
 import { RecapCardImage } from "@/lib/utils/recap-image";
 import { getBackgroundById, DEFAULT_BACKGROUND_ID } from "@/lib/recap-backgrounds";
+import { loadFonts } from "@/lib/og-fonts";
 
 export const alt = "Straude Recap";
 export const size = { width: 1200, height: 630 };
 export const contentType = "image/png";
-
-async function loadBackgroundAsDataUri(bgId: string): Promise<string | undefined> {
-  const bg = getBackgroundById(bgId);
-  try {
-    const imgPath = join(process.cwd(), "public", bg.src);
-    const buffer = await readFile(imgPath);
-    return `data:image/jpeg;base64,${buffer.toString("base64")}`;
-  } catch {
-    return undefined;
-  }
-}
 
 export default async function Image({
   params,
@@ -28,11 +16,7 @@ export default async function Image({
 }) {
   const { username } = await params;
 
-  const [interBold, interMedium] = await Promise.all([
-    readFile(join(process.cwd(), "assets/Inter-Bold.ttf")),
-    readFile(join(process.cwd(), "assets/Inter-Medium.ttf")),
-  ]);
-
+  const fonts = await loadFonts();
   const supabase = getServiceClient();
 
   const { data: profile } = await supabase
@@ -42,7 +26,6 @@ export default async function Image({
     .single();
 
   if (!profile || !profile.is_public) {
-    // Fallback: generic Straude card (light theme)
     return new ImageResponse(
       (
         <div
@@ -83,35 +66,22 @@ export default async function Image({
           </div>
         </div>
       ),
-      {
-        ...size,
-        fonts: [
-          { name: "Inter", data: interBold, style: "normal" as const, weight: 700 as const },
-          { name: "Inter", data: interMedium, style: "normal" as const, weight: 500 as const },
-        ],
-      }
+      { ...size, fonts }
     );
   }
 
-  const [data, backgroundImageSrc] = await Promise.all([
-    getRecapData(
-      supabase,
-      profile.id,
-      profile.username!,
-      profile.is_public,
-      "week"
-    ),
-    loadBackgroundAsDataUri(DEFAULT_BACKGROUND_ID),
-  ]);
+  const bg = getBackgroundById(DEFAULT_BACKGROUND_ID);
+
+  const data = await getRecapData(
+    supabase,
+    profile.id,
+    profile.username!,
+    profile.is_public,
+    "week"
+  );
 
   return new ImageResponse(
-    <RecapCardImage data={data} format="landscape" backgroundImageSrc={backgroundImageSrc} />,
-    {
-      ...size,
-      fonts: [
-        { name: "Inter", data: interBold, style: "normal" as const, weight: 700 as const },
-        { name: "Inter", data: interMedium, style: "normal" as const, weight: 500 as const },
-      ],
-    }
+    <RecapCardImage data={data} format="landscape" backgroundCss={bg.css} />,
+    { ...size, fonts }
   );
 }
