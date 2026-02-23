@@ -5,8 +5,13 @@ function makeStats(overrides: Partial<AchievementStats> = {}): AchievementStats 
   return {
     totalCost: 0,
     totalOutputTokens: 0,
+    totalInputTokens: 0,
+    totalCacheTokens: 0,
+    totalSessions: 0,
+    maxDailyCost: 0,
     streak: 0,
     syncCount: 0,
+    verifiedSyncCount: 0,
     ...overrides,
   };
 }
@@ -117,5 +122,113 @@ describe("100m-output", () => {
 
   it("earned at exactly 100,000,000 tokens", () => {
     expect(badge.check(makeStats({ totalOutputTokens: 100_000_000 }))).toBe(true);
+  });
+});
+
+describe("1m-input", () => {
+  const badge = ACHIEVEMENTS.find((a) => a.slug === "1m-input")!;
+
+  it("not earned at 999,999 input tokens", () => {
+    expect(badge.check(makeStats({ totalInputTokens: 999_999 }))).toBe(false);
+  });
+
+  it("earned at exactly 1,000,000 input tokens", () => {
+    expect(badge.check(makeStats({ totalInputTokens: 1_000_000 }))).toBe(true);
+  });
+});
+
+describe("10m-input", () => {
+  const badge = ACHIEVEMENTS.find((a) => a.slug === "10m-input")!;
+
+  it("not earned at 9,999,999 input tokens", () => {
+    expect(badge.check(makeStats({ totalInputTokens: 9_999_999 }))).toBe(false);
+  });
+
+  it("earned at exactly 10,000,000 input tokens", () => {
+    expect(badge.check(makeStats({ totalInputTokens: 10_000_000 }))).toBe(true);
+  });
+});
+
+describe("100m-input", () => {
+  const badge = ACHIEVEMENTS.find((a) => a.slug === "100m-input")!;
+
+  it("not earned at 99,999,999 input tokens", () => {
+    expect(badge.check(makeStats({ totalInputTokens: 99_999_999 }))).toBe(false);
+  });
+
+  it("earned at exactly 100,000,000 input tokens", () => {
+    expect(badge.check(makeStats({ totalInputTokens: 100_000_000 }))).toBe(true);
+  });
+});
+
+describe("1b-cache", () => {
+  const badge = ACHIEVEMENTS.find((a) => a.slug === "1b-cache")!;
+
+  it("not earned at 999,999,999 cache tokens", () => {
+    expect(badge.check(makeStats({ totalCacheTokens: 999_999_999 }))).toBe(false);
+  });
+
+  it("earned at exactly 1,000,000,000 cache tokens", () => {
+    expect(badge.check(makeStats({ totalCacheTokens: 1_000_000_000 }))).toBe(true);
+  });
+});
+
+describe("5b-cache", () => {
+  const badge = ACHIEVEMENTS.find((a) => a.slug === "5b-cache")!;
+
+  it("not earned at 4,999,999,999 cache tokens", () => {
+    expect(badge.check(makeStats({ totalCacheTokens: 4_999_999_999 }))).toBe(false);
+  });
+
+  it("earned at exactly 5,000,000,000 cache tokens", () => {
+    expect(badge.check(makeStats({ totalCacheTokens: 5_000_000_000 }))).toBe(true);
+  });
+});
+
+describe("20b-cache", () => {
+  const badge = ACHIEVEMENTS.find((a) => a.slug === "20b-cache")!;
+
+  it("not earned at 19,999,999,999 cache tokens", () => {
+    expect(badge.check(makeStats({ totalCacheTokens: 19_999_999_999 }))).toBe(false);
+  });
+
+  it("earned at exactly 20,000,000,000 cache tokens", () => {
+    expect(badge.check(makeStats({ totalCacheTokens: 20_000_000_000 }))).toBe(true);
+  });
+});
+
+describe("session-surge", () => {
+  const badge = ACHIEVEMENTS.find((a) => a.slug === "session-surge")!;
+
+  it("not earned at 999 sessions", () => {
+    expect(badge.check(makeStats({ totalSessions: 999 }))).toBe(false);
+  });
+
+  it("earned at exactly 1,000 sessions", () => {
+    expect(badge.check(makeStats({ totalSessions: 1_000 }))).toBe(true);
+  });
+});
+
+describe("power-session", () => {
+  const badge = ACHIEVEMENTS.find((a) => a.slug === "power-session")!;
+
+  it("not earned with max daily cost of $99.99", () => {
+    expect(badge.check(makeStats({ maxDailyCost: 99.99 }))).toBe(false);
+  });
+
+  it("earned with max daily cost of exactly $100", () => {
+    expect(badge.check(makeStats({ maxDailyCost: 100 }))).toBe(true);
+  });
+});
+
+describe("verified-contributor", () => {
+  const badge = ACHIEVEMENTS.find((a) => a.slug === "verified-contributor")!;
+
+  it("not earned at 49 verified syncs", () => {
+    expect(badge.check(makeStats({ verifiedSyncCount: 49 }))).toBe(false);
+  });
+
+  it("earned at exactly 50 verified syncs", () => {
+    expect(badge.check(makeStats({ verifiedSyncCount: 50 }))).toBe(true);
   });
 });
