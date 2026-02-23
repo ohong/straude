@@ -4,6 +4,10 @@
 
 ### Added
 
+- **16 social achievement badges.** Kudos Received (1/25/100/500), Kudos Given (1/25/100/500), Comments Received (1/25/100/500), Comments Sent (1/25/100/500). Each tier has a unique emoji. Category-prefixed slugs (`kudos-received-1`, `kudos-sent-25`, `comments-received-100`, `comments-sent-500`). Total badges: 33.
+- **`get_social_achievement_stats` Supabase RPC.** Aggregates `kudos_received`, `kudos_sent`, `comments_received`, and `comments_sent` in a single query. Service-role only, matching existing `get_achievement_stats` permission model.
+- **Trigger-based achievement filtering.** `checkAndAwardAchievements` now accepts an optional `trigger` parameter (`usage` | `kudos` | `comment`) to only check relevant achievements and call the appropriate RPC. Kudos/comment triggers skip the usage stats RPC and vice versa.
+- **Achievement checks wired into social routes.** Kudos POST checks achievements for both giver and post owner. Comments POST checks achievements for the post owner. All fire-and-forget.
 - **9 new achievement badges.** Input tokens (1M/10M/100M), cache tokens (1B/5B/20B), Session Surge (1,000 sessions), Power Session ($100/day), and Verified Contributor (50 verified syncs). Total badges: 17. Credit: @alexesprit PR #1.
 
 ### Changed

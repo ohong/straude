@@ -3,6 +3,7 @@ import { createClient } from "@/lib/supabase/server";
 import { getServiceClient } from "@/lib/supabase/service";
 import { parseMentions } from "@/lib/utils/mentions";
 import { sendNotificationEmail } from "@/lib/email/send-comment-email";
+import { checkAndAwardAchievements } from "@/lib/achievements";
 
 type RouteContext = { params: Promise<{ id: string }> };
 
@@ -148,6 +149,12 @@ export async function POST(request: NextRequest, context: RouteContext) {
         idempotencyKey: `mention-notif/${comment.id}/${u.id}`,
       });
     }
+  }
+
+  // Award comment achievements (fire-and-forget)
+  checkAndAwardAchievements(user.id, "comment").catch(() => {});
+  if (post && post.user_id !== user.id) {
+    checkAndAwardAchievements(post.user_id, "comment").catch(() => {});
   }
 
   return NextResponse.json(comment, { status: 201 });
