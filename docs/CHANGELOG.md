@@ -2,6 +2,10 @@
 
 ## Unreleased
 
+### Changed
+
+- **Collapsible achievements view.** Replaced flat badge pill list with a collapsed/expanded toggle. Collapsed shows earned emoji pills with a count (e.g. 3/8); expanded shows a responsive grid with emoji, title, and description. Locked badges still shown dimmed on own profile. Addresses #2.
+
 ### Fixed
 
 - **Description save failing for long posts.** Database constraint was still 500 chars while API/UI had been bumped to 5000. Applied migration to align the DB constraint. Added character counter to PostEditor (amber at 4500, red past 5000) and disabled Save when over limit. Updated AI caption generator truncation to match.

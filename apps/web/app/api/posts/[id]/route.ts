@@ -180,7 +180,7 @@ export async function PATCH(request: NextRequest, context: RouteContext) {
                 idempotencyKey: `mention-post/${id}/${u.id}`,
               });
             })
-            .catch(() => {});
+            .catch((err) => console.error("[email] mention notification failed:", err));
         }
       }
     }

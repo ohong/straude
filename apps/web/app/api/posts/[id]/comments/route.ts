@@ -48,7 +48,7 @@ function fireNotificationEmail(opts: {
         idempotencyKey: opts.idempotencyKey,
       });
     })
-    .catch(() => {});
+    .catch((err) => console.error("[email] notification failed:", err));
 }
 
 export async function POST(request: NextRequest, context: RouteContext) {
