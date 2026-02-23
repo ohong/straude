@@ -85,7 +85,7 @@ Usage stats for today:
 
 Based on the screenshots of what they were working on and the usage stats, write:
 1. A short title (max 100 chars) — like a Strava workout title. Examples: "Morning refactor session", "Migrating to TypeScript", "Bug hunting in the auth layer"
-2. A short description (max 500 chars) — casual, developer-friendly. Mention what was accomplished based on the screenshots. Keep it brief like a Strava caption.
+2. A description (max 5000 chars) — casual, developer-friendly. Mention what was accomplished based on the screenshots. Keep it conversational like a Strava caption.
 
 Return as JSON: { "title": "...", "description": "..." }`,
             },
@@ -116,7 +116,7 @@ Return as JSON: { "title": "...", "description": "..." }`,
     const parsed = JSON.parse(jsonMatch[0]);
     return NextResponse.json({
       title: String(parsed.title).slice(0, 100),
-      description: String(parsed.description).slice(0, 500),
+      description: String(parsed.description).slice(0, 5000),
     });
   } catch {
     return NextResponse.json(

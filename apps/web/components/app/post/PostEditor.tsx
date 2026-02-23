@@ -141,9 +141,14 @@ export function PostEditor({ post }: { post: Post }) {
           multiline
           className="w-full border border-border px-3 py-2 text-sm outline-none placeholder:text-muted focus:border-accent"
         />
-        <p className="text-xs text-muted">
-          Markdown supported — **bold**, *italic*, `code`, lists, and blockquotes
-        </p>
+        <div className="flex items-center justify-between">
+          <p className="text-xs text-muted">
+            Markdown supported — **bold**, *italic*, `code`, lists, and blockquotes
+          </p>
+          <p className={`text-xs tabular-nums ${description.length > 5000 ? "text-red-500 font-medium" : description.length > 4500 ? "text-amber-500" : "text-muted"}`}>
+            {(5000 - description.length).toLocaleString()} chars remaining
+          </p>
+        </div>
 
         {/* Image uploads */}
         {images.length > 0 && (
@@ -210,7 +215,7 @@ export function PostEditor({ post }: { post: Post }) {
           <Button variant="secondary" size="sm" onClick={() => setEditing(false)}>
             Cancel
           </Button>
-          <Button size="sm" onClick={handleSave} disabled={saving}>
+          <Button size="sm" onClick={handleSave} disabled={saving || description.length > 5000}>
             {saving ? "Saving..." : "Save changes"}
           </Button>
         </div>

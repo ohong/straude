@@ -2,6 +2,14 @@
 
 ## Unreleased
 
+### Fixed
+
+- **Description save failing for long posts.** Database constraint was still 500 chars while API/UI had been bumped to 5000. Applied migration to align the DB constraint. Added character counter to PostEditor (amber at 4500, red past 5000) and disabled Save when over limit. Updated AI caption generator truncation to match.
+
+### Changed
+
+- **Feed toolbar layout.** Moved "Sync your Claude sessions" command hint into the same row as the feed view selector dropdown, reducing vertical space.
+
 ### Added
 
 - **Motion scroll animations on landing page.** Replaced CSS `transition` + `useInView` entrance animations with Motion for React (`motion/react`). Hero background has parallax scrolling (moves at 30% of scroll speed) and the terminal mockup floats up as visitor scrolls. ProductShowcase dashboard cards have scroll-linked parallax at different drift rates. Stats, Features, and WallOfLove cards use staggered spring entrances. CTA section uses a scale + fade entrance. All animations are `once: true` (fire once, don't replay).

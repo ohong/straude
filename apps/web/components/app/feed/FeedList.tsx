@@ -20,8 +20,8 @@ function SyncCommandHint() {
   }
 
   return (
-    <div className="flex items-center justify-between border-b border-border bg-subtle px-4 py-2.5">
-      <span className="text-xs text-muted">
+    <div className="flex items-center gap-2.5">
+      <span className="text-xs text-muted whitespace-nowrap">
         Sync your Claude sessions:
       </span>
       <button
@@ -146,11 +146,11 @@ export function FeedList({
 
   return (
     <div>
-      <SyncCommandHint />
+      {/* Sync command + feed type dropdown in one row */}
+      <div className="flex items-center justify-between border-b border-border px-4 py-3">
+        <SyncCommandHint />
 
-      {/* Feed type dropdown */}
-      {showTabs && (
-        <div className="flex justify-end border-b border-border px-4 py-2">
+        {showTabs && (
           <div ref={dropdownRef} className="relative">
             <button
               type="button"
@@ -163,7 +163,7 @@ export function FeedList({
             </button>
 
             {dropdownOpen && (
-              <div className="absolute right-0 top-full mt-1 w-40 rounded border border-border bg-background shadow-lg">
+              <div className="absolute right-0 top-full mt-1 w-40 rounded border border-border bg-background shadow-lg z-10">
                 {(Object.keys(TAB_LABELS) as FeedType[]).map((type) => (
                   <button
                     key={type}
@@ -183,8 +183,8 @@ export function FeedList({
               </div>
             )}
           </div>
-        </div>
-      )}
+        )}
+      </div>
 
       {switching ? (
         <div className="flex justify-center py-12">
