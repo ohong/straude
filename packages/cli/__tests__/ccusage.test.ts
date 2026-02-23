@@ -154,11 +154,18 @@ describe("runCcusage", () => {
     mockExecFileSync.mockReturnValue(validOutput() as never);
   });
 
-  it("calls npx with correct arguments", () => {
+  it("calls bunx with correct arguments", () => {
     runCcusage("20250601", "20250601");
+    // First call is the bunx --version check
     expect(mockExecFileSync).toHaveBeenCalledWith(
-      "npx",
-      ["--yes", "ccusage", "daily", "--json", "--since", "20250601", "--until", "20250601"],
+      "bunx",
+      ["--version"],
+      expect.objectContaining({ encoding: "utf-8" }),
+    );
+    // Second call is the actual ccusage invocation
+    expect(mockExecFileSync).toHaveBeenCalledWith(
+      "bunx",
+      ["--bun", "ccusage", "daily", "--json", "--since", "20250601", "--until", "20250601"],
       expect.objectContaining({ encoding: "utf-8" }),
     );
   });

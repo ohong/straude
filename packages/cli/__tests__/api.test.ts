@@ -64,7 +64,7 @@ describe("apiRequest", () => {
       json: () => Promise.resolve({ error: "Unauthorized" }),
     });
     await expect(apiRequest(config, "/api/test")).rejects.toThrow(
-      "Unauthorized",
+      "Session expired or invalid",
     );
   });
 

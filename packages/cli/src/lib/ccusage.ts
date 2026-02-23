@@ -9,10 +9,30 @@ interface ExecError extends Error {
   killed?: boolean;
 }
 
-/** Run ccusage via npx. No global install required. */
+/** Detect whether bunx is available on PATH. Cached after first check. */
+let _hasBunx: boolean | undefined;
+function hasBunx(): boolean {
+  if (_hasBunx === undefined) {
+    try {
+      execFileSync("bunx", ["--version"], { encoding: "utf-8", timeout: 5_000, stdio: "pipe" });
+      _hasBunx = true;
+    } catch {
+      _hasBunx = false;
+    }
+  }
+  return _hasBunx;
+}
+
+/** Run ccusage via bunx (preferred) or npx fallback. No global install required. */
 function execCcusage(args: string[]): string {
+  const useBunx = hasBunx();
+  const cmd = useBunx ? "bunx" : "npx";
+  const cmdArgs = useBunx
+    ? ["--bun", "ccusage", ...args]
+    : ["--yes", "ccusage", ...args];
+
   try {
-    return execFileSync("npx", ["--yes", "ccusage", ...args], {
+    return execFileSync(cmd, cmdArgs, {
       encoding: "utf-8",
       timeout: 120_000,
       maxBuffer: 10 * 1024 * 1024,
@@ -22,7 +42,7 @@ function execCcusage(args: string[]): string {
 
     if (error.killed || error.signal === "SIGTERM") {
       throw new Error(
-        "ccusage timed out. Try running `npx ccusage daily --json` directly to verify it works.",
+        `ccusage timed out. Try running \`${cmd} ccusage daily --json\` directly to verify it works.`,
       );
     }
 
