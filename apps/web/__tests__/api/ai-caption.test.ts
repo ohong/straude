@@ -161,12 +161,12 @@ describe("POST /api/ai/generate-caption", () => {
     expect(json.error).toBe("Failed to parse AI response");
   });
 
-  it("truncates title to 100 chars and description to 500 chars", async () => {
+  it("truncates title to 100 chars and description to 5000 chars", async () => {
     mockSupabaseUser({ id: "user-1" });
     mockAnthropicResponse(
       JSON.stringify({
         title: "A".repeat(200),
-        description: "B".repeat(600),
+        description: "B".repeat(6000),
       })
     );
 
@@ -180,6 +180,6 @@ describe("POST /api/ai/generate-caption", () => {
 
     expect(res.status).toBe(200);
     expect(json.title.length).toBe(100);
-    expect(json.description.length).toBe(500);
+    expect(json.description.length).toBe(5000);
   });
 });

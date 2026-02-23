@@ -105,9 +105,9 @@ Private or public groups where teams (company, OSS project, friend group) share 
 
 ## Shipped
 
-### Achievements & Badges (2026-02-22)
+### Achievements & Badges (2026-02-22, expanded 2026-02-24)
 
-Eight milestone badges (First Sync through 100M Output Tokens) earned progressively, displayed on profiles, checked after each usage submit. Featured Challenge ("The Three Comma Club") added to the right sidebar.
+17 milestone badges earned progressively, displayed on profiles, checked after each usage submit. Original 8 badges (First Sync through 100M Output Tokens) plus 9 new badges: input tokens (1M/10M/100M), cache tokens (1B/5B/20B), Session Surge, Power Session, Verified Contributor. Stats aggregation moved to Supabase RPC. Featured Challenge ("The Three Comma Club") in the right sidebar.
 
 ### Shareable Recap Cards (2026-02-20, redesigned 2026-02-22)
 

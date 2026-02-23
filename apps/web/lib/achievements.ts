@@ -3,8 +3,13 @@ import { getServiceClient } from "@/lib/supabase/service";
 export interface AchievementStats {
   totalCost: number;
   totalOutputTokens: number;
+  totalInputTokens: number;
+  totalCacheTokens: number;
+  totalSessions: number;
+  maxDailyCost: number;
   streak: number;
   syncCount: number;
+  verifiedSyncCount: number;
 }
 
 export interface AchievementDef {
@@ -72,25 +77,94 @@ export const ACHIEVEMENTS: AchievementDef[] = [
     emoji: "\u{1F30B}",
     check: (s) => s.totalOutputTokens >= 100_000_000,
   },
+  {
+    slug: "1m-input",
+    title: "1M Input",
+    description: "Process 1 million input tokens",
+    emoji: "\u{1F4E5}",
+    check: (s) => s.totalInputTokens >= 1_000_000,
+  },
+  {
+    slug: "10m-input",
+    title: "10M Input",
+    description: "Process 10 million input tokens",
+    emoji: "\u{1F4DA}",
+    check: (s) => s.totalInputTokens >= 10_000_000,
+  },
+  {
+    slug: "100m-input",
+    title: "100M Input",
+    description: "Process 100 million input tokens",
+    emoji: "\u{1F9E0}",
+    check: (s) => s.totalInputTokens >= 100_000_000,
+  },
+  {
+    slug: "1b-cache",
+    title: "1B Cache",
+    description: "Use 1 billion cache tokens",
+    emoji: "\u{1F4BE}",
+    check: (s) => s.totalCacheTokens >= 1_000_000_000,
+  },
+  {
+    slug: "5b-cache",
+    title: "5B Cache",
+    description: "Use 5 billion cache tokens",
+    emoji: "\u{1F5C4}\uFE0F",
+    check: (s) => s.totalCacheTokens >= 5_000_000_000,
+  },
+  {
+    slug: "20b-cache",
+    title: "20B Cache",
+    description: "Use 20 billion cache tokens",
+    emoji: "\u{1F3ED}",
+    check: (s) => s.totalCacheTokens >= 20_000_000_000,
+  },
+  {
+    slug: "session-surge",
+    title: "Session Surge",
+    description: "Log 1,000 sessions",
+    emoji: "\u{1F300}",
+    check: (s) => s.totalSessions >= 1_000,
+  },
+  {
+    slug: "power-session",
+    title: "Power Session",
+    description: "Spend $100 in a single day",
+    emoji: "\u{1F4A5}",
+    check: (s) => s.maxDailyCost >= 100,
+  },
+  {
+    slug: "verified-contributor",
+    title: "Verified Contributor",
+    description: "Push 50 verified syncs",
+    emoji: "\u{2705}",
+    check: (s) => s.verifiedSyncCount >= 50,
+  },
 ];
 
 export async function checkAndAwardAchievements(userId: string): Promise<void> {
   const db = getServiceClient();
 
-  // Fetch earned slugs and aggregate stats in parallel
-  const [{ data: earned }, { data: usageRows }, streakResult] = await Promise.all([
+  // Fetch earned slugs, aggregated stats, and streak in parallel
+  const [{ data: earned }, rpcResult, streakResult] = await Promise.all([
     db.from("user_achievements").select("achievement_slug").eq("user_id", userId),
-    db.from("daily_usage").select("cost_usd, output_tokens").eq("user_id", userId),
+    db.rpc("get_achievement_stats", { p_user_id: userId }).single(),
     db.rpc("calculate_user_streak", { p_user_id: userId }),
   ]);
 
   const earnedSlugs = new Set(earned?.map((r) => r.achievement_slug) ?? []);
 
+  const rpcRow = rpcResult.data as Record<string, unknown> | null;
   const stats: AchievementStats = {
-    totalCost: usageRows?.reduce((s, r) => s + Number(r.cost_usd), 0) ?? 0,
-    totalOutputTokens: usageRows?.reduce((s, r) => s + Number(r.output_tokens), 0) ?? 0,
+    totalCost: Number(rpcRow?.total_cost ?? 0),
+    totalOutputTokens: Number(rpcRow?.total_output_tokens ?? 0),
+    totalInputTokens: Number(rpcRow?.total_input_tokens ?? 0),
+    totalCacheTokens: Number(rpcRow?.total_cache_tokens ?? 0),
+    totalSessions: Number(rpcRow?.total_sessions ?? 0),
+    maxDailyCost: Number(rpcRow?.max_daily_cost ?? 0),
     streak: (streakResult.data as number) ?? 0,
-    syncCount: usageRows?.length ?? 0,
+    syncCount: Number(rpcRow?.sync_count ?? 0),
+    verifiedSyncCount: Number(rpcRow?.verified_sync_count ?? 0),
   };
 
   const newAwards = ACHIEVEMENTS.filter(

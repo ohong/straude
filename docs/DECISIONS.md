@@ -1,5 +1,18 @@
 # Architecture & Design Decisions
 
+## Achievement Stats: Supabase RPC Over Client-Side Aggregation (2026-02-24)
+
+**Decision:** Created a `get_achievement_stats` plpgsql function that returns a single row of pre-aggregated stats (total cost, output/input/cache tokens, sessions, max daily cost, sync count, verified sync count). `checkAndAwardAchievements` now calls this RPC instead of fetching all `daily_usage` rows and reducing client-side.
+
+**Alternatives considered:**
+1. **Keep client-side aggregation** — works at current scale (~216 rows) but transfers increasingly more data as users accumulate history. Five `.reduce()` calls on the full result set.
+2. **Postgres VIEW** — pre-defined but still computes on every query without caching. An RPC with `STABLE` marking gives the planner the same optimization hints.
+3. **Materialized view + cron refresh** — overkill for a function called once per usage submit. Stale data risk for badges (user earns a badge but doesn't see it until next refresh).
+
+**Why RPC:** Single network round-trip returns exactly the shape the achievement checker needs. `STABLE` lets Postgres optimize within a transaction. Granted only to `service_role` — matches the existing pattern where achievements are awarded server-side only.
+
+**Bug fixed:** The PR's `verifiedSyncCount` incorrectly summed `session_count` for verified rows. The RPC uses `COUNT(*) FILTER (WHERE is_verified)`, which correctly counts the number of verified daily_usage rows.
+
 ## Landing Page: Motion for React over Custom useInView (2026-02-22)
 
 **Decision:** Replaced the custom `useInView` hook and CSS `transition` classes with Motion for React (`motion/react`) for all landing page scroll animations. The custom `useInView` hook remains in the codebase for non-landing components (e.g. `HowItWorks.tsx`).

@@ -2,8 +2,13 @@
 
 ## Unreleased
 
+### Added
+
+- **9 new achievement badges.** Input tokens (1M/10M/100M), cache tokens (1B/5B/20B), Session Surge (1,000 sessions), Power Session ($100/day), and Verified Contributor (50 verified syncs). Total badges: 17. Credit: @alexesprit PR #1.
+
 ### Changed
 
+- **Achievement stats aggregation moved to Supabase RPC.** Replaced client-side `SELECT * FROM daily_usage` + `.reduce()` calls with a single `get_achievement_stats` RPC that returns pre-aggregated stats. Reduces data transfer and computation on the server round-trip.
 - **Collapsible achievements view.** Replaced flat badge pill list with a collapsed/expanded toggle. Collapsed shows earned emoji pills with a count (e.g. 3/8); expanded shows a responsive grid with emoji, title, and description. Locked badges still shown dimmed on own profile. Addresses #2.
 
 ### Fixed
