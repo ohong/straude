@@ -266,13 +266,14 @@ export function RecapCardImage({
     );
   }
 
-  // Landscape (1200x630) — OG image format
+  // Landscape (1200x630) — single-column vertical flow, matching web UI
   return (
     <div
       style={{
         width,
         height,
         display: "flex",
+        flexDirection: "column",
         fontFamily: "Inter",
         position: "relative",
       }}
@@ -302,168 +303,139 @@ export function RecapCardImage({
         }}
       />
 
-      {/* Content wrapper */}
+      {/* Content */}
       <div
         style={{
           display: "flex",
+          flexDirection: "column",
           padding,
           position: "relative",
-          width: "100%",
-          height: "100%",
+          flex: 1,
         }}
       >
-        {/* Left side — hero stat */}
+        {/* Header: logo left, period label right */}
         <div
           style={{
             display: "flex",
-            flexDirection: "column",
-            justifyContent: "center",
-            flex: 1,
-            paddingRight: 40,
+            alignItems: "center",
+            justifyContent: "space-between",
           }}
         >
-          {/* Logo */}
-          <svg width="32" height="32" viewBox="0 0 32 32">
+          <svg width="36" height="36" viewBox="0 0 32 32">
             <polygon points="6.4,0 25.6,0 32,32 0,32" fill="#DF561F" />
           </svg>
-
-          {/* Hero cost */}
           <div
             style={{
-              fontSize: 72,
-              fontWeight: 700,
-              color: "#DF561F",
-              letterSpacing: "-0.03em",
-              lineHeight: 1,
-              marginTop: 16,
-            }}
-          >
-            {`$${data.total_cost.toFixed(2)}`}
-          </div>
-          <div
-            style={{
-              fontSize: 16,
-              fontWeight: 500,
-              color: "#999",
-              marginTop: 8,
-              textTransform: "uppercase" as const,
-              letterSpacing: "0.1em",
-            }}
-          >
-            total spend
-          </div>
-
-          {/* Model */}
-          <div
-            style={{
-              fontSize: 14,
-              fontWeight: 500,
-              color: "#999",
-              marginTop: 16,
-            }}
-          >
-            {`Powered by ${data.primary_model}`}
-          </div>
-        </div>
-
-        {/* Right side — stats + meta */}
-        <div
-          style={{
-            display: "flex",
-            flexDirection: "column",
-            justifyContent: "center",
-            width: 380,
-          }}
-        >
-          {/* Period label */}
-          <div
-            style={{
-              fontSize: 14,
+              fontSize: 22,
               fontWeight: 500,
               color: "#666",
-              marginBottom: 24,
             }}
           >
             {data.period_label}
           </div>
-
-          {/* Stats 2x2 */}
-          <div
-            style={{
-              display: "flex",
-              flexWrap: "wrap",
-              gap: 24,
-            }}
-          >
-            <StatBox
-              label="Output"
-              value={formatTokens(data.output_tokens)}
-            />
-            <StatBox
-              label="Active"
-              value={`${data.active_days}/${data.total_days}`}
-              suffix="days"
-            />
-            <StatBox label="Sessions" value={String(data.session_count)} />
-            <StatBox
-              label="Streak"
-              value={String(data.streak)}
-              suffix="days"
-              accent
-            />
-          </div>
         </div>
-      </div>
 
-      {/* Contribution strip — bottom */}
-      <div
-        style={{
-          position: "absolute",
-          bottom: padding + 32,
-          left: padding,
-          right: padding,
-          display: "flex",
-          gap: cellGap,
-        }}
-      >
-        {allDays.map((day) => (
-          <div
-            key={day.date}
-            style={{
-              width: cellWidth,
-              height: cellHeight,
-              backgroundColor: getCellColor(day.cost_usd),
-              borderRadius: 2,
-              flex: 1,
-            }}
+        {/* Hero cost */}
+        <div
+          style={{
+            fontSize: 112,
+            fontWeight: 700,
+            color: "#DF561F",
+            letterSpacing: "-0.03em",
+            lineHeight: 1,
+            marginTop: 20,
+          }}
+        >
+          {`$${data.total_cost.toFixed(2)}`}
+        </div>
+        <div
+          style={{
+            fontSize: 22,
+            fontWeight: 500,
+            color: "#999",
+            marginTop: 4,
+            textTransform: "uppercase" as const,
+            letterSpacing: "0.1em",
+          }}
+        >
+          total spend
+        </div>
+
+        {/* Stats row — 4 across */}
+        <div
+          style={{
+            display: "flex",
+            gap: 48,
+            marginTop: 28,
+          }}
+        >
+          <StatBox
+            label="Output"
+            value={formatTokens(data.output_tokens)}
+            large
           />
-        ))}
-      </div>
+          <StatBox
+            label="Active"
+            value={`${data.active_days}/${data.total_days}`}
+            suffix="days"
+            large
+          />
+          <StatBox label="Sessions" value={String(data.session_count)} large />
+          <StatBox
+            label="Streak"
+            value={String(data.streak)}
+            suffix="days"
+            accent
+            large
+          />
+        </div>
 
-      {/* Footer */}
-      <div
-        style={{
-          position: "absolute",
-          bottom: padding,
-          left: padding,
-          fontSize: 14,
-          fontWeight: 500,
-          color: "#666",
-        }}
-      >
-        {`@${data.username}`}
-      </div>
-      <div
-        style={{
-          position: "absolute",
-          bottom: padding,
-          right: padding,
-          fontSize: 14,
-          fontWeight: 500,
-          color: "#999",
-        }}
-      >
-        straude.com
+        {/* Model */}
+        <div
+          style={{
+            fontSize: 20,
+            fontWeight: 500,
+            color: "#999",
+            marginTop: 20,
+          }}
+        >
+          {`Powered by ${data.primary_model}`}
+        </div>
+
+        {/* Contribution strip */}
+        <div
+          style={{
+            display: "flex",
+            gap: cellGap,
+            marginTop: 16,
+          }}
+        >
+          {allDays.map((day) => (
+            <div
+              key={day.date}
+              style={{
+                height: 16,
+                backgroundColor: getCellColor(day.cost_usd),
+                borderRadius: 3,
+                flex: 1,
+              }}
+            />
+          ))}
+        </div>
+
+        {/* Footer */}
+        <div
+          style={{
+            display: "flex",
+            justifyContent: "space-between",
+            marginTop: "auto",
+            fontSize: 20,
+            fontWeight: 500,
+          }}
+        >
+          <div style={{ color: "#666" }}>{`@${data.username}`}</div>
+          <div style={{ color: "#999" }}>straude.com</div>
+        </div>
       </div>
     </div>
   );
@@ -474,17 +446,24 @@ function StatBox({
   value,
   suffix,
   accent,
+  large,
 }: {
   label: string;
   value: string;
   suffix?: string;
   accent?: boolean;
+  large?: boolean;
 }) {
+  const labelSize = large ? 18 : 12;
+  const valueSize = large ? 42 : 28;
+  const suffixSize = large ? 22 : 14;
+  const emojiSize = large ? 34 : 22;
+
   return (
-    <div style={{ display: "flex", flexDirection: "column", minWidth: 120 }}>
+    <div style={{ display: "flex", flexDirection: "column", minWidth: large ? 160 : 120 }}>
       <div
         style={{
-          fontSize: 12,
+          fontSize: labelSize,
           fontWeight: 500,
           color: "#999",
           textTransform: "uppercase" as const,
@@ -499,20 +478,20 @@ function StatBox({
           display: "flex",
           alignItems: "baseline",
           gap: 4,
-          fontSize: 28,
+          fontSize: valueSize,
           fontWeight: 700,
           color: accent ? "#DF561F" : "#000",
           letterSpacing: "-0.02em",
         }}
       >
         {accent && (
-          <span style={{ fontSize: 22, marginRight: 2 }}>🔥</span>
+          <span style={{ fontSize: emojiSize, marginRight: 2 }}>🔥</span>
         )}
         <span>{value}</span>
         {suffix && (
           <span
             style={{
-              fontSize: 14,
+              fontSize: suffixSize,
               fontWeight: 500,
               color: "#999",
             }}
