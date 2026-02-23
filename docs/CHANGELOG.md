@@ -4,6 +4,19 @@
 
 ### Added
 
+- **Motion scroll animations on landing page.** Replaced CSS `transition` + `useInView` entrance animations with Motion for React (`motion/react`). Hero background has parallax scrolling (moves at 30% of scroll speed) and the terminal mockup floats up as visitor scrolls. ProductShowcase dashboard cards have scroll-linked parallax at different drift rates. Stats, Features, and WallOfLove cards use staggered spring entrances. CTA section uses a scale + fade entrance. All animations are `once: true` (fire once, don't replay).
+
+### Changed
+
+- **Recap card redesign.** Switched from dark (black bg, white text) to light theme with FLUX-generated background images. Users pick from 10 motivational abstract backgrounds (golden hour, brushstroke, coral aurora, etc.) via a thumbnail selector on the recap page. Background selection carries through to the downloaded PNG, shareable link (`?bg=03`), and OG preview image. Contribution strip now only shows today + past days (no future day placeholders).
+- **Wall of Love.** Added @garrytan, @dhh, @jessepollak, and @alexisohanian tweets to landing page testimonials (7 total). Switched from CSS grid to CSS columns masonry layout so cards of varying text length pack tightly without wasted vertical space (like Poke's wall of love).
+
+### Fixed
+
+- **CTA section text overflow on mobile.** Replaced `whitespace-nowrap` with `text-wrap: balance` on the CTA subtitle so text wraps on narrow viewports instead of being cut off.
+
+### Added
+
 - **Achievements & Badges.** Milestone badges earned progressively and displayed on user profiles. Initial badges: First Sync, 7-Day Streak, 30-Day Streak, $100 Club, Big Spender ($500), 1M/10M/100M Output Tokens. Badges are never revoked. Achievement check runs fire-and-forget after each usage submit. Own profile shows locked (greyed-out) badges; other profiles show only earned badges.
 - **Featured Challenge card in right sidebar.** "The Three Comma Club" — race to 1 billion output tokens. Shows a progress bar based on the leader's total and the top 3 contributors with token counts. Displayed between Suggested Friends and Top This Week.
 
@@ -28,6 +41,9 @@
 
 ### Fixed
 
+- **Daily leaderboard missing users due to UTC timezone boundary.** The `leaderboard_daily` view was filtering `date = CURRENT_DATE` (UTC), which excluded users who pushed data for their local calendar date when UTC had already rolled over to the next day. Fixed by using a 2-day rolling window (`date >= CURRENT_DATE - 1`) and picking each user's most-recent date within that window.
+- **Model display showing wrong model on feed cards.** `formatModel` was reading `models[0]` from the stored array, but ccusage outputs models in insertion order, not by tier. Now picks highest tier present (Opus > Sonnet > Haiku).
+- **Sync command hint added to feed page.** Added a persistent `npx straude@latest` bar at the top of the feed with one-click copy-to-clipboard.
 - **Kudos avatars missing from feed and profile pages.** The feed page (`/feed`) and profile page (`/u/[username]`) had their own server-side data fetching that never included `kudos_users` or `recent_comments`. Only the API route and post detail page enriched posts with this data. All three data paths now fetch kudos user avatars and recent comments consistently via `Promise.all`.
 
 ### Added

@@ -4,10 +4,22 @@ import { join } from "node:path";
 import { getServiceClient } from "@/lib/supabase/service";
 import { getRecapData } from "@/lib/utils/recap";
 import { RecapCardImage } from "@/lib/utils/recap-image";
+import { getBackgroundById, DEFAULT_BACKGROUND_ID } from "@/lib/recap-backgrounds";
 
 export const alt = "Straude Recap";
 export const size = { width: 1200, height: 630 };
 export const contentType = "image/png";
+
+async function loadBackgroundAsDataUri(bgId: string): Promise<string | undefined> {
+  const bg = getBackgroundById(bgId);
+  try {
+    const imgPath = join(process.cwd(), "public", bg.src);
+    const buffer = await readFile(imgPath);
+    return `data:image/jpeg;base64,${buffer.toString("base64")}`;
+  } catch {
+    return undefined;
+  }
+}
 
 export default async function Image({
   params,
@@ -30,7 +42,7 @@ export default async function Image({
     .single();
 
   if (!profile || !profile.is_public) {
-    // Fallback: generic Straude card
+    // Fallback: generic Straude card (light theme)
     return new ImageResponse(
       (
         <div
@@ -41,8 +53,8 @@ export default async function Image({
             flexDirection: "column",
             alignItems: "center",
             justifyContent: "center",
-            backgroundColor: "#000",
-            color: "#fff",
+            backgroundColor: "#fff",
+            color: "#000",
             fontFamily: "Inter",
           }}
         >
@@ -63,7 +75,7 @@ export default async function Image({
             style={{
               fontSize: 24,
               fontWeight: 500,
-              color: "rgba(255,255,255,0.5)",
+              color: "#666",
               marginTop: 8,
             }}
           >
@@ -81,19 +93,25 @@ export default async function Image({
     );
   }
 
-  const data = await getRecapData(
-    supabase,
-    profile.id,
-    profile.username!,
-    profile.is_public,
-    "week"
-  );
+  const [data, backgroundImageSrc] = await Promise.all([
+    getRecapData(
+      supabase,
+      profile.id,
+      profile.username!,
+      profile.is_public,
+      "week"
+    ),
+    loadBackgroundAsDataUri(DEFAULT_BACKGROUND_ID),
+  ]);
 
-  return new ImageResponse(<RecapCardImage data={data} format="landscape" />, {
-    ...size,
-    fonts: [
-      { name: "Inter", data: interBold, style: "normal" as const, weight: 700 as const },
-      { name: "Inter", data: interMedium, style: "normal" as const, weight: 500 as const },
-    ],
-  });
+  return new ImageResponse(
+    <RecapCardImage data={data} format="landscape" backgroundImageSrc={backgroundImageSrc} />,
+    {
+      ...size,
+      fonts: [
+        { name: "Inter", data: interBold, style: "normal" as const, weight: 700 as const },
+        { name: "Inter", data: interMedium, style: "normal" as const, weight: 500 as const },
+      ],
+    }
+  );
 }

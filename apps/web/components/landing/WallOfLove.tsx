@@ -2,7 +2,7 @@
 
 import Image from "next/image";
 import type { WallOfLovePost } from "@/types";
-import { useInView } from "@/lib/hooks/useInView";
+import { motion, type Variants } from "motion/react";
 
 function XIcon({ className }: { className?: string }) {
   return (
@@ -17,14 +17,26 @@ function XIcon({ className }: { className?: string }) {
   );
 }
 
+const wallCardVariants: Variants = {
+  hidden: { opacity: 0, y: 28, scale: 0.97 },
+  visible: (i: number) => ({
+    opacity: 1,
+    y: 0,
+    scale: 1,
+    transition: {
+      delay: i * 0.08,
+      duration: 0.55,
+      ease: [0.25, 0.46, 0.45, 0.94],
+    },
+  }),
+};
+
 function WallOfLoveCard({
   post,
   index,
-  inView,
 }: {
   post: WallOfLovePost;
   index: number;
-  inView: boolean;
 }) {
   const initials = post.author_name
     .split(" ")
@@ -32,14 +44,16 @@ function WallOfLoveCard({
     .join("");
 
   return (
-    <a
+    <motion.a
       href={post.url}
       target="_blank"
       rel="noopener noreferrer"
-      className={`block rounded-2xl border border-white/10 bg-white/[0.06] p-6 transition-all duration-500 hover:shadow-[0_8px_32px_rgba(0,0,0,0.2)] hover:border-accent/30 ${
-        inView ? "opacity-100 translate-y-0" : "opacity-0 translate-y-8"
-      }`}
-      style={{ transitionDelay: `${index * 100}ms` }}
+      className="block break-inside-avoid mb-5 rounded-2xl border border-white/10 bg-white/[0.06] p-6 transition-[border-color,box-shadow] duration-300 hover:shadow-[0_8px_32px_rgba(0,0,0,0.2)] hover:border-accent/30"
+      custom={index}
+      variants={wallCardVariants}
+      initial="hidden"
+      whileInView="visible"
+      viewport={{ once: true, amount: 0.15 }}
     >
       {/* Header: avatar + name + X icon */}
       <div className="flex items-start gap-3">
@@ -76,31 +90,34 @@ function WallOfLoveCard({
 
       {/* Date */}
       <p className="mt-4 text-xs text-white/30">{post.date}</p>
-    </a>
+    </motion.a>
   );
 }
 
 export function WallOfLove({ posts }: { posts: WallOfLovePost[] }) {
-  const { ref, inView } = useInView(0.1);
-
   if (posts.length === 0) return null;
 
   return (
     <section className="bg-[#0A0A0A] py-24 md:py-32">
-      <div ref={ref} className="mx-auto max-w-[1280px] px-6 md:px-8">
-        <div className="flex flex-col items-center text-center mb-14">
+      <div className="mx-auto max-w-[1280px] px-6 md:px-8">
+        <motion.div
+          className="flex flex-col items-center text-center mb-14"
+          initial={{ opacity: 0, y: 20 }}
+          whileInView={{ opacity: 1, y: 0 }}
+          viewport={{ once: true, amount: 0.5 }}
+          transition={{ duration: 0.5, ease: "easeOut" }}
+        >
           <h2 className="text-[clamp(2rem,4vw,3.5rem)] font-bold tracking-[-0.03em] text-balance text-white">
             Everybody is <span className="text-accent">Claudemaxxing</span>. Are you?
           </h2>
-        </div>
+        </motion.div>
 
-        <div className="grid gap-6 sm:grid-cols-2 lg:grid-cols-3">
+        <div className="columns-1 sm:columns-2 lg:columns-3 gap-5">
           {posts.map((post, i) => (
             <WallOfLoveCard
               key={post.url}
               post={post}
               index={i}
-              inView={inView}
             />
           ))}
         </div>

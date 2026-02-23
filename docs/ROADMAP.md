@@ -2,6 +2,27 @@
 
 Sorted from lowest to highest technical lift.
 
+## Daily Digest Email (Streak Reminders + Social Nudges)
+
+A daily email at ~6 PM local time: "Your 12-day streak is at risk — push today." Include a social nugget ("@alice gave you kudos") and leaderboard position update. The email infra already exists (React Email, Resend, notification preferences). This is the single cheapest way to bring lapsed users back — it's the **trigger** in the habit loop.
+
+Requires: cron job (Vercel Cron or Supabase pg_cron), new email template, smart frequency logic (skip if user already pushed today), timezone-aware send time.
+
+## Efficiency Score + Cost Forecast
+
+Two complementary features that turn Straude from social toy into essential tool:
+
+- **Efficiency Score** (`output_tokens / cost_usd`): a skill-based metric where a $5/day user can outrank a $50/day spender. Rewards better prompting and cache usage, not bigger wallets. Display on profiles, leaderboards, and feed cards.
+- **Cost Forecast**: trailing 7-day average projected forward ("at this pace, you'll spend $420/month"). Optional budget alerts. Creates the "banking app" habit of checking your burn rate.
+
+Both are derived math on existing `daily_usage` data — no new infrastructure. Combined, they give users a reason to check the app daily even with zero followers.
+
+## Healthy Streaks (5-of-7) + Achievement Chains
+
+The current strict-consecutive-day streak is an active churn driver — one missed day and everything resets. Redesign to 5-of-7 with streak freezes (Duolingo saw 21% churn reduction). Pair with restructuring the flat `ACHIEVEMENTS` array into progression quest lines with visible progress bars ("72% to 90-Day Streak"). Fixes the psychological foundation everything else builds on.
+
+Requires: update `calculate_user_streak` / `calculate_streaks_batch` RPCs, add streak freeze logic, restructure achievement definitions into chains, add progress bar UI to profile.
+
 ## Notifications Page
 
 The dropdown shows the 20 most recent notifications. A dedicated `/notifications` page with pagination and filtering (by type) would be useful for users with high activity.
@@ -21,10 +42,6 @@ Add a strict CSP header with nonce-based script/style sources. Requires auditing
 ## Real-time Notifications
 
 The notifications system is built but uses polling (fetch on dropdown open + initial load). Consider adding Supabase Realtime subscriptions to push new notifications to the client without requiring a page refresh or dropdown toggle.
-
-## ~~Achievements & Badges~~ (Implemented)
-
-Shipped in the 2026-02-22 release. Eight milestone badges (First Sync through 100M Output Tokens) earned progressively, displayed on profiles, checked after each usage submit. Featured Challenge ("The Three Comma Club") added to the right sidebar.
 
 ## Personal Analytics Dashboard
 
@@ -80,50 +97,20 @@ Requires: new CLI command, new API endpoint (or reuse `/api/recap` with a `forma
 
 Community-wide goals that all users contribute to collectively, like "Race to 1 Billion Output Tokens." A challenge has a target metric, a deadline, and a live progress bar visible to everyone. Individual contributions are attributed and ranked within each challenge. Requires a `challenges` table, a `challenge_contributions` view aggregating from `daily_usage`, a challenge detail page with progress visualization, and a mechanism to create/schedule new challenges.
 
-## Shareable Recap Cards
+## Team Rooms
 
-Generate a branded image card summarizing your Claude Code usage for a week or month — like Strava's post-run share card or Spotify Wrapped. Designed for sharing on Twitter/X, LinkedIn, Instagram, and group chats.
+Private or public groups where teams (company, OSS project, friend group) share a scoped leaderboard, combined contribution graph, and team streak. Highest retention potential but needs critical mass and significant build (invites, permissions, team-scoped views). Right vision for month 6-12.
 
-**What the card shows:**
-- Hero stat: total spend for the period (the conversation-starter)
-- Supporting stats: output tokens, active days out of period, session count
-- Streak flame with current streak length
-- Primary model used (e.g., "Claude Opus")
-- Mini contribution graph strip (the "route map" equivalent — shows your usage pattern)
-- Period label ("My Week in Claude Code · Feb 10–16, 2026")
-- Username and straude.com URL (drives signups)
+---
 
-**Sharing mechanics:**
-- **OG image**: `/recap/[username]?period=week` is a public page with dynamic OG metadata. Sharing the URL on Twitter/LinkedIn auto-renders the stats card as the link preview. Image generated via `next/og` ImageResponse at 1200x630.
-- **Downloadable PNG**: "Download Card" button on the recap page saves a 1080x1080 PNG (Instagram/square format) to the user's device. Same data, square layout.
-- Privacy-aware: only works for users with `is_public: true`. Private users see their own recap but can't generate a public URL.
+## Shipped
 
-**Visual design:**
-- Fixed brand template: black background, white text, orange (`#DF561F`) accent on hero stat and streak flame, monospace tabular-nums for all numbers. Straude trapezoid logo top-left.
-- Instantly recognizable as a Straude card (consistent branding, not user-customizable).
-- Clean, high-contrast layout optimized for small previews (Twitter cards render ~500px wide).
+### Achievements & Badges (2026-02-22)
 
-**User flow:**
-1. User navigates to `/recap` from profile or sidebar
-2. Selects period: "This Week" or "This Month"
-3. Sees live preview of their card with stats
-4. Two actions: "Copy Link" (copies `/recap/username?period=week` URL) or "Download" (saves PNG)
-5. Posts to social media → non-users see the card, visit straude.com
+Eight milestone badges (First Sync through 100M Output Tokens) earned progressively, displayed on profiles, checked after each usage submit. Featured Challenge ("The Three Comma Club") added to the right sidebar.
 
-**Technical approach:**
-- Reuse existing `next/og` ImageResponse pattern from `opengraph-image.tsx` (Inter fonts, brand assets already loaded)
-- New API route for aggregated period stats: `GET /api/recap?period=week|month` — sums `daily_usage` for the period, counts active days, resolves primary model
-- New page: `apps/web/app/(app)/recap/page.tsx` — client-side period selector + card preview + download/copy buttons
-- New public page: `apps/web/app/recap/[username]/page.tsx` — renders the card data for OG crawlers
-- New OG image route: `apps/web/app/recap/[username]/opengraph-image.tsx` — generates the 1200x630 card
-- Download endpoint: `GET /api/recap/image?username=X&period=week&format=square` — generates 1080x1080 variant
-- Data already exists in `daily_usage` table — no schema changes needed
+### Shareable Recap Cards (2026-02-20, redesigned 2026-02-22)
 
-**Why this drives virality:**
-- Spend numbers are inherently provocative ("I spent $312 on AI this week" invites reactions)
-- Streaks create FOMO and consistency signaling
-- The card format is a proven viral mechanic (Strava, Spotify, Duolingo)
-- Every share is a free ad with the straude.com URL
-- Non-users can't generate their own card without signing up
+Generate branded usage summary images (weekly/monthly) for sharing on social media. Includes OG image generation for link previews (1200x630), downloadable square PNG (1080x1080) for Instagram, and a live card preview page at `/recap`. Stats include total spend, output tokens, active days, session count, streak, primary model, and a mini contribution strip. Public users get shareable URLs at `/recap/[username]`; private users can still view and download their own card.
 
-Requires: no schema changes. Primarily frontend + 2 new API routes + OG image generation.
+Redesign: light theme with 10 FLUX-generated abstract backgrounds (selectable). Contribution strip caps at today (no future-day placeholders). Background choice persists in shareable URLs via `?bg=` param.

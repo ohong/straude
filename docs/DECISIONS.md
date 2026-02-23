@@ -1,5 +1,37 @@
 # Architecture & Design Decisions
 
+## Landing Page: Motion for React over Custom useInView (2026-02-22)
+
+**Decision:** Replaced the custom `useInView` hook and CSS `transition` classes with Motion for React (`motion/react`) for all landing page scroll animations. The custom `useInView` hook remains in the codebase for non-landing components (e.g. `HowItWorks.tsx`).
+
+**What Motion enables that CSS transitions don't:**
+1. **Scroll-linked parallax** — Hero background moves at 30% scroll speed, ProductShowcase cards drift at different rates. These are continuous transforms tied to scroll position, not possible with CSS `transition` + IntersectionObserver.
+2. **Spring physics** — smoother, more natural entrance animations with eased cubic curves instead of CSS linear/ease-out.
+3. **Custom variants with `custom` prop** — stagger delays computed per-card index without inline `style` hacks.
+
+**Alternatives considered:**
+1. **Keep custom `useInView` + CSS** — zero dependency cost but can only do binary in/out transitions, no scroll-linked continuous movement.
+2. **CSS `@scroll-timeline`** — native but poor browser support as of Feb 2026.
+3. **GSAP ScrollTrigger** — powerful but large bundle, commercial license for premium features.
+
+**Why Motion:** Small bundle (tree-shakeable), React-native API (`motion.div`), first-class `useScroll`/`useTransform` for parallax, and widely adopted.
+
+## Landing Page: No whitespace-nowrap on Mobile-Visible Text (2026-02-22)
+
+**Decision:** Removed `whitespace-nowrap` from the CTA subtitle and replaced with `text-wrap: balance`. As a rule, no user-facing text on the landing page should use `whitespace-nowrap` unless it's within an `overflow-hidden` container or only visible on wide breakpoints.
+
+**Why:** At 390px viewport width, the CTA subtitle ("Join motivated Claude Code builders whose work you'll love.") rendered as a 518px-wide single line, overflowing the screen. `text-wrap: balance` gives a cleaner two-line split than default wrapping.
+
+## Recap Background: Session-Local, URL-Param Persistence (2026-02-22)
+
+**Decision:** Background selection is session-local state (React `useState`). No DB migration. The selected background ID is encoded in the shareable URL as `?bg=03` and in the download endpoint as a query param. The OG image route reads `?bg` from the URL; defaults to `01` if not specified.
+
+**Alternatives considered:**
+1. **Store preference in user profile** — adds a column and migration for a cosmetic preference. Overkill for v1 where users pick fresh each time.
+2. **Cookie/localStorage** — would persist across page loads but doesn't help with shareable links or OG images. URL params are more portable.
+
+**Why this option:** Zero infrastructure cost, the URL is the source of truth for shared cards, and it's trivially extensible if we later add persistence.
+
 ## Achievements: Definitions in Code, Records in DB (2026-02-22)
 
 **Decision:** Achievement badge definitions (slug, title, emoji, threshold check function) live in a typed const array in `lib/achievements.ts`. Earned records are stored in `user_achievements` (user_id, achievement_slug, earned_at). The `checkAndAwardAchievements` function runs fire-and-forget after each usage submit, fetches the user's stats, and inserts any newly earned badges.

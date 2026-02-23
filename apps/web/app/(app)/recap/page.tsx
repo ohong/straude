@@ -4,6 +4,11 @@ import { useState, useEffect, useCallback } from "react";
 import { Link2, Download, Check } from "lucide-react";
 import { RecapCard } from "@/components/app/recap/RecapCard";
 import type { RecapData } from "@/lib/utils/recap";
+import {
+  RECAP_BACKGROUNDS,
+  DEFAULT_BACKGROUND_ID,
+  type RecapBackgroundId,
+} from "@/lib/recap-backgrounds";
 
 export default function RecapPage() {
   const [period, setPeriod] = useState<"week" | "month">("week");
@@ -11,6 +16,8 @@ export default function RecapPage() {
   const [loading, setLoading] = useState(true);
   const [copied, setCopied] = useState(false);
   const [downloading, setDownloading] = useState(false);
+  const [backgroundId, setBackgroundId] =
+    useState<RecapBackgroundId>(DEFAULT_BACKGROUND_ID);
 
   useEffect(() => {
     setLoading(true);
@@ -22,17 +29,17 @@ export default function RecapPage() {
 
   const handleCopyLink = useCallback(async () => {
     if (!data) return;
-    const url = `https://straude.com/recap/${data.username}?period=${period}`;
+    const url = `https://straude.com/recap/${data.username}?period=${period}&bg=${backgroundId}`;
     await navigator.clipboard.writeText(url);
     setCopied(true);
     setTimeout(() => setCopied(false), 2000);
-  }, [data, period]);
+  }, [data, period, backgroundId]);
 
   const handleDownload = useCallback(async () => {
     setDownloading(true);
     try {
       const res = await fetch(
-        `/api/recap/image?period=${period}&format=square`
+        `/api/recap/image?period=${period}&format=square&bg=${backgroundId}`
       );
       const blob = await res.blob();
       const url = URL.createObjectURL(blob);
@@ -46,7 +53,7 @@ export default function RecapPage() {
     } finally {
       setDownloading(false);
     }
-  }, [period]);
+  }, [period, backgroundId]);
 
   return (
     <>
@@ -81,6 +88,39 @@ export default function RecapPage() {
           </button>
         </div>
 
+        {/* Background selector */}
+        <div className="mb-6">
+          <p className="mb-2 text-xs font-medium uppercase tracking-widest text-muted">
+            Background
+          </p>
+          <div className="flex flex-wrap gap-2">
+            {RECAP_BACKGROUNDS.map((bg) => (
+              <button
+                key={bg.id}
+                onClick={() => setBackgroundId(bg.id)}
+                className="overflow-hidden"
+                style={{
+                  width: 48,
+                  height: 48,
+                  borderRadius: 6,
+                  border:
+                    backgroundId === bg.id
+                      ? "2px solid #DF561F"
+                      : "2px solid transparent",
+                  padding: 0,
+                }}
+                title={bg.label}
+              >
+                <img
+                  src={bg.src}
+                  alt={bg.label}
+                  className="h-full w-full object-cover"
+                />
+              </button>
+            ))}
+          </div>
+        </div>
+
         {/* Card preview */}
         {loading ? (
           <div
@@ -89,7 +129,7 @@ export default function RecapPage() {
           />
         ) : data ? (
           <>
-            <RecapCard data={data} />
+            <RecapCard data={data} backgroundId={backgroundId} />
 
             {/* Actions */}
             <div className="mt-4 flex gap-3">
@@ -121,7 +161,7 @@ export default function RecapPage() {
                 style={{ borderRadius: 4 }}
               >
                 <Download size={14} aria-hidden />
-                {downloading ? "Generating…" : "Download Card"}
+                {downloading ? "Generating..." : "Download Card"}
               </button>
             </div>
 

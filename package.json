@@ -11,5 +11,9 @@
   "devDependencies": {
     "turbo": "^2",
     "typescript": "^5"
+  },
+  "dependencies": {
+    "motion": "^12.34.3",
+    "web": "^0.0.2"
   }
 }

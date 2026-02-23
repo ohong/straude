@@ -1,11 +1,9 @@
 "use client";
 
 import Link from "next/link";
-import { useInView } from "@/lib/hooks/useInView";
+import { motion } from "motion/react";
 
 export function CTASection() {
-  const { ref, inView } = useInView(0.3);
-
   return (
     <section className="bg-accent relative overflow-hidden py-24 md:py-32">
       {/* Pattern overlay */}
@@ -16,11 +14,12 @@ export function CTASection() {
         }}
       />
 
-      <div
-        ref={ref}
-        className={`relative z-10 mx-auto flex max-w-[900px] flex-col items-center px-6 text-center md:px-8 transition-all duration-700 ${
-          inView ? "opacity-100 translate-y-0" : "opacity-0 translate-y-6"
-        }`}
+      <motion.div
+        className="relative z-10 mx-auto flex max-w-[900px] flex-col items-center px-6 text-center md:px-8"
+        initial={{ opacity: 0, y: 28, scale: 0.97 }}
+        whileInView={{ opacity: 1, y: 0, scale: 1 }}
+        viewport={{ once: true, amount: 0.3 }}
+        transition={{ duration: 0.6, ease: [0.25, 0.46, 0.45, 0.94] }}
       >
         <h2
           className="text-[clamp(2rem,5vw,3.5rem)] font-bold leading-tight tracking-[-0.03em] text-white"
@@ -28,7 +27,7 @@ export function CTASection() {
         >
           Your move.
         </h2>
-        <p className="mt-4 text-lg text-white/70 max-w-lg whitespace-nowrap">
+        <p className="mt-4 text-lg text-white/70 max-w-lg" style={{ textWrap: "balance" }}>
           Join motivated Claude Code builders whose work you'll love.
         </p>
         <Link
@@ -47,7 +46,7 @@ export function CTASection() {
             <path strokeLinecap="round" strokeLinejoin="round" d="M9 5l7 7-7 7" />
           </svg>
         </Link>
-      </div>
+      </motion.div>
     </section>
   );
 }

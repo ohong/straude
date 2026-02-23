@@ -2,10 +2,44 @@
 
 import { useEffect, useRef, useState, useCallback } from "react";
 import { useRouter } from "next/navigation";
-import { ChevronDown } from "lucide-react";
+import { ChevronDown, Copy, Check } from "lucide-react";
 import { ActivityCard } from "./ActivityCard";
 import { cn } from "@/lib/utils/cn";
 import type { Post } from "@/types";
+
+const SYNC_COMMAND = "npx straude@latest";
+
+function SyncCommandHint() {
+  const [copied, setCopied] = useState(false);
+
+  function handleCopy() {
+    navigator.clipboard.writeText(SYNC_COMMAND).then(() => {
+      setCopied(true);
+      setTimeout(() => setCopied(false), 2000);
+    });
+  }
+
+  return (
+    <div className="flex items-center justify-between border-b border-border bg-subtle px-4 py-2.5">
+      <span className="text-xs text-muted">
+        Sync your Claude sessions:
+      </span>
+      <button
+        type="button"
+        onClick={handleCopy}
+        className="flex items-center gap-2 rounded border border-border bg-background px-3 py-1 font-mono text-xs text-foreground hover:border-accent hover:text-accent transition-colors"
+        aria-label="Copy sync command"
+      >
+        <span>{SYNC_COMMAND}</span>
+        {copied ? (
+          <Check size={12} className="text-accent" aria-hidden="true" />
+        ) : (
+          <Copy size={12} className="text-muted" aria-hidden="true" />
+        )}
+      </button>
+    </div>
+  );
+}
 
 type FeedType = "global" | "following" | "mine";
 
@@ -112,6 +146,8 @@ export function FeedList({
 
   return (
     <div>
+      <SyncCommandHint />
+
       {/* Feed type dropdown */}
       {showTabs && (
         <div className="flex justify-end border-b border-border px-4 py-2">

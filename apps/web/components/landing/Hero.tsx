@@ -3,6 +3,7 @@
 import Link from "next/link";
 import Image from "next/image";
 import { useCallback, useEffect, useRef, useState } from "react";
+import { motion, useScroll, useTransform } from "motion/react";
 
 function CopyCommand({ command }: { command: string }) {
   const [copied, setCopied] = useState(false);
@@ -115,18 +116,31 @@ function TerminalMockup() {
 }
 
 export function Hero() {
+  const sectionRef = useRef<HTMLElement>(null);
+  const { scrollYProgress } = useScroll({
+    target: sectionRef,
+    offset: ["start start", "end start"],
+  });
+
+  // Background parallax — image moves at 30% of scroll speed
+  const bgY = useTransform(scrollYProgress, [0, 1], ["0%", "30%"]);
+  // Terminal drifts up slightly as user scrolls
+  const terminalY = useTransform(scrollYProgress, [0, 1], [0, -60]);
+
   return (
-    <section className="relative min-h-[100vh] overflow-hidden">
-      {/* FLUX.2-generated background image */}
-      <Image
-        src="/hero-bg.jpg"
-        alt=""
-        fill
-        priority
-        sizes="100vw"
-        className="object-cover object-center"
-        quality={90}
-      />
+    <section ref={sectionRef} className="relative min-h-[100vh] overflow-hidden">
+      {/* FLUX.2-generated background image — parallax */}
+      <motion.div className="absolute inset-0" style={{ y: bgY }}>
+        <Image
+          src="/hero-bg.jpg"
+          alt=""
+          fill
+          priority
+          sizes="100vw"
+          className="object-cover object-center"
+          quality={90}
+        />
+      </motion.div>
 
       {/* Darken overlay for text readability */}
       <div className="pointer-events-none absolute inset-0 bg-black/40 z-[1]" />
@@ -144,28 +158,43 @@ export function Hero() {
       <div className="relative z-10 mx-auto flex max-w-[1280px] flex-col items-center gap-16 px-6 pt-36 pb-28 md:flex-row md:items-center md:gap-16 md:px-8 md:pt-44 md:pb-36">
         {/* Text */}
         <div className="flex max-w-2xl flex-1 flex-col items-center text-center md:items-start md:text-left">
-          <div className="animate-fade-in-up">
+          <motion.div
+            initial={{ opacity: 0, y: 20 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ duration: 0.6, ease: "easeOut" }}
+          >
             <span className="inline-block font-[family-name:var(--font-mono)] text-xs tracking-[0.2em] uppercase text-accent mb-6">
               Strava for Claude Code
             </span>
-          </div>
+          </motion.div>
 
-          <h1
-            className="text-[clamp(2.8rem,7vw,5.5rem)] font-bold leading-[0.95] tracking-[-0.04em] text-white animate-fade-in-up delay-100"
+          <motion.h1
+            className="text-[clamp(2.8rem,7vw,5.5rem)] font-bold leading-[0.95] tracking-[-0.04em] text-white"
             style={{ textWrap: "balance" }}
+            initial={{ opacity: 0, y: 24 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ duration: 0.7, delay: 0.1, ease: "easeOut" }}
           >
             Every session counts.
-          </h1>
+          </motion.h1>
 
-          <p
-            className="mt-6 text-lg text-white/60 md:text-xl max-w-md animate-fade-in-up delay-200"
+          <motion.p
+            className="mt-6 text-lg text-white/60 md:text-xl max-w-md"
             style={{ textWrap: "pretty" }}
+            initial={{ opacity: 0, y: 20 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ duration: 0.6, delay: 0.2, ease: "easeOut" }}
           >
             One command to log your Claude Code output. Track your spend,
             compare your pace, keep the streak alive.
-          </p>
+          </motion.p>
 
-          <div className="mt-10 flex flex-col sm:flex-row items-center gap-4 animate-fade-in-up delay-300">
+          <motion.div
+            className="mt-10 flex flex-col sm:flex-row items-center gap-4"
+            initial={{ opacity: 0, y: 20 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ duration: 0.6, delay: 0.3, ease: "easeOut" }}
+          >
             <Link
               href="/signup"
               className="group relative inline-flex items-center gap-2 rounded-lg bg-accent px-8 py-4 text-base font-bold text-white transition-[filter,box-shadow] duration-150 hover:brightness-110 hover:shadow-lg hover:shadow-accent/20 md:text-lg focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white focus-visible:ring-offset-2 focus-visible:ring-offset-accent"
@@ -187,13 +216,19 @@ export function Hero() {
               </svg>
             </Link>
             <CopyCommand command="npx straude@latest" />
-          </div>
+          </motion.div>
         </div>
 
-        {/* Terminal mockup */}
-        <div className="flex flex-1 items-center justify-center animate-fade-in delay-400">
+        {/* Terminal mockup — parallax float */}
+        <motion.div
+          className="flex flex-1 items-center justify-center"
+          style={{ y: terminalY }}
+          initial={{ opacity: 0, scale: 0.95 }}
+          animate={{ opacity: 1, scale: 1 }}
+          transition={{ duration: 0.8, delay: 0.4, ease: "easeOut" }}
+        >
           <TerminalMockup />
-        </div>
+        </motion.div>
       </div>
     </section>
   );

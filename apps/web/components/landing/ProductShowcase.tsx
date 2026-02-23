@@ -1,6 +1,7 @@
 "use client";
 
-import { useInView } from "@/lib/hooks/useInView";
+import { useRef } from "react";
+import { motion, useScroll, useTransform } from "motion/react";
 
 /* ── Fake Feed Card ── */
 function FeedCard({
@@ -206,12 +207,27 @@ function ProfileMockup() {
 }
 
 export function ProductShowcase() {
-  const { ref, inView } = useInView(0.1);
+  const sectionRef = useRef<HTMLElement>(null);
+  const { scrollYProgress } = useScroll({
+    target: sectionRef,
+    offset: ["start end", "end start"],
+  });
+
+  // Parallax: side cards drift at different speeds than center
+  const centerY = useTransform(scrollYProgress, [0, 1], [80, -40]);
+  const leftY = useTransform(scrollYProgress, [0, 1], [120, -60]);
+  const rightY = useTransform(scrollYProgress, [0, 1], [100, -50]);
 
   return (
-    <section className="bg-[#F7F5F0] py-24 md:py-32 overflow-hidden">
-      <div ref={ref} className="mx-auto max-w-[1400px] px-6 md:px-8">
-        <div className="flex flex-col items-center text-center mb-16">
+    <section ref={sectionRef} className="bg-[#F7F5F0] py-24 md:py-32 overflow-hidden">
+      <div className="mx-auto max-w-[1400px] px-6 md:px-8">
+        <motion.div
+          className="flex flex-col items-center text-center mb-16"
+          initial={{ opacity: 0, y: 24 }}
+          whileInView={{ opacity: 1, y: 0 }}
+          viewport={{ once: true, amount: 0.5 }}
+          transition={{ duration: 0.6, ease: "easeOut" }}
+        >
           <h2 className="text-[clamp(2rem,4vw,3.5rem)] font-bold tracking-[-0.03em] leading-tight max-w-2xl text-balance">
             Your sessions, visualized
           </h2>
@@ -219,17 +235,18 @@ export function ProductShowcase() {
             Every log generates a post with your daily output —
             cost, tokens, models, and your position on the board.
           </p>
-        </div>
+        </motion.div>
 
-        {/* Dashboard showcase — layered like superpower.com */}
+        {/* Dashboard showcase — layered with scroll parallax */}
         <div className="relative">
           {/* Main center: Feed */}
-          <div
-            className={`relative z-20 mx-auto max-w-md transition-all duration-1000 ${
-              inView
-                ? "opacity-100 translate-y-0 scale-100"
-                : "opacity-0 translate-y-12 scale-95"
-            }`}
+          <motion.div
+            className="relative z-20 mx-auto max-w-md"
+            style={{ y: centerY }}
+            initial={{ opacity: 0, y: 48, scale: 0.95 }}
+            whileInView={{ opacity: 1, y: 0, scale: 1 }}
+            viewport={{ once: true, amount: 0.2 }}
+            transition={{ duration: 0.8, ease: [0.25, 0.46, 0.45, 0.94] }}
           >
             {/* Browser chrome */}
             <div className="rounded-t-xl border border-b-0 border-[#D5D5D5] bg-[#F5F5F5] px-4 py-2.5 flex items-center gap-2">
@@ -262,33 +279,35 @@ export function ProductShowcase() {
                 kudos={8}
               />
             </div>
-          </div>
+          </motion.div>
 
-          {/* Left: Leaderboard */}
-          <div
-            className={`hidden lg:block absolute -left-4 top-12 w-[380px] z-10 transition-all duration-1000 delay-200 ${
-              inView
-                ? "opacity-100 translate-x-0 -rotate-2"
-                : "opacity-0 -translate-x-12 -rotate-6"
-            }`}
+          {/* Left: Leaderboard — parallax drift */}
+          <motion.div
+            className="hidden lg:block absolute -left-4 top-12 w-[380px] z-10"
+            style={{ y: leftY }}
+            initial={{ opacity: 0, x: -48, rotate: -6 }}
+            whileInView={{ opacity: 1, x: 0, rotate: -2 }}
+            viewport={{ once: true, amount: 0.1 }}
+            transition={{ duration: 0.9, delay: 0.15, ease: [0.25, 0.46, 0.45, 0.94] }}
           >
             <div className="shadow-xl shadow-black/5 rounded-xl">
               <LeaderboardMockup />
             </div>
-          </div>
+          </motion.div>
 
-          {/* Right: Profile */}
-          <div
-            className={`hidden lg:block absolute -right-4 top-8 w-[340px] z-10 transition-all duration-1000 delay-300 ${
-              inView
-                ? "opacity-100 translate-x-0 rotate-2"
-                : "opacity-0 translate-x-12 rotate-6"
-            }`}
+          {/* Right: Profile — parallax drift */}
+          <motion.div
+            className="hidden lg:block absolute -right-4 top-8 w-[340px] z-10"
+            style={{ y: rightY }}
+            initial={{ opacity: 0, x: 48, rotate: 6 }}
+            whileInView={{ opacity: 1, x: 0, rotate: 2 }}
+            viewport={{ once: true, amount: 0.1 }}
+            transition={{ duration: 0.9, delay: 0.25, ease: [0.25, 0.46, 0.45, 0.94] }}
           >
             <div className="shadow-xl shadow-black/5 rounded-xl">
               <ProfileMockup />
             </div>
-          </div>
+          </motion.div>
         </div>
       </div>
     </section>

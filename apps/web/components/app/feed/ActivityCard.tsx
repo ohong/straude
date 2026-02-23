@@ -32,11 +32,11 @@ function timeAgo(dateStr: string) {
 
 function formatModel(models: string[]) {
   if (!models || models.length === 0) return null;
-  const m = models[0];
-  if (m.includes("opus")) return "Claude Opus";
-  if (m.includes("sonnet")) return "Claude Sonnet";
-  if (m.includes("haiku")) return "Claude Haiku";
-  return m;
+  // Pick the highest-tier model present, regardless of array order
+  if (models.some((m) => m.includes("opus"))) return "Claude Opus";
+  if (models.some((m) => m.includes("sonnet"))) return "Claude Sonnet";
+  if (models.some((m) => m.includes("haiku"))) return "Claude Haiku";
+  return models[0];
 }
 
 export function ActivityCard({ post }: { post: Post }) {

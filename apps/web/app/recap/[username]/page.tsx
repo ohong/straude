@@ -4,6 +4,7 @@ import { getRecapData } from "@/lib/utils/recap";
 import { formatTokens } from "@/lib/utils/format";
 import type { Metadata } from "next";
 import Link from "next/link";
+import { getBackgroundById, DEFAULT_BACKGROUND_ID } from "@/lib/recap-backgrounds";
 
 function getCellColor(cost: number): string {
   if (cost <= 0) return "#E5E5E5";
@@ -30,11 +31,12 @@ export default async function PublicRecapPage({
   searchParams,
 }: {
   params: Promise<{ username: string }>;
-  searchParams: Promise<{ period?: string }>;
+  searchParams: Promise<{ period?: string; bg?: string }>;
 }) {
   const { username } = await params;
-  const { period: periodParam } = await searchParams;
+  const { period: periodParam, bg: bgParam } = await searchParams;
   const period = periodParam === "month" ? "month" : ("week" as const);
+  const bg = getBackgroundById(bgParam ?? DEFAULT_BACKGROUND_ID);
 
   const supabase = await createClient();
   const { data: profile } = await supabase
@@ -61,16 +63,28 @@ export default async function PublicRecapPage({
     <div className="flex min-h-screen flex-col items-center justify-center bg-background p-4">
       {/* Card preview */}
       <div
-        className="w-full max-w-[600px] overflow-hidden border border-border"
+        className="relative w-full max-w-[600px] overflow-hidden border border-border"
         style={{ borderRadius: 8 }}
       >
-        <div className="bg-black p-8 text-white">
+        {/* Background image */}
+        <img
+          src={bg.src}
+          alt=""
+          className="absolute inset-0 h-full w-full object-cover"
+        />
+        {/* White overlay */}
+        <div
+          className="absolute inset-0"
+          style={{ backgroundColor: "rgba(255,255,255,0.78)" }}
+        />
+
+        <div className="relative p-8">
           {/* Header */}
           <div className="flex items-start justify-between">
             <svg width="24" height="24" viewBox="0 0 32 32">
               <polygon points="6.4,0 25.6,0 32,32 0,32" fill="#DF561F" />
             </svg>
-            <p className="text-xs font-medium text-white/50">
+            <p className="text-xs font-medium" style={{ color: "#666" }}>
               {data.period_label}
             </p>
           </div>
@@ -83,7 +97,10 @@ export default async function PublicRecapPage({
             >
               ${data.total_cost.toFixed(2)}
             </p>
-            <p className="mt-1 text-xs font-medium uppercase tracking-widest text-white/40">
+            <p
+              className="mt-1 text-xs font-medium uppercase tracking-widest"
+              style={{ color: "#999" }}
+            >
               total spend
             </p>
           </div>
@@ -91,43 +108,68 @@ export default async function PublicRecapPage({
           {/* Stats grid */}
           <div className="mt-8 grid grid-cols-4 gap-4">
             <div>
-              <p className="text-[0.65rem] font-medium uppercase tracking-widest text-white/40">
+              <p
+                className="text-[0.65rem] font-medium uppercase tracking-widest"
+                style={{ color: "#999" }}
+              >
                 Output
               </p>
-              <p className="font-[family-name:var(--font-mono)] text-xl font-bold tabular-nums">
+              <p
+                className="font-[family-name:var(--font-mono)] text-xl font-bold tabular-nums"
+                style={{ color: "#000" }}
+              >
                 {formatTokens(data.output_tokens)}
               </p>
             </div>
             <div>
-              <p className="text-[0.65rem] font-medium uppercase tracking-widest text-white/40">
+              <p
+                className="text-[0.65rem] font-medium uppercase tracking-widest"
+                style={{ color: "#999" }}
+              >
                 Active
               </p>
-              <p className="font-[family-name:var(--font-mono)] text-xl font-bold tabular-nums">
+              <p
+                className="font-[family-name:var(--font-mono)] text-xl font-bold tabular-nums"
+                style={{ color: "#000" }}
+              >
                 {data.active_days}/{data.total_days}{" "}
-                <span className="text-sm font-medium text-white/40">days</span>
+                <span className="text-sm font-medium" style={{ color: "#999" }}>
+                  days
+                </span>
               </p>
             </div>
             <div>
-              <p className="text-[0.65rem] font-medium uppercase tracking-widest text-white/40">
+              <p
+                className="text-[0.65rem] font-medium uppercase tracking-widest"
+                style={{ color: "#999" }}
+              >
                 Sessions
               </p>
-              <p className="font-[family-name:var(--font-mono)] text-xl font-bold tabular-nums">
+              <p
+                className="font-[family-name:var(--font-mono)] text-xl font-bold tabular-nums"
+                style={{ color: "#000" }}
+              >
                 {data.session_count}
               </p>
             </div>
             <div>
-              <p className="text-[0.65rem] font-medium uppercase tracking-widest text-white/40">
+              <p
+                className="text-[0.65rem] font-medium uppercase tracking-widest"
+                style={{ color: "#999" }}
+              >
                 Streak
               </p>
               <p className="font-[family-name:var(--font-mono)] text-xl font-bold tabular-nums text-accent">
                 🔥 {data.streak}{" "}
-                <span className="text-sm font-medium text-white/40">days</span>
+                <span className="text-sm font-medium" style={{ color: "#999" }}>
+                  days
+                </span>
               </p>
             </div>
           </div>
 
           {/* Model */}
-          <p className="mt-6 text-xs font-medium text-white/35">
+          <p className="mt-6 text-xs font-medium" style={{ color: "#999" }}>
             Powered by {data.primary_model}
           </p>
 
@@ -148,8 +190,8 @@ export default async function PublicRecapPage({
 
           {/* Footer */}
           <div className="mt-6 flex items-center justify-between text-xs font-medium">
-            <span className="text-white/50">@{data.username}</span>
-            <span className="text-white/30">straude.com</span>
+            <span style={{ color: "#666" }}>@{data.username}</span>
+            <span style={{ color: "#999" }}>straude.com</span>
           </div>
         </div>
       </div>
@@ -189,8 +231,14 @@ function fillDays(
     start = new Date(now.getFullYear(), now.getMonth(), 1);
   }
 
+  // Cap at today — don't render future days
+  const msPerDay = 86400000;
+  const daysSinceStart =
+    Math.floor((now.getTime() - start.getTime()) / msPerDay) + 1;
+  const cappedDays = Math.min(totalDays, daysSinceStart);
+
   const result: { date: string; cost_usd: number }[] = [];
-  for (let i = 0; i < totalDays; i++) {
+  for (let i = 0; i < cappedDays; i++) {
     const d = new Date(start);
     d.setDate(start.getDate() + i);
     const key = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
