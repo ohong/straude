@@ -64,7 +64,7 @@ export function LeaderboardTable({
             key={value}
             onClick={() => navigate(value, currentRegion ?? "")}
             className={cn(
-              "cursor-pointer border-b-2 border-transparent px-5 py-3 text-sm font-semibold text-muted",
+              "border-b-2 border-transparent px-5 py-3 text-sm font-semibold text-muted",
               currentPeriod === value && "border-b-accent text-accent",
             )}
           >
@@ -81,7 +81,7 @@ export function LeaderboardTable({
               key={value}
               onClick={() => navigate(currentPeriod, value)}
               className={cn(
-                "shrink-0 cursor-pointer rounded-[4px] px-3 py-1 text-xs font-semibold",
+                "shrink-0 rounded-[4px] px-3 py-1 text-xs font-semibold",
                 (currentRegion ?? "") === value
                   ? "bg-foreground text-background"
                   : "text-muted hover:text-foreground",
