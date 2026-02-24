@@ -27,6 +27,7 @@ export default function SettingsPage() {
   const [githubUsername, setGithubUsername] = useState("");
   const [isPublic, setIsPublic] = useState(true);
   const [emailNotifications, setEmailNotifications] = useState(true);
+  const [emailMentionNotifications, setEmailMentionNotifications] = useState(true);
   const [timezone, setTimezone] = useState("");
 
   useEffect(() => {
@@ -53,6 +54,7 @@ export default function SettingsPage() {
         setGithubUsername(data.github_username ?? "");
         setIsPublic(data.is_public);
         setEmailNotifications(data.email_notifications ?? true);
+        setEmailMentionNotifications(data.email_mention_notifications ?? true);
         setTimezone(data.timezone ?? Intl.DateTimeFormat().resolvedOptions().timeZone);
       }
     }
@@ -77,6 +79,7 @@ export default function SettingsPage() {
         github_username: githubUsername || undefined,
         is_public: isPublic,
         email_notifications: emailNotifications,
+        email_mention_notifications: emailMentionNotifications,
         timezone,
       }),
     });
@@ -248,13 +251,33 @@ export default function SettingsPage() {
               className="accent-accent"
             />
             <label htmlFor="email_notifications" className="text-sm font-medium">
-              Email notifications
+              Comment emails
             </label>
           </div>
           <p className="pl-7 text-xs text-muted">
             {emailNotifications
               ? "You\u2019ll receive an email when someone comments on your posts."
               : "Email notifications for comments are turned off."}
+          </p>
+        </div>
+
+        <div className="space-y-1.5">
+          <div className="flex items-center gap-3">
+            <input
+              type="checkbox"
+              checked={emailMentionNotifications}
+              onChange={(e) => setEmailMentionNotifications(e.target.checked)}
+              id="email_mention_notifications"
+              className="accent-accent"
+            />
+            <label htmlFor="email_mention_notifications" className="text-sm font-medium">
+              Mention emails
+            </label>
+          </div>
+          <p className="pl-7 text-xs text-muted">
+            {emailMentionNotifications
+              ? "You\u2019ll receive an email when someone @mentions you in a post or comment."
+              : "Email notifications for mentions are turned off."}
           </p>
         </div>
 

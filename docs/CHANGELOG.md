@@ -2,6 +2,17 @@
 
 ## Unreleased
 
+### Added
+
+- **Email notifications for post mentions.** Users tagged with `@username` in someone else's post description now receive an email notification. Controlled by a new `email_mention_notifications` preference (default: on), separate from comment email notifications. Emails use a "tagged you in a post" subject line distinct from comment mentions.
+
+### Changed
+
+- **Image upload: HEIC/HEIF support and larger files.** Added `image/heic` and `image/heif` to allowed upload types. Increased max file size from 5MB to 20MB. File picker now accepts `.heic`/`.heif` files on iOS and macOS.
+- **Image upload: skeleton loading and parallel uploads.** Selected files now upload in parallel instead of sequentially. Pulsing skeleton placeholders appear immediately after file selection, replaced by thumbnails as each upload completes. The "Add images" button shows a spinner with count while uploads are in flight.
+- **Image reordering in post editor.** Drag-and-drop to reorder images on desktop. Chevron arrow buttons on each thumbnail for reordering on any device (always visible on mobile, shown on hover on desktop). Thumbnails increased from 80px to 112px.
+- **Settings: granular email preferences.** Split the single "Email notifications" checkbox into two: "Comment emails" (comments on your posts) and "Mention emails" (@mentions in posts and comments). Each defaults to on and can be toggled independently.
+
 ### Fixed
 
 - **Feed dropdown hidden on mobile.** The feed type selector (Global/Following/My Sessions) was left-aligned on mobile because `SyncCommandHint` is `display: none` below `sm`. Added `ml-auto` so the dropdown stays right-aligned — the dropdown menu now opens fully visible on small screens.

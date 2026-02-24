@@ -7,8 +7,10 @@ const ALLOWED_TYPES = [
   "image/png",
   "image/webp",
   "image/gif",
+  "image/heic",
+  "image/heif",
 ];
-const MAX_SIZE = 5 * 1024 * 1024; // 5MB
+const MAX_SIZE = 20 * 1024 * 1024; // 20MB
 
 export async function POST(request: NextRequest) {
   const supabase = await createClient();
@@ -29,19 +31,28 @@ export async function POST(request: NextRequest) {
 
   if (!ALLOWED_TYPES.includes(file.type)) {
     return NextResponse.json(
-      { error: "File type not allowed. Accepted: JPEG, PNG, WebP, GIF" },
+      {
+        error:
+          "File type not allowed. Accepted: JPEG, PNG, WebP, GIF, HEIC, HEIF",
+      },
       { status: 400 }
     );
   }
 
   if (file.size > MAX_SIZE) {
     return NextResponse.json(
-      { error: "File too large. Maximum size is 5MB" },
+      { error: "File too large. Maximum size is 20MB" },
       { status: 400 }
     );
   }
 
-  const ext = file.type.split("/")[1] === "jpeg" ? "jpg" : file.type.split("/")[1];
+  const EXT_MAP: Record<string, string> = {
+    jpeg: "jpg",
+    heif: "heif",
+    heic: "heic",
+  };
+  const rawExt = file.type.split("/")[1];
+  const ext = EXT_MAP[rawExt] ?? rawExt;
   const fileName = `${user.id}/${randomUUID()}.${ext}`;
 
   const buffer = Buffer.from(await file.arrayBuffer());

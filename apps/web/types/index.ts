@@ -15,6 +15,7 @@ export interface User {
   is_public: boolean;
   timezone: string;
   email_notifications: boolean;
+  email_mention_notifications: boolean;
   created_at: string;
   updated_at: string;
 }

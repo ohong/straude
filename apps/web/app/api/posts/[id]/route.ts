@@ -160,20 +160,20 @@ export async function PATCH(request: NextRequest, context: RouteContext) {
           Promise.all([
             sdb
               .from("users")
-              .select("email_notifications")
+              .select("email_mention_notifications")
               .eq("id", u.id)
               .single(),
             sdb.auth.admin.getUserById(u.id),
           ])
             .then(([profileRes, authRes]) => {
               const email = authRes.data?.user?.email;
-              if (!profileRes.data?.email_notifications || !email) return;
+              if (!profileRes.data?.email_mention_notifications || !email) return;
 
               return sendNotificationEmail({
                 recipientUserId: u.id,
                 recipientEmail: email,
                 actorUsername,
-                type: "mention",
+                type: "post_mention",
                 content: post.description!,
                 postId: id,
                 postTitle: (post.title as string) ?? null,

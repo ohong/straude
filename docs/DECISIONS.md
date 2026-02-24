@@ -1,5 +1,16 @@
 # Architecture & Design Decisions
 
+## Separate Email Preference for Mentions (2026-02-24)
+
+**Decision:** Added `email_mention_notifications` (boolean, default `true`) as a separate column from `email_notifications`, giving users independent control over comment emails and mention emails.
+
+**Alternatives considered:**
+1. **Single boolean for all emails** — simpler, but users who want comment notifications but not mention spam (or vice versa) have no recourse.
+2. **JSON preferences object** — a single `email_preferences` JSONB column with granular keys. More flexible but harder to query from the email-sending code paths, and overkill when there are only two notification types.
+3. **Separate boolean per type** (chosen) — mirrors the existing `email_notifications` pattern. Each email-sending code path checks the relevant column. Easy to extend later by adding another boolean column.
+
+**Email type differentiation:** The email template now has three types: `comment`, `mention` (in a comment), and `post_mention` (tagged in a post description). The in-app notification type stays `mention` for both — only the email subject/body distinguishes them.
+
 ## Social Achievements: Separate RPC + Trigger-Based Filtering (2026-02-23)
 
 **Decision:** Created a separate `get_social_achievement_stats` RPC (not extending the existing `get_achievement_stats`) and added a `trigger` parameter to `checkAndAwardAchievements` that filters which achievements to check and which RPCs to call.

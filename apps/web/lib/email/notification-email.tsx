@@ -13,7 +13,7 @@ import {
   pixelBasedPreset,
 } from "@react-email/components";
 
-export type NotificationType = "comment" | "mention";
+export type NotificationType = "comment" | "mention" | "post_mention";
 
 interface NotificationEmailProps {
   actorUsername: string;
@@ -33,7 +33,9 @@ function subjectLine(type: NotificationType, actor: string): string {
     case "comment":
       return `${actor} commented on your post`;
     case "mention":
-      return `${actor} mentioned you`;
+      return `${actor} mentioned you in a comment`;
+    case "post_mention":
+      return `${actor} tagged you in a post`;
   }
 }
 
@@ -48,6 +50,8 @@ function previewText(
       return `${actor}: "${short}"`;
     case "mention":
       return `${actor} mentioned you: "${short}"`;
+    case "post_mention":
+      return `${actor} tagged you: "${short}"`;
   }
 }
 
@@ -61,6 +65,8 @@ function headline(
       return `${actor} commented on ${postLabel}:`;
     case "mention":
       return `${actor} mentioned you in ${postLabel}:`;
+    case "post_mention":
+      return `${actor} tagged you in ${postLabel}:`;
   }
 }
 
@@ -104,7 +110,9 @@ export default function NotificationEmail({
                 <strong>{actorUsername}</strong>{" "}
                 {type === "comment"
                   ? `commented on ${postLabel}:`
-                  : `mentioned you in ${postLabel}:`}
+                  : type === "post_mention"
+                    ? `tagged you in ${postLabel}:`
+                    : `mentioned you in ${postLabel}:`}
               </Text>
 
               <Section className="bg-gray-50 border-l-4 border-solid border-l-brand border-t-0 border-r-0 border-b-0 px-4 py-3 mb-6">

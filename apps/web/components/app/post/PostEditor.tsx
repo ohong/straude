@@ -3,7 +3,7 @@
 import { useState, useRef } from "react";
 import { useRouter } from "next/navigation";
 import Image from "next/image";
-import { Pencil, X, Sparkles, Upload, Loader2, Trash2 } from "lucide-react";
+import { Pencil, X, Sparkles, Upload, Loader2, Trash2, ChevronLeft, ChevronRight } from "lucide-react";
 import { Button } from "@/components/ui/Button";
 import { Input } from "@/components/ui/Input";
 import { MentionInput } from "@/components/app/shared/MentionInput";
@@ -18,7 +18,9 @@ export function PostEditor({ post }: { post: Post }) {
   const [saving, setSaving] = useState(false);
   const [generating, setGenerating] = useState(false);
   const [deleting, setDeleting] = useState(false);
+  const [uploadingCount, setUploadingCount] = useState(0);
   const fileRef = useRef<HTMLInputElement>(null);
+  const dragIndexRef = useRef<number | null>(null);
 
   async function handleDelete() {
     if (!confirm("Delete this post? This cannot be undone.")) return;
@@ -80,24 +82,42 @@ export function PostEditor({ post }: { post: Post }) {
     const files = e.target.files;
     if (!files) return;
 
-    const remaining = 10 - images.length;
+    const remaining = 10 - images.length - uploadingCount;
+    if (remaining <= 0) return;
     const toUpload = Array.from(files).slice(0, remaining);
 
-    for (const file of toUpload) {
-      const form = new FormData();
-      form.append("file", file);
-      const res = await fetch("/api/upload", { method: "POST", body: form });
-      if (res.ok) {
-        const { url } = await res.json();
-        setImages((prev) => [...prev, url]);
-      }
-    }
+    setUploadingCount((c) => c + toUpload.length);
+
+    await Promise.all(
+      toUpload.map(async (file) => {
+        const form = new FormData();
+        form.append("file", file);
+        try {
+          const res = await fetch("/api/upload", { method: "POST", body: form });
+          if (res.ok) {
+            const { url } = await res.json();
+            setImages((prev) => [...prev, url]);
+          }
+        } finally {
+          setUploadingCount((c) => c - 1);
+        }
+      })
+    );
 
     if (fileRef.current) fileRef.current.value = "";
   }
 
   function removeImage(index: number) {
     setImages((prev) => prev.filter((_, i) => i !== index));
+  }
+
+  function moveImage(from: number, to: number) {
+    setImages((prev) => {
+      const next = [...prev];
+      const [moved] = next.splice(from, 1);
+      next.splice(to, 0, moved);
+      return next;
+    });
   }
 
   if (!editing) {
@@ -151,35 +171,85 @@ export function PostEditor({ post }: { post: Post }) {
         </div>
 
         {/* Image uploads */}
-        {images.length > 0 && (
-          <div className="flex gap-2 flex-wrap">
+        {(images.length > 0 || uploadingCount > 0) && (
+          <div className="flex gap-2.5 flex-wrap">
             {images.map((url, i) => (
-              <div key={url} className="relative">
+              <div
+                key={url}
+                className="relative group rounded"
+                draggable
+                onDragStart={(e) => {
+                  dragIndexRef.current = i;
+                  e.currentTarget.style.opacity = "0.4";
+                }}
+                onDragEnd={(e) => {
+                  e.currentTarget.style.opacity = "1";
+                }}
+                onDragOver={(e) => e.preventDefault()}
+                onDragEnter={(e) => {
+                  e.currentTarget.classList.add("ring-2", "ring-accent");
+                }}
+                onDragLeave={(e) => {
+                  e.currentTarget.classList.remove("ring-2", "ring-accent");
+                }}
+                onDrop={(e) => {
+                  e.currentTarget.classList.remove("ring-2", "ring-accent");
+                  if (dragIndexRef.current !== null && dragIndexRef.current !== i) {
+                    moveImage(dragIndexRef.current, i);
+                  }
+                  dragIndexRef.current = null;
+                }}
+              >
                 <Image
                   src={url}
                   alt=""
-                  width={80}
-                  height={80}
-                  className="h-20 w-20 rounded object-cover border border-border"
+                  width={112}
+                  height={112}
+                  className="h-28 w-28 rounded object-cover border border-border cursor-grab active:cursor-grabbing"
                 />
                 <button
+                  type="button"
                   onClick={() => removeImage(i)}
                   className="absolute -top-1.5 -right-1.5 flex h-5 w-5 items-center justify-center rounded-full bg-foreground text-background text-xs"
                 >
                   <X size={12} />
                 </button>
+                {i > 0 && (
+                  <button
+                    type="button"
+                    onClick={() => moveImage(i, i - 1)}
+                    className="absolute bottom-1 left-1 flex h-5 w-5 items-center justify-center rounded-full bg-background/80 text-foreground opacity-100 sm:opacity-0 sm:group-hover:opacity-100 transition-opacity"
+                  >
+                    <ChevronLeft size={12} />
+                  </button>
+                )}
+                {i < images.length - 1 && (
+                  <button
+                    type="button"
+                    onClick={() => moveImage(i, i + 1)}
+                    className="absolute bottom-1 right-1 flex h-5 w-5 items-center justify-center rounded-full bg-background/80 text-foreground opacity-100 sm:opacity-0 sm:group-hover:opacity-100 transition-opacity"
+                  >
+                    <ChevronRight size={12} />
+                  </button>
+                )}
               </div>
+            ))}
+            {Array.from({ length: uploadingCount }).map((_, i) => (
+              <div
+                key={`skeleton-${i}`}
+                className="h-28 w-28 rounded border border-border bg-muted/30 animate-pulse"
+              />
             ))}
           </div>
         )}
 
         <div className="flex items-center gap-2">
-          {images.length < 10 && (
+          {images.length + uploadingCount < 10 && (
             <>
               <input
                 ref={fileRef}
                 type="file"
-                accept="image/jpeg,image/png,image/webp,image/gif"
+                accept="image/jpeg,image/png,image/webp,image/gif,image/heic,image/heif,.heic,.heif"
                 multiple
                 onChange={handleImageUpload}
                 className="hidden"
@@ -188,9 +258,14 @@ export function PostEditor({ post }: { post: Post }) {
                 variant="secondary"
                 size="sm"
                 onClick={() => fileRef.current?.click()}
+                disabled={uploadingCount > 0}
               >
-                <Upload size={14} className="mr-1.5" />
-                Add images
+                {uploadingCount > 0 ? (
+                  <Loader2 size={14} className="mr-1.5 animate-spin" />
+                ) : (
+                  <Upload size={14} className="mr-1.5" />
+                )}
+                {uploadingCount > 0 ? `Uploading ${uploadingCount}...` : "Add images"}
               </Button>
             </>
           )}

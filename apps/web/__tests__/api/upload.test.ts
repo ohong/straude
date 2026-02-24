@@ -98,6 +98,30 @@ describe("POST /api/upload", () => {
     expect(json.error).toContain("File type not allowed");
   });
 
+  it("accepts heic files", async () => {
+    mockSupabase({ publicUrl: "https://cdn.example.com/user-1/abc.heic" });
+
+    const res = await POST(
+      makeUploadRequest({ name: "photo.heic", type: "image/heic", size: 100 })
+    );
+    const json = await res.json();
+
+    expect(res.status).toBe(200);
+    expect(json.url).toBe("https://cdn.example.com/user-1/abc.heic");
+  });
+
+  it("accepts heif files", async () => {
+    mockSupabase({ publicUrl: "https://cdn.example.com/user-1/abc.heif" });
+
+    const res = await POST(
+      makeUploadRequest({ name: "photo.heif", type: "image/heif", size: 100 })
+    );
+    const json = await res.json();
+
+    expect(res.status).toBe(200);
+    expect(json.url).toBe("https://cdn.example.com/user-1/abc.heif");
+  });
+
   it("accepts jpeg files", async () => {
     mockSupabase({ publicUrl: "https://cdn.example.com/user-1/abc.jpg" });
 
@@ -144,16 +168,16 @@ describe("POST /api/upload", () => {
     expect(res.status).toBe(200);
   });
 
-  it("rejects files over 5MB", async () => {
+  it("rejects files over 20MB", async () => {
     mockSupabase({});
 
     const res = await POST(
-      makeUploadRequest({ name: "huge.jpg", type: "image/jpeg", size: 6 * 1024 * 1024 })
+      makeUploadRequest({ name: "huge.jpg", type: "image/jpeg", size: 21 * 1024 * 1024 })
     );
     const json = await res.json();
 
     expect(res.status).toBe(400);
-    expect(json.error).toContain("5MB");
+    expect(json.error).toContain("20MB");
   });
 
   it("returns url on success", async () => {

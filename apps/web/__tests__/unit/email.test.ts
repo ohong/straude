@@ -72,8 +72,23 @@ describe("sendNotificationEmail", () => {
     });
 
     const call = mockSend.mock.calls[0][0];
-    expect(call.subject).toBe("alice mentioned you");
+    expect(call.subject).toBe("alice mentioned you in a comment");
     expect(call.tags[0]).toEqual({ name: "type", value: "mention" });
+  });
+
+  it("sends post_mention email with correct subject", async () => {
+    const mockSend = vi.fn().mockResolvedValue({ id: "email-pm1" });
+    (getResend as any).mockReturnValue({ emails: { send: mockSend } });
+
+    await sendNotificationEmail({
+      ...baseParams,
+      type: "post_mention",
+      idempotencyKey: "mention-post/p1/u2",
+    });
+
+    const call = mockSend.mock.calls[0][0];
+    expect(call.subject).toBe("alice tagged you in a post");
+    expect(call.tags[0]).toEqual({ name: "type", value: "post_mention" });
   });
 
   it("skips sending when Resend is not configured", async () => {

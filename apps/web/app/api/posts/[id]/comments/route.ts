@@ -19,6 +19,11 @@ function fireNotificationEmail(opts: {
   postId: string;
   idempotencyKey: string;
 }) {
+  const prefField =
+    opts.type === "mention"
+      ? "email_mention_notifications"
+      : "email_notifications";
+
   // Defer getServiceClient() inside the promise to avoid calling it
   // when env vars aren't set (e.g. in tests).
   Promise.resolve()
@@ -27,7 +32,7 @@ function fireNotificationEmail(opts: {
       return Promise.all([
         db
           .from("users")
-          .select("email_notifications")
+          .select(prefField)
           .eq("id", opts.recipientUserId)
           .single(),
         db.auth.admin.getUserById(opts.recipientUserId),
@@ -36,7 +41,7 @@ function fireNotificationEmail(opts: {
     })
     .then(([profileRes, authRes, postRes]) => {
       const email = authRes.data?.user?.email;
-      if (!profileRes.data?.email_notifications || !email) return;
+      if (!profileRes.data?.[prefField] || !email) return;
 
       return sendNotificationEmail({
         recipientUserId: opts.recipientUserId,

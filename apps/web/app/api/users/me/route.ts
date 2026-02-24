@@ -14,6 +14,7 @@ const ALLOWED_FIELDS = [
   "github_username",
   "onboarding_completed",
   "email_notifications",
+  "email_mention_notifications",
 ] as const;
 
 export async function GET() {
