@@ -18,6 +18,7 @@
 
 ### Fixed
 
+- **Centralized button cursor styles.** Moved `cursor: pointer` to a global CSS rule for all enabled buttons and `cursor: not-allowed` for disabled buttons. Removed redundant inline `cursor-pointer` classes across components. Added `type="button"` to buttons in CommentThread and FollowButton. Credit: @alexesprit PR #4.
 - **Description save failing for long posts.** Database constraint was still 500 chars while API/UI had been bumped to 5000. Applied migration to align the DB constraint. Added character counter to PostEditor (amber at 4500, red past 5000) and disabled Save when over limit. Updated AI caption generator truncation to match.
 
 ### Changed
