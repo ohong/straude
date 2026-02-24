@@ -159,7 +159,7 @@ export async function POST(request: Request) {
     });
   }
 
-  checkAndAwardAchievements(userId).catch(() => {});
+  checkAndAwardAchievements(userId, "usage").catch(() => {});
 
   return NextResponse.json({ results } satisfies UsageSubmitResponse);
 }

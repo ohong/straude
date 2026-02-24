@@ -1,5 +1,18 @@
 # Architecture & Design Decisions
 
+## Social Achievements: Separate RPC + Trigger-Based Filtering (2026-02-23)
+
+**Decision:** Created a separate `get_social_achievement_stats` RPC (not extending the existing `get_achievement_stats`) and added a `trigger` parameter to `checkAndAwardAchievements` that filters which achievements to check and which RPCs to call.
+
+**Alternatives considered:**
+1. **Extend existing RPC** — add `kudos_received`, `kudos_sent`, `comments_received`, `comments_sent` columns to `get_achievement_stats`. Simpler migration but creates a wider query touching `daily_usage`, `kudos`, `comments`, and `posts` on every call, even when only one category is needed.
+2. **No trigger filtering** — check all 33 achievements on every trigger. A single kudos toggle would fire 6 RPC calls (usage stats + streak + social stats, twice for giver + receiver). Wasteful.
+3. **Separate RPC + trigger filtering** (chosen) — social triggers only call `get_social_achievement_stats`, usage triggers only call `get_achievement_stats` + `calculate_user_streak`. Each path touches only the tables it needs.
+
+**Self-interactions:** Kudos/comments on own posts count toward achievements. The schema doesn't prevent self-kudos (only the notification is skipped), and filtering adds join complexity for negligible impact on thresholds.
+
+**Slug convention:** Category-prefixed thresholds (`kudos-received-25`, `kudos-sent-100`, `comments-received-500`) for consistency with existing tiered achievements (`1m-output`, `10m-output`). Enables prefix-based queries and makes tier progression self-documenting in the DB.
+
 ## Achievement Stats: Supabase RPC Over Client-Side Aggregation (2026-02-24)
 
 **Decision:** Created a `get_achievement_stats` plpgsql function that returns a single row of pre-aggregated stats (total cost, output/input/cache tokens, sessions, max daily cost, sync count, verified sync count). `checkAndAwardAchievements` now calls this RPC instead of fetching all `daily_usage` rows and reducing client-side.
