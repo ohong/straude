@@ -16,6 +16,14 @@
   --font-mono: var(--font-mono);
 }
 
+button:enabled {
+  cursor: pointer;
+}
+
+button:disabled {
+  cursor: not-allowed;
+}
+
 body {
   background: var(--color-background);
   color: var(--color-foreground);

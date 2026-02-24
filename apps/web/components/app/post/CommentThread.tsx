@@ -143,12 +143,14 @@ export function CommentThread({
                     onSubmit={() => handleEdit(comment.id)}
                   />
                   <button
+                    type="button"
                     onClick={() => handleEdit(comment.id)}
                     className="text-xs font-semibold text-accent hover:underline"
                   >
                     Save
                   </button>
                   <button
+                    type="button"
                     onClick={() => setEditingId(null)}
                     className="text-xs text-muted hover:underline"
                   >
@@ -161,6 +163,7 @@ export function CommentThread({
               {userId === comment.user_id && editingId !== comment.id && (
                 <div className="mt-1 flex gap-3">
                   <button
+                    type="button"
                     onClick={() => {
                       setEditingId(comment.id);
                       setEditContent(comment.content);
@@ -170,6 +173,7 @@ export function CommentThread({
                     Edit
                   </button>
                   <button
+                    type="button"
                     onClick={() => handleDelete(comment.id)}
                     className="text-xs text-muted hover:text-error"
                   >
@@ -196,7 +200,7 @@ export function CommentThread({
             type="button"
             onClick={handleSubmit}
             disabled={!content.trim() || submitting}
-            className="shrink-0 bg-accent px-4 py-2 text-sm font-semibold text-white disabled:opacity-50"
+            className="shrink-0 bg-accent px-4 py-2 text-sm font-semibold text-white disabled:cursor-not-allowed disabled:opacity-50"
             style={{ borderRadius: 4 }}
           >
             {submitting ? "..." : "Post"}

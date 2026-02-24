@@ -29,8 +29,8 @@ export function FollowButton({
       disabled={loading}
       className={
         following
-          ? "border border-border px-3 py-1 text-sm font-semibold hover:bg-subtle disabled:opacity-50"
-          : "bg-accent px-3 py-1 text-sm font-semibold text-white disabled:opacity-50"
+          ? "border border-border px-3 py-1 text-sm font-semibold hover:bg-subtle disabled:cursor-not-allowed disabled:opacity-50"
+          : "bg-accent px-3 py-1 text-sm font-semibold text-white disabled:cursor-not-allowed disabled:opacity-50"
       }
       style={{ borderRadius: 4 }}
     >
