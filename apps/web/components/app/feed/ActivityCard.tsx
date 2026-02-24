@@ -2,10 +2,11 @@
 
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { Zap, MessageCircle, Share2, CheckCircle, Check } from "lucide-react";
+import { Zap, MessageCircle, CheckCircle } from "lucide-react";
 import { Avatar } from "@/components/ui/Avatar";
 import { ImageGrid } from "@/components/app/shared/ImageGrid";
 import { ImageLightbox } from "@/components/app/shared/ImageLightbox";
+import { ShareMenu } from "./ShareMenu";
 import { cn } from "@/lib/utils/cn";
 import { formatTokens } from "@/lib/utils/format";
 import { mentionsToMarkdownLinks } from "@/lib/utils/mentions";
@@ -45,7 +46,6 @@ export function ActivityCard({ post }: { post: Post }) {
   const [kudosCount, setKudosCount] = useState(post.kudos_count ?? 0);
   const [animating, setAnimating] = useState(false);
   const [lightboxIndex, setLightboxIndex] = useState<number | null>(null);
-  const [copied, setCopied] = useState(false);
 
   const commentCount = post.comment_count ?? 0;
   const recentComments = post.recent_comments ?? [];
@@ -61,13 +61,6 @@ export function ActivityCard({ post }: { post: Post }) {
       setTimeout(() => setAnimating(false), 200);
     }
     await fetch(`/api/posts/${post.id}/kudos`, { method });
-  }
-
-  async function handleShare() {
-    const url = `${window.location.origin}/post/${post.id}`;
-    await navigator.clipboard.writeText(url);
-    setCopied(true);
-    setTimeout(() => setCopied(false), 2000);
   }
 
   return (
@@ -222,6 +215,7 @@ export function ActivityCard({ post }: { post: Post }) {
           <MessageCircle size={16} aria-hidden="true" />
           {commentCount} {commentCount === 1 ? "comment" : "comments"}
         </Link>
+<<<<<<< Updated upstream
         <button
           type="button"
           onClick={handleShare}
@@ -230,6 +224,9 @@ export function ActivityCard({ post }: { post: Post }) {
           {copied ? "Copied!" : "Share"}{" "}
           {copied ? <Check size={16} aria-hidden="true" /> : <Share2 size={16} aria-hidden="true" />}
         </button>
+=======
+        <ShareMenu postId={post.id} />
+>>>>>>> Stashed changes
       </div>
 
       {/* Lightbox */}
