@@ -192,7 +192,7 @@ describe("runCcusage", () => {
     expect(mockExecFileSync).toHaveBeenNthCalledWith(
       2,
       "npx",
-      ["--yes", "ccusage", "daily", "--json", "--since", "20250601", "--until", "20250601"],
+      ["--yes", "ccusage@17", "daily", "--json", "--since", "20250601", "--until", "20250601"],
       expect.objectContaining({ encoding: "utf-8" }),
     );
   });

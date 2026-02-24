@@ -12,6 +12,11 @@ interface ExecError extends Error {
 /** Resolved ccusage command. Cached after first resolution. */
 let _resolved: { cmd: string; args: string[] } | undefined;
 
+// Pin to v17 — ccusage v18 uses the `runtime:` protocol in its dependencies,
+// which npm doesn't support (EUNSUPPORTEDPROTOCOL). Safe to unpin once ccusage
+// drops `runtime:` or npm adds support for it.
+const CCUSAGE_PKG = "ccusage@17";
+
 /**
  * Resolve the fastest available way to run ccusage.
  * 1. Direct `ccusage` binary on PATH (globally installed) — fastest
@@ -51,7 +56,9 @@ export function _resetCcusageResolver(): void {
 /** Run ccusage via the resolved binary. */
 function execCcusage(args: string[]): string {
   const { cmd, args: prefix } = resolveCcusageCommand();
-  const cmdArgs = cmd === "ccusage" ? args : [...prefix, "ccusage", ...args];
+  // When running via bunx/npx, pin the version to avoid ccusage@18+ runtime: protocol issue
+  const pkg = cmd === "ccusage" ? null : CCUSAGE_PKG;
+  const cmdArgs = pkg ? [...prefix, pkg, ...args] : args;
 
   try {
     return execFileSync(cmd, cmdArgs, {
@@ -63,9 +70,9 @@ function execCcusage(args: string[]): string {
     const error = err as ExecError;
 
     if (error.killed || error.signal === "SIGTERM") {
-      const hint = cmd === "ccusage"
-        ? "ccusage daily --json"
-        : `${cmd} ${prefix.join(" ")} ccusage daily --json`;
+      const hint = pkg
+        ? `${cmd} ${prefix.join(" ")} ${pkg} daily --json`
+        : "ccusage daily --json";
       throw new Error(
         `ccusage timed out. Try running \`${hint}\` directly to verify it works.`,
       );
