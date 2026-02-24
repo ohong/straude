@@ -51,6 +51,60 @@ describe("achievement definitions", () => {
   });
 });
 
+describe("trigger filtering correctness", () => {
+  const usageBadges = ACHIEVEMENTS.filter((a) => a.trigger === "usage");
+  const kudosBadges = ACHIEVEMENTS.filter((a) => a.trigger === "kudos");
+  const commentBadges = ACHIEVEMENTS.filter((a) => a.trigger === "comment");
+
+  it("usage badges only depend on usage stats, not social stats", () => {
+    // Max social stats, zero usage stats — no usage badge should fire
+    const stats = makeStats({
+      kudosReceived: 999,
+      kudosSent: 999,
+      commentsReceived: 999,
+      commentsSent: 999,
+    });
+    const earned = usageBadges.filter((a) => a.check(stats));
+    expect(earned).toHaveLength(0);
+  });
+
+  it("kudos badges only depend on kudos stats", () => {
+    // Max non-kudos stats, zero kudos — no kudos badge should fire
+    const stats = makeStats({
+      totalCost: 9999,
+      totalOutputTokens: 999_999_999,
+      commentsReceived: 999,
+      commentsSent: 999,
+    });
+    const earned = kudosBadges.filter((a) => a.check(stats));
+    expect(earned).toHaveLength(0);
+  });
+
+  it("comment badges only depend on comment stats", () => {
+    // Max non-comment stats, zero comments — no comment badge should fire
+    const stats = makeStats({
+      totalCost: 9999,
+      totalOutputTokens: 999_999_999,
+      kudosReceived: 999,
+      kudosSent: 999,
+    });
+    const earned = commentBadges.filter((a) => a.check(stats));
+    expect(earned).toHaveLength(0);
+  });
+
+  it("all kudos badges fire with sufficient kudos stats", () => {
+    const stats = makeStats({ kudosReceived: 500, kudosSent: 500 });
+    const earned = kudosBadges.filter((a) => a.check(stats));
+    expect(earned).toHaveLength(8);
+  });
+
+  it("all comment badges fire with sufficient comment stats", () => {
+    const stats = makeStats({ commentsReceived: 500, commentsSent: 500 });
+    const earned = commentBadges.filter((a) => a.check(stats));
+    expect(earned).toHaveLength(8);
+  });
+});
+
 describe("first-sync", () => {
   const badge = ACHIEVEMENTS.find((a) => a.slug === "first-sync")!;
 

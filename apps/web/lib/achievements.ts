@@ -304,7 +304,7 @@ function fetchIf<T>(condition: boolean, fn: () => PromiseLike<T>): Promise<T | n
  *
  * - "usage" trigger: called from POST /api/usage/submit
  * - "kudos" trigger: called from POST /api/posts/[id]/kudos (for both giver and post owner)
- * - "comment" trigger: called from POST /api/posts/[id]/comments (for the post owner)
+ * - "comment" trigger: called from POST /api/posts/[id]/comments (for both commenter and post owner)
  */
 export async function checkAndAwardAchievements(
   userId: string,
