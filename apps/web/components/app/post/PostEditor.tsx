@@ -102,7 +102,7 @@ export function PostEditor({ post }: { post: Post }) {
 
   if (!editing) {
     return (
-      <div className="flex justify-end gap-2 px-6 py-3 border-b border-dashed border-muted/30">
+      <div className="flex justify-end gap-2 px-4 py-3 border-b border-dashed border-muted/30 sm:px-6">
         <Button variant="ghost" size="sm" onClick={() => setEditing(true)}>
           <Pencil size={14} className="mr-1.5" />
           Edit post
@@ -116,7 +116,7 @@ export function PostEditor({ post }: { post: Post }) {
   }
 
   return (
-    <div className="border-b border-border px-6 py-4">
+    <div className="border-b border-border px-4 py-4 sm:px-6">
       <div className="flex items-center justify-between mb-4">
         <h3 className="text-sm font-semibold uppercase tracking-widest text-muted">
           Edit Post

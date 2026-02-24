@@ -80,14 +80,21 @@ export function FeedList({
   cursorRef.current = cursor;
   feedTypeRef.current = feedType;
 
-  // Close dropdown on outside click
+  // Close dropdown on outside click or Escape
   useEffect(() => {
     function handleClick(e: MouseEvent) {
       if (dropdownRef.current && !dropdownRef.current.contains(e.target as Node))
         setDropdownOpen(false);
     }
+    function handleKeyDown(e: KeyboardEvent) {
+      if (e.key === "Escape") setDropdownOpen(false);
+    }
     document.addEventListener("click", handleClick);
-    return () => document.removeEventListener("click", handleClick);
+    document.addEventListener("keydown", handleKeyDown);
+    return () => {
+      document.removeEventListener("click", handleClick);
+      document.removeEventListener("keydown", handleKeyDown);
+    };
   }, []);
 
   const loadMore = useCallback(async () => {
@@ -151,7 +158,7 @@ export function FeedList({
         <SyncCommandHint />
 
         {showTabs && (
-          <div ref={dropdownRef} className="relative">
+          <div ref={dropdownRef} className="relative ml-auto">
             <button
               type="button"
               onClick={() => setDropdownOpen((v) => !v)}
@@ -187,7 +194,7 @@ export function FeedList({
       </div>
 
       {switching ? (
-        <div className="flex justify-center py-12">
+        <div className="flex justify-center py-12" role="status">
           <span className="text-sm text-muted">Loading&hellip;</span>
         </div>
       ) : posts.length === 0 ? (
@@ -213,7 +220,7 @@ export function FeedList({
             <ActivityCard key={post.id} post={post} />
           ))}
           {cursor && (
-            <div ref={sentinel} className="flex justify-center py-8">
+            <div ref={sentinel} className="flex justify-center py-8" role="status" aria-live="polite">
               {loading && (
                 <span className="text-sm text-muted">Loading&hellip;</span>
               )}

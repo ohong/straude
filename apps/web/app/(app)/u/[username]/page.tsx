@@ -195,17 +195,17 @@ export default async function ProfilePage({
 
   return (
     <>
-      <header className="sticky top-0 z-10 flex h-16 items-center border-b border-border bg-background px-6">
+      <header className="sticky top-0 z-10 flex h-14 items-center border-b border-border bg-background px-4 sm:px-6">
         <h3 className="text-lg font-medium">@{username}</h3>
       </header>
 
       {/* Profile header */}
-      <div className="border-b border-border p-6">
-        <div className="flex items-start gap-5">
+      <div className="border-b border-border px-4 py-5 sm:p-6">
+        <div className="flex items-start gap-4 sm:gap-5">
           <Avatar src={profile.avatar_url} alt={profile.username ?? ""} size="lg" fallback={profile.username ?? "?"} />
           <div className="flex-1">
-            <div className="flex items-center gap-3">
-              <h1 className="text-2xl font-medium" style={{ letterSpacing: "-0.03em" }}>
+            <div className="flex flex-wrap items-center gap-2 sm:gap-3">
+              <h1 className="text-xl font-medium sm:text-2xl" style={{ letterSpacing: "-0.03em" }}>
                 {profile.display_name ?? profile.username}
               </h1>
               {!isOwn && authUser && (
@@ -306,7 +306,7 @@ export default async function ProfilePage({
       </div>
 
       {/* Contribution graph */}
-      <div className="border-b border-border p-6">
+      <div className="border-b border-border px-4 py-5 sm:p-6">
         <p className="mb-3 text-xs font-semibold uppercase tracking-widest text-muted">
           Contributions
         </p>
@@ -315,7 +315,7 @@ export default async function ProfilePage({
 
       {/* Posts */}
       <div>
-        <div className="border-b border-border px-6 py-3">
+        <div className="border-b border-border px-4 py-3 sm:px-6">
           <p className="text-xs font-semibold uppercase tracking-widest text-muted">
             Recent Activities
           </p>
@@ -323,7 +323,7 @@ export default async function ProfilePage({
         {normalizedPosts.length > 0 ? (
           <FeedList initialPosts={normalizedPosts} userId={authUser?.id ?? ""} showTabs={false} />
         ) : (
-          <div className="px-6 py-12 text-center text-sm text-muted">
+          <div className="px-4 py-12 text-center text-sm text-muted sm:px-6">
             No activities yet.
           </div>
         )}

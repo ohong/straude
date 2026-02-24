@@ -81,7 +81,7 @@ export function TopHeader({ username, avatarUrl }: TopHeaderProps) {
   const [notifications, setNotifications] = useState<Notification[]>([]);
   const [unreadCount, setUnreadCount] = useState(0);
 
-  // Close dropdowns on outside click
+  // Close dropdowns on outside click or Escape
   useEffect(() => {
     function handleClick(e: MouseEvent) {
       const target = e.target as Node;
@@ -94,8 +94,18 @@ export function TopHeader({ username, avatarUrl }: TopHeaderProps) {
       if (notifOpen && notifRef.current && !notifRef.current.contains(target))
         setNotifOpen(false);
     }
+    function handleKeyDown(e: KeyboardEvent) {
+      if (e.key === "Escape") {
+        setProfileOpen(false);
+        setNotifOpen(false);
+      }
+    }
     document.addEventListener("click", handleClick);
-    return () => document.removeEventListener("click", handleClick);
+    document.addEventListener("keydown", handleKeyDown);
+    return () => {
+      document.removeEventListener("click", handleClick);
+      document.removeEventListener("keydown", handleKeyDown);
+    };
   }, [profileOpen, notifOpen]);
 
   const fetchNotifications = useCallback(async () => {
@@ -179,6 +189,7 @@ export function TopHeader({ username, avatarUrl }: TopHeaderProps) {
               }}
               className="relative text-muted hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent focus-visible:ring-offset-2 rounded"
               aria-label="Notifications"
+              aria-haspopup="true"
               aria-expanded={notifOpen}
             >
               <Bell size={20} aria-hidden="true" />
@@ -188,7 +199,7 @@ export function TopHeader({ username, avatarUrl }: TopHeaderProps) {
             </button>
 
             {notifOpen && (
-              <div className="absolute right-0 top-full mt-1 w-80 rounded border border-border bg-background shadow-lg">
+              <div className="absolute right-0 top-full mt-1 w-[calc(100vw-2rem)] rounded border border-border bg-background shadow-lg sm:w-80">
                 <div className="flex items-center justify-between border-b border-border px-4 py-2.5">
                   <span className="text-sm font-semibold">Notifications</span>
                   {unreadCount > 0 && (
@@ -260,6 +271,7 @@ export function TopHeader({ username, avatarUrl }: TopHeaderProps) {
               type="button"
               onClick={() => setProfileOpen((v) => !v)}
               aria-label="Profile menu"
+              aria-haspopup="true"
               aria-expanded={profileOpen}
               className="rounded focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent focus-visible:ring-offset-2"
             >

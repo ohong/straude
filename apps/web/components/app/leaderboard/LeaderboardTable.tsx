@@ -58,13 +58,13 @@ export function LeaderboardTable({
   return (
     <div>
       {/* Period tabs */}
-      <div className="flex border-b border-border">
+      <div className="flex overflow-x-auto border-b border-border">
         {PERIODS.map(({ value, label }) => (
           <button
             key={value}
             onClick={() => navigate(value, currentRegion ?? "")}
             className={cn(
-              "cursor-pointer border-b-2 border-transparent px-5 py-3 text-sm font-semibold text-muted",
+              "shrink-0 cursor-pointer border-b-2 border-transparent px-4 py-3 text-sm font-semibold text-muted sm:px-5",
               currentPeriod === value && "border-b-accent text-accent",
             )}
           >

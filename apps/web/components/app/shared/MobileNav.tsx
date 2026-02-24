@@ -2,13 +2,12 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { Home, Trophy, Plus, User } from "lucide-react";
+import { Home, Trophy, User } from "lucide-react";
 import { cn } from "@/lib/utils/cn";
 
 const ITEMS = [
   { href: "/feed", label: "Home", icon: Home },
   { href: "/leaderboard", label: "Leaderboard", icon: Trophy },
-  { href: "/settings/import", label: "Post", icon: Plus },
   { href: "/profile", label: "Profile", icon: User },
 ];
 

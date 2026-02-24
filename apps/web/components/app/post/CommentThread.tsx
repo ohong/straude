@@ -119,7 +119,7 @@ export function CommentThread({
       {/* Comment list */}
       <div className="flex flex-col">
         {comments.map((comment) => (
-          <div key={comment.id} className="flex gap-3 border-b border-dashed border-muted/30 px-6 py-4">
+          <div key={comment.id} className="flex gap-3 border-b border-dashed border-muted/30 px-4 py-4 sm:px-6">
             <Link href={comment.user?.username ? `/u/${comment.user.username}` : "#"}>
               <Avatar src={comment.user?.avatar_url} alt={comment.user?.username ?? ""} size="xs" fallback={comment.user?.username ?? "?"} />
             </Link>
@@ -184,7 +184,7 @@ export function CommentThread({
 
       {/* Comment input */}
       {userId && (
-        <div className="flex items-center gap-3 px-6 py-4">
+        <div className="flex items-center gap-3 px-4 py-4 sm:px-6">
           <MentionInput
             value={content}
             onChange={setContent}

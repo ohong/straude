@@ -14,6 +14,7 @@ interface ImageLightboxProps {
 export function ImageLightbox({ images, initialIndex, onClose }: ImageLightboxProps) {
   const [index, setIndex] = useState(initialIndex);
   const closeRef = useRef<HTMLButtonElement>(null);
+  const dialogRef = useRef<HTMLDivElement>(null);
   const touchStartX = useRef<number | null>(null);
 
   const hasPrev = index > 0;
@@ -52,6 +53,28 @@ export function ImageLightbox({ images, initialIndex, onClose }: ImageLightboxPr
     closeRef.current?.focus();
   }, []);
 
+  // Trap focus within lightbox
+  useEffect(() => {
+    function handleFocusTrap(e: KeyboardEvent) {
+      if (e.key !== "Tab" || !dialogRef.current) return;
+      const focusable = dialogRef.current.querySelectorAll<HTMLElement>(
+        'button, [href], [tabindex]:not([tabindex="-1"])'
+      );
+      if (focusable.length === 0) return;
+      const first = focusable[0];
+      const last = focusable[focusable.length - 1];
+      if (e.shiftKey && document.activeElement === first) {
+        e.preventDefault();
+        last.focus();
+      } else if (!e.shiftKey && document.activeElement === last) {
+        e.preventDefault();
+        first.focus();
+      }
+    }
+    document.addEventListener("keydown", handleFocusTrap);
+    return () => document.removeEventListener("keydown", handleFocusTrap);
+  }, []);
+
   // Touch swipe
   function handleTouchStart(e: React.TouchEvent) {
     touchStartX.current = e.touches[0].clientX;
@@ -73,8 +96,10 @@ export function ImageLightbox({ images, initialIndex, onClose }: ImageLightboxPr
 
   return createPortal(
     <div
+      ref={dialogRef}
       role="dialog"
       aria-modal="true"
+      aria-label={`Image ${index + 1} of ${images.length}`}
       className="fixed inset-0 z-50 flex items-center justify-center bg-black/85"
       onClick={handleBackdropClick}
       onTouchStart={handleTouchStart}

@@ -24,6 +24,7 @@ export function FollowButton({
 
   return (
     <button
+      type="button"
       onClick={toggle}
       disabled={loading}
       className={

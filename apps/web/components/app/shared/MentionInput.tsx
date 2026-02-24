@@ -194,6 +194,8 @@ export function MentionInput({
       {suggestions.length > 0 && mentionQuery !== null && (
         <div
           ref={dropdownRef}
+          role="listbox"
+          aria-label="Mention suggestions"
           className="absolute left-0 top-full z-50 mt-1 w-64 overflow-hidden border border-border bg-background shadow-lg"
           style={{ borderRadius: 6 }}
         >
@@ -201,6 +203,8 @@ export function MentionInput({
             <button
               key={user.id}
               type="button"
+              role="option"
+              aria-selected={i === activeIndex}
               onMouseDown={(e) => {
                 e.preventDefault(); // prevent blur
                 selectUser(user);

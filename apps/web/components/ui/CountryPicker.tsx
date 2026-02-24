@@ -121,12 +121,19 @@ export function CountryPicker({ value, onChange, id, name }: CountryPickerProps)
           {selected ? (
             <span
               role="button"
-              tabIndex={-1}
+              tabIndex={0}
               onClick={(e) => {
                 e.stopPropagation();
                 onChange("");
               }}
-              className="ml-2 flex-shrink-0 text-muted hover:text-foreground"
+              onKeyDown={(e) => {
+                if (e.key === "Enter" || e.key === " ") {
+                  e.preventDefault();
+                  e.stopPropagation();
+                  onChange("");
+                }
+              }}
+              className="ml-2 flex-shrink-0 rounded text-muted hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent"
               aria-label="Clear country"
             >
               <X size={16} />
@@ -140,13 +147,19 @@ export function CountryPicker({ value, onChange, id, name }: CountryPickerProps)
       {open && (
         <ul
           ref={listRef}
+          role="listbox"
+          aria-label="Countries"
           className="absolute left-0 right-0 top-full z-20 mt-1 max-h-60 overflow-y-auto rounded-[4px] border border-border bg-white shadow-sm"
         >
           {filtered.length === 0 ? (
             <li className="px-4 py-3 text-sm text-muted">No countries found</li>
           ) : (
             filtered.map((c, i) => (
-              <li key={c.code}>
+              <li
+                key={c.code}
+                role="option"
+                aria-selected={c.code === value}
+              >
                 <button
                   type="button"
                   data-index={i}

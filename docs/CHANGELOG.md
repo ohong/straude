@@ -2,6 +2,16 @@
 
 ## Unreleased
 
+### Fixed
+
+- **Feed dropdown hidden on mobile.** The feed type selector (Global/Following/My Sessions) was left-aligned on mobile because `SyncCommandHint` is `display: none` below `sm`. Added `ml-auto` so the dropdown stays right-aligned — the dropdown menu now opens fully visible on small screens.
+- **Notification dropdown overflow on small screens.** Changed the notifications panel from a fixed `w-80` to `w-[calc(100vw-2rem)] sm:w-80` so it fits within the viewport on phones narrower than 320px.
+- **Excessive horizontal padding on mobile.** Reduced `px-6` to `px-4 sm:px-6` across ActivityCard, post detail header, comment thread, post editor, profile page header/sections, and "Recent Activities" label. Reclaims ~32px of horizontal space on mobile.
+- **Profile name/button wrapping.** Added `flex-wrap` and smaller gap/font on mobile so the display name + Follow/Edit button row doesn't overflow on narrow screens.
+- **Leaderboard period tabs overflow.** Added `overflow-x-auto` and `shrink-0` to period tab buttons with tighter `px-4 sm:px-5` so they scroll horizontally on small screens instead of squishing.
+- **Accessibility audit fixes.** ImageGrid buttons now have `aria-label`s. ActivityCard clickable body has focus-visible ring. All action buttons have `type="button"`. Dropdowns (TopHeader, FeedList) close on Escape. ImageLightbox traps focus while open and has `aria-label`. CountryPicker clear button is keyboard-accessible (`tabIndex={0}`, Enter/Space). MentionInput and CountryPicker dropdowns use `role="listbox"` with `role="option"` items. Notification/profile triggers have `aria-haspopup`. Loading states announce via `role="status"`. Decorative icons marked `aria-hidden`.
+- **Removed "Post" from mobile bottom nav.** Users can't run CLI sync commands on mobile, so the import shortcut was noise. Bottom nav now has 3 items: Home, Leaderboard, Profile.
+
 ### Added
 
 - **9 new achievement badges.** Input tokens (1M/10M/100M), cache tokens (1B/5B/20B), Session Surge (1,000 sessions), Power Session ($100/day), and Verified Contributor (50 verified syncs). Total badges: 17. Credit: @alexesprit PR #1.

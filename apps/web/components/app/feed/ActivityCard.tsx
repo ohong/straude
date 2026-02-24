@@ -71,7 +71,7 @@ export function ActivityCard({ post }: { post: Post }) {
   }
 
   return (
-    <article className="border-b border-border p-6">
+    <article className="border-b border-border px-4 py-5 sm:p-6">
       {/* Header */}
       <div className="flex items-center gap-3">
         <Link href={user?.username ? `/u/${user.username}` : "#"}>
@@ -101,7 +101,7 @@ export function ActivityCard({ post }: { post: Post }) {
             )}
             {usage?.is_verified && (
               <span className="inline-flex items-center gap-1 font-semibold text-accent">
-                <CheckCircle size={12} />
+                <CheckCircle size={12} aria-hidden="true" />
                 Verified
               </span>
             )}
@@ -111,7 +111,7 @@ export function ActivityCard({ post }: { post: Post }) {
 
       {/* Body — clickable card, but not an <a> to avoid nesting with @mention links */}
       <div
-        className="mt-4 cursor-pointer"
+        className="mt-4 cursor-pointer rounded focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent focus-visible:ring-offset-2"
         role="link"
         tabIndex={0}
         onClick={(e) => {
@@ -186,6 +186,7 @@ export function ActivityCard({ post }: { post: Post }) {
       {/* Actions */}
       <div className="mt-4 flex items-center gap-6 border-t border-dashed border-muted/30 pt-4">
         <button
+          type="button"
           onClick={toggleKudos}
           className={cn(
             "flex items-center gap-2 text-sm font-semibold hover:text-accent",
@@ -222,6 +223,7 @@ export function ActivityCard({ post }: { post: Post }) {
           {commentCount} {commentCount === 1 ? "comment" : "comments"}
         </Link>
         <button
+          type="button"
           onClick={handleShare}
           className="ml-auto flex items-center gap-2 text-sm font-semibold hover:text-accent"
         >

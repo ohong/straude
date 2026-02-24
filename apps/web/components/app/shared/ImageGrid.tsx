@@ -29,6 +29,7 @@ export function ImageGrid({ images, maxVisible = 5, onImageClick }: ImageGridPro
           type="button"
           className="relative block w-full overflow-hidden rounded aspect-[3/2]"
           onClick={(e) => handleClick(e, 0)}
+          aria-label="View image 1"
         >
           <Image src={images[0]} alt="" fill className="object-cover" sizes="(max-width: 768px) 100vw, 600px" />
         </button>
@@ -45,6 +46,7 @@ export function ImageGrid({ images, maxVisible = 5, onImageClick }: ImageGridPro
             type="button"
             className="relative block overflow-hidden rounded aspect-[4/3]"
             onClick={(e) => handleClick(e, i)}
+            aria-label={`View image ${i + 1}`}
           >
             <Image src={url} alt="" fill className="object-cover" sizes="300px" />
           </button>
@@ -60,6 +62,7 @@ export function ImageGrid({ images, maxVisible = 5, onImageClick }: ImageGridPro
           type="button"
           className="relative row-span-2 overflow-hidden rounded"
           onClick={(e) => handleClick(e, 0)}
+          aria-label="View image 1"
         >
           <Image src={images[0]} alt="" fill className="object-cover" sizes="300px" />
         </button>
@@ -69,6 +72,7 @@ export function ImageGrid({ images, maxVisible = 5, onImageClick }: ImageGridPro
             type="button"
             className="relative overflow-hidden rounded"
             onClick={(e) => handleClick(e, i + 1)}
+            aria-label={`View image ${i + 2}`}
           >
             <Image src={url} alt="" fill className="object-cover" sizes="300px" />
           </button>
@@ -86,6 +90,7 @@ export function ImageGrid({ images, maxVisible = 5, onImageClick }: ImageGridPro
             type="button"
             className="relative overflow-hidden rounded"
             onClick={(e) => handleClick(e, i)}
+            aria-label={`View image ${i + 1}`}
           >
             <Image src={url} alt="" fill className="object-cover" sizes="300px" />
           </button>
@@ -101,6 +106,7 @@ export function ImageGrid({ images, maxVisible = 5, onImageClick }: ImageGridPro
         type="button"
         className="relative overflow-hidden rounded"
         onClick={(e) => handleClick(e, 0)}
+        aria-label="View image 1"
       >
         <Image src={visible[0]} alt="" fill className="object-cover" sizes="300px" />
       </button>
@@ -113,6 +119,7 @@ export function ImageGrid({ images, maxVisible = 5, onImageClick }: ImageGridPro
               type="button"
               className="relative overflow-hidden rounded"
               onClick={(e) => handleClick(e, i + 1)}
+              aria-label={`View image ${i + 2}${isLast ? `, plus ${remaining} more` : ""}`}
             >
               <Image src={url} alt="" fill className="object-cover" sizes="150px" />
               {isLast && (
