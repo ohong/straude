@@ -4,6 +4,10 @@
 
 ### Added
 
+- **Onboarding Step 3: "Log your first session."** After claiming a username and filling in profile details, a new third step shows the `npx straude@latest` CLI command with a copy-to-clipboard button and a mock terminal output preview. Users can proceed to the feed immediately or come back to it later. Step indicator dots updated from 2 to 3 across all steps.
+- **Welcome email on onboarding completion.** New users receive a transactional welcome email immediately after completing onboarding. Includes the `npx straude@latest` CLI command and a link to their profile. Fires once per user (idempotency key prevents duplicates). Sent regardless of email_notifications preference (transactional). Uses the same Resend + React Email pattern as notification emails.
+- **24-hour nudge email for inactive signups.** Sends a single "Your streak is waiting" email to users who signed up ~24 hours ago but never pushed usage data via the CLI. Runs hourly via Vercel cron (`/api/cron/nudge-inactive`), protected by `CRON_SECRET`. Respects `email_notifications` preference and includes unsubscribe link. Uses idempotency keys to prevent duplicate sends.
+- **Live feed on landing page.** Unauthenticated visitors now see the latest public posts directly on the landing page. A new "See what builders are logging" section displays up to 8 recent posts with usernames, avatars, cost, tokens, models, kudos count, and comment count. Fetched server-side using the service client. Kudos and comment buttons redirect to `/signup`. Positioned after ProductShowcase for maximum impact.
 - **Email notifications for post mentions.** Users tagged with `@username` in someone else's post description now receive an email notification. Controlled by a new `email_mention_notifications` preference (default: on), separate from comment email notifications. Emails use a "tagged you in a post" subject line distinct from comment mentions.
 
 ### Changed

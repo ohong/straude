@@ -1,6 +1,7 @@
 import { NextResponse, type NextRequest } from "next/server";
 import { createClient } from "@/lib/supabase/server";
 import { COUNTRY_TO_REGION } from "@/lib/constants/regions";
+import { sendWelcomeEmail } from "@/lib/email/send-welcome-email";
 
 const ALLOWED_FIELDS = [
   "username",
@@ -92,6 +93,8 @@ export async function PATCH(request: NextRequest) {
     return NextResponse.json({ error: "No fields to update" }, { status: 400 });
   }
 
+  const isOnboardingUpdate = updates.onboarding_completed === true;
+
   const { data: profile, error } = await supabase
     .from("users")
     .update(updates)
@@ -108,6 +111,19 @@ export async function PATCH(request: NextRequest) {
       );
     }
     return NextResponse.json({ error: error.message }, { status: 500 });
+  }
+
+  // Fire-and-forget welcome email on first onboarding completion.
+  // Resend idempotency key (welcome/{userId}) deduplicates at the provider level,
+  // so even a rare double-submit only sends one email.
+  if (isOnboardingUpdate && user.email) {
+    sendWelcomeEmail({
+      userId: user.id,
+      email: user.email,
+      username: (profile as Record<string, unknown>).username as string | null,
+    }).catch(() => {
+      // Swallow — email failure must not break onboarding
+    });
   }
 
   return NextResponse.json(profile);

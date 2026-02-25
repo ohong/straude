@@ -1,13 +1,113 @@
 "use client";
 
-import { useState, useEffect, useRef } from "react";
+import { useState, useEffect, useRef, useCallback } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { Check, X, Loader2, ArrowRight } from "lucide-react";
+import { Check, X, Loader2, ArrowRight, Copy } from "lucide-react";
 import { Button } from "@/components/ui/Button";
 import { Input } from "@/components/ui/Input";
 import { Textarea } from "@/components/ui/Textarea";
 import { CountryPicker } from "@/components/ui/CountryPicker";
+
+const SYNC_COMMAND = "npx straude@latest";
+
+function Step3LogSession({ username }: { username: string }) {
+  const router = useRouter();
+  const [copied, setCopied] = useState(false);
+
+  const handleCopy = useCallback(() => {
+    navigator.clipboard.writeText(SYNC_COMMAND).then(() => {
+      setCopied(true);
+      setTimeout(() => setCopied(false), 2000);
+    });
+  }, []);
+
+  const displayHandle = username || "yourname";
+
+  return (
+    <>
+      <div className="mb-8">
+        <span
+          className="inline-block h-6 w-6 bg-accent"
+          style={{
+            clipPath: "polygon(20% 0%, 80% 0%, 100% 100%, 0% 100%)",
+          }}
+        />
+      </div>
+
+      <h1
+        className="text-2xl font-medium tracking-tight"
+        style={{ letterSpacing: "-0.03em" }}
+      >
+        Log your first session
+      </h1>
+      <p className="mt-1 mb-6 text-sm text-muted">
+        Run this in your terminal to post today&apos;s Claude Code usage to your
+        profile. Takes about 10 seconds.
+      </p>
+
+      {/* Copy-to-clipboard command */}
+      <button
+        type="button"
+        onClick={handleCopy}
+        className="flex w-full items-center justify-between gap-3 rounded border border-border bg-subtle px-4 py-3 font-[family-name:var(--font-mono)] text-sm transition-[border-color,background-color] duration-150 hover:border-foreground/20 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent focus-visible:ring-offset-2"
+        aria-label="Copy sync command"
+      >
+        <span className="text-foreground">{SYNC_COMMAND}</span>
+        {copied ? (
+          <Check size={16} className="shrink-0 text-accent" aria-hidden="true" />
+        ) : (
+          <Copy size={16} className="shrink-0 text-muted" aria-hidden="true" />
+        )}
+      </button>
+      <p className="mt-1.5 text-xs text-muted">
+        {copied ? "Copied to clipboard" : "Click to copy"}
+      </p>
+
+      {/* Mock CLI output */}
+      <div className="mt-5 rounded border border-border bg-subtle px-4 py-3 font-[family-name:var(--font-mono)] text-xs leading-relaxed text-muted">
+        <p>Pushing usage for 2026-02-25&hellip;</p>
+        <p className="mt-1">
+          {"  "}Cost: <span className="text-foreground">$48.20</span>
+        </p>
+        <p>
+          {"  "}Tokens: <span className="text-foreground">142k</span>
+        </p>
+        <p>
+          {"  "}Models: <span className="text-foreground">claude-sonnet-4</span>
+        </p>
+        <p className="mt-1">
+          Posted{" "}
+          <span className="text-accent">
+            &rarr; straude.com/u/{displayHandle}
+          </span>
+        </p>
+      </div>
+
+      <div className="mt-6 flex items-center gap-3">
+        <Button
+          onClick={() => router.push("/feed")}
+          className="flex-1 py-3"
+        >
+          Done! Take me to my feed
+          <ArrowRight size={16} className="ml-1.5" />
+        </Button>
+      </div>
+
+      <div className="mt-3 text-center">
+        <Link href="/feed" className="text-sm text-muted hover:text-foreground">
+          I&apos;ll do this later &rarr; Go to feed
+        </Link>
+      </div>
+
+      <div className="mt-4 flex justify-center gap-1.5">
+        <span className="h-1.5 w-6 rounded-full bg-accent" />
+        <span className="h-1.5 w-6 rounded-full bg-accent" />
+        <span className="h-1.5 w-6 rounded-full bg-accent" />
+      </div>
+    </>
+  );
+}
 
 type UsernameStatus = "idle" | "checking" | "available" | "taken" | "invalid";
 
@@ -122,7 +222,7 @@ export default function OnboardingPage() {
       return;
     }
 
-    router.push("/feed");
+    setStep(3);
   }
 
   // Allow proceeding if username is valid+available, or if left empty (optional)
@@ -231,12 +331,14 @@ export default function OnboardingPage() {
         <div className="mt-4 flex justify-center gap-1.5">
           <span className="h-1.5 w-6 rounded-full bg-accent" />
           <span className="h-1.5 w-6 rounded-full bg-border" />
+          <span className="h-1.5 w-6 rounded-full bg-border" />
         </div>
       </>
     );
   }
 
-  return (
+  if (step === 2) {
+    return (
     <>
       <div className="mb-8">
         <span
@@ -330,7 +432,12 @@ export default function OnboardingPage() {
       <div className="mt-4 flex justify-center gap-1.5">
         <span className="h-1.5 w-6 rounded-full bg-accent" />
         <span className="h-1.5 w-6 rounded-full bg-accent" />
+        <span className="h-1.5 w-6 rounded-full bg-border" />
       </div>
     </>
-  );
+    );
+  }
+
+  // Step 3: Log your first session
+  return <Step3LogSession username={username} />;
 }
