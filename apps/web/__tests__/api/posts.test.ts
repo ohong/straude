@@ -3,6 +3,19 @@ import { describe, it, expect, vi, beforeEach } from "vitest";
 vi.mock("@/lib/supabase/server", () => ({
   createClient: vi.fn(),
 }));
+vi.mock("@/lib/supabase/service", () => ({
+  getServiceClient: vi.fn(() => ({
+    from: vi.fn().mockReturnValue({
+      select: vi.fn().mockReturnThis(),
+      eq: vi.fn().mockReturnThis(),
+      single: vi.fn().mockResolvedValue({ data: { username: "author" }, error: null }),
+    }),
+    auth: { admin: { getUserById: vi.fn().mockResolvedValue({ data: { user: null } }) } },
+  })),
+}));
+vi.mock("@/lib/email/send-comment-email", () => ({
+  sendNotificationEmail: vi.fn().mockResolvedValue(undefined),
+}));
 
 import { GET, PATCH, DELETE } from "@/app/api/posts/[id]/route";
 import { createClient } from "@/lib/supabase/server";
@@ -212,6 +225,58 @@ describe("PATCH /api/posts/[id]", () => {
     expect(res.status).toBe(401);
     expect(json.error).toBe("Unauthorized");
   });
+
+  it("does not insert mention notifications when only images change", async () => {
+    const insertFn = vi.fn().mockReturnValue({ then: (r: any) => r({ error: null }) });
+
+    const client = mockSupabase({
+      user: { id: "user-1" },
+      tableHandlers: {
+        posts: (c) => {
+          c.single.mockResolvedValue({
+            data: { id: "post-1", description: "hey @alice check this", title: "T" },
+            error: null,
+          });
+        },
+      },
+    });
+
+    // Wire up users + notifications so that removing the gate would reach insert
+    const originalFrom = client.from;
+    client.from = vi.fn().mockImplementation((table: string) => {
+      if (table === "users") {
+        const chain = buildChain();
+        chain.in.mockResolvedValue({
+          data: [{ id: "alice-id", username: "alice" }],
+          error: null,
+        });
+        return chain;
+      }
+      if (table === "notifications") {
+        return {
+          insert: insertFn,
+          select: vi.fn().mockReturnValue({
+            eq: vi.fn().mockReturnValue({
+              eq: vi.fn().mockReturnValue({
+                in: vi.fn().mockResolvedValue({ data: [], error: null }),
+              }),
+            }),
+          }),
+        };
+      }
+      return originalFrom(table);
+    });
+
+    // Only images in the body — no description
+    const res = await PATCH(
+      makeRequest("PATCH", { images: ["img1.jpg"] }),
+      makeContext("post-1")
+    );
+
+    expect(res.status).toBe(200);
+    expect(insertFn).not.toHaveBeenCalled();
+  });
+
 });
 
 describe("DELETE /api/posts/[id]", () => {
