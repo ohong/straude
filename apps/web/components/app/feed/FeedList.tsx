@@ -56,7 +56,7 @@ export function FeedList({
   showTabs = true,
 }: {
   initialPosts: Post[];
-  userId: string;
+  userId: string | null;
   feedType?: FeedType;
   showTabs?: boolean;
 }) {
@@ -155,9 +155,9 @@ export function FeedList({
     <div>
       {/* Sync command + feed type dropdown in one row */}
       <div className="flex items-center justify-between border-b border-border px-4 py-3">
-        <SyncCommandHint />
+        {userId ? <SyncCommandHint /> : <div />}
 
-        {showTabs && (
+        {showTabs && userId && (
           <div ref={dropdownRef} className="relative ml-auto">
             <button
               type="button"

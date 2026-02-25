@@ -28,14 +28,14 @@ export default async function LeaderboardPage({
     query = query.eq("region", region);
   }
 
-  // Fetch leaderboard + profile in parallel (avoid waterfall)
+  // Fetch leaderboard + profile in parallel (skip profile for guests)
+  const profilePromise = user
+    ? supabase.from("users").select("country, region").eq("id", user.id).single()
+    : Promise.resolve({ data: null });
+
   const [{ data: entries }, { data: profile }] = await Promise.all([
     query,
-    supabase
-      .from("users")
-      .select("country, region")
-      .eq("id", user!.id)
-      .single(),
+    profilePromise,
   ]);
 
   // Fetch streaks for all leaderboard users in a single RPC call
@@ -67,7 +67,7 @@ export default async function LeaderboardPage({
 
       <LeaderboardTable
         entries={ranked}
-        currentUserId={user!.id}
+        currentUserId={user?.id ?? null}
         currentPeriod={period}
         currentRegion={region ?? null}
         userCountry={profile?.country ?? null}

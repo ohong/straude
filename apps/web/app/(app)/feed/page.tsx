@@ -12,16 +12,17 @@ export default async function FeedPage({
   searchParams: Promise<{ tab?: string }>;
 }) {
   const params = await searchParams;
-  const feedType: FeedType =
-    params.tab === "following" || params.tab === "mine"
-      ? params.tab
-      : "global";
-
   const supabase = await createClient();
 
   const {
     data: { user },
   } = await supabase.auth.getUser();
+
+  // Unauthenticated visitors can only see the global feed
+  const feedType: FeedType =
+    user && (params.tab === "following" || params.tab === "mine")
+      ? params.tab
+      : "global";
 
   const baseFields = `
     *,
@@ -71,13 +72,18 @@ export default async function FeedPage({
   if (posts.length > 0) {
     const postIds = posts.map((p: any) => p.id);
 
-    const [{ data: userKudos }, { data: recentKudos }, { data: recentComments }] =
-      await Promise.all([
-        supabase
+    // User-specific kudos check only when logged in
+    const userKudosPromise = user
+      ? supabase
           .from("kudos")
           .select("post_id")
-          .eq("user_id", user!.id)
-          .in("post_id", postIds),
+          .eq("user_id", user.id)
+          .in("post_id", postIds)
+      : Promise.resolve({ data: [] as { post_id: string }[] });
+
+    const [{ data: userKudos }, { data: recentKudos }, { data: recentComments }] =
+      await Promise.all([
+        userKudosPromise,
         supabase
           .from("kudos")
           .select("post_id, user:users!kudos_user_id_fkey(avatar_url, username)")
@@ -91,7 +97,7 @@ export default async function FeedPage({
           .order("created_at", { ascending: false }),
       ]);
 
-    const kudosedSet = new Set(userKudos?.map((k) => k.post_id));
+    const kudosedSet = new Set((userKudos ?? []).map((k) => k.post_id));
 
     const kudosUsersMap = new Map<string, any[]>();
     for (const k of recentKudos ?? []) {
@@ -124,5 +130,5 @@ export default async function FeedPage({
     }));
   }
 
-  return <FeedList initialPosts={posts} userId={user!.id} feedType={feedType} />;
+  return <FeedList initialPosts={posts} userId={user?.id ?? null} feedType={feedType} />;
 }

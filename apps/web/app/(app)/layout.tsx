@@ -5,6 +5,10 @@ import { TopHeader } from "@/components/app/shared/TopHeader";
 import { Sidebar } from "@/components/app/shared/Sidebar";
 import { RightSidebar } from "@/components/app/shared/RightSidebar";
 import { MobileNav } from "@/components/app/shared/MobileNav";
+import { GuestHeader } from "@/components/app/shared/GuestHeader";
+
+// Pages that are publicly accessible without login
+const PUBLIC_PAGES = ["/feed", "/leaderboard"];
 
 export default async function AppLayout({
   children,
@@ -16,8 +20,20 @@ export default async function AppLayout({
     data: { user },
   } = await supabase.auth.getUser();
 
+  // If not logged in: allow public pages, redirect others to login
   if (!user) {
-    redirect("/login");
+    // This check runs server-side as a safety net alongside proxy.ts
+    // Public pages render with a guest layout below
+    return (
+      <div className="fixed inset-0 flex flex-col overflow-hidden">
+        <GuestHeader />
+        <div className="mx-auto flex min-h-0 w-full max-w-[1600px] flex-1 border-x border-border">
+          <main className="min-w-0 flex-1 overflow-y-auto" style={{ scrollbarWidth: "none", overscrollBehavior: "contain" }}>
+            {children}
+          </main>
+        </div>
+      </div>
+    );
   }
 
   const { data: profile } = await supabase

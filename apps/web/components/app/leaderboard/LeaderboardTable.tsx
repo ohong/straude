@@ -41,7 +41,7 @@ export function LeaderboardTable({
   userCountry,
 }: {
   entries: LeaderboardEntry[];
-  currentUserId: string;
+  currentUserId: string | null;
   currentPeriod: string;
   currentRegion: string | null;
   userCountry: string | null;

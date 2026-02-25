@@ -41,7 +41,19 @@ export function Navbar() {
         </Link>
 
         {/* Desktop nav */}
-        <div className="hidden items-center gap-4 md:flex">
+        <div className="hidden items-center gap-6 md:flex">
+          <Link
+            href="/feed"
+            className="text-sm font-medium text-white/60 hover:text-white transition-colors"
+          >
+            Feed
+          </Link>
+          <Link
+            href="/leaderboard"
+            className="text-sm font-medium text-white/60 hover:text-white transition-colors"
+          >
+            Leaderboard
+          </Link>
           <Link
             href="/login"
             className="text-sm font-medium text-white/80 hover:text-white transition-colors rounded focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white focus-visible:ring-offset-2 focus-visible:ring-offset-black"
@@ -70,6 +82,20 @@ export function Navbar() {
       {mobileOpen && (
         <div className="border-t border-white/10 bg-black/95 backdrop-blur-md px-6 pb-6 pt-4 md:hidden">
           <div className="flex flex-col gap-4">
+            <Link
+              href="/feed"
+              className="text-base font-medium text-white/60"
+              onClick={() => setMobileOpen(false)}
+            >
+              Feed
+            </Link>
+            <Link
+              href="/leaderboard"
+              className="text-base font-medium text-white/60"
+              onClick={() => setMobileOpen(false)}
+            >
+              Leaderboard
+            </Link>
             <Link
               href="/login"
               className="text-base font-medium text-white/80"

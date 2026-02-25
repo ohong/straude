@@ -7,14 +7,15 @@ export async function GET(request: NextRequest) {
     data: { user },
   } = await supabase.auth.getUser();
 
-  if (!user) {
-    return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
-  }
-
   const { searchParams } = request.nextUrl;
   const cursor = searchParams.get("cursor");
   const limit = Math.min(Number(searchParams.get("limit") ?? 20), 50);
   const type = searchParams.get("type") ?? "global";
+
+  // Unauthenticated users can only access the global feed
+  if (!user && type !== "global") {
+    return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  }
 
   const baseFields = `
     daily_usage:daily_usage!posts_daily_usage_id_fkey(*),
@@ -40,16 +41,16 @@ export async function GET(request: NextRequest) {
       .limit(limit);
 
     if (type === "mine") {
-      query = query.eq("user_id", user.id);
+      query = query.eq("user_id", user!.id);
     } else {
       // following: own posts + posts from followed users
       const { data: followData } = await supabase
         .from("follows")
         .select("following_id")
-        .eq("follower_id", user.id);
+        .eq("follower_id", user!.id);
 
       const followingIds = (followData ?? []).map((f) => f.following_id);
-      const feedUserIds = [user.id, ...followingIds];
+      const feedUserIds = [user!.id, ...followingIds];
       query = query.in("user_id", feedUserIds);
     }
   }
@@ -64,9 +65,9 @@ export async function GET(request: NextRequest) {
     return NextResponse.json({ error: error.message }, { status: 500 });
   }
 
-  // Check which posts the current user has kudosed
+  // Check which posts the current user has kudosed (skip if not logged in)
   const postIds = (posts ?? []).map((p) => p.id);
-  const { data: userKudos } = postIds.length
+  const { data: userKudos } = user && postIds.length
     ? await supabase
         .from("kudos")
         .select("post_id")
