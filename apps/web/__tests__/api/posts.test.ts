@@ -277,6 +277,108 @@ describe("PATCH /api/posts/[id]", () => {
     expect(insertFn).not.toHaveBeenCalled();
   });
 
+  it("inserts mention notifications for new mentions in description", async () => {
+    const insertFn = vi.fn().mockReturnValue({ then: (r: any) => r({ error: null }) });
+
+    const client = mockSupabase({
+      user: { id: "user-1" },
+      tableHandlers: {
+        posts: (c) => {
+          c.single.mockResolvedValue({
+            data: { id: "post-1", description: "hey @alice great work", title: null },
+            error: null,
+          });
+        },
+      },
+    });
+
+    const originalFrom = client.from;
+    client.from = vi.fn().mockImplementation((table: string) => {
+      if (table === "users") {
+        const chain = buildChain();
+        chain.in.mockResolvedValue({
+          data: [{ id: "alice-id", username: "alice" }],
+          error: null,
+        });
+        return chain;
+      }
+      if (table === "notifications") {
+        return {
+          insert: insertFn,
+          select: vi.fn().mockReturnValue({
+            eq: vi.fn().mockReturnValue({
+              eq: vi.fn().mockReturnValue({
+                in: vi.fn().mockResolvedValue({ data: [], error: null }),
+              }),
+            }),
+          }),
+        };
+      }
+      return originalFrom(table);
+    });
+
+    const res = await PATCH(
+      makeRequest("PATCH", { description: "hey @alice great work" }),
+      makeContext("post-1")
+    );
+
+    expect(res.status).toBe(200);
+    expect(insertFn).toHaveBeenCalledWith([
+      { user_id: "alice-id", actor_id: "user-1", type: "mention", post_id: "post-1" },
+    ]);
+  });
+
+  it("skips mention notification for already-notified users", async () => {
+    const insertFn = vi.fn().mockReturnValue({ then: (r: any) => r({ error: null }) });
+
+    const client = mockSupabase({
+      user: { id: "user-1" },
+      tableHandlers: {
+        posts: (c) => {
+          c.single.mockResolvedValue({
+            data: { id: "post-1", description: "hey @alice great work", title: null },
+            error: null,
+          });
+        },
+      },
+    });
+
+    const originalFrom = client.from;
+    client.from = vi.fn().mockImplementation((table: string) => {
+      if (table === "users") {
+        const chain = buildChain();
+        chain.in.mockResolvedValue({
+          data: [{ id: "alice-id", username: "alice" }],
+          error: null,
+        });
+        return chain;
+      }
+      if (table === "notifications") {
+        return {
+          insert: insertFn,
+          select: vi.fn().mockReturnValue({
+            eq: vi.fn().mockReturnValue({
+              eq: vi.fn().mockReturnValue({
+                in: vi.fn().mockResolvedValue({
+                  data: [{ user_id: "alice-id" }],
+                  error: null,
+                }),
+              }),
+            }),
+          }),
+        };
+      }
+      return originalFrom(table);
+    });
+
+    const res = await PATCH(
+      makeRequest("PATCH", { description: "hey @alice great work" }),
+      makeContext("post-1")
+    );
+
+    expect(res.status).toBe(200);
+    expect(insertFn).not.toHaveBeenCalled();
+  });
 });
 
 describe("DELETE /api/posts/[id]", () => {
