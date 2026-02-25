@@ -277,6 +277,45 @@ describe("PATCH /api/posts/[id]", () => {
     expect(insertFn).not.toHaveBeenCalled();
   });
 
+  it("skips notification query when mentioned users do not exist", async () => {
+    const notificationFrom = vi.fn();
+
+    const client = mockSupabase({
+      user: { id: "user-1" },
+      tableHandlers: {
+        posts: (c) => {
+          c.single.mockResolvedValue({
+            data: { id: "post-1", description: "hey @ghost check this", title: "T" },
+            error: null,
+          });
+        },
+      },
+    });
+
+    const originalFrom = client.from;
+    client.from = vi.fn().mockImplementation((table: string) => {
+      if (table === "users") {
+        const chain = buildChain();
+        // No matching users found in the database
+        chain.in.mockResolvedValue({ data: [], error: null });
+        return chain;
+      }
+      if (table === "notifications") {
+        notificationFrom();
+        return buildChain();
+      }
+      return originalFrom(table);
+    });
+
+    const res = await PATCH(
+      makeRequest("PATCH", { description: "hey @ghost check this" }),
+      makeContext("post-1")
+    );
+
+    expect(res.status).toBe(200);
+    expect(notificationFrom).not.toHaveBeenCalled();
+  });
+
   it("inserts mention notifications for new mentions in description", async () => {
     const insertFn = vi.fn().mockReturnValue({ then: (r: any) => r({ error: null }) });
 

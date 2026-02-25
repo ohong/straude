@@ -134,6 +134,10 @@ export async function PATCH(request: NextRequest, context: RouteContext) {
         (u) => u.id !== user.id,
       );
 
+      if (candidates.length === 0) {
+        return NextResponse.json(post);
+      }
+
       // Deduplicate: skip users who already have a mention notification for this post
       const { data: existingNotifs } = await supabase
         .from("notifications")
