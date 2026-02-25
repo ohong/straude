@@ -41,7 +41,7 @@ function fireNotificationEmail(opts: {
     })
     .then(([profileRes, authRes, postRes]) => {
       const email = authRes.data?.user?.email;
-      if (!profileRes.data?.[prefField] || !email) return;
+      if (!(profileRes.data as Record<string, unknown>)?.[prefField] || !email) return;
 
       return sendNotificationEmail({
         recipientUserId: opts.recipientUserId,

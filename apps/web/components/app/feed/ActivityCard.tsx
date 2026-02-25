@@ -215,18 +215,7 @@ export function ActivityCard({ post }: { post: Post }) {
           <MessageCircle size={16} aria-hidden="true" />
           {commentCount} {commentCount === 1 ? "comment" : "comments"}
         </Link>
-<<<<<<< Updated upstream
-        <button
-          type="button"
-          onClick={handleShare}
-          className="ml-auto flex items-center gap-2 text-sm font-semibold hover:text-accent"
-        >
-          {copied ? "Copied!" : "Share"}{" "}
-          {copied ? <Check size={16} aria-hidden="true" /> : <Share2 size={16} aria-hidden="true" />}
-        </button>
-=======
         <ShareMenu postId={post.id} />
->>>>>>> Stashed changes
       </div>
 
       {/* Lightbox */}
