@@ -11,6 +11,19 @@
 
 **Email type differentiation:** The email template now has three types: `comment`, `mention` (in a comment), and `post_mention` (tagged in a post description). The in-app notification type stays `mention` for both — only the email subject/body distinguishes them.
 
+## Mention Notification Deduplication (2026-02-25)
+
+**Decision:** The PATCH `/api/posts/[id]` handler now (1) only runs mention notification logic when `body.description` is present in the update payload, and (2) queries existing `mention` notifications for the post before inserting, skipping users who already have one.
+
+**Problem:** Every post save — including image reorders, title edits, or caption generation — re-inserted mention notifications for all `@username` references in the description. Users received duplicate in-app notifications on each save. Emails were deduplicated by Resend's idempotency key, but DB rows were not.
+
+**Alternatives considered:**
+1. **Diff old vs. new description to find new mentions** — more precise but requires fetching the old description before the update. Adds a read query and string-diffing logic for marginal benefit over the simpler approach.
+2. **Unique constraint on `(type, post_id, user_id)` in notifications table** — prevents duplicates at the DB level but turns the insert into an upsert, and doesn't prevent the unnecessary email-sending code path from executing.
+3. **Gate on `body.description` + query existing notifications** (chosen) — two simple checks that prevent both the unnecessary DB writes and the email code path. No schema migration needed.
+
+**Supersedes:** The "Accepted as V1 tradeoff" note in the "@Mention Tagging" decision (2026-02-18) which deferred diff-based deduplication.
+
 ## Social Achievements: Separate RPC + Trigger-Based Filtering (2026-02-23)
 
 **Decision:** Created a separate `get_social_achievement_stats` RPC (not extending the existing `get_achievement_stats`) and added a `trigger` parameter to `checkAndAwardAchievements` that filters which achievements to check and which RPCs to call.

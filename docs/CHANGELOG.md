@@ -2,6 +2,10 @@
 
 ## Unreleased
 
+### Fixed
+
+- **Duplicate mention notifications on post edit.** Every PATCH to a post re-inserted mention notifications for all `@username` references in the description, even when only images or title changed. Now mention logic only runs when the description field is actually updated, and existing mention notifications for the post are checked before inserting — users who were already notified are skipped.
+
 ### Added
 
 - **Email notifications for post mentions.** Users tagged with `@username` in someone else's post description now receive an email notification. Controlled by a new `email_mention_notifications` preference (default: on), separate from comment email notifications. Emails use a "tagged you in a post" subject line distinct from comment mentions.

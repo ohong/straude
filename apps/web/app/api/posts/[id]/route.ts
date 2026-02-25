@@ -121,8 +121,8 @@ export async function PATCH(request: NextRequest, context: RouteContext) {
     );
   }
 
-  // Mention notifications on description edit
-  if (post.description) {
+  // Mention notifications — only when description was actually changed
+  if (body.description !== undefined && post.description) {
     const mentionedUsernames = parseMentions(post.description);
     if (mentionedUsernames.length > 0) {
       const { data: mentionedUsers } = await supabase
@@ -130,9 +130,22 @@ export async function PATCH(request: NextRequest, context: RouteContext) {
         .select("id, username")
         .in("username", mentionedUsernames);
 
-      const toNotify = (mentionedUsers ?? []).filter(
+      const candidates = (mentionedUsers ?? []).filter(
         (u) => u.id !== user.id,
       );
+
+      // Deduplicate: skip users who already have a mention notification for this post
+      const { data: existingNotifs } = await supabase
+        .from("notifications")
+        .select("user_id")
+        .eq("type", "mention")
+        .eq("post_id", id)
+        .in("user_id", candidates.map((u) => u.id));
+
+      const alreadyNotified = new Set(
+        (existingNotifs ?? []).map((n) => n.user_id),
+      );
+      const toNotify = candidates.filter((u) => !alreadyNotified.has(u.id));
 
       const mentionNotifs = toNotify.map((u) => ({
         user_id: u.id,
