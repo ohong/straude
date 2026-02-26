@@ -2,6 +2,15 @@
 
 ## Unreleased
 
+### Changed
+
+- **Single "Get Started" button in nav.** Replaced separate "Log in" / "Sign up" buttons with a single "Get Started" CTA in both the landing page Navbar and GuestHeader. Routes to `/login` for returning users (detected via localStorage), `/signup` for new visitors.
+
+### Fixed
+
+- **Guest navigation continuity.** Feed and Leaderboard nav links now stay on the right side of the GuestHeader, matching their position in the landing page navbar. Removed the empty top bar on the feed page for logged-out visitors. Removed the redundant "Leaderboard" heading below the nav. Centered period tabs on the leaderboard.
+- **CI test failures (4 tests).** Updated feed and privacy-visibility tests to expect 200 (not 401) for unauthenticated global feed access. Mocked `sharp` in upload tests so HEIC/HEIF conversion doesn't require libheif on CI.
+
 ### Added
 
 - **Public profile pages.** `/u/[username]` and `/u/[username]/follows` are now accessible to logged-out visitors. Guests see the profile with a guest header (Log In / Sign Up) and no sidebars. Auth-specific UI (Follow button, Edit Profile, SyncCommandHint) is hidden for guests. Private profiles (`is_public: false`) return 404 for non-owners.

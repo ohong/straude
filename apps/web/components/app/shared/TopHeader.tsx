@@ -116,9 +116,10 @@ export function TopHeader({ username, avatarUrl }: TopHeaderProps) {
     setUnreadCount(data.unread_count ?? 0);
   }, []);
 
-  // Initial unread count fetch
+  // Initial unread count fetch + mark as returning user for guest nav
   useEffect(() => {
     fetchNotifications();
+    try { localStorage.setItem("straude_returning", "1"); } catch {}
   }, [fetchNotifications]);
 
   async function handleLogout() {

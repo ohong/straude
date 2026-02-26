@@ -153,45 +153,47 @@ export function FeedList({
 
   return (
     <div>
-      {/* Sync command + feed type dropdown in one row */}
-      <div className="flex items-center justify-between border-b border-border px-4 py-3">
-        {userId ? <SyncCommandHint /> : <div />}
+      {/* Sync command + feed type dropdown in one row (logged-in only) */}
+      {userId && (
+        <div className="flex items-center justify-between border-b border-border px-4 py-3">
+          <SyncCommandHint />
 
-        {showTabs && userId && (
-          <div ref={dropdownRef} className="relative ml-auto">
-            <button
-              type="button"
-              onClick={() => setDropdownOpen((v) => !v)}
-              className="flex items-center gap-1 text-sm font-medium text-muted hover:text-foreground"
-              aria-expanded={dropdownOpen}
-            >
-              {TAB_LABELS[feedType]}
-              <ChevronDown size={14} aria-hidden="true" />
-            </button>
+          {showTabs && (
+            <div ref={dropdownRef} className="relative ml-auto">
+              <button
+                type="button"
+                onClick={() => setDropdownOpen((v) => !v)}
+                className="flex items-center gap-1 text-sm font-medium text-muted hover:text-foreground"
+                aria-expanded={dropdownOpen}
+              >
+                {TAB_LABELS[feedType]}
+                <ChevronDown size={14} aria-hidden="true" />
+              </button>
 
-            {dropdownOpen && (
-              <div className="absolute right-0 top-full mt-1 w-40 rounded border border-border bg-background shadow-lg z-10">
-                {(Object.keys(TAB_LABELS) as FeedType[]).map((type) => (
-                  <button
-                    key={type}
-                    type="button"
-                    onClick={() => {
-                      setDropdownOpen(false);
-                      switchTab(type);
-                    }}
-                    className={cn(
-                      "flex w-full items-center px-4 py-2.5 text-sm hover:bg-subtle",
-                      feedType === type ? "font-semibold text-foreground" : "text-muted",
-                    )}
-                  >
-                    {TAB_LABELS[type]}
-                  </button>
-                ))}
-              </div>
-            )}
-          </div>
-        )}
-      </div>
+              {dropdownOpen && (
+                <div className="absolute right-0 top-full mt-1 w-40 rounded border border-border bg-background shadow-lg z-10">
+                  {(Object.keys(TAB_LABELS) as FeedType[]).map((type) => (
+                    <button
+                      key={type}
+                      type="button"
+                      onClick={() => {
+                        setDropdownOpen(false);
+                        switchTab(type);
+                      }}
+                      className={cn(
+                        "flex w-full items-center px-4 py-2.5 text-sm hover:bg-subtle",
+                        feedType === type ? "font-semibold text-foreground" : "text-muted",
+                      )}
+                    >
+                      {TAB_LABELS[type]}
+                    </button>
+                  ))}
+                </div>
+              )}
+            </div>
+          )}
+        </div>
+      )}
 
       {switching ? (
         <div className="flex justify-center py-12" role="status">

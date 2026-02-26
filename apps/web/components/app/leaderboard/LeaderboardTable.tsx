@@ -58,7 +58,7 @@ export function LeaderboardTable({
   return (
     <div>
       {/* Period tabs */}
-      <div className="flex overflow-x-auto border-b border-border">
+      <div className="flex justify-center overflow-x-auto border-b border-border">
         {PERIODS.map(({ value, label }) => (
           <button
             key={value}

@@ -112,10 +112,40 @@ beforeEach(() => {
 });
 
 describe("GET /api/feed", () => {
-  it("rejects unauthenticated requests", async () => {
-    mockSupabase({ user: null });
+  it("allows unauthenticated access to global feed", async () => {
+    // Global feed is public — unauth users get 200 with posts
+    const client: Record<string, any> = {
+      auth: {
+        getUser: vi.fn().mockResolvedValue({
+          data: { user: null },
+          error: null,
+        }),
+      },
+      from: vi.fn().mockImplementation((table: string) => {
+        if (table === "posts") {
+          const c = buildChain();
+          c.select.mockReturnValue(c);
+          c.eq.mockReturnValue(c);
+          c.order.mockReturnValue(c);
+          c.limit.mockResolvedValue({ data: [], error: null });
+          return c;
+        }
+        return buildChain();
+      }),
+    };
+    (createClient as any).mockResolvedValue(client);
 
     const res = await GET(makeRequest());
+    const json = await res.json();
+
+    expect(res.status).toBe(200);
+    expect(json.posts).toEqual([]);
+  });
+
+  it("rejects unauthenticated requests for non-global feed", async () => {
+    mockSupabase({ user: null });
+
+    const res = await GET(makeRequest({ type: "following" }));
     const json = await res.json();
 
     expect(res.status).toBe(401);

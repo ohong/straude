@@ -8,12 +8,16 @@ import { Menu, X } from "lucide-react";
 export function Navbar() {
   const [scrolled, setScrolled] = useState(false);
   const [mobileOpen, setMobileOpen] = useState(false);
+  const [authHref, setAuthHref] = useState("/signup");
 
   useEffect(() => {
     function onScroll() {
       setScrolled(window.scrollY > 48);
     }
     window.addEventListener("scroll", onScroll, { passive: true });
+    try {
+      if (localStorage.getItem("straude_returning")) setAuthHref("/login");
+    } catch {}
     return () => window.removeEventListener("scroll", onScroll);
   }, []);
 
@@ -55,13 +59,7 @@ export function Navbar() {
             Leaderboard
           </Link>
           <Link
-            href="/login"
-            className="text-sm font-medium text-white/80 hover:text-white transition-colors rounded focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white focus-visible:ring-offset-2 focus-visible:ring-offset-black"
-          >
-            Log in
-          </Link>
-          <Link
-            href="/signup"
+            href={authHref}
             className="rounded-lg bg-accent px-5 py-2.5 text-sm font-semibold text-white hover:brightness-110 transition-[filter] duration-150 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white focus-visible:ring-offset-2 focus-visible:ring-offset-black"
           >
             Get Started
@@ -97,14 +95,7 @@ export function Navbar() {
               Leaderboard
             </Link>
             <Link
-              href="/login"
-              className="text-base font-medium text-white/80"
-              onClick={() => setMobileOpen(false)}
-            >
-              Log in
-            </Link>
-            <Link
-              href="/signup"
+              href={authHref}
               className="rounded-lg bg-accent px-5 py-3 text-center text-base font-semibold text-white"
               onClick={() => setMobileOpen(false)}
             >

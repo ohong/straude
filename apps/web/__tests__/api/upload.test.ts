@@ -4,6 +4,15 @@ vi.mock("@/lib/supabase/server", () => ({
   createClient: vi.fn(),
 }));
 
+// Mock sharp so HEIC/HEIF conversion doesn't need real libheif
+vi.mock("sharp", () => ({
+  default: vi.fn(() => ({
+    jpeg: vi.fn(() => ({
+      toBuffer: vi.fn().mockResolvedValue(Buffer.from("fake-jpeg")),
+    })),
+  })),
+}));
+
 import { POST } from "@/app/api/upload/route";
 import { createClient } from "@/lib/supabase/server";
 

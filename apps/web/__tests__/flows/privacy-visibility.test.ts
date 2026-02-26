@@ -293,15 +293,26 @@ describe("Flow: Privacy and Visibility", () => {
     expect(data.posts).toEqual([]);
   });
 
-  it("unauthenticated user cannot access feed", async () => {
+  it("unauthenticated user can access global feed", async () => {
     mockSupabase.auth.getUser.mockResolvedValue({
       data: { user: null },
+    });
+
+    // Global feed is public — support the .eq("user.is_public", true) chain
+    mockSupabase.from.mockImplementation((table: string) => {
+      if (table === "posts") {
+        const c = chainBuilder();
+        c.eq = vi.fn().mockReturnValue(c);
+        c.limit = vi.fn().mockResolvedValue({ data: [], error: null });
+        return c;
+      }
+      return chainBuilder();
     });
 
     const { GET } = await import("@/app/api/feed/route");
     const req = makeRequest("http://localhost:3000/api/feed");
     const res = await GET(req as any);
 
-    expect(res.status).toBe(401);
+    expect(res.status).toBe(200);
   });
 });
