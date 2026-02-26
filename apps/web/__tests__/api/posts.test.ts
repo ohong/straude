@@ -3,6 +3,19 @@ import { describe, it, expect, vi, beforeEach } from "vitest";
 vi.mock("@/lib/supabase/server", () => ({
   createClient: vi.fn(),
 }));
+vi.mock("@/lib/supabase/service", () => ({
+  getServiceClient: vi.fn(() => ({
+    from: vi.fn().mockReturnValue({
+      select: vi.fn().mockReturnThis(),
+      eq: vi.fn().mockReturnThis(),
+      single: vi.fn().mockResolvedValue({ data: { username: "author" }, error: null }),
+    }),
+    auth: { admin: { getUserById: vi.fn().mockResolvedValue({ data: { user: null } }) } },
+  })),
+}));
+vi.mock("@/lib/email/send-comment-email", () => ({
+  sendNotificationEmail: vi.fn().mockResolvedValue(undefined),
+}));
 
 import { GET, PATCH, DELETE } from "@/app/api/posts/[id]/route";
 import { createClient } from "@/lib/supabase/server";
@@ -211,6 +224,199 @@ describe("PATCH /api/posts/[id]", () => {
 
     expect(res.status).toBe(401);
     expect(json.error).toBe("Unauthorized");
+  });
+
+  it("does not insert mention notifications when only images change", async () => {
+    const insertFn = vi.fn().mockResolvedValue({ error: null });
+
+    const client = mockSupabase({
+      user: { id: "user-1" },
+      tableHandlers: {
+        posts: (c) => {
+          c.single.mockResolvedValue({
+            data: { id: "post-1", description: "hey @alice check this", title: "T" },
+            error: null,
+          });
+        },
+      },
+    });
+
+    // Wire up users + notifications so that removing the gate would reach insert
+    const originalFrom = client.from;
+    client.from = vi.fn().mockImplementation((table: string) => {
+      if (table === "users") {
+        const chain = buildChain();
+        chain.in.mockResolvedValue({
+          data: [{ id: "alice-id", username: "alice" }],
+          error: null,
+        });
+        return chain;
+      }
+      if (table === "notifications") {
+        return {
+          insert: insertFn,
+          select: vi.fn().mockReturnValue({
+            eq: vi.fn().mockReturnValue({
+              eq: vi.fn().mockReturnValue({
+                in: vi.fn().mockResolvedValue({ data: [], error: null }),
+              }),
+            }),
+          }),
+        };
+      }
+      return originalFrom(table);
+    });
+
+    // Only images in the body — no description
+    const res = await PATCH(
+      makeRequest("PATCH", { images: ["img1.jpg"] }),
+      makeContext("post-1")
+    );
+
+    expect(res.status).toBe(200);
+    expect(insertFn).not.toHaveBeenCalled();
+  });
+
+  it("skips notification query when mentioned users do not exist", async () => {
+    const notificationFrom = vi.fn();
+
+    const client = mockSupabase({
+      user: { id: "user-1" },
+      tableHandlers: {
+        posts: (c) => {
+          c.single.mockResolvedValue({
+            data: { id: "post-1", description: "hey @ghost check this", title: "T" },
+            error: null,
+          });
+        },
+      },
+    });
+
+    const originalFrom = client.from;
+    client.from = vi.fn().mockImplementation((table: string) => {
+      if (table === "users") {
+        const chain = buildChain();
+        // No matching users found in the database
+        chain.in.mockResolvedValue({ data: [], error: null });
+        return chain;
+      }
+      if (table === "notifications") {
+        notificationFrom();
+        return buildChain();
+      }
+      return originalFrom(table);
+    });
+
+    const res = await PATCH(
+      makeRequest("PATCH", { description: "hey @ghost check this" }),
+      makeContext("post-1")
+    );
+
+    expect(res.status).toBe(200);
+    expect(notificationFrom).not.toHaveBeenCalled();
+  });
+
+  it("inserts mention notifications for new mentions in description", async () => {
+    const insertFn = vi.fn().mockResolvedValue({ error: null });
+
+    const client = mockSupabase({
+      user: { id: "user-1" },
+      tableHandlers: {
+        posts: (c) => {
+          c.single.mockResolvedValue({
+            data: { id: "post-1", description: "hey @alice great work", title: null },
+            error: null,
+          });
+        },
+      },
+    });
+
+    const originalFrom = client.from;
+    client.from = vi.fn().mockImplementation((table: string) => {
+      if (table === "users") {
+        const chain = buildChain();
+        chain.in.mockResolvedValue({
+          data: [{ id: "alice-id", username: "alice" }],
+          error: null,
+        });
+        return chain;
+      }
+      if (table === "notifications") {
+        return {
+          insert: insertFn,
+          select: vi.fn().mockReturnValue({
+            eq: vi.fn().mockReturnValue({
+              eq: vi.fn().mockReturnValue({
+                in: vi.fn().mockResolvedValue({ data: [], error: null }),
+              }),
+            }),
+          }),
+        };
+      }
+      return originalFrom(table);
+    });
+
+    const res = await PATCH(
+      makeRequest("PATCH", { description: "hey @alice great work" }),
+      makeContext("post-1")
+    );
+
+    expect(res.status).toBe(200);
+    expect(insertFn).toHaveBeenCalledWith([
+      { user_id: "alice-id", actor_id: "user-1", type: "mention", post_id: "post-1" },
+    ]);
+  });
+
+  it("skips mention notification for already-notified users", async () => {
+    const insertFn = vi.fn().mockResolvedValue({ error: null });
+
+    const client = mockSupabase({
+      user: { id: "user-1" },
+      tableHandlers: {
+        posts: (c) => {
+          c.single.mockResolvedValue({
+            data: { id: "post-1", description: "hey @alice great work", title: null },
+            error: null,
+          });
+        },
+      },
+    });
+
+    const originalFrom = client.from;
+    client.from = vi.fn().mockImplementation((table: string) => {
+      if (table === "users") {
+        const chain = buildChain();
+        chain.in.mockResolvedValue({
+          data: [{ id: "alice-id", username: "alice" }],
+          error: null,
+        });
+        return chain;
+      }
+      if (table === "notifications") {
+        return {
+          insert: insertFn,
+          select: vi.fn().mockReturnValue({
+            eq: vi.fn().mockReturnValue({
+              eq: vi.fn().mockReturnValue({
+                in: vi.fn().mockResolvedValue({
+                  data: [{ user_id: "alice-id" }],
+                  error: null,
+                }),
+              }),
+            }),
+          }),
+        };
+      }
+      return originalFrom(table);
+    });
+
+    const res = await PATCH(
+      makeRequest("PATCH", { description: "hey @alice great work" }),
+      makeContext("post-1")
+    );
+
+    expect(res.status).toBe(200);
+    expect(insertFn).not.toHaveBeenCalled();
   });
 });
 
