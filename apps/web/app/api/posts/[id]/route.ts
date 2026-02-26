@@ -134,70 +134,68 @@ export async function PATCH(request: NextRequest, context: RouteContext) {
         (u) => u.id !== user.id,
       );
 
-      if (candidates.length === 0) {
-        return NextResponse.json(post);
-      }
+      if (candidates.length > 0) {
+        // Deduplicate: skip users who already have a mention notification for this post
+        const { data: existingNotifs } = await supabase
+          .from("notifications")
+          .select("user_id")
+          .eq("type", "mention")
+          .eq("post_id", id)
+          .in("user_id", candidates.map((u) => u.id));
 
-      // Deduplicate: skip users who already have a mention notification for this post
-      const { data: existingNotifs } = await supabase
-        .from("notifications")
-        .select("user_id")
-        .eq("type", "mention")
-        .eq("post_id", id)
-        .in("user_id", candidates.map((u) => u.id));
+        const alreadyNotified = new Set(
+          (existingNotifs ?? []).map((n) => n.user_id),
+        );
+        const toNotify = candidates.filter((u) => !alreadyNotified.has(u.id));
 
-      const alreadyNotified = new Set(
-        (existingNotifs ?? []).map((n) => n.user_id),
-      );
-      const toNotify = candidates.filter((u) => !alreadyNotified.has(u.id));
+        const mentionNotifs = toNotify.map((u) => ({
+          user_id: u.id,
+          actor_id: user.id,
+          type: "mention" as const,
+          post_id: id,
+        }));
 
-      const mentionNotifs = toNotify.map((u) => ({
-        user_id: u.id,
-        actor_id: user.id,
-        type: "mention" as const,
-        post_id: id,
-      }));
+        if (mentionNotifs.length > 0) {
+          supabase.from("notifications").insert(mentionNotifs).then(() => {});
+        }
 
-      if (mentionNotifs.length > 0) {
-        supabase.from("notifications").insert(mentionNotifs).then(() => {});
-      }
+        // Fire mention emails
+        if (toNotify.length > 0) {
+          const db = getServiceClient();
+          const { data: actor } = await db
+            .from("users")
+            .select("username")
+            .eq("id", user.id)
+            .single();
+          const actorUsername = actor?.username ?? "Someone";
 
-      // Fire mention emails
-      if (toNotify.length > 0) {
-        const db = getServiceClient();
-        const { data: actor } = await db
-          .from("users")
-          .select("username")
-          .eq("id", user.id)
-          .single();
-        const actorUsername = actor?.username ?? "Someone";
+          for (const u of toNotify) {
+            const sdb = getServiceClient();
+            Promise.all([
+              sdb
+                .from("users")
+                .select("email_mention_notifications")
+                .eq("id", u.id)
+                .single(),
+              sdb.auth.admin.getUserById(u.id),
+            ])
+              .then(([profileRes, authRes]) => {
+                const email = authRes.data?.user?.email;
+                if (!profileRes.data?.email_mention_notifications || !email) return;
 
-        for (const u of toNotify) {
-          const sdb = getServiceClient();
-          Promise.all([
-            sdb
-              .from("users")
-              .select("email_mention_notifications")
-              .eq("id", u.id)
-              .single(),
-            sdb.auth.admin.getUserById(u.id),
-          ])
-            .then(([profileRes, authRes]) => {
-              const email = authRes.data?.user?.email;
-              if (!profileRes.data?.email_mention_notifications || !email) return;
-
-              return sendNotificationEmail({
-                recipientUserId: u.id,
-                recipientEmail: email,
-                actorUsername,
-                type: "post_mention",
-                content: post.description!,
-                postId: id,
-                postTitle: (post.title as string) ?? null,
-                idempotencyKey: `mention-post/${id}/${u.id}`,
-              });
-            })
-            .catch((err) => console.error("[email] mention notification failed:", err));
+                return sendNotificationEmail({
+                  recipientUserId: u.id,
+                  recipientEmail: email,
+                  actorUsername,
+                  type: "post_mention",
+                  content: post.description!,
+                  postId: id,
+                  postTitle: (post.title as string) ?? null,
+                  idempotencyKey: `mention-post/${id}/${u.id}`,
+                });
+              })
+              .catch((err) => console.error("[email] mention notification failed:", err));
+          }
         }
       }
     }

@@ -227,7 +227,7 @@ describe("PATCH /api/posts/[id]", () => {
   });
 
   it("does not insert mention notifications when only images change", async () => {
-    const insertFn = vi.fn().mockReturnValue({ then: (r: any) => r({ error: null }) });
+    const insertFn = vi.fn().mockResolvedValue({ error: null });
 
     const client = mockSupabase({
       user: { id: "user-1" },
@@ -317,7 +317,7 @@ describe("PATCH /api/posts/[id]", () => {
   });
 
   it("inserts mention notifications for new mentions in description", async () => {
-    const insertFn = vi.fn().mockReturnValue({ then: (r: any) => r({ error: null }) });
+    const insertFn = vi.fn().mockResolvedValue({ error: null });
 
     const client = mockSupabase({
       user: { id: "user-1" },
@@ -368,7 +368,7 @@ describe("PATCH /api/posts/[id]", () => {
   });
 
   it("skips mention notification for already-notified users", async () => {
-    const insertFn = vi.fn().mockReturnValue({ then: (r: any) => r({ error: null }) });
+    const insertFn = vi.fn().mockResolvedValue({ error: null });
 
     const client = mockSupabase({
       user: { id: "user-1" },
