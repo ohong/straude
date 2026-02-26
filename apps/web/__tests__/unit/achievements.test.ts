@@ -16,6 +16,7 @@ function makeStats(overrides: Partial<AchievementStats> = {}): AchievementStats 
     kudosSent: 0,
     commentsReceived: 0,
     commentsSent: 0,
+    hasPhoto: false,
     ...overrides,
   };
 }
@@ -34,7 +35,7 @@ describe("achievement definitions", () => {
 
   it("every achievement has a valid trigger", () => {
     for (const a of ACHIEVEMENTS) {
-      expect(["usage", "kudos", "comment"]).toContain(a.trigger);
+      expect(["usage", "kudos", "comment", "photo"]).toContain(a.trigger);
     }
   });
 
@@ -49,12 +50,17 @@ describe("achievement definitions", () => {
   it("has 8 comment achievements", () => {
     expect(ACHIEVEMENTS.filter((a) => a.trigger === "comment")).toHaveLength(8);
   });
+
+  it("has 1 photo achievement", () => {
+    expect(ACHIEVEMENTS.filter((a) => a.trigger === "photo")).toHaveLength(1);
+  });
 });
 
 describe("trigger filtering correctness", () => {
   const usageBadges = ACHIEVEMENTS.filter((a) => a.trigger === "usage");
   const kudosBadges = ACHIEVEMENTS.filter((a) => a.trigger === "kudos");
   const commentBadges = ACHIEVEMENTS.filter((a) => a.trigger === "comment");
+  const photoBadges = ACHIEVEMENTS.filter((a) => a.trigger === "photo");
 
   it("usage badges only depend on usage stats, not social stats", () => {
     // Max social stats, zero usage stats — no usage badge should fire
@@ -63,6 +69,7 @@ describe("trigger filtering correctness", () => {
       kudosSent: 999,
       commentsReceived: 999,
       commentsSent: 999,
+      hasPhoto: true,
     });
     const earned = usageBadges.filter((a) => a.check(stats));
     expect(earned).toHaveLength(0);
@@ -75,6 +82,7 @@ describe("trigger filtering correctness", () => {
       totalOutputTokens: 999_999_999,
       commentsReceived: 999,
       commentsSent: 999,
+      hasPhoto: true,
     });
     const earned = kudosBadges.filter((a) => a.check(stats));
     expect(earned).toHaveLength(0);
@@ -87,8 +95,23 @@ describe("trigger filtering correctness", () => {
       totalOutputTokens: 999_999_999,
       kudosReceived: 999,
       kudosSent: 999,
+      hasPhoto: true,
     });
     const earned = commentBadges.filter((a) => a.check(stats));
+    expect(earned).toHaveLength(0);
+  });
+
+  it("photo badge only depends on hasPhoto", () => {
+    // Max everything else, no photo — no photo badge should fire
+    const stats = makeStats({
+      totalCost: 9999,
+      totalOutputTokens: 999_999_999,
+      kudosReceived: 999,
+      kudosSent: 999,
+      commentsReceived: 999,
+      commentsSent: 999,
+    });
+    const earned = photoBadges.filter((a) => a.check(stats));
     expect(earned).toHaveLength(0);
   });
 
@@ -498,5 +521,17 @@ describe("comments-sent-500", () => {
 
   it("earned with exactly 500 comments sent", () => {
     expect(badge.check(makeStats({ commentsSent: 500 }))).toBe(true);
+  });
+});
+
+describe("first-photo", () => {
+  const badge = ACHIEVEMENTS.find((a) => a.slug === "first-photo")!;
+
+  it("not earned without photo", () => {
+    expect(badge.check(makeStats({ hasPhoto: false }))).toBe(false);
+  });
+
+  it("earned with photo", () => {
+    expect(badge.check(makeStats({ hasPhoto: true }))).toBe(true);
   });
 });

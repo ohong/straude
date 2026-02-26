@@ -1,0 +1,6 @@
+Contact: https://github.com/ohong/straude/security/advisories
+Contact: https://x.com/oscrhong
+Expires: 2027-02-26T00:00:00.000Z
+Preferred-Languages: en
+Canonical: https://straude.com/.well-known/security.txt
+Policy: https://github.com/ohong/straude/security/policy

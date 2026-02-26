@@ -3,6 +3,7 @@ import { createClient } from "@/lib/supabase/server";
 import { getServiceClient } from "@/lib/supabase/service";
 import { parseMentions } from "@/lib/utils/mentions";
 import { sendNotificationEmail } from "@/lib/email/send-comment-email";
+import { checkAndAwardAchievements } from "@/lib/achievements";
 
 type RouteContext = { params: Promise<{ id: string }> };
 
@@ -119,6 +120,11 @@ export async function PATCH(request: NextRequest, context: RouteContext) {
       { error: "Post not found or not yours" },
       { status: 404 }
     );
+  }
+
+  // Photo achievement — fire-and-forget when images were added
+  if (body.images !== undefined && Array.isArray(post.images) && post.images.length > 0) {
+    checkAndAwardAchievements(user.id, "photo").catch(() => {});
   }
 
   // Mention notifications — only when description was actually changed

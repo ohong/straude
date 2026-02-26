@@ -2,6 +2,11 @@
 
 ## Unreleased
 
+### Added
+
+- **"First Photo" achievement.** New badge (trigger: `photo`) awarded when a user adds an image to any post. The PATCH `/api/posts/[id]` route triggers a fire-and-forget achievement check when images are updated. A nudge banner ("Unlock achievements by adding a photo to your post") appears in the app layout for logged-in users who have posts but haven't earned the badge yet. Banner links to the user's latest post and disappears once the achievement is earned.
+- **Security headers & security.txt.** Added Content-Security-Policy (CSP), Cross-Origin-Opener-Policy, Cross-Origin-Resource-Policy, and X-Permitted-Cross-Domain-Policies headers via `next.config.ts`. Disabled the `X-Powered-By` header. Created RFC 9116–compliant `/.well-known/security.txt` with contact, policy, and expiry fields. Targets passing Cloudflare Radar security checks on enterprise networks.
+
 ### Changed
 
 - **Single "Get Started" button in nav.** Replaced separate "Log in" / "Sign up" buttons with a single "Get Started" CTA in both the landing page Navbar and GuestHeader. Routes to `/login` for returning users (detected via localStorage), `/signup` for new visitors.

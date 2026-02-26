@@ -52,6 +52,7 @@ export default async function AppLayout({
     latestPostRes,
     streakRes,
     allTimeUsageRes,
+    photoAchievementRes,
   ] = await Promise.all([
     supabase
       .from("follows")
@@ -76,12 +77,20 @@ export default async function AppLayout({
       .from("daily_usage")
       .select("cost_usd, output_tokens")
       .eq("user_id", user.id),
+    supabase
+      .from("user_achievements")
+      .select("id")
+      .eq("user_id", user.id)
+      .eq("achievement_slug", "first-photo")
+      .maybeSingle(),
   ]);
 
   const followingCount = followingRes.count ?? 0;
   const followersCount = followersRes.count ?? 0;
   const postsCount = postsRes.count ?? 0;
   const streak = Number(streakRes.data) || 0;
+  const hasPhotoAchievement = !!photoAchievementRes.data;
+  const showPhotoNudge = postsCount > 0 && !hasPhotoAchievement && !onboardingIncomplete;
 
   const totalOutputTokens =
     allTimeUsageRes.data?.reduce((s, r) => s + Number(r.output_tokens), 0) ?? 0;
@@ -105,6 +114,14 @@ export default async function AppLayout({
           <span className="text-muted">Finish setting up your profile</span>
           <Link href="/onboarding" className="font-medium text-accent hover:underline">
             Complete onboarding
+          </Link>
+        </div>
+      )}
+      {showPhotoNudge && (
+        <div className="flex items-center justify-center gap-2 border-b border-border bg-accent/5 px-4 py-2 text-sm">
+          <span className="text-muted">Unlock achievements by adding a photo to your post</span>
+          <Link href={`/post/${latestPosts[0]?.id}`} className="font-medium text-accent hover:underline">
+            Add a photo
           </Link>
         </div>
       )}

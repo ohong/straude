@@ -1,6 +1,6 @@
 import { getServiceClient } from "@/lib/supabase/service";
 
-export type AchievementTrigger = "usage" | "kudos" | "comment";
+export type AchievementTrigger = "usage" | "kudos" | "comment" | "photo";
 
 export interface AchievementStats {
   totalCost: number;
@@ -16,6 +16,7 @@ export interface AchievementStats {
   kudosSent: number;
   commentsReceived: number;
   commentsSent: number;
+  hasPhoto: boolean;
 }
 
 export interface AchievementDef {
@@ -28,6 +29,14 @@ export interface AchievementDef {
 }
 
 export const ACHIEVEMENTS: AchievementDef[] = [
+  {
+    slug: "first-photo",
+    title: "First Photo",
+    description: "Add an image to a post",
+    emoji: "\u{1F4F8}",
+    trigger: "photo",
+    check: (s) => s.hasPhoto,
+  },
   {
     slug: "first-sync",
     title: "First Sync",
@@ -328,10 +337,11 @@ export async function checkAndAwardAchievements(
   const needs = (...triggers: AchievementTrigger[]) =>
     !trigger || triggers.includes(trigger);
 
-  const [usageResult, streakResult, socialResult] = await Promise.all([
+  const [usageResult, streakResult, socialResult, photoResult] = await Promise.all([
     fetchIf(needs("usage"), () => db.rpc("get_achievement_stats", { p_user_id: userId }).single()),
     fetchIf(needs("usage"), () => db.rpc("calculate_user_streak", { p_user_id: userId })),
     fetchIf(needs("kudos", "comment"), () => db.rpc("get_social_achievement_stats", { p_user_id: userId }).single()),
+    fetchIf(needs("photo"), () => db.from("posts").select("id").eq("user_id", userId).not("images", "is", null).neq("images", "[]").limit(1)),
   ]);
 
   const usageRow = usageResult?.data as Record<string, unknown> | null;
@@ -352,6 +362,7 @@ export async function checkAndAwardAchievements(
     kudosSent: Number(socialRow?.kudos_sent ?? 0),
     commentsReceived: Number(socialRow?.comments_received ?? 0),
     commentsSent: Number(socialRow?.comments_sent ?? 0),
+    hasPhoto: (photoResult?.data as any[] | null)?.length ? true : false,
   };
 
   const newAwards = candidates.filter(
