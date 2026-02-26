@@ -1,6 +1,7 @@
 import { NextResponse, type NextRequest } from "next/server";
 import { createClient } from "@/lib/supabase/server";
 import { randomUUID } from "node:crypto";
+import sharp from "sharp";
 
 const ALLOWED_TYPES = [
   "image/jpeg",
@@ -10,6 +11,7 @@ const ALLOWED_TYPES = [
   "image/heic",
   "image/heif",
 ];
+const HEIC_TYPES = ["image/heic", "image/heif"];
 const MAX_SIZE = 20 * 1024 * 1024; // 20MB
 
 export async function POST(request: NextRequest) {
@@ -46,21 +48,27 @@ export async function POST(request: NextRequest) {
     );
   }
 
-  const EXT_MAP: Record<string, string> = {
-    jpeg: "jpg",
-    heif: "heif",
-    heic: "heic",
-  };
-  const rawExt = file.type.split("/")[1];
-  const ext = EXT_MAP[rawExt] ?? rawExt;
-  const fileName = `${user.id}/${randomUUID()}.${ext}`;
+  let buffer: Buffer = Buffer.from(await file.arrayBuffer());
+  let contentType = file.type;
+  let ext: string;
 
-  const buffer = Buffer.from(await file.arrayBuffer());
+  // Convert HEIC/HEIF to JPEG since browsers can't render them
+  if (HEIC_TYPES.includes(file.type)) {
+    buffer = await sharp(buffer).jpeg({ quality: 90 }).toBuffer();
+    contentType = "image/jpeg";
+    ext = "jpg";
+  } else {
+    const EXT_MAP: Record<string, string> = { jpeg: "jpg" };
+    const rawExt = file.type.split("/")[1];
+    ext = EXT_MAP[rawExt] ?? rawExt;
+  }
+
+  const fileName = `${user.id}/${randomUUID()}.${ext}`;
 
   const { error: uploadError } = await supabase.storage
     .from("post-images")
     .upload(fileName, buffer, {
-      contentType: file.type,
+      contentType,
       upsert: false,
     });
 

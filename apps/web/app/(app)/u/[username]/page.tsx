@@ -42,6 +42,7 @@ export default async function ProfilePage({
     .single();
 
   if (!profile) notFound();
+  if (!profile.is_public && authUser?.id !== profile.id) notFound();
 
   const isOwn = authUser?.id === profile.id;
 
@@ -321,7 +322,7 @@ export default async function ProfilePage({
           </p>
         </div>
         {normalizedPosts.length > 0 ? (
-          <FeedList initialPosts={normalizedPosts} userId={authUser?.id ?? ""} showTabs={false} />
+          <FeedList initialPosts={normalizedPosts} userId={authUser?.id ?? null} showTabs={false} />
         ) : (
           <div className="px-4 py-12 text-center text-sm text-muted sm:px-6">
             No activities yet.

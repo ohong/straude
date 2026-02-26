@@ -4,6 +4,8 @@
 
 ### Added
 
+- **Public profile pages.** `/u/[username]` and `/u/[username]/follows` are now accessible to logged-out visitors. Guests see the profile with a guest header (Log In / Sign Up) and no sidebars. Auth-specific UI (Follow button, Edit Profile, SyncCommandHint) is hidden for guests. Private profiles (`is_public: false`) return 404 for non-owners.
+
 - **Onboarding Step 3: "Log your first session."** After claiming a username and filling in profile details, a new third step shows the `npx straude@latest` CLI command with a copy-to-clipboard button and a mock terminal output preview. Users can proceed to the feed immediately or come back to it later. Step indicator dots updated from 2 to 3 across all steps.
 - **Welcome email on onboarding completion.** New users receive a transactional welcome email immediately after completing onboarding. Includes the `npx straude@latest` CLI command and a link to their profile. Fires once per user (idempotency key prevents duplicates). Sent regardless of email_notifications preference (transactional). Uses the same Resend + React Email pattern as notification emails.
 - **24-hour nudge email for inactive signups.** Sends a single "Your streak is waiting" email to users who signed up ~24 hours ago but never pushed usage data via the CLI. Runs hourly via Vercel cron (`/api/cron/nudge-inactive`), protected by `CRON_SECRET`. Respects `email_notifications` preference and includes unsubscribe link. Uses idempotency keys to prevent duplicate sends.

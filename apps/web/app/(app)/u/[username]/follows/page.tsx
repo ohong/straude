@@ -32,11 +32,14 @@ export default async function FollowsPage({
 
   const { data: profile } = await supabase
     .from("users")
-    .select("id, username")
+    .select("id, username, is_public")
     .eq("username", username)
     .single();
 
   if (!profile) notFound();
+
+  const { data: { user: authUser } } = await supabase.auth.getUser();
+  if (!profile.is_public && authUser?.id !== profile.id) notFound();
 
   let users: { id: string; username: string | null; display_name: string | null; avatar_url: string | null; bio: string | null }[] = [];
 
