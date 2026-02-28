@@ -1,3 +1,4 @@
+import { Suspense } from "react";
 import { Navbar } from "@/components/landing/Navbar";
 import { Hero } from "@/components/landing/Hero";
 import { Ticker } from "@/components/landing/Ticker";
@@ -20,14 +21,30 @@ export const metadata: Metadata = {
     "One command to log your Claude Code output. Track your spend, compare your pace, keep the streak alive.",
 };
 
+const TICKER_FALLBACK = [
+  { label: "Pace Leader", value: "---" },
+  { label: "Sessions Logged", value: "---" },
+  { label: "Tokens Processed", value: "---" },
+  { label: "Spend Tracked", value: "---" },
+  { label: "Active Streaks", value: "---" },
+];
+
 async function getTickerStats() {
   const supabase = getServiceClient();
 
-  // Aggregate stats + streak dates (one query, fine at current scale)
-  const { data: usageRows } = await supabase
-    .from("daily_usage")
-    .select("session_count, total_tokens, cost_usd, user_id, date")
-    .order("date", { ascending: false });
+  // Run independent queries in parallel
+  const [{ data: usageRows }, { data: topUser }] = await Promise.all([
+    supabase
+      .from("daily_usage")
+      .select("session_count, total_tokens, cost_usd, user_id, date")
+      .order("date", { ascending: false }),
+    supabase
+      .from("leaderboard_weekly")
+      .select("username, total_output_tokens")
+      .order("total_output_tokens", { ascending: false })
+      .limit(1)
+      .single(),
+  ]);
 
   let totalSessions = 0;
   let totalTokens = 0;
@@ -43,14 +60,6 @@ async function getTickerStats() {
       datesByUser.set(row.user_id, dates);
     }
   }
-
-  // Weekly pace leader
-  const { data: topUser } = await supabase
-    .from("leaderboard_weekly")
-    .select("username, total_output_tokens")
-    .order("total_output_tokens", { ascending: false })
-    .limit(1)
-    .single();
 
   // Sum of all current streaks (consecutive days ending at most recent entry per user)
   const DAY_MS = 86_400_000;
@@ -92,21 +101,17 @@ async function getTickerStats() {
   ];
 }
 
-export default async function LandingPage() {
-  let tickerItems: { label: string; value: string }[];
+async function TickerWithData() {
+  let items: { label: string; value: string }[];
   try {
-    tickerItems = await getTickerStats();
+    items = await getTickerStats();
   } catch {
-    // Supabase unavailable at build time — render placeholder
-    tickerItems = [
-      { label: "Pace Leader", value: "---" },
-      { label: "Sessions Logged", value: "---" },
-      { label: "Tokens Processed", value: "---" },
-      { label: "Spend Tracked", value: "---" },
-      { label: "Active Streaks", value: "---" },
-    ];
+    items = TICKER_FALLBACK;
   }
+  return <Ticker items={items} />;
+}
 
+export default function LandingPage() {
   return (
     <div className="bg-[#050505] text-[#F0F0F0] min-h-screen relative">
       <HalftoneCanvas />
@@ -114,9 +119,13 @@ export default async function LandingPage() {
         <Navbar />
         <main>
           <Hero />
-          <Ticker items={tickerItems} />
+          <Suspense fallback={<Ticker items={TICKER_FALLBACK} />}>
+            <TickerWithData />
+          </Suspense>
           <FeaturesGrid />
-          <GlobalFeed />
+          <Suspense fallback={null}>
+            <GlobalFeed />
+          </Suspense>
           <WallOfLove posts={wallOfLovePosts} />
           <CTASection />
         </main>

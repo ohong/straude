@@ -1,3 +1,4 @@
+import { after } from "next/server";
 import { NextResponse, type NextRequest } from "next/server";
 import { createClient } from "@/lib/supabase/server";
 import { getServiceClient } from "@/lib/supabase/service";
@@ -131,98 +132,101 @@ export async function PATCH(request: NextRequest, context: RouteContext) {
     );
   }
 
-  // Photo achievement — fire-and-forget when images were added
-  if (body.images !== undefined && Array.isArray(post.images) && post.images.length > 0) {
-    checkAndAwardAchievements(user.id, "photo").catch(() => {});
-  }
+  // Defer non-blocking work after the response is sent
+  after(async () => {
+    // Photo achievement — when images were added
+    if (body.images !== undefined && Array.isArray(post.images) && post.images.length > 0) {
+      checkAndAwardAchievements(user.id, "photo").catch(() => {});
+    }
 
-  // Award streak freeze when enriching a bare post (first time adding title or description)
-  const wasBare = currentPost && currentPost.title === null && currentPost.description === null;
-  const isEnriching = wasBare && (body.title || body.description);
-  if (isEnriching) {
-    const db = getServiceClient();
-    db.rpc("increment_streak_freezes", { p_user_id: user.id, p_max: 7 }).then(() => {}, () => {});
-  }
+    // Award streak freeze when enriching a bare post (first time adding title or description)
+    const wasBare = currentPost && currentPost.title === null && currentPost.description === null;
+    const isEnriching = wasBare && (body.title || body.description);
+    if (isEnriching) {
+      const db = getServiceClient();
+      db.rpc("increment_streak_freezes", { p_user_id: user.id, p_max: 7 }).then(() => {}, () => {});
+    }
 
-  // Mention notifications — only when description was actually changed
-  if (body.description !== undefined && post.description) {
-    const mentionedUsernames = parseMentions(post.description);
-    if (mentionedUsernames.length > 0) {
-      const { data: mentionedUsers } = await supabase
-        .from("users")
-        .select("id, username")
-        .in("username", mentionedUsernames);
+    // Mention notifications — only when description was actually changed
+    if (body.description !== undefined && post.description) {
+      const mentionedUsernames = parseMentions(post.description);
+      if (mentionedUsernames.length > 0) {
+        const { data: mentionedUsers } = await supabase
+          .from("users")
+          .select("id, username")
+          .in("username", mentionedUsernames);
 
-      const candidates = (mentionedUsers ?? []).filter(
-        (u) => u.id !== user.id,
-      );
-
-      if (candidates.length > 0) {
-        // Deduplicate: skip users who already have a mention notification for this post
-        const { data: existingNotifs } = await supabase
-          .from("notifications")
-          .select("user_id")
-          .eq("type", "mention")
-          .eq("post_id", id)
-          .in("user_id", candidates.map((u) => u.id));
-
-        const alreadyNotified = new Set(
-          (existingNotifs ?? []).map((n) => n.user_id),
+        const candidates = (mentionedUsers ?? []).filter(
+          (u) => u.id !== user.id,
         );
-        const toNotify = candidates.filter((u) => !alreadyNotified.has(u.id));
 
-        const mentionNotifs = toNotify.map((u) => ({
-          user_id: u.id,
-          actor_id: user.id,
-          type: "mention" as const,
-          post_id: id,
-        }));
+        if (candidates.length > 0) {
+          // Deduplicate: skip users who already have a mention notification for this post
+          const { data: existingNotifs } = await supabase
+            .from("notifications")
+            .select("user_id")
+            .eq("type", "mention")
+            .eq("post_id", id)
+            .in("user_id", candidates.map((u) => u.id));
 
-        if (mentionNotifs.length > 0) {
-          supabase.from("notifications").insert(mentionNotifs).then(() => {});
-        }
+          const alreadyNotified = new Set(
+            (existingNotifs ?? []).map((n) => n.user_id),
+          );
+          const toNotify = candidates.filter((u) => !alreadyNotified.has(u.id));
 
-        // Fire mention emails
-        if (toNotify.length > 0) {
-          const db = getServiceClient();
-          const { data: actor } = await db
-            .from("users")
-            .select("username")
-            .eq("id", user.id)
-            .single();
-          const actorUsername = actor?.username ?? "Someone";
+          const mentionNotifs = toNotify.map((u) => ({
+            user_id: u.id,
+            actor_id: user.id,
+            type: "mention" as const,
+            post_id: id,
+          }));
 
-          for (const u of toNotify) {
-            const sdb = getServiceClient();
-            Promise.all([
-              sdb
-                .from("users")
-                .select("email_mention_notifications")
-                .eq("id", u.id)
-                .single(),
-              sdb.auth.admin.getUserById(u.id),
-            ])
-              .then(([profileRes, authRes]) => {
-                const email = authRes.data?.user?.email;
-                if (!profileRes.data?.email_mention_notifications || !email) return;
+          if (mentionNotifs.length > 0) {
+            await supabase.from("notifications").insert(mentionNotifs);
+          }
 
-                return sendNotificationEmail({
-                  recipientUserId: u.id,
-                  recipientEmail: email,
-                  actorUsername,
-                  type: "post_mention",
-                  content: post.description!,
-                  postId: id,
-                  postTitle: (post.title as string) ?? null,
-                  idempotencyKey: `mention-post/${id}/${u.id}`,
-                });
-              })
-              .catch((err) => console.error("[email] mention notification failed:", err));
+          // Fire mention emails
+          if (toNotify.length > 0) {
+            const db = getServiceClient();
+            const { data: actor } = await db
+              .from("users")
+              .select("username")
+              .eq("id", user.id)
+              .single();
+            const actorUsername = actor?.username ?? "Someone";
+
+            for (const u of toNotify) {
+              const sdb = getServiceClient();
+              Promise.all([
+                sdb
+                  .from("users")
+                  .select("email_mention_notifications")
+                  .eq("id", u.id)
+                  .single(),
+                sdb.auth.admin.getUserById(u.id),
+              ])
+                .then(([profileRes, authRes]) => {
+                  const email = authRes.data?.user?.email;
+                  if (!profileRes.data?.email_mention_notifications || !email) return;
+
+                  return sendNotificationEmail({
+                    recipientUserId: u.id,
+                    recipientEmail: email,
+                    actorUsername,
+                    type: "post_mention",
+                    content: post.description!,
+                    postId: id,
+                    postTitle: (post.title as string) ?? null,
+                    idempotencyKey: `mention-post/${id}/${u.id}`,
+                  });
+                })
+                .catch((err) => console.error("[email] mention notification failed:", err));
+            }
           }
         }
       }
     }
-  }
+  });
 
   return NextResponse.json(post);
 }

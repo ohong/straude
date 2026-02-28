@@ -1,4 +1,5 @@
 import { createClient } from "@/lib/supabase/server";
+import { getAuthUser } from "@/lib/supabase/auth";
 import { FeedList } from "@/components/app/feed/FeedList";
 import type { Metadata } from "next";
 
@@ -12,11 +13,8 @@ export default async function FeedPage({
   searchParams: Promise<{ tab?: string }>;
 }) {
   const params = await searchParams;
+  const user = await getAuthUser();
   const supabase = await createClient();
-
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
 
   // Unauthenticated visitors can only see the global feed
   const feedType: FeedType =

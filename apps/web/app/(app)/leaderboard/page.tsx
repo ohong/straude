@@ -1,4 +1,5 @@
 import { createClient } from "@/lib/supabase/server";
+import { getAuthUser } from "@/lib/supabase/auth";
 import { LeaderboardTable } from "@/components/app/leaderboard/LeaderboardTable";
 import type { Metadata } from "next";
 
@@ -10,10 +11,8 @@ export default async function LeaderboardPage({
   searchParams: Promise<{ period?: string; region?: string }>;
 }) {
   const { period = "week", region } = await searchParams;
+  const user = await getAuthUser();
   const supabase = await createClient();
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
 
   // We'll use the materialized view directly for SSR
   const viewName = `leaderboard_${period === "all_time" ? "all_time" : period === "month" ? "monthly" : period === "day" ? "daily" : "weekly"}`;

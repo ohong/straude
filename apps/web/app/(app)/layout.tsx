@@ -1,5 +1,6 @@
 import Link from "next/link";
 import { createClient } from "@/lib/supabase/server";
+import { getAuthUser } from "@/lib/supabase/auth";
 import { redirect } from "next/navigation";
 import { TopHeader } from "@/components/app/shared/TopHeader";
 import { Sidebar } from "@/components/app/shared/Sidebar";
@@ -15,10 +16,8 @@ export default async function AppLayout({
 }: {
   children: React.ReactNode;
 }) {
+  const user = await getAuthUser();
   const supabase = await createClient();
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
 
   // If not logged in: allow public pages, redirect others to login
   if (!user) {

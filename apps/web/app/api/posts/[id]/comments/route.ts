@@ -1,3 +1,4 @@
+import { after } from "next/server";
 import { NextResponse, type NextRequest } from "next/server";
 import { createClient } from "@/lib/supabase/server";
 import { getServiceClient } from "@/lib/supabase/service";
@@ -87,80 +88,83 @@ export async function POST(request: NextRequest, context: RouteContext) {
     return NextResponse.json({ error: error.message }, { status: 500 });
   }
 
-  // Insert comment notification (skip self-comment)
-  const { data: post } = await supabase
-    .from("posts")
-    .select("user_id")
-    .eq("id", id)
-    .single();
-  if (post && post.user_id !== user.id) {
-    await supabase.from("notifications").insert({
-      user_id: post.user_id,
-      actor_id: user.id,
-      type: "comment",
-      post_id: id,
-      comment_id: comment.id,
-    });
+  // Defer notifications and achievements after the response is sent
+  after(async () => {
+    // Insert comment notification (skip self-comment)
+    const { data: post } = await supabase
+      .from("posts")
+      .select("user_id")
+      .eq("id", id)
+      .single();
+    if (post && post.user_id !== user.id) {
+      await supabase.from("notifications").insert({
+        user_id: post.user_id,
+        actor_id: user.id,
+        type: "comment",
+        post_id: id,
+        comment_id: comment.id,
+      });
 
-    const commenterUsername =
-      (comment.user as Record<string, unknown>)?.username as string ??
-      "Someone";
+      const commenterUsername =
+        (comment.user as Record<string, unknown>)?.username as string ??
+        "Someone";
 
-    fireNotificationEmail({
-      recipientUserId: post.user_id,
-      actorUsername: commenterUsername,
-      type: "comment",
-      content,
-      postId: id,
-      idempotencyKey: `comment-notif/${comment.id}`,
-    });
-  }
-
-  // Mention notifications (de-dup: skip self and post owner)
-  const mentionedUsernames = parseMentions(content);
-  if (mentionedUsernames.length > 0) {
-    const { data: mentionedUsers } = await supabase
-      .from("users")
-      .select("id, username")
-      .in("username", mentionedUsernames);
-
-    const skipIds = new Set([user.id, post?.user_id].filter(Boolean));
-    const toNotify = (mentionedUsers ?? []).filter((u) => !skipIds.has(u.id));
-
-    const mentionNotifs = toNotify.map((u) => ({
-      user_id: u.id,
-      actor_id: user.id,
-      type: "mention" as const,
-      post_id: id,
-      comment_id: comment.id,
-    }));
-
-    if (mentionNotifs.length > 0) {
-      supabase.from("notifications").insert(mentionNotifs).then(() => {});
-    }
-
-    // Fire mention emails (fire-and-forget, one per mentioned user)
-    const actorUsername =
-      (comment.user as Record<string, unknown>)?.username as string ??
-      "Someone";
-
-    for (const u of toNotify) {
       fireNotificationEmail({
-        recipientUserId: u.id,
-        actorUsername,
-        type: "mention",
+        recipientUserId: post.user_id,
+        actorUsername: commenterUsername,
+        type: "comment",
         content,
         postId: id,
-        idempotencyKey: `mention-notif/${comment.id}/${u.id}`,
+        idempotencyKey: `comment-notif/${comment.id}`,
       });
     }
-  }
 
-  // Award comment achievements (fire-and-forget)
-  checkAndAwardAchievements(user.id, "comment").catch(() => {});
-  if (post && post.user_id !== user.id) {
-    checkAndAwardAchievements(post.user_id, "comment").catch(() => {});
-  }
+    // Mention notifications (de-dup: skip self and post owner)
+    const mentionedUsernames = parseMentions(content);
+    if (mentionedUsernames.length > 0) {
+      const { data: mentionedUsers } = await supabase
+        .from("users")
+        .select("id, username")
+        .in("username", mentionedUsernames);
+
+      const skipIds = new Set([user.id, post?.user_id].filter(Boolean));
+      const toNotify = (mentionedUsers ?? []).filter((u) => !skipIds.has(u.id));
+
+      const mentionNotifs = toNotify.map((u) => ({
+        user_id: u.id,
+        actor_id: user.id,
+        type: "mention" as const,
+        post_id: id,
+        comment_id: comment.id,
+      }));
+
+      if (mentionNotifs.length > 0) {
+        await supabase.from("notifications").insert(mentionNotifs);
+      }
+
+      // Fire mention emails (one per mentioned user)
+      const actorUsername =
+        (comment.user as Record<string, unknown>)?.username as string ??
+        "Someone";
+
+      for (const u of toNotify) {
+        fireNotificationEmail({
+          recipientUserId: u.id,
+          actorUsername,
+          type: "mention",
+          content,
+          postId: id,
+          idempotencyKey: `mention-notif/${comment.id}/${u.id}`,
+        });
+      }
+    }
+
+    // Award comment achievements
+    checkAndAwardAchievements(user.id, "comment").catch(() => {});
+    if (post && post.user_id !== user.id) {
+      checkAndAwardAchievements(post.user_id, "comment").catch(() => {});
+    }
+  });
 
   return NextResponse.json(comment, { status: 201 });
 }

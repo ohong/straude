@@ -36,7 +36,7 @@ export default async function PostDetailPage({
     data: { user },
   } = await supabase.auth.getUser();
 
-  const { data: post } = await supabase
+  const postPromise = supabase
     .from("posts")
     .select(
       `
@@ -50,35 +50,35 @@ export default async function PostDetailPage({
     .eq("id", id)
     .single();
 
-  if (!post) notFound();
+  const kudosCheckPromise = user
+    ? supabase
+        .from("kudos")
+        .select("id")
+        .eq("user_id", user.id)
+        .eq("post_id", id)
+        .maybeSingle()
+    : Promise.resolve({ data: null });
 
-  // Check if current user has kudosed
-  let hasKudosed = false;
-  if (user) {
-    const { data: k } = await supabase
-      .from("kudos")
-      .select("id")
-      .eq("user_id", user.id)
-      .eq("post_id", id)
-      .maybeSingle();
-    hasKudosed = !!k;
-  }
-
-  // Fetch recent kudos users (up to 3 for avatar display)
-  const { data: recentKudos } = await supabase
+  const recentKudosPromise = supabase
     .from("kudos")
     .select("user:users!kudos_user_id_fkey(avatar_url, username)")
     .eq("post_id", id)
     .order("created_at", { ascending: false })
     .limit(3);
 
-  // Get first page of comments
-  const { data: comments } = await supabase
+  const commentsPromise = supabase
     .from("comments")
     .select("*, user:users!comments_user_id_fkey(*)")
     .eq("post_id", id)
     .order("created_at", { ascending: true })
     .limit(20);
+
+  const [{ data: post }, { data: kudosCheck }, { data: recentKudos }, { data: comments }] =
+    await Promise.all([postPromise, kudosCheckPromise, recentKudosPromise, commentsPromise]);
+
+  if (!post) notFound();
+
+  const hasKudosed = !!kudosCheck;
 
   const normalizedPost = {
     ...post,

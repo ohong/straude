@@ -18,6 +18,12 @@
 
 ### Fixed
 
+- **Leaderboard streaks all showing "-".** Two overloads of `calculate_user_streak` caused PostgreSQL ambiguity error in `calculate_streaks_batch`. Dropped the redundant 1-arg overload and disambiguated the batch call.
+- **Post detail page waterfall.** 4 sequential queries (post, kudos check, recent kudos, comments) now run in parallel via `Promise.all`.
+- **Landing page waterfall.** Ticker stats and weekly leaderboard queries now run in parallel. Added `<Suspense>` boundaries so Hero and static sections stream immediately.
+- **Redundant auth calls.** Added `React.cache()` wrapper (`getAuthUser`) to deduplicate `getUser()` between layouts and pages within a single request.
+- **API response latency.** Moved notifications, achievement checks, and emails into `after()` in 4 API routes (kudos, comments, posts PATCH, follow) so they run after the response is sent.
+- **Bundle size: barrel imports.** Added `optimizePackageImports` for `lucide-react` and `motion/react` to tree-shake unused exports across 18+ files.
 - **PostgREST filter injection.** Sanitized user input in `/api/search` and `/api/mentions` to strip characters that could break `.or()` filter syntax.
 - **Feed API sequential queries.** Converted 3 sequential enrichment queries to `Promise.all` in `/api/feed`.
 - **Unbounded comments queries.** Added `.limit()` to comments queries in feed page, feed API, and profile page.

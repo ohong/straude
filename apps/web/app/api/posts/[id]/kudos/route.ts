@@ -1,3 +1,4 @@
+import { after } from "next/server";
 import { NextResponse, type NextRequest } from "next/server";
 import { createClient } from "@/lib/supabase/server";
 import { checkAndAwardAchievements } from "@/lib/achievements";
@@ -24,31 +25,31 @@ export async function POST(_request: NextRequest, context: RouteContext) {
     return NextResponse.json({ error: error.message }, { status: 500 });
   }
 
-  // Fetch post owner for notifications and achievements
-  const { data: post } = !error
-    ? await supabase
+  // Fetch post owner for notifications and achievements (deferred after response)
+  if (!error) {
+    after(async () => {
+      const { data: post } = await supabase
         .from("posts")
         .select("user_id")
         .eq("id", id)
-        .single()
-    : { data: null };
+        .single();
 
-  // Insert kudos notification (skip self-kudos)
-  if (!error && post && post.user_id !== user.id) {
-    await supabase.from("notifications").insert({
-      user_id: post.user_id,
-      actor_id: user.id,
-      type: "kudos",
-      post_id: id,
+      // Insert kudos notification (skip self-kudos)
+      if (post && post.user_id !== user.id) {
+        await supabase.from("notifications").insert({
+          user_id: post.user_id,
+          actor_id: user.id,
+          type: "kudos",
+          post_id: id,
+        });
+      }
+
+      // Award social achievements (only on INSERT not DELETE)
+      checkAndAwardAchievements(user.id, "kudos").catch(() => {});
+      if (post && post.user_id !== user.id) {
+        checkAndAwardAchievements(post.user_id, "kudos").catch(() => {});
+      }
     });
-  }
-
-  // Award social achievements (fire-and-forget, only on INSERT not DELETE)
-  if (!error) {
-    checkAndAwardAchievements(user.id, "kudos").catch(() => {});
-    if (post && post.user_id !== user.id) {
-      checkAndAwardAchievements(post.user_id, "kudos").catch(() => {});
-    }
   }
 
   const { count } = await supabase

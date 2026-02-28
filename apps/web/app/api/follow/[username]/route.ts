@@ -1,3 +1,4 @@
+import { after } from "next/server";
 import { NextResponse, type NextRequest } from "next/server";
 import { createClient } from "@/lib/supabase/server";
 
@@ -44,11 +45,13 @@ export async function POST(_request: NextRequest, context: RouteContext) {
     return NextResponse.json({ error: error.message }, { status: 500 });
   }
 
-  // Insert follow notification (fire-and-forget)
-  await supabase.from("notifications").insert({
-    user_id: target.id,
-    actor_id: user.id,
-    type: "follow",
+  // Insert follow notification after the response is sent
+  after(async () => {
+    await supabase.from("notifications").insert({
+      user_id: target.id,
+      actor_id: user.id,
+      type: "follow",
+    });
   });
 
   return NextResponse.json({ following: true });
