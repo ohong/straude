@@ -167,7 +167,7 @@ describe("runCcusage", () => {
     // Second call is the actual ccusage invocation (direct, no bunx wrapper)
     expect(mockExecFileSync).toHaveBeenCalledWith(
       "ccusage",
-      ["daily", "--json", "--since", "20250601", "--until", "20250601"],
+      ["daily", "--json", "--breakdown", "--since", "20250601", "--until", "20250601"],
       expect.objectContaining({ encoding: "utf-8" }),
     );
   });
@@ -192,7 +192,7 @@ describe("runCcusage", () => {
     expect(mockExecFileSync).toHaveBeenNthCalledWith(
       2,
       "npx",
-      ["--yes", "ccusage@17", "daily", "--json", "--since", "20250601", "--until", "20250601"],
+      ["--yes", "ccusage@17", "daily", "--json", "--breakdown", "--since", "20250601", "--until", "20250601"],
       expect.objectContaining({ encoding: "utf-8" }),
     );
   });
