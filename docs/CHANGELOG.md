@@ -21,6 +21,10 @@
 
 - **Single "Get Started" button in nav.** Replaced separate "Log in" / "Sign up" buttons with a single "Get Started" CTA in both the landing page Navbar and GuestHeader. Routes to `/login` for returning users (detected via localStorage), `/signup` for new visitors.
 
+### Changed
+
+- **HEIC upload: replaced `sharp` with `heic-convert`.** Switched from `sharp` (native `libheif` bindings, often unavailable on Vercel) to `heic-convert` (pure JS, zero native deps) for HEIC/HEIF→JPEG conversion. Also added magic-byte detection so HEIC files mislabeled as `application/octet-stream` by iOS are still recognized. Removed `sharp` dependency entirely.
+
 ### Fixed
 
 - **Timezone-aware streak calculation.** `calculate_user_streak` now uses the user's `timezone` column to compute "today" instead of UTC `CURRENT_DATE`. Previously, users behind UTC (e.g., PST) could see their streak appear broken near midnight because the server thought it was the next day. The 2-day timezone buffer hack is replaced with a proper 1-day grace period using the user's actual timezone.

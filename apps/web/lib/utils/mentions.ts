@@ -6,7 +6,9 @@
  * - mentionsToMarkdownLinks: convert @user to [@user](/u/user) for markdown rendering
  */
 
-const MENTION_RE = /(?:^|(?<=\s))@([a-zA-Z0-9_-]{1,39})\b/g;
+// Match @username preceded by start-of-string or any non-word character.
+// This allows (@user), "@user", etc. while still excluding email-like user@name.
+const MENTION_RE = /(?:^|(?<=[^a-zA-Z0-9_-]))@([a-zA-Z0-9_-]{1,39})\b/g;
 
 /** Extract unique lowercase usernames from text. */
 export function parseMentions(text: string): string[] {
@@ -25,7 +27,7 @@ export function getMentionQuery(
 ): string | null {
   // Walk backwards from cursor to find @
   const before = text.slice(0, cursorPos);
-  const match = before.match(/(?:^|\s)@([a-zA-Z0-9_-]{0,39})$/);
+  const match = before.match(/(?:^|[^a-zA-Z0-9_-])@([a-zA-Z0-9_-]{0,39})$/);
   if (!match) return null;
   return match[1].toLowerCase();
 }
@@ -33,7 +35,6 @@ export function getMentionQuery(
 /** Replace @user with [@user](/u/user) markdown links. */
 export function mentionsToMarkdownLinks(text: string): string {
   return text.replace(MENTION_RE, (full, username: string) => {
-    const prefix = full.startsWith("@") ? "" : full[0];
-    return `${prefix}[@${username}](/u/${username.toLowerCase()})`;
+    return `[@${username}](/u/${username.toLowerCase()})`;
   });
 }

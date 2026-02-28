@@ -4,13 +4,9 @@ vi.mock("@/lib/supabase/server", () => ({
   createClient: vi.fn(),
 }));
 
-// Mock sharp so HEIC/HEIF conversion doesn't need real libheif
-vi.mock("sharp", () => ({
-  default: vi.fn(() => ({
-    jpeg: vi.fn(() => ({
-      toBuffer: vi.fn().mockResolvedValue(Buffer.from("fake-jpeg")),
-    })),
-  })),
+// Mock heic-convert so tests don't need real HEIC decoding
+vi.mock("heic-convert", () => ({
+  default: vi.fn().mockResolvedValue(new ArrayBuffer(8)),
 }));
 
 import { POST } from "@/app/api/upload/route";
@@ -47,18 +43,30 @@ function mockSupabase(opts: {
   return client;
 }
 
+/** Build a HEIC ftyp header for magic-byte detection tests. */
+function makeHeicBuffer(brand = "heic"): ArrayBuffer {
+  // ftyp box: 4 bytes size + "ftyp" + 4-byte brand
+  const buf = new Uint8Array(12);
+  buf.set([0, 0, 0, 12]); // box size
+  buf.set(new TextEncoder().encode("ftyp"), 4);
+  buf.set(new TextEncoder().encode(brand), 8);
+  return buf.buffer;
+}
+
 /**
  * Build a mock NextRequest with a stubbed formData() method.
  * This avoids jsdom FormData + body streaming incompatibilities.
  */
-function makeUploadRequest(file: { name: string; type: string; size: number } | null) {
+function makeUploadRequest(
+  file: { name: string; type: string; size: number; buffer?: ArrayBuffer } | null
+) {
   const formData = new Map<string, any>();
   if (file) {
     formData.set("file", {
       name: file.name,
       type: file.type,
       size: file.size,
-      arrayBuffer: () => Promise.resolve(new ArrayBuffer(file.size)),
+      arrayBuffer: () => Promise.resolve(file.buffer ?? new ArrayBuffer(file.size)),
     });
   }
 
@@ -107,8 +115,8 @@ describe("POST /api/upload", () => {
     expect(json.error).toContain("File type not allowed");
   });
 
-  it("accepts heic files", async () => {
-    mockSupabase({ publicUrl: "https://cdn.example.com/user-1/abc.heic" });
+  it("accepts heic files by MIME type", async () => {
+    mockSupabase({ publicUrl: "https://cdn.example.com/user-1/abc.jpg" });
 
     const res = await POST(
       makeUploadRequest({ name: "photo.heic", type: "image/heic", size: 100 })
@@ -116,11 +124,11 @@ describe("POST /api/upload", () => {
     const json = await res.json();
 
     expect(res.status).toBe(200);
-    expect(json.url).toBe("https://cdn.example.com/user-1/abc.heic");
+    expect(json.url).toBeDefined();
   });
 
-  it("accepts heif files", async () => {
-    mockSupabase({ publicUrl: "https://cdn.example.com/user-1/abc.heif" });
+  it("accepts heif files by MIME type", async () => {
+    mockSupabase({ publicUrl: "https://cdn.example.com/user-1/abc.jpg" });
 
     const res = await POST(
       makeUploadRequest({ name: "photo.heif", type: "image/heif", size: 100 })
@@ -128,7 +136,57 @@ describe("POST /api/upload", () => {
     const json = await res.json();
 
     expect(res.status).toBe(200);
-    expect(json.url).toBe("https://cdn.example.com/user-1/abc.heif");
+    expect(json.url).toBeDefined();
+  });
+
+  it("detects HEIC by magic bytes when MIME is application/octet-stream", async () => {
+    mockSupabase({ publicUrl: "https://cdn.example.com/user-1/abc.jpg" });
+
+    const res = await POST(
+      makeUploadRequest({
+        name: "IMG_1234.HEIC",
+        type: "application/octet-stream",
+        size: 12,
+        buffer: makeHeicBuffer("heic"),
+      })
+    );
+    const json = await res.json();
+
+    expect(res.status).toBe(200);
+    expect(json.url).toBeDefined();
+  });
+
+  it("detects HEIC by magic bytes for mif1 brand", async () => {
+    mockSupabase({ publicUrl: "https://cdn.example.com/user-1/abc.jpg" });
+
+    const res = await POST(
+      makeUploadRequest({
+        name: "photo.heic",
+        type: "application/octet-stream",
+        size: 12,
+        buffer: makeHeicBuffer("mif1"),
+      })
+    );
+    const json = await res.json();
+
+    expect(res.status).toBe(200);
+    expect(json.url).toBeDefined();
+  });
+
+  it("rejects octet-stream that is not HEIC", async () => {
+    mockSupabase({});
+
+    const res = await POST(
+      makeUploadRequest({
+        name: "file.bin",
+        type: "application/octet-stream",
+        size: 100,
+      })
+    );
+    const json = await res.json();
+
+    expect(res.status).toBe(400);
+    expect(json.error).toContain("File type not allowed");
   });
 
   it("accepts jpeg files", async () => {

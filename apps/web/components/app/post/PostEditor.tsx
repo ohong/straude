@@ -9,6 +9,63 @@ import { Input } from "@/components/ui/Input";
 import { MentionInput } from "@/components/app/shared/MentionInput";
 import type { Post } from "@/types";
 
+const MAX_DIMENSION = 2400;
+const MAX_BYTES = 4 * 1024 * 1024; // 4MB — stay under Vercel's 4.5MB body limit
+const HEIC_TYPES = ["image/heic", "image/heif"];
+
+/**
+ * Compress an image client-side using Canvas API.
+ * Resizes to MAX_DIMENSION on the longest side, then JPEG-compresses
+ * to stay under MAX_BYTES. HEIC files on browsers that can't decode them
+ * (non-Safari) are passed through as-is for server-side conversion.
+ */
+async function compressImage(file: File): Promise<File> {
+  // Skip compression for small files and GIFs (preserve animation)
+  if (file.size <= MAX_BYTES || file.type === "image/gif") return file;
+
+  // HEIC: try to load via Canvas (works on Safari/iOS), pass through if it fails
+  const isHeic = HEIC_TYPES.includes(file.type) || /\.hei[cf]$/i.test(file.name);
+
+  const bitmap = await createImageBitmap(file).catch(() => null);
+  if (!bitmap) {
+    // Browser can't decode (likely HEIC on Chrome) — send to server as-is
+    return file;
+  }
+
+  let { width, height } = bitmap;
+  if (width > MAX_DIMENSION || height > MAX_DIMENSION) {
+    const scale = MAX_DIMENSION / Math.max(width, height);
+    width = Math.round(width * scale);
+    height = Math.round(height * scale);
+  }
+
+  const canvas = new OffscreenCanvas(width, height);
+  const ctx = canvas.getContext("2d")!;
+  ctx.drawImage(bitmap, 0, 0, width, height);
+  bitmap.close();
+
+  // Binary search for the best quality that fits under MAX_BYTES
+  let lo = 0.5, hi = 0.92;
+  let blob = await canvas.convertToBlob({ type: "image/jpeg", quality: hi });
+
+  if (blob.size <= MAX_BYTES) {
+    return new File([blob], file.name.replace(/\.[^.]+$/, ".jpg"), { type: "image/jpeg" });
+  }
+
+  for (let i = 0; i < 4 && hi - lo > 0.05; i++) {
+    const mid = (lo + hi) / 2;
+    blob = await canvas.convertToBlob({ type: "image/jpeg", quality: mid });
+    if (blob.size <= MAX_BYTES) {
+      lo = mid;
+    } else {
+      hi = mid;
+    }
+  }
+
+  blob = await canvas.convertToBlob({ type: "image/jpeg", quality: lo });
+  return new File([blob], file.name.replace(/\.[^.]+$/, ".jpg"), { type: "image/jpeg" });
+}
+
 export function PostEditor({ post, autoEdit = false }: { post: Post; autoEdit?: boolean }) {
   const router = useRouter();
   const [editing, setEditing] = useState(autoEdit);
@@ -90,8 +147,9 @@ export function PostEditor({ post, autoEdit = false }: { post: Post; autoEdit?: 
 
     await Promise.all(
       toUpload.map(async (file) => {
+        const compressed = await compressImage(file);
         const form = new FormData();
-        form.append("file", file);
+        form.append("file", compressed);
         try {
           const res = await fetch("/api/upload", { method: "POST", body: form });
           if (res.ok) {

@@ -32,6 +32,14 @@ describe("parseMentions", () => {
       "user_name",
     ]);
   });
+
+  it("matches after punctuation like parentheses", () => {
+    expect(parseMentions("(@ohong)")).toEqual(["ohong"]);
+  });
+
+  it("matches after quotes and other non-word chars", () => {
+    expect(parseMentions('"@alice" and /@bob')).toEqual(["alice", "bob"]);
+  });
 });
 
 describe("getMentionQuery", () => {
@@ -54,6 +62,18 @@ describe("getMentionQuery", () => {
   it("handles @ at start of string", () => {
     expect(getMentionQuery("@bob", 4)).toBe("bob");
   });
+
+  it("triggers after punctuation like parentheses", () => {
+    expect(getMentionQuery("(@oh", 4)).toBe("oh");
+  });
+
+  it("triggers after quote", () => {
+    expect(getMentionQuery('"@al', 4)).toBe("al");
+  });
+
+  it("does not trigger after word character", () => {
+    expect(getMentionQuery("user@al", 7)).toBeNull();
+  });
 });
 
 describe("mentionsToMarkdownLinks", () => {
@@ -75,5 +95,11 @@ describe("mentionsToMarkdownLinks", () => {
 
   it("lowercases in the link href", () => {
     expect(mentionsToMarkdownLinks("@Alice")).toBe("[@Alice](/u/alice)");
+  });
+
+  it("converts mentions after punctuation", () => {
+    expect(mentionsToMarkdownLinks("(@ohong)")).toBe(
+      "([@ohong](/u/ohong))"
+    );
   });
 });

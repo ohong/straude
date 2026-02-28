@@ -87,7 +87,7 @@ export function MentionInput({
     const after = value.slice(cursorPos);
 
     // Find the @ that started this mention
-    const atMatch = before.match(/(?:^|\s)@([a-zA-Z0-9_-]{0,39})$/);
+    const atMatch = before.match(/(?:^|[^a-zA-Z0-9_-])@([a-zA-Z0-9_-]{0,39})$/);
     if (!atMatch) return;
 
     const atStart = before.length - atMatch[0].length + (atMatch[0].startsWith("@") ? 0 : 1);

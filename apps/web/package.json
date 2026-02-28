@@ -19,6 +19,7 @@
     "@vercel/analytics": "^1.6.1",
     "agentation": "^2.2.1",
     "clsx": "^2",
+    "heic-convert": "^2.1.0",
     "lucide-react": "^0.474",
     "motion": "^12",
     "next": "16.1.6",
@@ -28,7 +29,6 @@
     "recharts": "^3.7.0",
     "remark-breaks": "^4.0.0",
     "resend": "^6.9.2",
-    "sharp": "^0.34.5",
     "tailwind-merge": "^3"
   },
   "devDependencies": {
@@ -36,6 +36,7 @@
     "@tailwindcss/postcss": "^4",
     "@testing-library/jest-dom": "^6.9.1",
     "@testing-library/react": "^16.3.2",
+    "@types/heic-convert": "^2.1.0",
     "@types/node": "^20",
     "@types/react": "^19",
     "@types/react-dom": "^19",
