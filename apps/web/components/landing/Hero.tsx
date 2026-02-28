@@ -65,7 +65,7 @@ export function Hero() {
           >
             Start Your Streak
           </Link>
-          <CopySnippet command="npx straude@latest" />
+          <CopySnippet command="bunx straude" />
         </div>
 
         {/* Terminal output */}

@@ -25,7 +25,7 @@ export function CTASection() {
         <div className="inline-flex items-center gap-4 border border-[#222] bg-black/50 px-6 py-3 font-[family-name:var(--font-mono)] text-lg text-[#888]">
           ${" "}
           <span className="text-[#F0F0F0]">
-            npx straude@latest push --days 7
+            bunx straude push --days 7
           </span>
         </div>
       </motion.div>

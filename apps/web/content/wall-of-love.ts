@@ -74,14 +74,14 @@ export const wallOfLovePosts: WallOfLovePost[] = [
     text: "JUST IN: Coinbase CEO Brian Armstrong has started codemaxxing and is brutally gitmogging Coinbase staff.",
     date: "Feb 26, 2026",
   },
-  {
-    url: "https://x.com/alexisohanian/status/2025726222500516179",
-    author_name: "Alexis Ohanian",
-    author_handle: "@alexisohanian",
-    author_avatar: "https://unavatar.io/x/alexisohanian",
-    text: "Yes. For those of us who've been building software to turn our life into a video game, this is an amazing time",
-    date: "Feb 22, 2026",
-  },
+  // {
+  //   url: "https://x.com/alexisohanian/status/2025726222500516179",
+  //   author_name: "Alexis Ohanian",
+  //   author_handle: "@alexisohanian",
+  //   author_avatar: "https://unavatar.io/x/alexisohanian",
+  //   text: "Yes. For those of us who've been building software to turn our life into a video game, this is an amazing time",
+  //   date: "Feb 22, 2026",
+  // },
   {
     url: "https://x.com/apoorva_mehta/status/2027467586867454304",
     author_name: "Apoorva Mehta",
