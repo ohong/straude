@@ -105,6 +105,10 @@ Private or public groups where teams (company, OSS project, friend group) share 
 
 ## Shipped
 
+### Admin Dashboard (2026-02-28)
+
+Internal dashboard at `/admin` for tracking the North Star Metric (cumulative spend), user activation funnel, growth metrics, and top users. Access restricted via `ADMIN_USER_IDS` env var. Four SECURITY DEFINER RPCs power the data. Charts via recharts (lazy-loaded). Future: add retention cohorts, revenue per user trends, and model usage breakdown.
+
 ### Achievements & Badges (2026-02-22, expanded 2026-02-24)
 
 33 milestone badges earned progressively, displayed on profiles. Original 17 usage badges (First Sync through Verified Contributor) plus 16 social badges: Kudos Received/Sent and Comments Received/Sent at 4 tiers each (1/25/100/500). Stats aggregation via two Supabase RPCs (`get_achievement_stats` for usage, `get_social_achievement_stats` for social). Trigger-based filtering ensures each API route only checks relevant achievements. Featured Challenge ("The Three Comma Club") in the right sidebar.

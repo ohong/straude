@@ -1,0 +1,56 @@
+.admin-shell {
+  --admin-bg: #F5F5F5;
+  --admin-fg: #111;
+  --admin-fg-secondary: #555;
+  --admin-fg-muted: #999;
+  --admin-card: #FFF;
+  --admin-border: rgba(0, 0, 0, 0.07);
+  --admin-hover: rgba(0, 0, 0, 0.04);
+  --admin-accent: #DF561F;
+  --admin-grid: rgba(0, 0, 0, 0.06);
+  --admin-axis: #999;
+  --admin-tooltip-bg: #FFF;
+  --admin-tooltip-border: rgba(0, 0, 0, 0.12);
+  --admin-pill-bg: rgba(0, 0, 0, 0.05);
+  --admin-pill-active-bg: #111;
+  --admin-pill-active-fg: #FFF;
+  --admin-bar-track: rgba(0, 0, 0, 0.05);
+  --admin-gradient-fill-0: rgba(223, 86, 31, 0.2);
+  --admin-gradient-fill-1: rgba(223, 86, 31, 0);
+  --admin-growth-stroke: #111;
+  --admin-growth-fill-0: rgba(0, 0, 0, 0.08);
+  --admin-growth-fill-1: rgba(0, 0, 0, 0);
+
+  transition: background-color 0.2s ease, color 0.2s ease;
+}
+
+.admin-shell[data-theme="dark"] {
+  --admin-bg: #0A0A0A;
+  --admin-fg: #E0E0E0;
+  --admin-fg-secondary: #888;
+  --admin-fg-muted: #555;
+  --admin-card: #111;
+  --admin-border: rgba(255, 255, 255, 0.06);
+  --admin-hover: rgba(255, 255, 255, 0.04);
+  --admin-accent: #DF561F;
+  --admin-grid: rgba(255, 255, 255, 0.04);
+  --admin-axis: #555;
+  --admin-tooltip-bg: #1A1A1A;
+  --admin-tooltip-border: rgba(255, 255, 255, 0.08);
+  --admin-pill-bg: rgba(255, 255, 255, 0.06);
+  --admin-pill-active-bg: #E0E0E0;
+  --admin-pill-active-fg: #0A0A0A;
+  --admin-bar-track: rgba(255, 255, 255, 0.05);
+  --admin-gradient-fill-0: rgba(223, 86, 31, 0.25);
+  --admin-gradient-fill-1: rgba(223, 86, 31, 0);
+  --admin-growth-stroke: #E0E0E0;
+  --admin-growth-fill-0: rgba(255, 255, 255, 0.06);
+  --admin-growth-fill-1: rgba(255, 255, 255, 0);
+}
+
+.admin-card {
+  background: var(--admin-card);
+  border: 1px solid var(--admin-border);
+  border-radius: 12px;
+  transition: background-color 0.2s ease, border-color 0.2s ease;
+}

@@ -1,5 +1,18 @@
 # Architecture & Design Decisions
 
+## Admin Dashboard: Env-Var Access Control + SECURITY DEFINER RPCs (2026-02-28)
+
+**Decision:** Admin access is gated by an `ADMIN_USER_IDS` env var (comma-separated UUIDs) checked in the layout's server component. Data is fetched via four `SECURITY DEFINER` Postgres functions that bypass RLS, with `EXECUTE` revoked from `anon` and `authenticated` roles.
+
+**Alternatives considered:**
+1. **RLS policy with an `is_admin` column on `users`** — requires a migration, adds a privilege-escalation surface if the column is writable, and couples admin status to the database.
+2. **Supabase custom claims in JWT** — requires changes to the auth flow and token generation. More correct long-term but overkill for a single-founder dashboard.
+3. **Env var allowlist** (chosen) — zero-migration, easy to rotate, works with any auth provider. The layout server component checks before rendering; the RPCs are only callable by `service_role` anyway.
+
+**Why SECURITY DEFINER RPCs:** Admin queries need to aggregate across all users (bypassing RLS). The service client already uses `SUPABASE_SECRET_KEY`, but RPCs encapsulate the query logic in Postgres and prevent ad-hoc cross-user reads from application code. Revoking `EXECUTE` from `anon`/`authenticated` ensures the functions can only be called via the service client.
+
+**DAU/WAU/MAU:** Computed by fetching `user_id` from `daily_usage` with date filters and deduplicating in JS via `Set`. At current scale (~1k rows), this is simpler than a dedicated RPC. Revisit if `daily_usage` exceeds ~50k rows.
+
 ## Separate Email Preference for Mentions (2026-02-24)
 
 **Decision:** Added `email_mention_notifications` (boolean, default `true`) as a separate column from `email_notifications`, giving users independent control over comment emails and mention emails.
