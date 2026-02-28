@@ -9,7 +9,7 @@ export const metadata: Metadata = {
 export default function PrivacyPage() {
   return (
     <>
-      <Navbar />
+      <Navbar variant="light" />
       <main className="bg-white py-32 md:py-40">
         <article className="mx-auto max-w-2xl px-6 md:px-8">
           <h1 className="text-3xl font-bold tracking-tight md:text-4xl">

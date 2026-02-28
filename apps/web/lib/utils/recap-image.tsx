@@ -1,14 +1,5 @@
 import type { RecapData } from "./recap";
-import { formatTokens } from "./format";
-
-/** Color scale for contribution cells (light theme) */
-function getCellColor(cost: number): string {
-  if (cost <= 0) return "#E5E5E5";
-  if (cost <= 10) return "#FDD0B1";
-  if (cost <= 50) return "#F4945E";
-  if (cost <= 100) return "#DF561F";
-  return "#B8441A";
-}
+import { formatTokens, getCellColor } from "./format";
 
 /** Fill in missing days with $0 entries — only up to today (no future days) */
 function fillContributionDays(
