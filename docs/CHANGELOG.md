@@ -4,6 +4,7 @@
 
 ### Added
 
+- **Notifications page (`/notifications`).** Dedicated full page for viewing all notifications with infinite scroll pagination (20 per page), type filter tabs (All / Follows / Kudos / Comments / Mentions), mark-all-as-read, and per-notification mark-as-read on click. Dropdown in the header now includes a "See all notifications" link at the bottom.
 - **Codex (OpenAI) usage tracking.** The CLI now reads `@ccusage/codex` data alongside Claude usage. Same-day Claude + Codex data is merged into a single post with summed tokens/costs. Feed cards show per-model cost percentages (e.g., "75% Claude Opus, 25% GPT-5") when `model_breakdown` data is available. Falls back to legacy highest-tier-model display for older rows. New `model_breakdown jsonb` column on `daily_usage`.
 - **Auto-generated post titles on sync.** When the CLI pushes usage, new posts get a title like "Feb 27 — Claude Opus, $4.82" from usage data. Existing posts aren't overwritten. Pending posts nudge now checks for missing description/images instead of missing title.
 - **CLI `?edit=1` deep links.** Post URLs printed after `npx straude@latest` now append `?edit=1`, opening the post editor on click.
@@ -11,18 +12,22 @@
 - **Streak freeze earned by enriching posts.** Users earn streak freeze tokens (max 7) by adding title/description to bare posts. Each freeze extends the streak grace period by 1 day. Displayed in sidebar as snowflake count next to streak.
 - **Post completeness ring.** Small SVG progress ring on feed cards (visible to post owner only) showing 25/50/75/100% based on title, description, and images filled.
 - **Onboarding auto-follow.** New users auto-follow the top 3 most active users on onboarding completion. No follow notifications sent for auto-follows.
-
 - **Admin dashboard (`/admin`).** Single-page dashboard for tracking the North Star Metric (cumulative spend), user activation, and engagement. Includes: stat cards (Total Spend, Total Users, DAU/WAU/MAU), cumulative spend area chart with 7D/14D/30D/All zoom, activation funnel (Signed Up → Onboarded → First Usage → First Post → 3d Retained), user growth chart, top-20 users table by spend, cohort retention grid (weekly retention heatmap by signup cohort), revenue concentration breakdown (top 1/5/10 user spend share with stacked bar), and time-to-first-sync histogram (activation speed distribution). Server components fetch via Supabase service client (bypasses RLS) through seven `SECURITY DEFINER` RPCs. Access restricted to user IDs in `ADMIN_USER_IDS` env var. Charts powered by recharts (lazy-loaded on `/admin` route only). Light/dark theme toggle (persisted to localStorage) with Benji Taylor–inspired card aesthetic: centered stat numbers with dot labels, 12px-radius cards, whisper-quiet borders, theme-scoped CSS variables.
 - **"First Photo" achievement.** New badge (trigger: `photo`) awarded when a user adds an image to any post. The PATCH `/api/posts/[id]` route triggers a fire-and-forget achievement check when images are updated. A nudge banner ("Unlock achievements by adding a photo to your post") appears in the app layout for logged-in users who have posts but haven't earned the badge yet. Banner links to the user's latest post and disappears once the achievement is earned.
 - **Security headers & security.txt.** Added Content-Security-Policy (CSP), Cross-Origin-Opener-Policy, Cross-Origin-Resource-Policy, and X-Permitted-Cross-Domain-Policies headers via `next.config.ts`. Disabled the `X-Powered-By` header. Created RFC 9116–compliant `/.well-known/security.txt` with contact, policy, and expiry fields. Targets passing Cloudflare Radar security checks on enterprise networks.
 - **`robots.txt` and `sitemap.xml`.** Added Next.js route handlers for both. Allows categorization bots (Cloudflare, Zscaler, PAN-DB) to crawl and index the site. Sitemap includes `/`, `/feed`, and `/leaderboard`.
+- **Public profile pages.** `/u/[username]` and `/u/[username]/follows` are now accessible to logged-out visitors. Guests see the profile with a guest header (Log In / Sign Up) and no sidebars. Auth-specific UI (Follow button, Edit Profile, SyncCommandHint) is hidden for guests. Private profiles (`is_public: false`) return 404 for non-owners.
+- **Onboarding Step 3: "Log your first session."** After claiming a username and filling in profile details, a new third step shows the `npx straude@latest` CLI command with a copy-to-clipboard button and a mock terminal output preview. Users can proceed to the feed immediately or come back to it later. Step indicator dots updated from 2 to 3 across all steps.
+- **Welcome email on onboarding completion.** New users receive a transactional welcome email immediately after completing onboarding. Includes the `npx straude@latest` CLI command and a link to their profile. Fires once per user (idempotency key prevents duplicates). Sent regardless of email_notifications preference (transactional). Uses the same Resend + React Email pattern as notification emails.
+- **24-hour nudge email for inactive signups.** Sends a single "Your streak is waiting" email to users who signed up ~24 hours ago but never pushed usage data via the CLI. Runs hourly via Vercel cron (`/api/cron/nudge-inactive`), protected by `CRON_SECRET`. Respects `email_notifications` preference and includes unsubscribe link. Uses idempotency keys to prevent duplicate sends.
+- **Public feed and leaderboard.** `/feed` and `/leaderboard` are now publicly accessible without login. Unauthenticated visitors see the full global feed with infinite scroll and the complete leaderboard. Personal tabs (Following, My Sessions) and interactive features (kudos, comments) require login. A guest header with Feed/Leaderboard nav + sign-up CTA replaces the authenticated layout for visitors. Landing page navbar now links to both pages.
 
 ### Changed
 
+- **Notification helpers extracted to shared utility.** `timeAgo`, `notificationMessage`, and `notificationHref` moved from inline TopHeader functions to `lib/utils/notifications.ts`, reused by both the dropdown and the full page.
+- **Notifications API supports pagination and filtering.** `GET /api/notifications` now accepts `?limit`, `?offset`, and `?type` query params. Backward-compatible — no params returns the same 20 most recent as before.
+- **Header notification badge syncs with notifications page.** Marking notifications as read on `/notifications` (individually or "Mark all read") updates the TopHeader unread dot immediately via a custom event, without opening the dropdown.
 - **Single "Get Started" button in nav.** Replaced separate "Log in" / "Sign up" buttons with a single "Get Started" CTA in both the landing page Navbar and GuestHeader. Routes to `/login` for returning users (detected via localStorage), `/signup` for new visitors.
-
-### Changed
-
 - **HEIC upload: replaced `sharp` with `heic-convert`.** Switched from `sharp` (native `libheif` bindings, often unavailable on Vercel) to `heic-convert` (pure JS, zero native deps) for HEIC/HEIF→JPEG conversion. Also added magic-byte detection so HEIC files mislabeled as `application/octet-stream` by iOS are still recognized. Removed `sharp` dependency entirely.
 
 ### Fixed
@@ -35,12 +40,6 @@
 
 ### Added
 
-- **Public profile pages.** `/u/[username]` and `/u/[username]/follows` are now accessible to logged-out visitors. Guests see the profile with a guest header (Log In / Sign Up) and no sidebars. Auth-specific UI (Follow button, Edit Profile, SyncCommandHint) is hidden for guests. Private profiles (`is_public: false`) return 404 for non-owners.
-
-- **Onboarding Step 3: "Log your first session."** After claiming a username and filling in profile details, a new third step shows the `npx straude@latest` CLI command with a copy-to-clipboard button and a mock terminal output preview. Users can proceed to the feed immediately or come back to it later. Step indicator dots updated from 2 to 3 across all steps.
-- **Welcome email on onboarding completion.** New users receive a transactional welcome email immediately after completing onboarding. Includes the `npx straude@latest` CLI command and a link to their profile. Fires once per user (idempotency key prevents duplicates). Sent regardless of email_notifications preference (transactional). Uses the same Resend + React Email pattern as notification emails.
-- **24-hour nudge email for inactive signups.** Sends a single "Your streak is waiting" email to users who signed up ~24 hours ago but never pushed usage data via the CLI. Runs hourly via Vercel cron (`/api/cron/nudge-inactive`), protected by `CRON_SECRET`. Respects `email_notifications` preference and includes unsubscribe link. Uses idempotency keys to prevent duplicate sends.
-- **Public feed and leaderboard.** `/feed` and `/leaderboard` are now publicly accessible without login. Unauthenticated visitors see the full global feed with infinite scroll and the complete leaderboard. Personal tabs (Following, My Sessions) and interactive features (kudos, comments) require login. A guest header with Feed/Leaderboard nav + sign-up CTA replaces the authenticated layout for visitors. Landing page navbar now links to both pages.
 - **Email notifications for post mentions.** Users tagged with `@username` in someone else's post description now receive an email notification. Controlled by a new `email_mention_notifications` preference (default: on), separate from comment email notifications. Emails use a "tagged you in a post" subject line distinct from comment mentions.
 
 ### Changed
