@@ -58,9 +58,13 @@ export default async function AdminPage() {
   const totalUsers =
     funnelData.find((s: any) => s.stage === "signed_up")?.count ?? 0;
 
-  const dau = new Set((dauRes.data ?? []).map((r: any) => r.user_id)).size;
-  const wau = new Set((wauRes.data ?? []).map((r: any) => r.user_id)).size;
-  const mau = new Set((mauRes.data ?? []).map((r: any) => r.user_id)).size;
+  const isDummy = (id: string) => id.startsWith("a0000000-0000-4000-8000-");
+  const uniqueReal = (rows: any[]) =>
+    new Set(rows.filter((r) => !isDummy(r.user_id)).map((r) => r.user_id)).size;
+
+  const dau = uniqueReal(dauRes.data ?? []);
+  const wau = uniqueReal(wauRes.data ?? []);
+  const mau = uniqueReal(mauRes.data ?? []);
 
   const spendFormatted = totalSpend.toLocaleString("en-US", {
     minimumFractionDigits: 0,
