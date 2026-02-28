@@ -12,6 +12,7 @@ function makeStats(overrides: Partial<AchievementStats> = {}): AchievementStats 
     streak: 0,
     syncCount: 0,
     verifiedSyncCount: 0,
+    syncsInFirstWeek: 0,
     kudosReceived: 0,
     kudosSent: 0,
     commentsReceived: 0,
@@ -39,8 +40,8 @@ describe("achievement definitions", () => {
     }
   });
 
-  it("has 17 usage achievements", () => {
-    expect(ACHIEVEMENTS.filter((a) => a.trigger === "usage")).toHaveLength(17);
+  it("has 18 usage achievements", () => {
+    expect(ACHIEVEMENTS.filter((a) => a.trigger === "usage")).toHaveLength(18);
   });
 
   it("has 8 kudos achievements", () => {
