@@ -54,8 +54,8 @@ export function Hero() {
         </h1>
 
         <p className="font-[family-name:var(--font-mono)] text-base text-[#888] max-w-[500px]">
-          One command to log your Claude Code output. Track your spend, compare
-          your pace, keep the streak alive.
+          One command to log your Claude Code usage. Track spend, compare
+          pace, keep the streak alive.
         </p>
 
         <div className="flex flex-wrap gap-4 mt-10">
@@ -71,7 +71,7 @@ export function Hero() {
         {/* Terminal output */}
         <div className="mt-10 font-[family-name:var(--font-mono)] text-[0.8rem] text-[#888] leading-relaxed max-w-[600px]">
           <span className="block text-[#F0F0F0]">
-            &gt; straude scan --session current
+            &gt; bunx straude
           </span>
           <span className="block">Analyzing ~/.config/claude/projects/...</span>
           <span className="block">
