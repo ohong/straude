@@ -11,7 +11,7 @@ export async function GET(request: NextRequest) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
 
-  const q = (request.nextUrl.searchParams.get("q") ?? "").toLowerCase();
+  const q = (request.nextUrl.searchParams.get("q") ?? "").toLowerCase().replace(/[,()\\]/g, "");
 
   // Step 1: get IDs of users the current user follows
   const { data: follows } = await supabase

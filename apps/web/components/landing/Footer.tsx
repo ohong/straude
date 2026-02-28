@@ -1,45 +1,64 @@
+"use client";
+
+import { useEffect, useState } from "react";
 import Link from "next/link";
+import { BoltIcon } from "@/components/landing/icons";
 
 export function Footer() {
-  return (
-    <footer className="bg-[#0A0A0A] py-16">
-      <div className="mx-auto flex max-w-[1280px] flex-col items-center gap-8 px-6 md:flex-row md:justify-between md:px-8">
-        {/* Brand */}
-        <div className="flex items-center gap-2">
-          <div
-            className="h-5 w-5 bg-accent"
-            style={{
-              clipPath: "polygon(20% 0%, 80% 0%, 100% 100%, 0% 100%)",
-            }}
-          />
-          <span className="text-sm font-semibold tracking-tight text-white">
-            STRAUDE
-          </span>
-        </div>
+  const [utc, setUtc] = useState("UTC 00:00:00");
 
-        {/* Links */}
-        <div className="flex items-center gap-6 text-sm text-white/40">
-          <Link href="/privacy" className="hover:text-white transition-colors">
+  useEffect(() => {
+    function tick() {
+      setUtc(`UTC ${new Date().toISOString().substring(11, 19)}`);
+    }
+    tick();
+    const id = setInterval(tick, 1000);
+    return () => clearInterval(id);
+  }, []);
+
+  return (
+    <footer className="border-t border-[#222] px-8 py-10 flex flex-col gap-8 md:flex-row md:justify-between md:items-end">
+      {/* Brand */}
+      <div className="flex items-center gap-2 font-[family-name:var(--font-mono)] font-bold text-base text-[#F0F0F0]">
+        <BoltIcon className="w-4 h-4 text-accent" />
+        STRAUDE
+      </div>
+
+      {/* Status */}
+      <div className="font-[family-name:var(--font-mono)] text-xs text-[#888] flex flex-col gap-1">
+        <div>
+          STATUS: <span className="text-accent">ONLINE</span>
+        </div>
+        <div>SYS LATENCY: 12ms</div>
+        <div suppressHydrationWarning>{utc}</div>
+      </div>
+
+      {/* Links + copyright */}
+      <div className="font-[family-name:var(--font-mono)] text-xs text-[#888] flex flex-col gap-1 md:text-right">
+        <div className="flex gap-4 md:justify-end">
+          <Link
+            href="/privacy"
+            className="hover:text-[#F0F0F0] transition-colors"
+          >
             Privacy
           </Link>
-          <Link href="/terms" className="hover:text-white transition-colors">
+          <Link
+            href="/terms"
+            className="hover:text-[#F0F0F0] transition-colors"
+          >
             Terms
           </Link>
           <a
             href="https://github.com/ohong/straude"
             target="_blank"
             rel="noopener noreferrer"
-            className="hover:text-white transition-colors"
+            className="hover:text-[#F0F0F0] transition-colors"
           >
             GitHub
           </a>
         </div>
-
-        {/* Copyright */}
-        <div className="flex flex-col items-center gap-1 text-xs text-white/30 md:items-end">
-          <span>Built by Claude Opus 4.6</span>
-          <span>&copy; 2026 Straude</span>
-        </div>
+        <div>&copy; 2026 PACIFIC SYSTEMS, INC. d/b/a STRAUDE</div>
+        <div>DESIGNED FOR PEAK PERFORMERS</div>
       </div>
     </footer>
   );

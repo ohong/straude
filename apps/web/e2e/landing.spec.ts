@@ -24,7 +24,7 @@ test.describe("Landing page", () => {
 
   test("renders hero content", async ({ page }) => {
     await page.goto("/");
-    await expect(page.locator("h1")).toContainText("Every session counts");
+    await expect(page.locator("h1")).toContainText("Code like");
   });
 
   test("does not expose internal jargon", async ({ page }) => {

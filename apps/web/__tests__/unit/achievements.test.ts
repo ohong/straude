@@ -39,8 +39,8 @@ describe("achievement definitions", () => {
     }
   });
 
-  it("has 17 usage achievements", () => {
-    expect(ACHIEVEMENTS.filter((a) => a.trigger === "usage")).toHaveLength(17);
+  it("has 18 usage achievements", () => {
+    expect(ACHIEVEMENTS.filter((a) => a.trigger === "usage")).toHaveLength(18);
   });
 
   it("has 8 kudos achievements", () => {
