@@ -4,6 +4,11 @@ import { createClient } from "@/lib/supabase/server";
 // Safe public fields only — never expose email, private settings, etc.
 const PUBLIC_USER_FIELDS = "id, username, display_name, bio, avatar_url, is_public";
 
+/** Strip characters that could break PostgREST filter syntax */
+function sanitizeFilter(s: string): string {
+  return s.replace(/[,()\\]/g, "");
+}
+
 export async function GET(request: NextRequest) {
   const supabase = await createClient();
 
@@ -20,12 +25,14 @@ export async function GET(request: NextRequest) {
     );
   }
 
+  const safe = sanitizeFilter(q);
+
   // Search by username, display name, or github_username
   const { data: users, error } = await supabase
     .from("users")
     .select(PUBLIC_USER_FIELDS)
     .eq("is_public", true)
-    .or(`username.ilike.%${q}%,display_name.ilike.%${q}%,github_username.ilike.%${q}%`)
+    .or(`username.ilike.%${safe}%,display_name.ilike.%${safe}%,github_username.ilike.%${safe}%`)
     .limit(limit);
 
   if (error) {

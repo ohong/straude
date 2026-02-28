@@ -2,6 +2,29 @@
 
 ## Unreleased
 
+### Changed
+
+- **Landing page redesign.** Dark terminal aesthetic with WebGL halftone shader background, new hero ("Code like an athlete."), scrolling stats ticker, 12-column features grid, live global feed + weekly leaderboard, and redesigned Wall of Love / CTA / footer. Replaces the previous parallax hero, Stats, ProductShowcase, and Features components.
+- **Live global feed from Supabase.** The landing feed section shows the top 3 highest-spend public sessions from the past week (ordered newest-first) and the top 5 weekly leaderboard entries. Feed items link to `/post/:id`, leaderboard rows link to `/leaderboard`.
+- **Live ticker stats from Supabase.** The landing page ticker now shows real data: pace leader (weekly leaderboard), sessions logged, tokens processed, spend tracked, and sum of all current user streaks. Server-rendered with 5-minute cache (`revalidate = 300`).
+- **Navbar light variant.** Privacy and Terms pages now pass `variant="light"` to the shared Navbar so text is legible on white backgrounds.
+- **Landing copy polish.** "Telemetry for Claude Code", updated feature descriptions, `~/.config/claude/projects/` in terminal output, `bunx straude` as default command (was `npx straude@latest`).
+- **`formatTokens` supports billions.** Added `B` tier so 33.3 billion tokens renders as `33.3B` instead of `33302.2M`.
+
+### Removed
+
+- **Dead landing components deleted.** Removed `Stats.tsx`, `Features.tsx`, `ProductShowcase.tsx`, `HowItWorks.tsx`, and `useInView.ts` hook (only used by HowItWorks). Net −818 lines.
+- **Unused types removed.** Deleted `Kudos`, `FeedResponse`, `LeaderboardResponse` from `types/index.ts`.
+
+### Fixed
+
+- **PostgREST filter injection.** Sanitized user input in `/api/search` and `/api/mentions` to strip characters that could break `.or()` filter syntax.
+- **Feed API sequential queries.** Converted 3 sequential enrichment queries to `Promise.all` in `/api/feed`.
+- **Unbounded comments queries.** Added `.limit()` to comments queries in feed page, feed API, and profile page.
+- **Profile page waterfall.** Moved follow-status check into existing `Promise.all`.
+- **Extracted shared `BoltIcon`.** Deduplicated icon from Navbar and Footer into `icons.tsx`.
+- **Extracted shared `getCellColor`.** Deduplicated from 4 components into `lib/utils/format.ts`.
+
 ### Added
 
 - **Notifications page (`/notifications`).** Dedicated full page for viewing all notifications with infinite scroll pagination (20 per page), type filter tabs (All / Follows / Kudos / Comments / Mentions), mark-all-as-read, and per-notification mark-as-read on click. Dropdown in the header now includes a "See all notifications" link at the bottom.
