@@ -9,9 +9,9 @@ import { Input } from "@/components/ui/Input";
 import { MentionInput } from "@/components/app/shared/MentionInput";
 import type { Post } from "@/types";
 
-export function PostEditor({ post }: { post: Post }) {
+export function PostEditor({ post, autoEdit = false }: { post: Post; autoEdit?: boolean }) {
   const router = useRouter();
-  const [editing, setEditing] = useState(false);
+  const [editing, setEditing] = useState(autoEdit);
   const [title, setTitle] = useState(post.title ?? "");
   const [description, setDescription] = useState(post.description ?? "");
   const [images, setImages] = useState<string[]>(post.images ?? []);
@@ -150,13 +150,13 @@ export function PostEditor({ post }: { post: Post }) {
         <Input
           value={title}
           onChange={(e) => setTitle(e.target.value)}
-          placeholder="Post title (optional)"
+          placeholder="e.g. Refactored the auth flow, Shipped dark mode, Debugged for 3 hours..."
           maxLength={100}
         />
         <MentionInput
           value={description}
           onChange={setDescription}
-          placeholder="Describe what you built, @ to mention"
+          placeholder="What did you build? Any breakthroughs, dead ends, or lessons learned? Drop screenshots above to show your work."
           maxLength={5000}
           multiline
           className="w-full border border-border px-3 py-2 text-sm outline-none placeholder:text-muted focus:border-accent"

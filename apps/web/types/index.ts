@@ -16,6 +16,7 @@ export interface User {
   timezone: string;
   email_notifications: boolean;
   email_mention_notifications: boolean;
+  streak_freezes: number;
   created_at: string;
   updated_at: string;
 }
@@ -31,6 +32,7 @@ export interface DailyUsage {
   cache_read_tokens: number;
   total_tokens: number;
   models: string[];
+  model_breakdown: ModelBreakdownEntry[] | null;
   session_count: number;
   is_verified: boolean;
   raw_hash: string | null;
@@ -92,6 +94,12 @@ export interface ContributionDay {
   has_post: boolean;
 }
 
+// Model breakdown for multi-source usage (Claude + Codex)
+export interface ModelBreakdownEntry {
+  model: string;
+  cost_usd: number;
+}
+
 // ccusage integration types
 export interface CcusageDailyEntry {
   date: string;
@@ -102,6 +110,7 @@ export interface CcusageDailyEntry {
   cacheReadTokens: number;
   totalTokens: number;
   costUSD: number;
+  modelBreakdown?: ModelBreakdownEntry[];
 }
 
 export interface CcusageOutput {

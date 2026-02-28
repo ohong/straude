@@ -1,5 +1,18 @@
 # Straude — Project Instructions for Claude
 
+## North Star Metric
+
+**Cumulative spend logged** — total `cost_usd` across all users in `daily_usage`. This is the single most important metric for the project. Supabase project ID: `kanfzeovbmusnhmbnhit`.
+
+```sql
+SELECT
+  COUNT(DISTINCT user_id) AS total_users,
+  SUM(cost_usd) AS total_spend_usd,
+  SUM(total_tokens) AS total_tokens,
+  SUM(session_count) AS total_sessions
+FROM daily_usage;
+```
+
 ## Stack
 
 - **Monorepo**: Turborepo with Bun workspaces

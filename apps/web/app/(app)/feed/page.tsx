@@ -68,6 +68,20 @@ export default async function FeedPage({
     posts = data ?? [];
   }
 
+  // Fetch incomplete posts for the logged-in user (bare synced sessions)
+  let pendingPosts: any[] = [];
+  if (user) {
+    const { data } = await supabase
+      .from("posts")
+      .select("*, daily_usage:daily_usage!posts_daily_usage_id_fkey(*)")
+      .eq("user_id", user.id)
+      .is("description", null)
+      .eq("images", "[]")
+      .order("created_at", { ascending: false })
+      .limit(5);
+    pendingPosts = data ?? [];
+  }
+
   // Enrich with kudos status + kudos users + recent comments
   if (posts.length > 0) {
     const postIds = posts.map((p: any) => p.id);
@@ -130,5 +144,5 @@ export default async function FeedPage({
     }));
   }
 
-  return <FeedList initialPosts={posts} userId={user?.id ?? null} feedType={feedType} />;
+  return <FeedList initialPosts={posts} userId={user?.id ?? null} feedType={feedType} pendingPosts={pendingPosts} />;
 }

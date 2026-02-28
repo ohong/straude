@@ -1,5 +1,6 @@
 import { NextResponse, type NextRequest } from "next/server";
 import { createClient } from "@/lib/supabase/server";
+import { getServiceClient } from "@/lib/supabase/service";
 import { COUNTRY_TO_REGION } from "@/lib/constants/regions";
 import { sendWelcomeEmail } from "@/lib/email/send-welcome-email";
 
@@ -121,10 +122,30 @@ export async function PATCH(request: NextRequest) {
       userId: user.id,
       email: user.email,
       username: (profile as Record<string, unknown>).username as string | null,
-    }).catch(() => {
-      // Swallow — email failure must not break onboarding
-    });
+    }).catch(() => {});
+  }
+
+  // Auto-follow top active users so new users see content in their feed
+  if (isOnboardingUpdate) {
+    autoFollowTopUsers(user.id).catch(() => {});
   }
 
   return NextResponse.json(profile);
+}
+
+async function autoFollowTopUsers(userId: string) {
+  const db = getServiceClient();
+  const { data: topUsers } = await db
+    .from("leaderboard_weekly")
+    .select("user_id")
+    .neq("user_id", userId)
+    .order("total_cost", { ascending: false })
+    .limit(3);
+
+  if (!topUsers?.length) return;
+
+  await db.from("follows").upsert(
+    topUsers.map((u) => ({ follower_id: userId, following_id: u.user_id })),
+    { onConflict: "follower_id,following_id", ignoreDuplicates: true },
+  );
 }

@@ -19,9 +19,11 @@ Both are derived math on existing `daily_usage` data — no new infrastructure. 
 
 ## Healthy Streaks (5-of-7) + Achievement Chains
 
-The current strict-consecutive-day streak is an active churn driver — one missed day and everything resets. Redesign to 5-of-7 with streak freezes (Duolingo saw 21% churn reduction). Pair with restructuring the flat `ACHIEVEMENTS` array into progression quest lines with visible progress bars ("72% to 90-Day Streak"). Fixes the psychological foundation everything else builds on.
+Streak freezes are now shipped (earned by enriching posts, extend grace window). The remaining work:
 
-Requires: update `calculate_user_streak` / `calculate_streaks_batch` RPCs, add streak freeze logic, restructure achievement definitions into chains, add progress bar UI to profile.
+- **5-of-7 streaks**: Redesign the core streak calculation to count 5 active days out of any 7-day window instead of strict consecutive days. Requires rewriting `calculate_user_streak` and `calculate_streaks_batch` RPCs.
+- **Achievement chains**: Restructure the flat `ACHIEVEMENTS` array into progression quest lines with visible progress bars ("72% to 90-Day Streak").
+- **Ship Week countdown banner**: Show "4 days left — 3/5 synced" banner for users in their first week. The Ship Week achievement is live but the countdown UI is deferred.
 
 ## Notifications Page
 

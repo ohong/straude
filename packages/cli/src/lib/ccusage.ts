@@ -83,6 +83,12 @@ function execCcusage(args: string[]): string {
   }
 }
 
+/** Per-model cost entry for breakdown tracking. */
+export interface ModelBreakdownEntry {
+  model: string;
+  cost_usd: number;
+}
+
 /** Normalized entry used throughout the CLI and sent to the API. */
 export interface CcusageDailyEntry {
   date: string;
@@ -93,6 +99,7 @@ export interface CcusageDailyEntry {
   cacheReadTokens: number;
   totalTokens: number;
   costUSD: number;
+  modelBreakdown?: ModelBreakdownEntry[];
 }
 
 /** Raw shape returned by ccusage v18+ (`ccusage daily --json`). */

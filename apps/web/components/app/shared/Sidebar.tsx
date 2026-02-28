@@ -13,6 +13,7 @@ interface SidebarProps {
   followersCount: number;
   postsCount: number;
   streak: number;
+  streakFreezes: number;
   latestPosts: { id: string; title: string; date: string }[];
   totalOutputTokens: number;
   totalCost: number;
@@ -26,6 +27,7 @@ export function Sidebar({
   followersCount,
   postsCount,
   streak,
+  streakFreezes,
   latestPosts,
   totalOutputTokens,
   totalCost,
@@ -78,6 +80,11 @@ export function Sidebar({
       <div className="flex items-center gap-2 border-b border-border px-6 py-4 text-sm">
         <Flame size={16} className={streak > 0 ? "text-accent" : undefined} aria-hidden="true" />
         {streak > 0 ? `${streak} day streak` : "No active streak"}
+        {streakFreezes > 0 && (
+          <span className="text-muted" title={`${streakFreezes} streak freeze${streakFreezes !== 1 ? "s" : ""}`}>
+            &middot; {streakFreezes} &#10052;&#65039;
+          </span>
+        )}
       </div>
 
       {/* Latest Activities — clickable */}

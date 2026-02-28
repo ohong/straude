@@ -139,7 +139,6 @@ export function CommentThread({
                     value={editContent}
                     onChange={setEditContent}
                     maxLength={500}
-                    className="flex-1 border border-border px-2 py-1 text-sm outline-none focus:border-accent"
                     onSubmit={() => handleEdit(comment.id)}
                   />
                   <button

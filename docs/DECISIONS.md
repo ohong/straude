@@ -1,5 +1,39 @@
 # Architecture & Design Decisions
 
+## Codex Integration: Merged Data, Not Separate Rows (2026-02-27)
+
+**Decision:** Claude and Codex usage on the same day are merged into a single `daily_usage` row and a single post. Per-model costs are stored in a new `model_breakdown jsonb` column for percentage display.
+
+**Alternatives considered:**
+1. **Separate rows per source** — one `daily_usage` row for Claude, one for Codex. Simpler merge-free push, but doubles posts in the feed, complicates leaderboard aggregation, and splits the user's daily story.
+2. **Merged row with model_breakdown** (chosen) — sum tokens/costs, union models, store per-model costs in JSONB. Single post per day. Feed card shows "75% Claude Opus, 25% GPT-5". Nullable column keeps existing rows valid.
+
+**Silent skip design:** If `@ccusage/codex` is not installed or fails, the CLI silently proceeds with Claude data only. No error, no message. This prevents breaking existing users who don't use Codex.
+
+## Streak Freeze: Grace Window Extension, Not Gap Bridging (2026-02-27)
+
+**Decision:** Streak freezes extend the "is the streak still alive" check (initial grace window: `2 + freeze_days`) but do NOT bridge gaps in the middle of a streak. The base 2-day grace covers timezone offsets; freezes add extra buffer on top.
+
+**Alternatives considered:**
+1. **Consumable freezes that fill in gap days** — more like Duolingo, but adds state tracking (which freezes were used on which days), complicates the RPC, and creates confusing UX ("did my freeze get used?"). Over-engineered for current scale.
+2. **Permanent grace extension** (chosen) — simplest correct behavior. Users earn freezes by enriching posts (max 7). The grace window grows from 2 to up to 9 days. No consumption tracking needed. Incentivizes post enrichment without adding complexity.
+
+**Achievement streak vs display streak:** Achievement checks (7-day, 30-day) use `p_freeze_days = 0` so achievements are based on actual consecutive days. Only user-facing displays (sidebar, profile, API) include freeze benefits.
+
+## Auto-Title on Sync: Separate Insert/Update, Not Upsert (2026-02-27)
+
+**Decision:** The usage submit route now uses separate insert (with auto-title) and update (without title) paths instead of a single upsert for posts. This prevents overwriting user-edited titles on re-sync.
+
+**Alternatives considered:**
+1. **Single upsert with conditional title** — Supabase upsert with `undefined` fields can still overwrite to NULL depending on column defaults. Risky.
+2. **Separate insert/update** (chosen) — explicit control over which fields are set on create vs update. Slightly more code but zero ambiguity.
+
+## Onboarding Auto-Follow: Top Weekly Spenders (2026-02-27)
+
+**Decision:** Auto-follow the top 3 users from `leaderboard_weekly` on onboarding completion. Skip follow notifications to avoid spamming top users.
+
+**Why weekly not all-time:** Weekly leaders are more likely to have recent posts in their feed, giving new users fresh content rather than historical posts from inactive accounts.
+
 ## Admin Dashboard: Env-Var Access Control + SECURITY DEFINER RPCs (2026-02-28)
 
 **Decision:** Admin access is gated by an `ADMIN_USER_IDS` env var (comma-separated UUIDs) checked in the layout's server component. Data is fetched via four `SECURITY DEFINER` Postgres functions that bypass RLS, with `EXECUTE` revoked from `anon` and `authenticated` roles.

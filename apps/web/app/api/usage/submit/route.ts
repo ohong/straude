@@ -113,6 +113,7 @@ export async function POST(request: Request) {
           cache_read_tokens: entry.data.cacheReadTokens,
           total_tokens: entry.data.totalTokens,
           models: entry.data.models,
+          model_breakdown: entry.data.modelBreakdown ?? null,
           is_verified: isVerified,
           raw_hash: body.hash ?? null,
           updated_at: new Date().toISOString(),
@@ -129,19 +130,56 @@ export async function POST(request: Request) {
       );
     }
 
-    // Upsert post linked to the daily_usage record
-    const { data: post, error: postError } = await db
+    // Build auto-title from usage data (only used for new posts)
+    const models = entry.data.models;
+    const hasCodex = models?.some((m) => m.includes("gpt") || m.includes("o3") || m.includes("o4"));
+    const hasClaude = models?.some((m) => m.includes("claude") || m.includes("opus") || m.includes("sonnet") || m.includes("haiku"));
+    const claudeLabel = models?.some((m) => m.includes("opus")) ? "Claude Opus"
+      : models?.some((m) => m.includes("sonnet")) ? "Claude Sonnet"
+      : models?.some((m) => m.includes("haiku")) ? "Claude Haiku" : null;
+    const codexLabel = models?.some((m) => m.includes("gpt-5")) ? "GPT-5"
+      : models?.some((m) => m.includes("gpt-4o")) ? "GPT-4o"
+      : models?.some((m) => m.includes("o3")) ? "o3" : null;
+    const toolLabels = [claudeLabel, codexLabel].filter(Boolean);
+    const modelLabel = toolLabels.length > 0 ? toolLabels.join(" + ") : (hasClaude ? "Claude" : null);
+    const dateLabel = new Date(entry.date).toLocaleDateString("en-US", { month: "short", day: "numeric" });
+    const costLabel = entry.data.costUSD > 0 ? `, $${entry.data.costUSD.toFixed(2)}` : "";
+    const autoTitle = modelLabel ? `${dateLabel} — ${modelLabel}${costLabel}` : `${dateLabel}${costLabel}`;
+
+    // Create or update post linked to the daily_usage record
+    // Use separate insert/update to avoid overwriting user-edited titles
+    let post: { id: string } | null = null;
+    let postError: any = null;
+
+    const { data: existingPost } = await db
       .from("posts")
-      .upsert(
-        {
+      .select("id")
+      .eq("daily_usage_id", usage.id)
+      .maybeSingle();
+
+    if (existingPost) {
+      const { data, error } = await db
+        .from("posts")
+        .update({ updated_at: new Date().toISOString() })
+        .eq("id", existingPost.id)
+        .select("id")
+        .single();
+      post = data;
+      postError = error;
+    } else {
+      const { data, error } = await db
+        .from("posts")
+        .insert({
           user_id: userId,
           daily_usage_id: usage.id,
+          title: autoTitle,
           updated_at: new Date().toISOString(),
-        },
-        { onConflict: "daily_usage_id" },
-      )
-      .select("id")
-      .single();
+        })
+        .select("id")
+        .single();
+      post = data;
+      postError = error;
+    }
 
     if (postError || !post) {
       return NextResponse.json(

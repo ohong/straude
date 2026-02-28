@@ -3,7 +3,8 @@ import { requireAuth, updateLastPushDate } from "../lib/auth.js";
 import type { StraudeConfig } from "../lib/auth.js";
 import { apiRequest } from "../lib/api.js";
 import { runCcusageRaw, parseCcusageOutput } from "../lib/ccusage.js";
-import type { CcusageDailyEntry } from "../lib/ccusage.js";
+import type { CcusageDailyEntry, ModelBreakdownEntry } from "../lib/ccusage.js";
+import { runCodexRaw, parseCodexOutput } from "../lib/codex.js";
 import { MAX_BACKFILL_DAYS } from "../config.js";
 
 interface UsageSubmitRequest {
@@ -65,6 +66,61 @@ function formatCost(n: number): string {
   return `$${n.toFixed(2)}`;
 }
 
+/**
+ * Build per-model cost breakdown from a source's entry.
+ * Distributes total cost evenly across models when per-model data isn't available.
+ */
+function buildBreakdown(entry: CcusageDailyEntry): ModelBreakdownEntry[] {
+  if (entry.models.length === 0 || entry.costUSD === 0) return [];
+  const perModel = entry.costUSD / entry.models.length;
+  return entry.models.map((model) => ({ model, cost_usd: perModel }));
+}
+
+/**
+ * Merge Claude and Codex daily entries by date.
+ * Sums tokens/costs, unions models, builds model_breakdown.
+ */
+export function mergeEntries(
+  claudeEntries: CcusageDailyEntry[],
+  codexEntries: CcusageDailyEntry[],
+): CcusageDailyEntry[] {
+  const byDate = new Map<string, { claude?: CcusageDailyEntry; codex?: CcusageDailyEntry }>();
+
+  for (const e of claudeEntries) {
+    byDate.set(e.date, { ...byDate.get(e.date), claude: e });
+  }
+  for (const e of codexEntries) {
+    byDate.set(e.date, { ...byDate.get(e.date), codex: e });
+  }
+
+  const merged: CcusageDailyEntry[] = [];
+
+  for (const [date, { claude, codex }] of byDate) {
+    const claudeBreakdown = claude ? buildBreakdown(claude) : [];
+    const codexBreakdown = codex ? buildBreakdown(codex) : [];
+    const modelBreakdown = [...claudeBreakdown, ...codexBreakdown];
+
+    merged.push({
+      date,
+      models: [
+        ...(claude?.models ?? []),
+        ...(codex?.models ?? []),
+      ],
+      inputTokens: (claude?.inputTokens ?? 0) + (codex?.inputTokens ?? 0),
+      outputTokens: (claude?.outputTokens ?? 0) + (codex?.outputTokens ?? 0),
+      cacheCreationTokens: (claude?.cacheCreationTokens ?? 0) + (codex?.cacheCreationTokens ?? 0),
+      cacheReadTokens: (claude?.cacheReadTokens ?? 0) + (codex?.cacheReadTokens ?? 0),
+      totalTokens: (claude?.totalTokens ?? 0) + (codex?.totalTokens ?? 0),
+      costUSD: (claude?.costUSD ?? 0) + (codex?.costUSD ?? 0),
+      modelBreakdown: modelBreakdown.length > 0 ? modelBreakdown : undefined,
+    });
+  }
+
+  // Sort by date ascending
+  merged.sort((a, b) => a.date.localeCompare(b.date));
+  return merged;
+}
+
 export async function pushCommand(options: PushOptions, configOverride?: StraudeConfig): Promise<void> {
   const config = configOverride ?? requireAuth();
   const today = new Date();
@@ -103,24 +159,29 @@ export async function pushCommand(options: PushOptions, configOverride?: Straude
       : `Pushing usage for ${formatDate(sinceDate)} to ${formatDate(untilDate)}...`,
   );
 
-  // Get raw JSON for hashing
-  let rawJson: string;
+  // Get raw JSON for hashing — Claude source
+  let claudeRaw: string;
   try {
-    rawJson = runCcusageRaw(sinceStr, untilStr);
+    claudeRaw = runCcusageRaw(sinceStr, untilStr);
   } catch (err) {
     console.error((err as Error).message);
     process.exit(1);
   }
 
-  // Parse and normalize the data
-  let entries: CcusageDailyEntry[];
+  let claudeEntries: CcusageDailyEntry[];
   try {
-    const output = parseCcusageOutput(rawJson);
-    entries = output.data;
+    claudeEntries = parseCcusageOutput(claudeRaw).data;
   } catch (err) {
     console.error((err as Error).message);
     process.exit(1);
   }
+
+  // Get Codex data — silent on failure
+  const codexRaw = runCodexRaw(sinceStr, untilStr);
+  const codexEntries = codexRaw ? parseCodexOutput(codexRaw).data : [];
+
+  // Merge Claude + Codex entries by date
+  const entries = mergeEntries(claudeEntries, codexEntries);
 
   if (entries.length === 0) {
     console.log("No usage data found for the specified period.");
@@ -142,8 +203,9 @@ export async function pushCommand(options: PushOptions, configOverride?: Straude
     return;
   }
 
-  // Compute SHA-256 hash of raw JSON
-  const hash = createHash("sha256").update(rawJson).digest("hex");
+  // Compute SHA-256 hash of concatenated raw JSONs
+  const hashInput = codexRaw ? claudeRaw + codexRaw : claudeRaw;
+  const hash = createHash("sha256").update(hashInput).digest("hex");
 
   const body: UsageSubmitRequest = {
     entries: entries.map((entry) => ({
@@ -175,6 +237,6 @@ export async function pushCommand(options: PushOptions, configOverride?: Straude
   console.log("");
   for (const result of response.results) {
     const verb = result.action === "updated" ? "Updated" : "Posted";
-    console.log(`${verb} ${result.date}: ${result.post_url}`);
+    console.log(`${verb} ${result.date}: ${result.post_url}?edit=1`);
   }
 }

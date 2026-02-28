@@ -73,6 +73,15 @@ export async function PATCH(request: NextRequest, context: RouteContext) {
   }
 
   const body = await request.json();
+
+  // Fetch current post state before applying updates (for enrichment detection)
+  const { data: currentPost } = await supabase
+    .from("posts")
+    .select("title, description")
+    .eq("id", id)
+    .eq("user_id", user.id)
+    .single();
+
   const updates: Record<string, unknown> = {};
 
   if (body.title !== undefined) {
@@ -125,6 +134,14 @@ export async function PATCH(request: NextRequest, context: RouteContext) {
   // Photo achievement — fire-and-forget when images were added
   if (body.images !== undefined && Array.isArray(post.images) && post.images.length > 0) {
     checkAndAwardAchievements(user.id, "photo").catch(() => {});
+  }
+
+  // Award streak freeze when enriching a bare post (first time adding title or description)
+  const wasBare = currentPost && currentPost.title === null && currentPost.description === null;
+  const isEnriching = wasBare && (body.title || body.description);
+  if (isEnriching) {
+    const db = getServiceClient();
+    db.rpc("increment_streak_freezes", { p_user_id: user.id, p_max: 7 }).then(() => {}, () => {});
   }
 
   // Mention notifications — only when description was actually changed

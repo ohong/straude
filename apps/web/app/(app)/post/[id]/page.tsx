@@ -25,10 +25,12 @@ export async function generateMetadata({
 
 export default async function PostDetailPage({
   params,
+  searchParams,
 }: {
   params: Promise<{ id: string }>;
+  searchParams: Promise<{ edit?: string }>;
 }) {
-  const { id } = await params;
+  const [{ id }, query] = await Promise.all([params, searchParams]);
   const supabase = await createClient();
   const {
     data: { user },
@@ -94,7 +96,7 @@ export default async function PostDetailPage({
         <h3 className="text-lg font-medium">Post</h3>
       </header>
       <ActivityCard post={normalizedPost} />
-      {isOwner && <PostEditor post={normalizedPost} />}
+      {isOwner && <PostEditor post={normalizedPost} autoEdit={query.edit === "1"} />}
       <CommentThread
         postId={id}
         initialComments={comments ?? []}

@@ -40,6 +40,7 @@ export async function GET(_request: NextRequest, context: RouteContext) {
   // Streak: consecutive days with usage, ending today or yesterday
   const { data: streakData } = await supabase.rpc("calculate_user_streak", {
     p_user_id: profile.id,
+    p_freeze_days: profile.streak_freezes ?? 0,
   });
   const streak = typeof streakData === "number" ? streakData : 0;
 

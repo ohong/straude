@@ -4,6 +4,7 @@ import { useEffect, useRef, useState, useCallback } from "react";
 import { useRouter } from "next/navigation";
 import { ChevronDown, Copy, Check } from "lucide-react";
 import { ActivityCard } from "./ActivityCard";
+import { PendingPostsNudge } from "./PendingPostsNudge";
 import { cn } from "@/lib/utils/cn";
 import type { Post } from "@/types";
 
@@ -54,11 +55,13 @@ export function FeedList({
   userId,
   feedType: initialFeedType = "global",
   showTabs = true,
+  pendingPosts = [],
 }: {
   initialPosts: Post[];
   userId: string | null;
   feedType?: FeedType;
   showTabs?: boolean;
+  pendingPosts?: Post[];
 }) {
   const router = useRouter();
   const [feedType, setFeedType] = useState<FeedType>(initialFeedType);
@@ -195,6 +198,8 @@ export function FeedList({
         </div>
       )}
 
+      {pendingPosts.length > 0 && <PendingPostsNudge posts={pendingPosts} />}
+
       {switching ? (
         <div className="flex justify-center py-12" role="status">
           <span className="text-sm text-muted">Loading&hellip;</span>
@@ -219,7 +224,7 @@ export function FeedList({
       ) : (
         <>
           {posts.map((post) => (
-            <ActivityCard key={post.id} post={post} />
+            <ActivityCard key={post.id} post={post} userId={userId} />
           ))}
           {cursor && (
             <div ref={sentinel} className="flex justify-center py-8" role="status" aria-live="polite">

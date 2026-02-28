@@ -117,6 +117,20 @@ function ccusageJson(dates: string[]) {
   });
 }
 
+/**
+ * Wraps mockExecFileSync to return ccusage JSON for ccusage calls and throw
+ * for @ccusage/codex calls (simulating codex not installed — the default).
+ */
+function mockCcusageOnly(json: string) {
+  mockExecFileSync.mockImplementation(((cmd: string, args: string[]) => {
+    // @ccusage/codex calls should fail silently
+    if (args?.some?.((a: string) => typeof a === "string" && a.includes("@ccusage/codex"))) {
+      throw new Error("@ccusage/codex not found");
+    }
+    return json;
+  }) as typeof execFileSync);
+}
+
 function mockSuccessfulSubmit(dates: string[]) {
   mockFetch.mockResolvedValueOnce({
     ok: true,
@@ -183,7 +197,7 @@ describe("sync flow", () => {
     // The login flow writes config via saveConfig, which uses our fs mock
     // Then push runs ccusage + submit
     const today = todayStr();
-    mockExecFileSync.mockReturnValue(ccusageJson([today]));
+    mockCcusageOnly(ccusageJson([today]));
     mockSuccessfulSubmit([today]);
 
     await syncCommand("https://straude.com");
@@ -199,7 +213,7 @@ describe("sync flow", () => {
   it("returning user with no last_push_date: push today only", async () => {
     seedConfig(); // has token, no last_push_date
     const today = todayStr();
-    mockExecFileSync.mockReturnValue(ccusageJson([today]));
+    mockCcusageOnly(ccusageJson([today]));
     mockSuccessfulSubmit([today]);
 
     await syncCommand();
@@ -212,15 +226,15 @@ describe("sync flow", () => {
   it("returning user already synced today: re-syncs with days=1", async () => {
     seedConfig({ last_push_date: todayStr() });
     const today = todayStr();
-    mockExecFileSync.mockReturnValue(ccusageJson([today]));
+    mockCcusageOnly(ccusageJson([today]));
     mockSuccessfulSubmit([today]);
 
     await syncCommand();
 
     // Re-syncs today's data (1 API call)
     expect(mockFetch).toHaveBeenCalledTimes(1);
-    // 2 execFileSync calls: ccusage --version probe + actual ccusage daily
-    expect(mockExecFileSync).toHaveBeenCalledTimes(2);
+    // 3 execFileSync calls: ccusage --version probe + actual ccusage daily + codex attempt (fails silently)
+    expect(mockExecFileSync).toHaveBeenCalledTimes(3);
     const saved = readPersistedConfig();
     expect(saved.last_push_date).toBe(today);
   });
@@ -230,13 +244,13 @@ describe("sync flow", () => {
     seedConfig({ last_push_date: threeDaysAgo });
 
     const dates = [daysAgoStr(2), daysAgoStr(1), todayStr()];
-    mockExecFileSync.mockReturnValue(ccusageJson(dates));
+    mockCcusageOnly(ccusageJson(dates));
     mockSuccessfulSubmit(dates);
 
     await syncCommand();
 
-    // 2 execFileSync calls: ccusage --version probe + actual ccusage daily
-    expect(mockExecFileSync).toHaveBeenCalledTimes(2);
+    // 3 execFileSync calls: ccusage --version probe + actual ccusage daily + codex attempt
+    expect(mockExecFileSync).toHaveBeenCalledTimes(3);
     expect(mockFetch).toHaveBeenCalledTimes(1);
 
     const saved = readPersistedConfig();
@@ -247,13 +261,13 @@ describe("sync flow", () => {
     seedConfig({ last_push_date: daysAgoStr(30) });
 
     const today = todayStr();
-    mockExecFileSync.mockReturnValue(ccusageJson([today]));
+    mockCcusageOnly(ccusageJson([today]));
     mockSuccessfulSubmit([today]);
 
     await syncCommand();
 
-    // 2 execFileSync calls: ccusage --version probe + actual ccusage daily
-    expect(mockExecFileSync).toHaveBeenCalledTimes(2);
+    // 3 execFileSync calls: ccusage --version probe + actual ccusage daily + codex attempt
+    expect(mockExecFileSync).toHaveBeenCalledTimes(3);
     // calls[0] = version probe, calls[1] = actual ccusage daily
     const args = mockExecFileSync.mock.calls[1]!;
     // ccusage is called with: ["daily", "--json", "--since", ..., "--until", ...]
@@ -275,7 +289,7 @@ describe("API error handling during push", () => {
   it("404 Not Found — surfaces error clearly", async () => {
     seedConfig();
     const today = todayStr();
-    mockExecFileSync.mockReturnValue(ccusageJson([today]));
+    mockCcusageOnly(ccusageJson([today]));
 
     mockFetch.mockResolvedValueOnce({
       ok: false,
@@ -292,7 +306,7 @@ describe("API error handling during push", () => {
   it("401 Unauthorized — surfaces auth error", async () => {
     seedConfig();
     const today = todayStr();
-    mockExecFileSync.mockReturnValue(ccusageJson([today]));
+    mockCcusageOnly(ccusageJson([today]));
 
     mockFetch.mockResolvedValueOnce({
       ok: false,
@@ -309,7 +323,7 @@ describe("API error handling during push", () => {
   it("500 Internal Server Error — surfaces server error", async () => {
     seedConfig();
     const today = todayStr();
-    mockExecFileSync.mockReturnValue(ccusageJson([today]));
+    mockCcusageOnly(ccusageJson([today]));
 
     mockFetch.mockResolvedValueOnce({
       ok: false,
@@ -326,7 +340,7 @@ describe("API error handling during push", () => {
   it("network failure — surfaces connection error", async () => {
     seedConfig();
     const today = todayStr();
-    mockExecFileSync.mockReturnValue(ccusageJson([today]));
+    mockCcusageOnly(ccusageJson([today]));
 
     mockFetch.mockRejectedValueOnce(new TypeError("fetch failed"));
 
@@ -339,7 +353,7 @@ describe("API error handling during push", () => {
   it("404 during sync flow — surfaces error, does not save last_push_date", async () => {
     seedConfig();
     const today = todayStr();
-    mockExecFileSync.mockReturnValue(ccusageJson([today]));
+    mockCcusageOnly(ccusageJson([today]));
 
     mockFetch.mockResolvedValueOnce({
       ok: false,
@@ -362,7 +376,7 @@ describe("API endpoint paths", () => {
   it("push submits to /api/usage/submit", async () => {
     seedConfig();
     const today = todayStr();
-    mockExecFileSync.mockReturnValue(ccusageJson([today]));
+    mockCcusageOnly(ccusageJson([today]));
     mockSuccessfulSubmit([today]);
 
     await pushCommand({});
@@ -374,7 +388,7 @@ describe("API endpoint paths", () => {
   it("push sends POST method", async () => {
     seedConfig();
     const today = todayStr();
-    mockExecFileSync.mockReturnValue(ccusageJson([today]));
+    mockCcusageOnly(ccusageJson([today]));
     mockSuccessfulSubmit([today]);
 
     await pushCommand({});
@@ -386,7 +400,7 @@ describe("API endpoint paths", () => {
   it("push sends Authorization header", async () => {
     seedConfig({ token: "my-jwt-token" });
     const today = todayStr();
-    mockExecFileSync.mockReturnValue(ccusageJson([today]));
+    mockCcusageOnly(ccusageJson([today]));
     mockSuccessfulSubmit([today]);
 
     await pushCommand({});
@@ -398,7 +412,7 @@ describe("API endpoint paths", () => {
   it("push sends correct body shape", async () => {
     seedConfig();
     const today = todayStr();
-    mockExecFileSync.mockReturnValue(ccusageJson([today]));
+    mockCcusageOnly(ccusageJson([today]));
     mockSuccessfulSubmit([today]);
 
     await pushCommand({});
@@ -433,7 +447,7 @@ describe("API endpoint paths", () => {
       });
 
     const today = todayStr();
-    mockExecFileSync.mockReturnValue(ccusageJson([today]));
+    mockCcusageOnly(ccusageJson([today]));
     mockSuccessfulSubmit([today]);
 
     await syncCommand("https://straude.com");
@@ -454,7 +468,7 @@ describe("config persistence", () => {
   it("saves last_push_date after successful push", async () => {
     seedConfig();
     const today = todayStr();
-    mockExecFileSync.mockReturnValue(ccusageJson([today]));
+    mockCcusageOnly(ccusageJson([today]));
     mockSuccessfulSubmit([today]);
 
     await pushCommand({});
@@ -466,7 +480,7 @@ describe("config persistence", () => {
   it("saves latest date when pushing multiple days", async () => {
     seedConfig();
     const dates = [daysAgoStr(2), daysAgoStr(1), todayStr()];
-    mockExecFileSync.mockReturnValue(ccusageJson(dates));
+    mockCcusageOnly(ccusageJson(dates));
     mockSuccessfulSubmit(dates);
 
     await pushCommand({ days: 3 });
@@ -478,7 +492,7 @@ describe("config persistence", () => {
   it("does not save last_push_date on dry run", async () => {
     seedConfig();
     const today = todayStr();
-    mockExecFileSync.mockReturnValue(ccusageJson([today]));
+    mockCcusageOnly(ccusageJson([today]));
 
     await pushCommand({ dryRun: true });
 
@@ -499,7 +513,7 @@ describe("config persistence", () => {
   it("does not overwrite other config fields", async () => {
     seedConfig({ token: "original-token", username: "bob" });
     const today = todayStr();
-    mockExecFileSync.mockReturnValue(ccusageJson([today]));
+    mockCcusageOnly(ccusageJson([today]));
     mockSuccessfulSubmit([today]);
 
     await pushCommand({});
@@ -520,7 +534,7 @@ describe("--api-url override", () => {
     // Config saved with port 3000, but dev server is on 3001
     seedConfig({ api_url: "http://localhost:3000" });
     const today = todayStr();
-    mockExecFileSync.mockReturnValue(ccusageJson([today]));
+    mockCcusageOnly(ccusageJson([today]));
     mockSuccessfulSubmit([today]);
 
     await syncCommand("http://localhost:3001");
@@ -532,7 +546,7 @@ describe("--api-url override", () => {
   it("push with configOverride uses override URL", async () => {
     seedConfig({ api_url: "http://localhost:3000" });
     const today = todayStr();
-    mockExecFileSync.mockReturnValue(ccusageJson([today]));
+    mockCcusageOnly(ccusageJson([today]));
     mockSuccessfulSubmit([today]);
 
     const override = { ...makeConfig(), api_url: "http://localhost:3001" };
@@ -545,7 +559,7 @@ describe("--api-url override", () => {
   it("sync without override uses stored config URL", async () => {
     seedConfig({ api_url: "http://localhost:3000" });
     const today = todayStr();
-    mockExecFileSync.mockReturnValue(ccusageJson([today]));
+    mockCcusageOnly(ccusageJson([today]));
     mockSuccessfulSubmit([today]);
 
     await syncCommand(); // no override
@@ -577,7 +591,7 @@ describe("ccusage failures during flow", () => {
 
   it("ccusage returns invalid JSON — clear error message", async () => {
     seedConfig();
-    mockExecFileSync.mockReturnValue("not json at all");
+    mockCcusageOnly("not json at all");
 
     await expect(syncCommand()).rejects.toThrow(ExitError);
     expect(console.error).toHaveBeenCalledWith(

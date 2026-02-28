@@ -72,7 +72,7 @@ export default async function AppLayout({
       .eq("user_id", user.id)
       .order("created_at", { ascending: false })
       .limit(3),
-    supabase.rpc("calculate_user_streak", { p_user_id: user.id }),
+    supabase.rpc("calculate_user_streak", { p_user_id: user.id, p_freeze_days: profile?.streak_freezes ?? 0 }),
     supabase
       .from("daily_usage")
       .select("cost_usd, output_tokens")
@@ -141,6 +141,7 @@ export default async function AppLayout({
             followersCount={followersCount}
             postsCount={postsCount}
             streak={streak}
+            streakFreezes={profile?.streak_freezes ?? 0}
             latestPosts={latestPosts}
             totalOutputTokens={totalOutputTokens}
             totalCost={totalCost}

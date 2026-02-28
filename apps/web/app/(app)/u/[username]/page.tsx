@@ -79,7 +79,7 @@ export default async function ProfilePage({
       .from("posts")
       .select("*", { count: "exact", head: true })
       .eq("user_id", profile.id),
-    supabase.rpc("calculate_user_streak", { p_user_id: profile.id }),
+    supabase.rpc("calculate_user_streak", { p_user_id: profile.id, p_freeze_days: profile.streak_freezes ?? 0 }),
     supabase
       .from("daily_usage")
       .select("cost_usd, output_tokens")

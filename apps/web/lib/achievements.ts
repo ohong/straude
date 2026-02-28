@@ -12,6 +12,7 @@ export interface AchievementStats {
   streak: number;
   syncCount: number;
   verifiedSyncCount: number;
+  syncsInFirstWeek: number;
   kudosReceived: number;
   kudosSent: number;
   commentsReceived: number;
@@ -44,6 +45,14 @@ export const ACHIEVEMENTS: AchievementDef[] = [
     emoji: "\u{1F331}",
     trigger: "usage",
     check: (s) => s.syncCount >= 1,
+  },
+  {
+    slug: "ship-week",
+    title: "Ship Week",
+    description: "Sync 5 days in your first week",
+    emoji: "\u{1F6A2}",
+    trigger: "usage",
+    check: (s) => s.syncsInFirstWeek >= 5,
   },
   {
     slug: "7-day-streak",
@@ -337,11 +346,21 @@ export async function checkAndAwardAchievements(
   const needs = (...triggers: AchievementTrigger[]) =>
     !trigger || triggers.includes(trigger);
 
-  const [usageResult, streakResult, socialResult, photoResult] = await Promise.all([
+  const [usageResult, streakResult, socialResult, photoResult, firstWeekResult] = await Promise.all([
     fetchIf(needs("usage"), () => db.rpc("get_achievement_stats", { p_user_id: userId }).single()),
     fetchIf(needs("usage"), () => db.rpc("calculate_user_streak", { p_user_id: userId })),
     fetchIf(needs("kudos", "comment"), () => db.rpc("get_social_achievement_stats", { p_user_id: userId }).single()),
     fetchIf(needs("photo"), () => db.from("posts").select("id").eq("user_id", userId).not("images", "is", null).neq("images", "[]").limit(1)),
+    fetchIf(needs("usage"), async () => {
+      const { data: userRow } = await db.from("users").select("created_at").eq("id", userId).single();
+      if (!userRow?.created_at) return { count: 0 };
+      const firstWeekEnd = new Date(new Date(userRow.created_at).getTime() + 7 * 86400000).toISOString().slice(0, 10);
+      const { count } = await db.from("daily_usage")
+        .select("id", { count: "exact", head: true })
+        .eq("user_id", userId)
+        .lte("date", firstWeekEnd);
+      return { count: count ?? 0 };
+    }),
   ]);
 
   const usageRow = usageResult?.data as Record<string, unknown> | null;
@@ -357,6 +376,7 @@ export async function checkAndAwardAchievements(
     streak: (streakResult?.data as number) ?? 0,
     syncCount: Number(usageRow?.sync_count ?? 0),
     verifiedSyncCount: Number(usageRow?.verified_sync_count ?? 0),
+    syncsInFirstWeek: (firstWeekResult as any)?.count ?? 0,
     // Self-interactions (kudos/comments on own posts) are counted intentionally.
     kudosReceived: Number(socialRow?.kudos_received ?? 0),
     kudosSent: Number(socialRow?.kudos_sent ?? 0),

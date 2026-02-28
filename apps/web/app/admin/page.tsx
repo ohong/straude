@@ -4,6 +4,9 @@ import { NorthStarChart } from "./components/NorthStarChart";
 import { TopUsersTable } from "./components/TopUsersTable";
 import { ActivationFunnel } from "./components/ActivationFunnel";
 import { GrowthMetrics } from "./components/GrowthMetrics";
+import { CohortRetention } from "./components/CohortRetention";
+import { RevenueConcentration } from "./components/RevenueConcentration";
+import { TimeToFirstSync } from "./components/TimeToFirstSync";
 
 export default async function AdminPage() {
   const supabase = getServiceClient();
@@ -16,16 +19,29 @@ export default async function AdminPage() {
     .toISOString()
     .slice(0, 10);
 
-  const [spendRes, usersRes, funnelRes, growthRes, dauRes, wauRes, mauRes] =
-    await Promise.all([
-      supabase.rpc("admin_cumulative_spend"),
-      supabase.rpc("admin_top_users", { p_limit: 20 }),
-      supabase.rpc("admin_activation_funnel"),
-      supabase.rpc("admin_growth_metrics"),
-      supabase.from("daily_usage").select("user_id").gte("date", today),
-      supabase.from("daily_usage").select("user_id").gte("date", weekAgo),
-      supabase.from("daily_usage").select("user_id").gte("date", monthAgo),
-    ]);
+  const [
+    spendRes,
+    usersRes,
+    funnelRes,
+    growthRes,
+    dauRes,
+    wauRes,
+    mauRes,
+    cohortRes,
+    revenueRes,
+    syncRes,
+  ] = await Promise.all([
+    supabase.rpc("admin_cumulative_spend"),
+    supabase.rpc("admin_top_users", { p_limit: 20 }),
+    supabase.rpc("admin_activation_funnel"),
+    supabase.rpc("admin_growth_metrics"),
+    supabase.from("daily_usage").select("user_id").gte("date", today),
+    supabase.from("daily_usage").select("user_id").gte("date", weekAgo),
+    supabase.from("daily_usage").select("user_id").gte("date", monthAgo),
+    supabase.rpc("admin_cohort_retention"),
+    supabase.rpc("admin_revenue_concentration"),
+    supabase.rpc("admin_time_to_first_sync"),
+  ]);
 
   const spendData = (spendRes.data ?? []).map((r: any) => ({
     date: r.date,
@@ -66,6 +82,29 @@ export default async function AdminPage() {
   const wau = uniqueReal(wauRes.data ?? []);
   const mau = uniqueReal(mauRes.data ?? []);
 
+  const cohortData = (cohortRes.data ?? []).map((r: any) => ({
+    cohort_week: r.cohort_week,
+    cohort_size: Number(r.cohort_size),
+    week_0: r.week_0 !== null ? Number(r.week_0) : null,
+    week_1: r.week_1 !== null ? Number(r.week_1) : null,
+    week_2: r.week_2 !== null ? Number(r.week_2) : null,
+    week_3: r.week_3 !== null ? Number(r.week_3) : null,
+    week_4: r.week_4 !== null ? Number(r.week_4) : null,
+  }));
+
+  const revenueData = (revenueRes.data ?? []).map((r: any) => ({
+    segment: r.segment,
+    user_count: Number(r.user_count),
+    total_spend: Number(r.total_spend),
+    pct_of_total: Number(r.pct_of_total),
+  }));
+
+  const syncData = (syncRes.data ?? []).map((r: any) => ({
+    bucket: r.bucket,
+    bucket_order: Number(r.bucket_order),
+    user_count: Number(r.user_count),
+  }));
+
   const spendFormatted = totalSpend.toLocaleString("en-US", {
     minimumFractionDigits: 0,
     maximumFractionDigits: 0,
@@ -100,6 +139,15 @@ export default async function AdminPage() {
       <div className="grid gap-3 lg:grid-cols-2">
         <ActivationFunnel data={funnelData} />
         <GrowthMetrics data={growthData} />
+      </div>
+
+      {/* Cohort Retention */}
+      <CohortRetention data={cohortData} />
+
+      {/* Revenue Concentration + Time to First Sync side by side */}
+      <div className="grid gap-3 lg:grid-cols-2">
+        <RevenueConcentration data={revenueData} />
+        <TimeToFirstSync data={syncData} />
       </div>
 
       {/* Top users table */}

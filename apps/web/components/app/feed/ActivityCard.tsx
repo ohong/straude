@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { Zap, MessageCircle, CheckCircle } from "lucide-react";
+import { Zap, MessageCircle, CheckCircle, MoreHorizontal, Pencil } from "lucide-react";
 import { Avatar } from "@/components/ui/Avatar";
 import { ImageGrid } from "@/components/app/shared/ImageGrid";
 import { ImageLightbox } from "@/components/app/shared/ImageLightbox";
@@ -10,7 +10,7 @@ import { ShareMenu } from "./ShareMenu";
 import { cn } from "@/lib/utils/cn";
 import { formatTokens } from "@/lib/utils/format";
 import { mentionsToMarkdownLinks } from "@/lib/utils/mentions";
-import type { Post, Comment } from "@/types";
+import type { Post, Comment, ModelBreakdownEntry } from "@/types";
 import dynamic from "next/dynamic";
 import { useState } from "react";
 import remarkBreaks from "remark-breaks";
@@ -31,21 +31,79 @@ function timeAgo(dateStr: string) {
   return new Date(dateStr).toLocaleDateString("en-US", { month: "short", day: "numeric" });
 }
 
-function formatModel(models: string[]) {
+function prettifyModel(model: string): string {
+  if (/claude-opus-4/i.test(model)) return "Claude Opus";
+  if (/claude-sonnet-4/i.test(model)) return "Claude Sonnet";
+  if (/claude-haiku-4/i.test(model)) return "Claude Haiku";
+  if (/gpt-5/i.test(model)) return "GPT-5";
+  if (/gpt-4o/i.test(model)) return "GPT-4o";
+  if (/^o3/i.test(model)) return "o3";
+  if (/^o4/i.test(model)) return "o4";
+  // Legacy: broader Claude matching
+  if (model.includes("opus")) return "Claude Opus";
+  if (model.includes("sonnet")) return "Claude Sonnet";
+  if (model.includes("haiku")) return "Claude Haiku";
+  return model;
+}
+
+function formatModels(
+  models: string[] | undefined,
+  breakdown: ModelBreakdownEntry[] | null | undefined,
+): string | null {
+  // With model_breakdown data: show cost percentages
+  if (breakdown && breakdown.length > 0) {
+    const totalCost = breakdown.reduce((sum, e) => sum + e.cost_usd, 0);
+    if (totalCost <= 0) return null;
+
+    // Deduplicate by pretty name, summing costs
+    const byCostMap = new Map<string, number>();
+    for (const entry of breakdown) {
+      const name = prettifyModel(entry.model);
+      byCostMap.set(name, (byCostMap.get(name) ?? 0) + entry.cost_usd);
+    }
+
+    // Sort by cost descending
+    const sorted = [...byCostMap.entries()].sort((a, b) => b[1] - a[1]);
+
+    return sorted
+      .map(([name, cost]) => `${Math.round((cost / totalCost) * 100)}% ${name}`)
+      .join(", ");
+  }
+
+  // Legacy fallback: pick highest-tier model
   if (!models || models.length === 0) return null;
-  // Pick the highest-tier model present, regardless of array order
   if (models.some((m) => m.includes("opus"))) return "Claude Opus";
   if (models.some((m) => m.includes("sonnet"))) return "Claude Sonnet";
   if (models.some((m) => m.includes("haiku"))) return "Claude Haiku";
-  return models[0];
+  return prettifyModel(models[0]!);
 }
 
-export function ActivityCard({ post }: { post: Post }) {
+function CompletenessRing({ post }: { post: Post }) {
+  const steps = [post.title, post.description, post.images?.length].filter(Boolean).length;
+  const pct = 25 + steps * 25;
+  const r = 7;
+  const c = 2 * Math.PI * r;
+  return (
+    <svg width="18" height="18" className="shrink-0" aria-label={`${pct}% complete`}>
+      <circle cx="9" cy="9" r={r} fill="none" stroke="currentColor" strokeWidth="2" className="text-border" />
+      <circle
+        cx="9" cy="9" r={r} fill="none" stroke="currentColor" strokeWidth="2"
+        className={pct === 100 ? "text-accent" : "text-muted"}
+        strokeDasharray={c} strokeDashoffset={c * (1 - pct / 100)}
+        transform="rotate(-90 9 9)"
+      />
+    </svg>
+  );
+}
+
+export function ActivityCard({ post, userId }: { post: Post; userId?: string | null }) {
   const router = useRouter();
   const [kudosed, setKudosed] = useState(post.has_kudosed ?? false);
   const [kudosCount, setKudosCount] = useState(post.kudos_count ?? 0);
   const [animating, setAnimating] = useState(false);
   const [lightboxIndex, setLightboxIndex] = useState<number | null>(null);
+  const [menuOpen, setMenuOpen] = useState(false);
+  const isOwn = userId != null && userId === post.user_id;
 
   const commentCount = post.comment_count ?? 0;
   const recentComments = post.recent_comments ?? [];
@@ -89,7 +147,7 @@ export function ActivityCard({ post }: { post: Post }) {
             {usage?.models && usage.models.length > 0 && (
               <>
                 <span>&middot;</span>
-                <span>{formatModel(usage.models)}</span>
+                <span>{formatModels(usage.models, usage.model_breakdown)}</span>
               </>
             )}
             {usage?.is_verified && (
@@ -98,8 +156,35 @@ export function ActivityCard({ post }: { post: Post }) {
                 Verified
               </span>
             )}
+            {isOwn && <CompletenessRing post={post} />}
           </div>
         </div>
+        {isOwn && (
+          <div className="relative">
+            <button
+              type="button"
+              onClick={() => setMenuOpen((v) => !v)}
+              className="rounded p-1 text-muted hover:bg-subtle hover:text-foreground"
+              aria-label="Post options"
+            >
+              <MoreHorizontal size={18} />
+            </button>
+            {menuOpen && (
+              <>
+                <div className="fixed inset-0 z-10" onClick={() => setMenuOpen(false)} />
+                <div className="absolute right-0 top-full z-20 mt-1 w-36 rounded border border-border bg-background shadow-lg">
+                  <Link
+                    href={`/post/${post.id}?edit=1`}
+                    className="flex w-full items-center gap-2 px-3 py-2 text-sm hover:bg-subtle"
+                    onClick={() => setMenuOpen(false)}
+                  >
+                    <Pencil size={14} /> Edit
+                  </Link>
+                </div>
+              </>
+            )}
+          </div>
+        )}
       </div>
 
       {/* Body — clickable card, but not an <a> to avoid nesting with @mention links */}
@@ -156,7 +241,7 @@ export function ActivityCard({ post }: { post: Post }) {
               <p className="col-span-2 text-xs text-muted">
                 Uploaded by the user via JSON
                 {usage.models && usage.models.length > 0 && (
-                  <> &middot; {formatModel(usage.models)}</>
+                  <> &middot; {formatModels(usage.models, usage.model_breakdown)}</>
                 )}
               </p>
             )}
