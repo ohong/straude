@@ -22,7 +22,7 @@ function TickerStrip({ items }: { items: TickerItem[] }) {
 export function Ticker({ items }: { items: TickerItem[] }) {
   return (
     <div className="w-full overflow-hidden border-t border-b border-[#222] py-3 relative z-10 bg-[#050505]">
-      <div className="inline-block whitespace-nowrap animate-[ticker_30s_linear_infinite]">
+      <div className="inline-block whitespace-nowrap animate-ticker">
         <TickerStrip items={items} />
         <TickerStrip items={items} />
       </div>

@@ -135,13 +135,10 @@ export function PostEditor({ post, autoEdit = false }: { post: Post; autoEdit?: 
     setGenerating(false);
   }
 
-  async function handleImageUpload(e: React.ChangeEvent<HTMLInputElement>) {
-    const files = e.target.files;
-    if (!files) return;
-
+  async function uploadFiles(files: File[]) {
     const remaining = 10 - images.length - uploadingCount;
     if (remaining <= 0) return;
-    const toUpload = Array.from(files).slice(0, remaining);
+    const toUpload = files.slice(0, remaining);
 
     setUploadingCount((c) => c + toUpload.length);
 
@@ -161,8 +158,23 @@ export function PostEditor({ post, autoEdit = false }: { post: Post; autoEdit?: 
         }
       })
     );
+  }
 
+  async function handleImageUpload(e: React.ChangeEvent<HTMLInputElement>) {
+    const files = e.target.files;
+    if (!files) return;
+    await uploadFiles(Array.from(files));
     if (fileRef.current) fileRef.current.value = "";
+  }
+
+  async function handlePaste(e: React.ClipboardEvent) {
+    const imageFiles = Array.from(e.clipboardData.items)
+      .filter((item) => item.kind === "file" && item.type.startsWith("image/"))
+      .map((item) => item.getAsFile())
+      .filter((file): file is File => file !== null);
+    if (imageFiles.length === 0) return;
+    e.preventDefault();
+    await uploadFiles(imageFiles);
   }
 
   function removeImage(index: number) {
@@ -194,7 +206,7 @@ export function PostEditor({ post, autoEdit = false }: { post: Post; autoEdit?: 
   }
 
   return (
-    <div className="border-b border-border px-4 py-4 sm:px-6">
+    <div className="border-b border-border px-4 py-4 sm:px-6" onPaste={handlePaste}>
       <div className="flex items-center justify-between mb-4">
         <h3 className="text-sm font-semibold uppercase tracking-widest text-muted">
           Edit Post
@@ -325,6 +337,7 @@ export function PostEditor({ post, autoEdit = false }: { post: Post; autoEdit?: 
                 )}
                 {uploadingCount > 0 ? `Uploading ${uploadingCount}...` : "Add images"}
               </Button>
+              <span className="text-xs text-muted">or paste from clipboard</span>
             </>
           )}
           {images.length > 0 && (

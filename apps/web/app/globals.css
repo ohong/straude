@@ -35,6 +35,10 @@ body {
   100% { transform: translate3d(-50%, 0, 0); }
 }
 
+.animate-ticker {
+  animation: ticker 30s linear infinite;
+}
+
 /* ---- Landing page animations ---- */
 @keyframes fade-in-up {
   from {

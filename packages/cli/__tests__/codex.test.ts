@@ -30,11 +30,60 @@ function validOutput() {
   });
 }
 
+/** Build a real @ccusage/codex JSON string (actual output format). */
+function realCodexOutput() {
+  return JSON.stringify({
+    daily: [
+      {
+        date: "Feb 03, 2026",
+        inputTokens: 8247567,
+        cachedInputTokens: 7428352,
+        outputTokens: 42769,
+        reasoningOutputTokens: 32128,
+        totalTokens: 8290336,
+        costUSD: 3.33,
+        models: {
+          "gpt-5.2-codex": {
+            inputTokens: 8247567,
+            cachedInputTokens: 7428352,
+            outputTokens: 42769,
+            reasoningOutputTokens: 32128,
+            totalTokens: 8290336,
+            isFallback: false,
+          },
+        },
+      },
+    ],
+    totals: {
+      inputTokens: 8247567,
+      cachedInputTokens: 7428352,
+      outputTokens: 42769,
+      totalTokens: 8290336,
+      costUSD: 3.33,
+    },
+  });
+}
+
 // ---------------------------------------------------------------------------
 // parseCodexOutput
 // ---------------------------------------------------------------------------
 
 describe("parseCodexOutput", () => {
+  it("parses real @ccusage/codex output format", () => {
+    const result = parseCodexOutput(realCodexOutput());
+    expect(result.data).toHaveLength(1);
+    const entry = result.data[0]!;
+    expect(entry.date).toBe("2026-02-03");
+    expect(entry.costUSD).toBe(3.33);
+    expect(entry.models).toEqual(["gpt-5.2-codex"]);
+    expect(entry.inputTokens).toBe(8247567);
+    expect(entry.outputTokens).toBe(42769);
+    expect(entry.totalTokens).toBe(8290336);
+    // cachedInputTokens maps to cacheReadTokens in our canonical format
+    expect(entry.cacheReadTokens).toBe(7428352);
+    expect(entry.cacheCreationTokens).toBe(0);
+  });
+
   it("parses valid Codex JSON and normalizes fields", () => {
     const result = parseCodexOutput(validOutput());
     expect(result.data).toHaveLength(1);

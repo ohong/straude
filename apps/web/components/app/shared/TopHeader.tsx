@@ -14,6 +14,7 @@ import {
 import { Avatar } from "@/components/ui/Avatar";
 import { cn } from "@/lib/utils/cn";
 import { createClient } from "@/lib/supabase/client";
+import { timeAgo, notificationMessage, notificationHref } from "@/lib/utils/notifications";
 import type { Notification } from "@/types";
 
 interface TopHeaderProps {
@@ -26,47 +27,6 @@ const navLinks = [
   { href: "/leaderboard", label: "Leaderboard" },
   { href: "/search", label: "Search" },
 ] as const;
-
-function timeAgo(dateStr: string): string {
-  const diff = Date.now() - new Date(dateStr).getTime();
-  const mins = Math.floor(diff / 60000);
-  if (mins < 1) return "just now";
-  if (mins < 60) return `${mins}m`;
-  const hrs = Math.floor(mins / 60);
-  if (hrs < 24) return `${hrs}h`;
-  const days = Math.floor(hrs / 24);
-  if (days < 30) return `${days}d`;
-  return `${Math.floor(days / 30)}mo`;
-}
-
-function notificationMessage(n: Notification): string {
-  const actor = n.actor?.username ?? "Someone";
-  switch (n.type) {
-    case "follow":
-      return `${actor} started following you`;
-    case "kudos":
-      return `${actor} gave kudos to your post`;
-    case "comment":
-      return `${actor} commented on your post`;
-    case "mention":
-      return `${actor} mentioned you in a ${n.comment_id ? "comment" : "post"}`;
-    default:
-      return `${actor} interacted with you`;
-  }
-}
-
-function notificationHref(n: Notification): string {
-  switch (n.type) {
-    case "follow":
-      return `/u/${n.actor?.username ?? ""}`;
-    case "kudos":
-    case "comment":
-    case "mention":
-      return `/post/${n.post_id ?? ""}`;
-    default:
-      return "/notifications";
-  }
-}
 
 export function TopHeader({ username, avatarUrl }: TopHeaderProps) {
   const pathname = usePathname();
@@ -116,10 +76,15 @@ export function TopHeader({ username, avatarUrl }: TopHeaderProps) {
     setUnreadCount(data.unread_count ?? 0);
   }, []);
 
-  // Initial unread count fetch + mark as returning user for guest nav
+  // Initial unread count fetch + mark as returning user + listen for external changes
   useEffect(() => {
     fetchNotifications();
     try { localStorage.setItem("straude_returning", "1"); } catch {}
+    function handleSync() {
+      fetchNotifications();
+    }
+    window.addEventListener("notifications-updated", handleSync);
+    return () => window.removeEventListener("notifications-updated", handleSync);
   }, [fetchNotifications]);
 
   async function handleLogout() {
@@ -262,6 +227,13 @@ export function TopHeader({ username, avatarUrl }: TopHeaderProps) {
                     ))
                   )}
                 </div>
+                <Link
+                  href="/notifications"
+                  onClick={() => setNotifOpen(false)}
+                  className="block border-t border-border px-4 py-2.5 text-center text-xs font-medium text-muted hover:text-foreground"
+                >
+                  See all notifications
+                </Link>
               </div>
             )}
           </div>

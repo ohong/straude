@@ -25,9 +25,9 @@ Streak freezes are now shipped (earned by enriching posts, extend grace window).
 - **Achievement chains**: Restructure the flat `ACHIEVEMENTS` array into progression quest lines with visible progress bars ("72% to 90-Day Streak").
 - **Ship Week countdown banner**: Show "4 days left — 3/5 synced" banner for users in their first week. The Ship Week achievement is live but the countdown UI is deferred.
 
-## Notifications Page
+## ~~Notifications Page~~ (shipped 2026-02-25)
 
-The dropdown shows the 20 most recent notifications. A dedicated `/notifications` page with pagination and filtering (by type) would be useful for users with high activity.
+Moved to Shipped section below.
 
 ## Create Post Page
 
@@ -110,6 +110,10 @@ Private or public groups where teams (company, OSS project, friend group) share 
 ### Admin Dashboard (2026-02-28)
 
 Internal dashboard at `/admin` for tracking the North Star Metric (cumulative spend), user activation funnel, growth metrics, and top users. Access restricted via `ADMIN_USER_IDS` env var. Four SECURITY DEFINER RPCs power the data. Charts via recharts (lazy-loaded). Future: add retention cohorts, revenue per user trends, and model usage breakdown.
+
+### Notifications Page (2026-02-25)
+
+Dedicated `/notifications` page with infinite scroll pagination, type filtering (All/Follows/Kudos/Comments/Mentions), and mark-all-as-read. API extended with `?limit`, `?offset`, and `?type` query params. "See all notifications" link added to the header dropdown.
 
 ### Achievements & Badges (2026-02-22, expanded 2026-02-24)
 

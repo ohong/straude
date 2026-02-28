@@ -12,6 +12,7 @@ function makeStats(overrides: Partial<AchievementStats> = {}): AchievementStats 
     streak: 0,
     syncCount: 0,
     verifiedSyncCount: 0,
+    syncsInFirstWeek: 0,
     kudosReceived: 0,
     kudosSent: 0,
     commentsReceived: 0,
@@ -137,6 +138,18 @@ describe("first-sync", () => {
 
   it("earned with 1 sync", () => {
     expect(badge.check(makeStats({ syncCount: 1 }))).toBe(true);
+  });
+});
+
+describe("ship-week", () => {
+  const badge = ACHIEVEMENTS.find((a) => a.slug === "ship-week")!;
+
+  it("not earned with 4 syncs in first week", () => {
+    expect(badge.check(makeStats({ syncsInFirstWeek: 4 }))).toBe(false);
+  });
+
+  it("earned with exactly 5 syncs in first week", () => {
+    expect(badge.check(makeStats({ syncsInFirstWeek: 5 }))).toBe(true);
   });
 });
 
