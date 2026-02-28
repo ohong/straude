@@ -2,65 +2,55 @@
 
 import { useState, useEffect } from "react";
 import Link from "next/link";
-import { cn } from "@/lib/utils/cn";
 import { Menu, X } from "lucide-react";
+import { BoltIcon } from "@/components/landing/icons";
 
-export function Navbar() {
-  const [scrolled, setScrolled] = useState(false);
+export function Navbar({ variant = "dark" }: { variant?: "dark" | "light" }) {
   const [mobileOpen, setMobileOpen] = useState(false);
   const [authHref, setAuthHref] = useState("/signup");
 
   useEffect(() => {
-    function onScroll() {
-      setScrolled(window.scrollY > 48);
-    }
-    window.addEventListener("scroll", onScroll, { passive: true });
     try {
       if (localStorage.getItem("straude_returning")) setAuthHref("/login");
     } catch {}
-    return () => window.removeEventListener("scroll", onScroll);
   }, []);
 
+  const light = variant === "light";
+  const text = light ? "text-[#111]" : "text-[#F0F0F0]";
+  const hoverCta = light ? "hover:text-[#111]" : "hover:text-[#F0F0F0]";
+  const mobileBg = light
+    ? "border-[#ddd] bg-white/95"
+    : "border-[#222] bg-[#050505]/95";
+
   return (
-    <nav
-      className={cn(
-        "fixed top-0 left-0 right-0 z-50 transition-[background-color,border-color,backdrop-filter] duration-300",
-        scrolled
-          ? "bg-black/95 backdrop-blur-md border-b border-white/10"
-          : "bg-transparent"
-      )}
-    >
-      <div className="mx-auto flex max-w-[1280px] items-center justify-between px-6 py-4 md:px-8">
-        {/* Brand */}
-        <Link href="/" className="flex items-center gap-2">
-          <div
-            className="h-6 w-6 bg-accent"
-            style={{
-              clipPath: "polygon(20% 0%, 80% 0%, 100% 100%, 0% 100%)",
-            }}
-          />
-          <span className="text-lg font-semibold tracking-tight text-white">
-            STRAUDE
-          </span>
+    <nav className="fixed top-0 left-0 w-full z-50">
+      <div className="flex justify-between items-start px-8 py-8">
+        {/* Logo */}
+        <Link
+          href="/"
+          className={`flex items-center gap-2 font-[family-name:var(--font-mono)] font-bold text-2xl ${text}`}
+        >
+          <BoltIcon className="w-6 h-6 text-accent" />
+          STRAUDE
         </Link>
 
         {/* Desktop nav */}
-        <div className="hidden items-center gap-6 md:flex">
+        <div className="hidden md:flex items-center gap-8 font-[family-name:var(--font-mono)] text-sm uppercase">
           <Link
             href="/feed"
-            className="text-sm font-medium text-white/60 hover:text-white transition-colors"
+            className={`${text} hover:text-accent transition-colors`}
           >
             Feed
           </Link>
           <Link
             href="/leaderboard"
-            className="text-sm font-medium text-white/60 hover:text-white transition-colors"
+            className={`${text} hover:text-accent transition-colors`}
           >
             Leaderboard
           </Link>
           <Link
             href={authHref}
-            className="rounded-lg bg-accent px-5 py-2.5 text-sm font-semibold text-white hover:brightness-110 transition-[filter] duration-150 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white focus-visible:ring-offset-2 focus-visible:ring-offset-black"
+            className={`text-accent ${hoverCta} transition-colors`}
           >
             Get Started
           </Link>
@@ -68,7 +58,7 @@ export function Navbar() {
 
         {/* Mobile hamburger */}
         <button
-          className="md:hidden text-white"
+          className={`md:hidden ${text}`}
           onClick={() => setMobileOpen(!mobileOpen)}
           aria-label="Toggle menu"
         >
@@ -78,25 +68,25 @@ export function Navbar() {
 
       {/* Mobile menu */}
       {mobileOpen && (
-        <div className="border-t border-white/10 bg-black/95 backdrop-blur-md px-6 pb-6 pt-4 md:hidden">
-          <div className="flex flex-col gap-4">
+        <div className={`md:hidden border-t ${mobileBg} backdrop-blur-md px-8 pb-8 pt-6`}>
+          <div className="flex flex-col gap-6 font-[family-name:var(--font-mono)] text-sm uppercase">
             <Link
               href="/feed"
-              className="text-base font-medium text-white/60"
+              className={text}
               onClick={() => setMobileOpen(false)}
             >
               Feed
             </Link>
             <Link
               href="/leaderboard"
-              className="text-base font-medium text-white/60"
+              className={text}
               onClick={() => setMobileOpen(false)}
             >
               Leaderboard
             </Link>
             <Link
               href={authHref}
-              className="rounded-lg bg-accent px-5 py-3 text-center text-base font-semibold text-white"
+              className="text-accent"
               onClick={() => setMobileOpen(false)}
             >
               Get Started

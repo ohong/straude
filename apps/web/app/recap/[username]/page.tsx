@@ -1,18 +1,10 @@
 import { notFound } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
 import { getRecapData } from "@/lib/utils/recap";
-import { formatTokens } from "@/lib/utils/format";
+import { formatTokens, getCellColor } from "@/lib/utils/format";
 import type { Metadata } from "next";
 import Link from "next/link";
 import { getBackgroundById, DEFAULT_BACKGROUND_ID } from "@/lib/recap-backgrounds";
-
-function getCellColor(cost: number): string {
-  if (cost <= 0) return "#E5E5E5";
-  if (cost <= 10) return "#FDD0B1";
-  if (cost <= 50) return "#F4945E";
-  if (cost <= 100) return "#DF561F";
-  return "#B8441A";
-}
 
 export async function generateMetadata({
   params,
