@@ -141,6 +141,18 @@ describe("first-sync", () => {
   });
 });
 
+describe("ship-week", () => {
+  const badge = ACHIEVEMENTS.find((a) => a.slug === "ship-week")!;
+
+  it("not earned with 4 syncs in first week", () => {
+    expect(badge.check(makeStats({ syncsInFirstWeek: 4 }))).toBe(false);
+  });
+
+  it("earned with exactly 5 syncs in first week", () => {
+    expect(badge.check(makeStats({ syncsInFirstWeek: 5 }))).toBe(true);
+  });
+});
+
 describe("7-day-streak", () => {
   const badge = ACHIEVEMENTS.find((a) => a.slug === "7-day-streak")!;
 
