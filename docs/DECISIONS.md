@@ -20,6 +20,22 @@
 
 **Achievement streak vs display streak:** Achievement checks (7-day, 30-day) use `p_freeze_days = 0` so achievements are based on actual consecutive days. Only user-facing displays (sidebar, profile, API) include freeze benefits.
 
+## Admin Revenue Concentration: Non-Overlapping Segments (2026-02-27)
+
+**Decision:** The `admin_revenue_concentration` RPC returns non-overlapping segments (top_1, top_2–5, top_6–10, rest) rather than cumulative ranges. The client component accumulates segments to display cumulative percentages (Top 5 = top_1 + top_2–5).
+
+**Alternatives considered:**
+1. **Cumulative ranges in SQL** — simpler client code but overlapping data makes the stacked bar visualization incorrect (segments would sum to >100%).
+2. **Non-overlapping segments** (chosen) — each user belongs to exactly one segment. Stacked bar sums to 100%. Client accumulates for the "Top 5 / Top 10" summary cards. More flexible for future visualizations.
+
+## Admin Cohort Retention: Fixed 5-Week Window (2026-02-27)
+
+**Decision:** Cohort retention shows weeks 0–4 (5 columns) for the last 12 signup cohorts. Fixed width keeps the heatmap readable.
+
+**Alternatives considered:**
+1. **Dynamic week columns up to current age** — older cohorts would have more columns, creating a jagged table. Harder to scan visually.
+2. **Fixed 5-week window** (chosen) — consistent table shape. Null cells for cohorts too young for later weeks render as "–". Covers the critical first-month retention period.
+
 ## Auto-Title on Sync: Separate Insert/Update, Not Upsert (2026-02-27)
 
 **Decision:** The usage submit route now uses separate insert (with auto-title) and update (without title) paths instead of a single upsert for posts. This prevents overwriting user-edited titles on re-sync.

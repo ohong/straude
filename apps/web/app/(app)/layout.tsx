@@ -68,7 +68,7 @@ export default async function AppLayout({
       .eq("user_id", user.id),
     supabase
       .from("posts")
-      .select("id, title, created_at")
+      .select("id, title, created_at, daily_usage:daily_usage!posts_daily_usage_id_fkey(date)")
       .eq("user_id", user.id)
       .order("created_at", { ascending: false })
       .limit(3),
@@ -97,15 +97,18 @@ export default async function AppLayout({
   const totalCost =
     allTimeUsageRes.data?.reduce((s, r) => s + Number(r.cost_usd), 0) ?? 0;
 
-  const latestPosts = (latestPostRes.data ?? []).map((row) => ({
-    id: row.id,
-    title: row.title ?? "Untitled",
-    date: new Date(row.created_at).toLocaleDateString("en-US", {
-      month: "short",
-      day: "numeric",
-      year: "numeric",
-    }),
-  }));
+  const latestPosts = (latestPostRes.data ?? []).map((row) => {
+    // Prefer the usage date (user's local date) over created_at (UTC timestamp)
+    const usageDate = (row.daily_usage as any)?.date as string | undefined;
+    const displayDate = usageDate
+      ? new Date(usageDate + "T12:00:00").toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" })
+      : new Date(row.created_at).toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" });
+    return {
+      id: row.id,
+      title: row.title ?? "Untitled",
+      date: displayDate,
+    };
+  });
 
   return (
     <div className="fixed inset-0 flex flex-col overflow-hidden">

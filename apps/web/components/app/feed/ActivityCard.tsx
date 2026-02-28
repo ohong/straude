@@ -19,7 +19,7 @@ const ReactMarkdown = dynamic(() => import("react-markdown"), {
   loading: () => null,
 });
 
-function timeAgo(dateStr: string) {
+function timeAgo(dateStr: string, usageDate?: string | null) {
   const diff = Date.now() - new Date(dateStr).getTime();
   const mins = Math.floor(diff / 60000);
   if (mins < 1) return "just now";
@@ -28,6 +28,10 @@ function timeAgo(dateStr: string) {
   if (hrs < 24) return `${hrs}h ago`;
   const days = Math.floor(hrs / 24);
   if (days < 7) return `${days}d ago`;
+  // Prefer usage date (user's local date) over created_at (UTC) to avoid timezone shift
+  if (usageDate) {
+    return new Date(usageDate + "T12:00:00").toLocaleDateString("en-US", { month: "short", day: "numeric" });
+  }
   return new Date(dateStr).toLocaleDateString("en-US", { month: "short", day: "numeric" });
 }
 
@@ -143,7 +147,7 @@ export function ActivityCard({ post, userId }: { post: Post; userId?: string | n
             </Link>
           </div>
           <div className="flex items-center gap-2 text-xs text-muted">
-            <span suppressHydrationWarning>{timeAgo(post.created_at)}</span>
+            <span suppressHydrationWarning>{timeAgo(post.created_at, usage?.date)}</span>
             {usage?.models && usage.models.length > 0 && (
               <>
                 <span>&middot;</span>

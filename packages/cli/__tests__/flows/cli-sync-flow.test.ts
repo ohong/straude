@@ -282,6 +282,155 @@ describe("sync flow", () => {
 });
 
 // ===========================================================================
+// 1b. CODEX INTEGRATION — merged Claude + Codex data
+// ===========================================================================
+
+describe("Codex integration", () => {
+  /** Builds @ccusage/codex-style JSON for a single day. */
+  function codexJson(dates: string[]) {
+    return JSON.stringify({
+      daily: dates.map((date) => ({
+        date,
+        modelsUsed: ["gpt-5-codex"],
+        inputTokens: 2000,
+        outputTokens: 800,
+        totalTokens: 2800,
+        totalCost: 3.0,
+      })),
+      totals: {
+        inputTokens: 2000,
+        outputTokens: 800,
+        totalTokens: 2800,
+        totalCost: 3.0,
+      },
+    });
+  }
+
+  /** Mock that returns ccusage JSON for ccusage calls and codex JSON for codex calls. */
+  function mockBothSources(ccJson: string, codexJsonStr: string) {
+    mockExecFileSync.mockImplementation(((cmd: string, args: string[]) => {
+      if (args?.some?.((a: string) => typeof a === "string" && a.includes("@ccusage/codex"))) {
+        return codexJsonStr;
+      }
+      return ccJson;
+    }) as typeof execFileSync);
+  }
+
+  it("merges Claude + Codex data when both are available", async () => {
+    seedConfig();
+    const today = todayStr();
+    mockBothSources(ccusageJson([today]), codexJson([today]));
+    mockSuccessfulSubmit([today]);
+
+    await pushCommand({});
+
+    // Verify the API call was made
+    expect(mockFetch).toHaveBeenCalledTimes(1);
+    const [, options] = mockFetch.mock.calls[0]!;
+    const body = JSON.parse(options.body);
+
+    // Should have merged data
+    expect(body.entries).toHaveLength(1);
+    const data = body.entries[0].data;
+    expect(data.costUSD).toBe(3.05); // 0.05 (Claude) + 3.0 (Codex)
+    expect(data.inputTokens).toBe(3000); // 1000 + 2000
+    expect(data.outputTokens).toBe(1300); // 500 + 800
+    expect(data.totalTokens).toBe(4300); // 1500 + 2800
+    expect(data.models).toContain("claude-sonnet-4-6");
+    expect(data.models).toContain("gpt-5-codex");
+
+    // model_breakdown should have per-source cost entries
+    expect(data.modelBreakdown).toHaveLength(2);
+    expect(data.modelBreakdown).toContainEqual({ model: "claude-sonnet-4-6", cost_usd: 0.05 });
+    expect(data.modelBreakdown).toContainEqual({ model: "gpt-5-codex", cost_usd: 3.0 });
+  });
+
+  it("hash includes both Claude and Codex raw JSON", async () => {
+    seedConfig();
+    const today = todayStr();
+    const ccRaw = ccusageJson([today]);
+    const codexRaw = codexJson([today]);
+    mockBothSources(ccRaw, codexRaw);
+    mockSuccessfulSubmit([today]);
+
+    await pushCommand({});
+
+    const [, options] = mockFetch.mock.calls[0]!;
+    const body = JSON.parse(options.body);
+
+    // Hash should be SHA-256 of concatenated raw JSONs
+    const { createHash } = await import("node:crypto");
+    const expectedHash = createHash("sha256").update(ccRaw + codexRaw).digest("hex");
+    expect(body.hash).toBe(expectedHash);
+  });
+
+  it("Codex-only day (no Claude data) still submits", async () => {
+    seedConfig();
+    const today = todayStr();
+
+    // ccusage returns empty, Codex has data
+    mockExecFileSync.mockImplementation(((cmd: string, args: string[]) => {
+      if (args?.some?.((a: string) => typeof a === "string" && a.includes("@ccusage/codex"))) {
+        return codexJson([today]);
+      }
+      return "[]"; // ccusage: no data
+    }) as typeof execFileSync);
+
+    mockSuccessfulSubmit([today]);
+
+    await pushCommand({});
+
+    expect(mockFetch).toHaveBeenCalledTimes(1);
+    const [, options] = mockFetch.mock.calls[0]!;
+    const body = JSON.parse(options.body);
+    const data = body.entries[0].data;
+
+    expect(data.models).toEqual(["gpt-5-codex"]);
+    expect(data.costUSD).toBe(3.0);
+    expect(data.modelBreakdown).toEqual([{ model: "gpt-5-codex", cost_usd: 3.0 }]);
+  });
+
+  it("dry-run shows merged Codex models in summary", async () => {
+    seedConfig();
+    const today = todayStr();
+    mockBothSources(ccusageJson([today]), codexJson([today]));
+
+    await pushCommand({ dryRun: true });
+
+    expect(mockFetch).not.toHaveBeenCalled();
+    // Should print model names in summary
+    expect(console.log).toHaveBeenCalledWith(
+      expect.stringContaining("gpt-5-codex"),
+    );
+    expect(console.log).toHaveBeenCalledWith(
+      expect.stringContaining("dry run"),
+    );
+  });
+
+  it("Codex failure is silent — Claude data still pushes", async () => {
+    seedConfig();
+    const today = todayStr();
+    // ccusage works, codex throws
+    mockCcusageOnly(ccusageJson([today]));
+    mockSuccessfulSubmit([today]);
+
+    await pushCommand({});
+
+    expect(mockFetch).toHaveBeenCalledTimes(1);
+    const [, options] = mockFetch.mock.calls[0]!;
+    const body = JSON.parse(options.body);
+    const data = body.entries[0].data;
+
+    // Only Claude data
+    expect(data.models).toEqual(["claude-sonnet-4-6"]);
+    expect(data.costUSD).toBe(0.05);
+    // No console.error about Codex
+    const errorCalls = (console.error as any).mock.calls.map((c: any[]) => c[0]);
+    expect(errorCalls.every((msg: string) => !msg.includes("codex"))).toBe(true);
+  });
+});
+
+// ===========================================================================
 // 2. API ERROR HANDLING — the kind of bug that prompted this test suite
 // ===========================================================================
 

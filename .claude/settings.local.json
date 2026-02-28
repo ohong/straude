@@ -9,7 +9,9 @@
       "Bash(bun run:*)",
       "Bash(bunx vitest run:*)",
       "Bash(git add:*)",
-      "Bash(git commit:*)"
+      "Bash(git commit:*)",
+      "mcp__plugin_supabase_supabase__list_projects",
+      "mcp__plugin_supabase_supabase__execute_sql"
     ]
   }
 }

@@ -252,6 +252,134 @@ describe("Flow: CLI Push", () => {
     expect(upsertCall[1]).toEqual({ onConflict: "user_id,date" });
   });
 
+  it("CLI pushes merged Claude + Codex data with model_breakdown", async () => {
+    const userId = "user-cli-1";
+
+    (verifyCliToken as ReturnType<typeof vi.fn>).mockReturnValue(userId);
+    mockSessionClient.auth.getUser.mockResolvedValue({ data: { user: null } });
+
+    const today = new Date().toISOString().split("T")[0]!;
+
+    const usageChain = chainBuilder({ data: { id: "usage-1" }, error: null });
+    const postChain = chainBuilder({ data: { id: "post-1" }, error: null });
+
+    mockServiceClient.from.mockImplementation((table: string) => {
+      if (table === "daily_usage") return usageChain;
+      if (table === "posts") return postChain;
+      return chainBuilder();
+    });
+
+    const { POST } = await import("@/app/api/usage/submit/route");
+    const req = makeRequest("http://localhost:3000/api/usage/submit", {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        Authorization: "Bearer mock-cli-jwt-token",
+      },
+      body: JSON.stringify({
+        entries: [
+          {
+            date: today,
+            data: {
+              date: today,
+              models: ["claude-opus-4-20250505", "gpt-5-codex"],
+              inputTokens: 3000,
+              outputTokens: 1300,
+              cacheCreationTokens: 100,
+              cacheReadTokens: 50,
+              totalTokens: 4450,
+              costUSD: 13.0,
+              modelBreakdown: [
+                { model: "claude-opus-4-20250505", cost_usd: 10.0 },
+                { model: "gpt-5-codex", cost_usd: 3.0 },
+              ],
+            },
+          },
+        ],
+        hash: "merged-hash-123",
+        source: "cli",
+      }),
+    });
+    const res = await POST(req);
+    const data = await res.json();
+
+    expect(res.status).toBe(200);
+    expect(data.results).toHaveLength(1);
+    expect(data.results[0].usage_id).toBe("usage-1");
+
+    // Verify the upsert payload includes merged data
+    const upsertCall = (usageChain.upsert as ReturnType<typeof vi.fn>).mock.calls[0];
+    expect(upsertCall[0].cost_usd).toBe(13.0);
+    expect(upsertCall[0].input_tokens).toBe(3000);
+    expect(upsertCall[0].output_tokens).toBe(1300);
+    expect(upsertCall[0].total_tokens).toBe(4450);
+    expect(upsertCall[0].models).toEqual(["claude-opus-4-20250505", "gpt-5-codex"]);
+    expect(upsertCall[0].model_breakdown).toEqual([
+      { model: "claude-opus-4-20250505", cost_usd: 10.0 },
+      { model: "gpt-5-codex", cost_usd: 3.0 },
+    ]);
+    expect(upsertCall[0].is_verified).toBe(true);
+  });
+
+  it("CLI pushes Codex-only data (no Claude models)", async () => {
+    const userId = "user-cli-1";
+
+    (verifyCliToken as ReturnType<typeof vi.fn>).mockReturnValue(userId);
+    mockSessionClient.auth.getUser.mockResolvedValue({ data: { user: null } });
+
+    const today = new Date().toISOString().split("T")[0]!;
+
+    const usageChain = chainBuilder({ data: { id: "usage-2" }, error: null });
+    const postChain = chainBuilder({ data: { id: "post-2" }, error: null });
+
+    mockServiceClient.from.mockImplementation((table: string) => {
+      if (table === "daily_usage") return usageChain;
+      if (table === "posts") return postChain;
+      return chainBuilder();
+    });
+
+    const { POST } = await import("@/app/api/usage/submit/route");
+    const req = makeRequest("http://localhost:3000/api/usage/submit", {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        Authorization: "Bearer mock-cli-jwt-token",
+      },
+      body: JSON.stringify({
+        entries: [
+          {
+            date: today,
+            data: {
+              date: today,
+              models: ["gpt-5-codex"],
+              inputTokens: 2000,
+              outputTokens: 800,
+              cacheCreationTokens: 0,
+              cacheReadTokens: 0,
+              totalTokens: 2800,
+              costUSD: 3.20,
+              modelBreakdown: [{ model: "gpt-5-codex", cost_usd: 3.20 }],
+            },
+          },
+        ],
+        hash: "codex-only-hash",
+        source: "cli",
+      }),
+    });
+    const res = await POST(req);
+    const data = await res.json();
+
+    expect(res.status).toBe(200);
+    expect(data.results).toHaveLength(1);
+
+    const upsertCall = (usageChain.upsert as ReturnType<typeof vi.fn>).mock.calls[0];
+    expect(upsertCall[0].models).toEqual(["gpt-5-codex"]);
+    expect(upsertCall[0].cost_usd).toBe(3.20);
+    expect(upsertCall[0].model_breakdown).toEqual([
+      { model: "gpt-5-codex", cost_usd: 3.20 },
+    ]);
+  });
+
   it("rejects push without authentication", async () => {
     (verifyCliToken as ReturnType<typeof vi.fn>).mockReturnValue(null);
     mockSessionClient.auth.getUser.mockResolvedValue({ data: { user: null } });

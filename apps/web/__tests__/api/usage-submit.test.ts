@@ -48,6 +48,8 @@ function mockServiceClient(overrides: Record<string, any> = {}) {
   const chain: Record<string, any> = {
     from: vi.fn().mockReturnThis(),
     upsert: vi.fn().mockReturnThis(),
+    insert: vi.fn().mockReturnThis(),
+    update: vi.fn().mockReturnThis(),
     select: vi.fn().mockReturnThis(),
     eq: vi.fn().mockReturnThis(),
     maybeSingle: vi.fn().mockResolvedValue({
@@ -263,14 +265,14 @@ describe("POST /api/usage/submit", () => {
       mockRequest({ entries: [makeEntry(todayStr())], source: "cli" })
     );
 
-    // upsert called twice: once for usage, once for post
-    expect(svc.upsert).toHaveBeenCalledTimes(2);
-    const postUpsertCall = svc.upsert.mock.calls[1];
-    expect(postUpsertCall[0]).toMatchObject({
+    // upsert called once for usage, insert called once for new post
+    expect(svc.upsert).toHaveBeenCalledTimes(1);
+    expect(svc.insert).toHaveBeenCalledTimes(1);
+    const postInsertCall = svc.insert.mock.calls[0];
+    expect(postInsertCall[0]).toMatchObject({
       user_id: "user-1",
       daily_usage_id: "usage-1",
     });
-    expect(postUpsertCall[1]).toEqual({ onConflict: "daily_usage_id" });
   });
 
   it("rejects invalid JSON body", async () => {
@@ -307,5 +309,132 @@ describe("POST /api/usage/submit", () => {
 
     expect(res.status).toBe(400);
     expect(json.error).toBe("Invalid source");
+  });
+
+  // -------------------------------------------------------------------------
+  // Codex / model_breakdown tests
+  // -------------------------------------------------------------------------
+
+  it("stores model_breakdown in upsert when provided", async () => {
+    (verifyCliToken as any).mockReturnValue("user-1");
+    const svc = mockServiceClient();
+    svc.single
+      .mockResolvedValueOnce({ data: { id: "usage-1" }, error: null })
+      .mockResolvedValueOnce({ data: { id: "post-1" }, error: null });
+
+    const breakdown = [
+      { model: "claude-opus-4-20250505", cost_usd: 10.0 },
+      { model: "gpt-5-codex", cost_usd: 3.0 },
+    ];
+
+    const res = await POST(
+      mockRequest({
+        entries: [
+          makeEntry(todayStr(), {
+            models: ["claude-opus-4-20250505", "gpt-5-codex"],
+            costUSD: 13.0,
+            modelBreakdown: breakdown,
+          }),
+        ],
+        source: "cli",
+      })
+    );
+    const json = await res.json();
+
+    expect(res.status).toBe(200);
+    const upsertCall = svc.upsert.mock.calls[0];
+    expect(upsertCall[0].model_breakdown).toEqual(breakdown);
+  });
+
+  it("stores null model_breakdown when not provided (backward compat)", async () => {
+    (verifyCliToken as any).mockReturnValue("user-1");
+    const svc = mockServiceClient();
+    svc.single
+      .mockResolvedValueOnce({ data: { id: "usage-1" }, error: null })
+      .mockResolvedValueOnce({ data: { id: "post-1" }, error: null });
+
+    const res = await POST(
+      mockRequest({
+        entries: [makeEntry(todayStr())],
+        source: "cli",
+      })
+    );
+
+    expect(res.status).toBe(200);
+    const upsertCall = svc.upsert.mock.calls[0];
+    expect(upsertCall[0].model_breakdown).toBeNull();
+  });
+
+  it("accepts Codex-only usage (no Claude models)", async () => {
+    (verifyCliToken as any).mockReturnValue("user-1");
+    const svc = mockServiceClient();
+    svc.single
+      .mockResolvedValueOnce({ data: { id: "usage-1" }, error: null })
+      .mockResolvedValueOnce({ data: { id: "post-1" }, error: null });
+
+    const res = await POST(
+      mockRequest({
+        entries: [
+          makeEntry(todayStr(), {
+            models: ["gpt-5-codex"],
+            costUSD: 3.0,
+            inputTokens: 2000,
+            outputTokens: 800,
+            totalTokens: 2800,
+            modelBreakdown: [{ model: "gpt-5-codex", cost_usd: 3.0 }],
+          }),
+        ],
+        source: "cli",
+      })
+    );
+    const json = await res.json();
+
+    expect(res.status).toBe(200);
+    expect(json.results).toHaveLength(1);
+    const upsertCall = svc.upsert.mock.calls[0];
+    expect(upsertCall[0].models).toEqual(["gpt-5-codex"]);
+    expect(upsertCall[0].cost_usd).toBe(3.0);
+    expect(upsertCall[0].model_breakdown).toEqual([
+      { model: "gpt-5-codex", cost_usd: 3.0 },
+    ]);
+  });
+
+  it("accepts merged Claude + Codex usage in a single entry", async () => {
+    (verifyCliToken as any).mockReturnValue("user-1");
+    const svc = mockServiceClient();
+    svc.single
+      .mockResolvedValueOnce({ data: { id: "usage-1" }, error: null })
+      .mockResolvedValueOnce({ data: { id: "post-1" }, error: null });
+
+    const res = await POST(
+      mockRequest({
+        entries: [
+          makeEntry(todayStr(), {
+            models: ["claude-opus-4-20250505", "gpt-5-codex"],
+            costUSD: 13.0,
+            inputTokens: 3000,
+            outputTokens: 1300,
+            totalTokens: 4300,
+            modelBreakdown: [
+              { model: "claude-opus-4-20250505", cost_usd: 10.0 },
+              { model: "gpt-5-codex", cost_usd: 3.0 },
+            ],
+          }),
+        ],
+        source: "cli",
+      })
+    );
+    const json = await res.json();
+
+    expect(res.status).toBe(200);
+    expect(json.results).toHaveLength(1);
+    const upsertCall = svc.upsert.mock.calls[0];
+    expect(upsertCall[0].cost_usd).toBe(13.0);
+    expect(upsertCall[0].input_tokens).toBe(3000);
+    expect(upsertCall[0].models).toEqual(["claude-opus-4-20250505", "gpt-5-codex"]);
+    expect(upsertCall[0].model_breakdown).toEqual([
+      { model: "claude-opus-4-20250505", cost_usd: 10.0 },
+      { model: "gpt-5-codex", cost_usd: 3.0 },
+    ]);
   });
 });
