@@ -108,7 +108,8 @@ export default async function FeedPage({
           .from("comments")
           .select("id, post_id, content, created_at, user:users!comments_user_id_fkey(username, avatar_url)")
           .in("post_id", postIds)
-          .order("created_at", { ascending: false }),
+          .order("created_at", { ascending: false })
+          .limit(postIds.length * 2),
       ]);
 
     const kudosedSet = new Set((userKudos ?? []).map((k) => k.post_id));

@@ -69,13 +69,6 @@ export interface Comment {
   user?: User;
 }
 
-export interface Kudos {
-  id: string;
-  user_id: string;
-  post_id: string;
-  created_at: string;
-}
-
 export interface LeaderboardEntry {
   user_id: string;
   username: string;
@@ -144,17 +137,6 @@ export interface UsageSubmitResponse {
     post_url: string;
     action: "created" | "updated";
   }>;
-}
-
-export interface FeedResponse {
-  posts: Post[];
-  next_cursor?: string;
-}
-
-export interface LeaderboardResponse {
-  entries: LeaderboardEntry[];
-  user_rank?: number;
-  next_cursor?: string;
 }
 
 export interface Notification {

@@ -29,6 +29,12 @@ body {
   color: var(--color-foreground);
 }
 
+/* ---- Ticker animation ---- */
+@keyframes ticker {
+  0% { transform: translate3d(0, 0, 0); }
+  100% { transform: translate3d(-50%, 0, 0); }
+}
+
 /* ---- Landing page animations ---- */
 @keyframes fade-in-up {
   from {
