@@ -56,6 +56,8 @@
 
 ### Fixed
 
+- **Codex integration silently dropping all data.** The `@ccusage/codex` parser assumed ccusage v18 field names (`totalCost`, `modelsUsed`, `cacheReadTokens`) but the actual output uses different names (`costUSD`, `models` as an object, `cachedInputTokens`). Locale dates (`"Feb 03, 2026"`) are now parsed to ISO format. The parser accepts both formats for forward-compatibility.
+- **`.claude/settings.local.json` tracked in git.** Added to `.gitignore` and untracked. This is a machine-local Claude Code settings file.
 - **Post completeness ring visibility.** Ring fill now always uses the accent color (regardless of completion level) with a light gray track, making it readable at all completion levels. Tooltip now lists only the missing fields (title, description, images) instead of a generic "complete your post" message.
 - **Per-model cost breakdown always showing even split.** Activity card model percentages were always split evenly across models (e.g., 33%/33%/33%) because `ccusage daily --json` returns only model names with no per-model costs. The CLI now passes `--breakdown` to ccusage, which returns `modelBreakdowns` with actual per-model costs. `normalizeEntry` maps this to `modelBreakdown` on the entry; `buildBreakdown` prefers it over the even-split fallback.
 - **Timezone-aware streak calculation.** `calculate_user_streak` now uses the user's `timezone` column to compute "today" instead of UTC `CURRENT_DATE`. Previously, users behind UTC (e.g., PST) could see their streak appear broken near midnight because the server thought it was the next day. The 2-day timezone buffer hack is replaced with a proper 1-day grace period using the user's actual timezone.
