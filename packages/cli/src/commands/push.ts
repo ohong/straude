@@ -71,6 +71,8 @@ function formatCost(n: number): string {
  * Distributes total cost evenly across models when per-model data isn't available.
  */
 function buildBreakdown(entry: CcusageDailyEntry): ModelBreakdownEntry[] {
+  if (entry.modelBreakdown && entry.modelBreakdown.length > 0) return entry.modelBreakdown;
+  // Fallback: distribute evenly (no per-model data available)
   if (entry.models.length === 0 || entry.costUSD === 0) return [];
   const perModel = entry.costUSD / entry.models.length;
   return entry.models.map((model) => ({ model, cost_usd: perModel }));

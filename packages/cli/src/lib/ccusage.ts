@@ -112,6 +112,7 @@ interface CcusageV18Entry {
   cacheReadTokens: number;
   totalTokens: number;
   totalCost: number;
+  modelBreakdowns?: Array<{ modelName: string; cost: number }>;
 }
 
 interface CcusageV18Output {
@@ -135,13 +136,13 @@ export interface CcusageOutput {
  * Dates should be in YYYYMMDD format (no dashes) as ccusage expects.
  */
 export function runCcusage(sinceDate: string, untilDate: string): CcusageOutput {
-  const args = ["daily", "--json", "--since", sinceDate, "--until", untilDate];
+  const args = ["daily", "--json", "--breakdown", "--since", sinceDate, "--until", untilDate];
   return parseCcusageOutput(execCcusage(args));
 }
 
 /** Returns the raw JSON string from ccusage (for hashing). */
 export function runCcusageRaw(sinceDate: string, untilDate: string): string {
-  const args = ["daily", "--json", "--since", sinceDate, "--until", untilDate];
+  const args = ["daily", "--json", "--breakdown", "--since", sinceDate, "--until", untilDate];
   return execCcusage(args);
 }
 
@@ -156,6 +157,7 @@ function normalizeEntry(raw: CcusageV18Entry): CcusageDailyEntry {
     cacheReadTokens: raw.cacheReadTokens,
     totalTokens: raw.totalTokens,
     costUSD: raw.totalCost,
+    modelBreakdown: raw.modelBreakdowns?.map((b) => ({ model: b.modelName, cost_usd: b.cost })),
   };
 }
 
