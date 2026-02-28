@@ -4,6 +4,8 @@
 
 ### Added
 
+- **Paste-to-upload images in post editor.** Pasting an image from the clipboard (e.g. a screenshot) while the post editor is open now automatically uploads it — same compression pipeline and 10-image limit as the file picker. A "or paste from clipboard" hint appears next to the "Add images" button.
+
 - **Codex (OpenAI) usage tracking.** The CLI now reads `@ccusage/codex` data alongside Claude usage. Same-day Claude + Codex data is merged into a single post with summed tokens/costs. Feed cards show per-model cost percentages (e.g., "75% Claude Opus, 25% GPT-5") when `model_breakdown` data is available. Falls back to legacy highest-tier-model display for older rows. New `model_breakdown jsonb` column on `daily_usage`.
 - **Auto-generated post titles on sync.** When the CLI pushes usage, new posts get a title like "Feb 27 — Claude Opus, $4.82" from usage data. Existing posts aren't overwritten. Pending posts nudge now checks for missing description/images instead of missing title.
 - **CLI `?edit=1` deep links.** Post URLs printed after `npx straude@latest` now append `?edit=1`, opening the post editor on click.
