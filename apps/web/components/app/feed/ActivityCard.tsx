@@ -98,7 +98,7 @@ function CompletenessRing({ post }: { post: Post }) {
   return (
     <svg width="18" height="18" className="shrink-0" aria-label={`${pct}% complete`}>
       <title>{tooltip}</title>
-      <circle cx="9" cy="9" r={r} fill="none" stroke="#e0e0e0" strokeWidth="2" />
+      <circle cx="9" cy="9" r={r} fill="none" stroke="currentColor" strokeWidth="2" className="text-muted" />
       <circle
         cx="9" cy="9" r={r} fill="none" stroke="currentColor" strokeWidth="2"
         className="text-accent"
