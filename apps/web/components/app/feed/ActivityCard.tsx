@@ -83,16 +83,25 @@ function formatModels(
 }
 
 function CompletenessRing({ post }: { post: Post }) {
-  const steps = [post.title, post.description, post.images?.length].filter(Boolean).length;
+  const missing = [
+    !post.title && "title",
+    !post.description && "description",
+    !post.images?.length && "images",
+  ].filter(Boolean) as string[];
+  const steps = 3 - missing.length;
   const pct = 25 + steps * 25;
   const r = 7;
   const c = 2 * Math.PI * r;
+  const tooltip = missing.length === 0
+    ? "Post is complete"
+    : `Add ${missing.join(", ")} to complete this post`;
   return (
     <svg width="18" height="18" className="shrink-0" aria-label={`${pct}% complete`}>
-      <circle cx="9" cy="9" r={r} fill="none" stroke="currentColor" strokeWidth="2" className="text-border" />
+      <title>{tooltip}</title>
+      <circle cx="9" cy="9" r={r} fill="none" stroke="#e0e0e0" strokeWidth="2" />
       <circle
         cx="9" cy="9" r={r} fill="none" stroke="currentColor" strokeWidth="2"
-        className={pct === 100 ? "text-accent" : "text-muted"}
+        className="text-accent"
         strokeDasharray={c} strokeDashoffset={c * (1 - pct / 100)}
         transform="rotate(-90 9 9)"
       />
