@@ -2,6 +2,7 @@
 
 import { useState, useCallback } from "react";
 import { cn } from "@/lib/utils/cn";
+import { getCellColor } from "@/lib/utils/format";
 import type { ContributionDay } from "@/types";
 
 const CELL_SIZE = 12;
@@ -9,14 +10,6 @@ const GAP = 3;
 const STEP = CELL_SIZE + GAP;
 const DAYS = 7;
 const MONTH_LABEL_HEIGHT = 16;
-
-function getCellColor(cost: number): string {
-  if (cost <= 0) return "#E5E5E5";
-  if (cost <= 10) return "#FDD0B1";
-  if (cost <= 50) return "#F4945E";
-  if (cost <= 100) return "#DF561F";
-  return "#B8441A";
-}
 
 function formatDateKey(d: Date): string {
   const y = d.getFullYear();

@@ -2,6 +2,12 @@
 
 ## Unreleased
 
+### Changed
+
+- **Landing page redesign.** Dark terminal aesthetic with WebGL halftone shader background, new hero ("Code like an athlete."), scrolling stats ticker, 12-column features grid, mock global feed + leaderboard section, and redesigned Wall of Love / CTA / footer. Replaces the previous parallax hero, Stats, ProductShowcase, and Features components.
+- **Live ticker stats from Supabase.** The landing page ticker now shows real data: pace leader (weekly leaderboard), sessions logged, tokens processed, spend tracked, and sum of all current user streaks. Server-rendered with 5-minute cache (`revalidate = 300`).
+- **`formatTokens` supports billions.** Added `B` tier so 33.3 billion tokens renders as `33.3B` instead of `33302.2M`.
+
 ### Added
 
 - **Codex (OpenAI) usage tracking.** The CLI now reads `@ccusage/codex` data alongside Claude usage. Same-day Claude + Codex data is merged into a single post with summed tokens/costs. Feed cards show per-model cost percentages (e.g., "75% Claude Opus, 25% GPT-5") when `model_breakdown` data is available. Falls back to legacy highest-tier-model display for older rows. New `model_breakdown jsonb` column on `daily_usage`.
