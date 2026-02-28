@@ -93,7 +93,19 @@ async function getTickerStats() {
 }
 
 export default async function LandingPage() {
-  const tickerItems = await getTickerStats();
+  let tickerItems: { label: string; value: string }[];
+  try {
+    tickerItems = await getTickerStats();
+  } catch {
+    // Supabase unavailable at build time — render placeholder
+    tickerItems = [
+      { label: "Pace Leader", value: "---" },
+      { label: "Sessions Logged", value: "---" },
+      { label: "Tokens Processed", value: "---" },
+      { label: "Spend Tracked", value: "---" },
+      { label: "Active Streaks", value: "---" },
+    ];
+  }
 
   return (
     <div className="bg-[#050505] text-[#F0F0F0] min-h-screen relative">
