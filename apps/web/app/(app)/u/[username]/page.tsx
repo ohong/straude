@@ -7,13 +7,8 @@ import { AchievementBadges } from "@/components/app/profile/AchievementBadges";
 import { ContributionGraph } from "@/components/app/profile/ContributionGraph";
 import { FeedList } from "@/components/app/feed/FeedList";
 import { FollowButton } from "@/components/app/profile/FollowButton";
+import { formatTokens } from "@/lib/utils/format";
 import type { Metadata } from "next";
-
-function formatTokens(n: number): string {
-  if (n >= 1_000_000) return `${(n / 1_000_000).toFixed(1)}M`;
-  if (n >= 1_000) return `${(n / 1_000).toFixed(1)}k`;
-  return String(n);
-}
 
 export async function generateMetadata({
   params,
@@ -46,19 +41,7 @@ export default async function ProfilePage({
 
   const isOwn = authUser?.id === profile.id;
 
-  // Check follow status
-  let isFollowing = false;
-  if (authUser && !isOwn) {
-    const { data: f } = await supabase
-      .from("follows")
-      .select("id")
-      .eq("follower_id", authUser.id)
-      .eq("following_id", profile.id)
-      .maybeSingle();
-    isFollowing = !!f;
-  }
-
-  // Run independent queries in parallel
+  // Run all independent queries in parallel (including follow check)
   const [
     { count: followersCount },
     { count: followingCount },
@@ -66,6 +49,7 @@ export default async function ProfilePage({
     { data: streak },
     { data: totalSpendRows },
     { data: achievements },
+    { data: followRow },
   ] = await Promise.all([
     supabase
       .from("follows")
@@ -88,7 +72,16 @@ export default async function ProfilePage({
       .from("user_achievements")
       .select("*")
       .eq("user_id", profile.id),
+    authUser && !isOwn
+      ? supabase
+          .from("follows")
+          .select("id")
+          .eq("follower_id", authUser.id)
+          .eq("following_id", profile.id)
+          .maybeSingle()
+      : Promise.resolve({ data: null }),
   ]);
+  const isFollowing = !!followRow;
   const totalSpend = totalSpendRows?.reduce((s, r) => s + Number(r.cost_usd), 0) ?? 0;
   const lifetimeOutputTokens = totalSpendRows?.reduce((s, r) => s + Number(r.output_tokens), 0) ?? 0;
 
@@ -158,7 +151,8 @@ export default async function ProfilePage({
           .from("comments")
           .select("id, post_id, content, created_at, user:users!comments_user_id_fkey(username, avatar_url)")
           .in("post_id", postIds)
-          .order("created_at", { ascending: false }),
+          .order("created_at", { ascending: false })
+          .limit(postIds.length * 2),
       ]);
 
     const kudosedSet = new Set(userKudos?.map((k) => k.post_id));

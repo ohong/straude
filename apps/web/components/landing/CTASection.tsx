@@ -1,51 +1,33 @@
 "use client";
 
-import Link from "next/link";
 import { motion } from "motion/react";
 
 export function CTASection() {
   return (
-    <section className="bg-accent relative overflow-hidden py-24 md:py-32">
-      {/* Pattern overlay */}
-      <div
-        className="pointer-events-none absolute inset-0 opacity-[0.06]"
-        style={{
-          backgroundImage: `url("data:image/svg+xml,%3Csvg width='60' height='60' viewBox='0 0 60 60' xmlns='http://www.w3.org/2000/svg'%3E%3Cg fill='none' fill-rule='evenodd'%3E%3Cg fill='%23ffffff' fill-opacity='1'%3E%3Cpath d='M36 34v-4h-2v4h-4v2h4v4h2v-4h4v-2h-4zm0-30V0h-2v4h-4v2h4v4h2V6h4V4h-4zM6 34v-4H4v4H0v2h4v4h2v-4h4v-2H6zM6 4V0H4v4H0v2h4v4h2V6h4V4H6z'/%3E%3C/g%3E%3C/g%3E%3C/svg%3E")`,
-        }}
-      />
-
+    <section className="border-t border-[#222] py-24 md:py-32">
       <motion.div
-        className="relative z-10 mx-auto flex max-w-[900px] flex-col items-center px-6 text-center md:px-8"
-        initial={{ opacity: 0, y: 28, scale: 0.97 }}
-        whileInView={{ opacity: 1, y: 0, scale: 1 }}
+        className="flex flex-col items-center text-center gap-8 max-w-2xl mx-auto px-8"
+        initial={{ opacity: 0, y: 28 }}
+        whileInView={{ opacity: 1, y: 0 }}
         viewport={{ once: true, amount: 0.3 }}
         transition={{ duration: 0.6, ease: [0.25, 0.46, 0.45, 0.94] }}
       >
-        <h2
-          className="text-[clamp(2rem,5vw,3.5rem)] font-bold leading-tight tracking-[-0.03em] text-white"
-          style={{ textWrap: "balance" }}
-        >
-          Your move.
+        <h2 className="text-[clamp(2rem,5vw,4rem)] font-medium tracking-[-0.03em] leading-[1.1] text-[#F0F0F0]">
+          Ready to run?
         </h2>
-        <p className="mt-4 text-lg text-white/70 max-w-lg" style={{ textWrap: "balance" }}>
-          Join motivated Claude Code builders whose work you'll love.
-        </p>
-        <Link
-          href="/signup"
-          className="group mt-10 inline-flex items-center gap-2 rounded-lg bg-white px-8 py-4 text-base font-bold text-accent transition-[box-shadow] duration-150 hover:shadow-lg hover:shadow-black/10 md:text-lg focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white focus-visible:ring-offset-2 focus-visible:ring-offset-accent"
-        >
-          Log Your First Session
-          <svg
-            className="w-4 h-4 transition-transform group-hover:translate-x-0.5"
-            fill="none"
-            viewBox="0 0 24 24"
-            stroke="currentColor"
-            strokeWidth={2.5}
-            aria-hidden="true"
-          >
-            <path strokeLinecap="round" strokeLinejoin="round" d="M9 5l7 7-7 7" />
-          </svg>
-        </Link>
+        <div className="font-[family-name:var(--font-mono)] text-sm text-[#888]">
+          1. Claim your profile at straude.com
+          <br />
+          2. Run one command after your session
+          <br />
+          3. See who else is putting in the work
+        </div>
+        <div className="inline-flex items-center gap-4 border border-[#222] bg-black/50 px-6 py-3 font-[family-name:var(--font-mono)] text-lg text-[#888]">
+          ${" "}
+          <span className="text-[#F0F0F0]">
+            bunx straude push --days 7
+          </span>
+        </div>
       </motion.div>
     </section>
   );
