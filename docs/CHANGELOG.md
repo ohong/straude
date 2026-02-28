@@ -23,6 +23,8 @@
 
 ### Fixed
 
+- **Timezone-aware streak calculation.** `calculate_user_streak` now uses the user's `timezone` column to compute "today" instead of UTC `CURRENT_DATE`. Previously, users behind UTC (e.g., PST) could see their streak appear broken near midnight because the server thought it was the next day. The 2-day timezone buffer hack is replaced with a proper 1-day grace period using the user's actual timezone.
+- **Sidebar and feed date display off by one day.** The sidebar "Latest Activities" dates and the feed `timeAgo` fallback used `posts.created_at` (UTC) instead of `daily_usage.date` (the user's local date). A post pushed at 10pm PST on Feb 27 would display as "Feb 28" because `created_at` was Feb 28 UTC. Both now prefer the usage date when available.
 - **Duplicate mention notifications on post edit.** Every PATCH to a post re-inserted mention notifications for all `@username` references in the description, even when only images or title changed. Now mention logic only runs when the description field is actually updated, and existing mention notifications for the post are checked before inserting — users who were already notified are skipped.
 - **Guest navigation continuity.** Feed and Leaderboard nav links now stay on the right side of the GuestHeader, matching their position in the landing page navbar. Removed the empty top bar on the feed page for logged-out visitors. Removed the redundant "Leaderboard" heading below the nav. Centered period tabs on the leaderboard.
 - **CI test failures (4 tests).** Updated feed and privacy-visibility tests to expect 200 (not 401) for unauthenticated global feed access. Mocked `sharp` in upload tests so HEIC/HEIF conversion doesn't require libheif on CI.

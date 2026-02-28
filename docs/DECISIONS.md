@@ -12,13 +12,21 @@
 
 ## Streak Freeze: Grace Window Extension, Not Gap Bridging (2026-02-27)
 
-**Decision:** Streak freezes extend the "is the streak still alive" check (initial grace window: `2 + freeze_days`) but do NOT bridge gaps in the middle of a streak. The base 2-day grace covers timezone offsets; freezes add extra buffer on top.
+**Decision:** Streak freezes extend the "is the streak still alive" check (initial grace window: `1 + freeze_days`) but do NOT bridge gaps in the middle of a streak. Freezes add extra buffer on top of the base 1-day grace.
 
 **Alternatives considered:**
 1. **Consumable freezes that fill in gap days** — more like Duolingo, but adds state tracking (which freezes were used on which days), complicates the RPC, and creates confusing UX ("did my freeze get used?"). Over-engineered for current scale.
-2. **Permanent grace extension** (chosen) — simplest correct behavior. Users earn freezes by enriching posts (max 7). The grace window grows from 2 to up to 9 days. No consumption tracking needed. Incentivizes post enrichment without adding complexity.
+2. **Permanent grace extension** (chosen) — simplest correct behavior. Users earn freezes by enriching posts (max 7). The grace window grows from 1 to up to 8 days. No consumption tracking needed. Incentivizes post enrichment without adding complexity.
 
 **Achievement streak vs display streak:** Achievement checks (7-day, 30-day) use `p_freeze_days = 0` so achievements are based on actual consecutive days. Only user-facing displays (sidebar, profile, API) include freeze benefits.
+
+## Timezone-Aware Streak Calculation (2026-02-28)
+
+**Decision:** `calculate_user_streak` now looks up the user's `timezone` column and computes "today" as `(NOW() AT TIME ZONE user_tz)::date` instead of using UTC `CURRENT_DATE`. Falls back to UTC for users with no timezone set.
+
+**Alternatives considered:**
+1. **UTC + generous grace period (2 days)** — the previous approach. Simple but semantically wrong: a user in PST pushing at 11pm on Feb 27 gets `CURRENT_DATE` = Feb 28 (UTC), making the streak logic think they haven't pushed "today." The 2-day buffer papered over this but was fragile and confusing.
+2. **User-timezone-aware calculation** (chosen) — reads the existing `users.timezone` column (IANA format, e.g., `America/Los_Angeles`). Grace reduced from 2 days to 1 day since timezone drift is no longer an issue. Date display in sidebar and feed also updated to use `daily_usage.date` instead of `posts.created_at` (UTC).
 
 ## Admin Revenue Concentration: Non-Overlapping Segments (2026-02-27)
 
