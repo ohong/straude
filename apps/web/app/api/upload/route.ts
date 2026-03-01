@@ -18,6 +18,11 @@ const MAX_SIZE = 20 * 1024 * 1024; // 20MB
 
 // HEIC/HEIF files contain an "ftyp" box at offset 4 with one of these brands
 const HEIC_BRANDS = ["heic", "heix", "hevc", "hevx", "heim", "heis", "mif1", "msf1"];
+const convertHeic = convert as unknown as (opts: {
+  buffer: Uint8Array;
+  format: "JPEG";
+  quality: number;
+}) => Promise<ArrayBuffer | Uint8Array>;
 
 /** Detect HEIC/HEIF by magic bytes — more reliable than MIME type. */
 function isHeicByMagicBytes(buf: Buffer): boolean {
@@ -73,8 +78,10 @@ export async function POST(request: NextRequest) {
   if (isHeic) {
     // Use heic-convert (pure JS, no native deps) for reliable HEIC→JPEG conversion
     try {
-      const jpegBuf = await convert({ buffer: buffer.buffer.slice(buffer.byteOffset, buffer.byteOffset + buffer.byteLength), format: "JPEG", quality: 0.9 });
-      buffer = Buffer.from(jpegBuf);
+      const jpegBuf = await convertHeic({ buffer, format: "JPEG", quality: 0.9 });
+      buffer = ArrayBuffer.isView(jpegBuf)
+        ? Buffer.from(jpegBuf.buffer, jpegBuf.byteOffset, jpegBuf.byteLength)
+        : Buffer.from(jpegBuf);
     } catch {
       return NextResponse.json(
         { error: "Unable to process HEIC/HEIF image. Try re-exporting as JPEG and upload again." },

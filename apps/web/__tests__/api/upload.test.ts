@@ -126,6 +126,8 @@ describe("POST /api/upload", () => {
 
     expect(res.status).toBe(200);
     expect(json.url).toBeDefined();
+    const call = (convert as any).mock.calls[0]?.[0];
+    expect(Buffer.isBuffer(call?.buffer)).toBe(true);
   });
 
   it("accepts heif files by MIME type", async () => {
