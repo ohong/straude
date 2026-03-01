@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, beforeEach } from "vitest";
-import { parseCodexOutput, runCodex, runCodexRaw } from "../src/lib/codex.js";
+import { parseCodexOutput, runCodexRaw } from "../src/lib/codex.js";
 
 vi.mock("node:child_process", () => ({
   execFileSync: vi.fn(),
@@ -154,45 +154,8 @@ describe("parseCodexOutput", () => {
 });
 
 // ---------------------------------------------------------------------------
-// runCodex / runCodexRaw — silent failure
+// runCodexRaw — silent failure
 // ---------------------------------------------------------------------------
-
-describe("runCodex", () => {
-  beforeEach(() => {
-    vi.clearAllMocks();
-    mockExecFileSync.mockReturnValue(validOutput() as never);
-  });
-
-  it("returns parsed data on success", () => {
-    const result = runCodex("20250601", "20250601");
-    expect(result.data).toHaveLength(1);
-    expect(result.data[0]!.costUSD).toBe(0.12);
-  });
-
-  it("returns empty data on exec failure (silent)", () => {
-    mockExecFileSync.mockImplementation(() => { throw new Error("command not found"); });
-    const result = runCodex("20250601", "20250601");
-    expect(result.data).toEqual([]);
-  });
-
-  it("returns empty data on timeout (silent)", () => {
-    const err = new Error("killed") as Error & { killed: boolean; signal: string };
-    err.killed = true;
-    err.signal = "SIGTERM";
-    mockExecFileSync.mockImplementation(() => { throw err; });
-    const result = runCodex("20250601", "20250601");
-    expect(result.data).toEqual([]);
-  });
-
-  it("uses npx in non-bun environment", () => {
-    runCodex("20250601", "20250601");
-    expect(mockExecFileSync).toHaveBeenCalledWith(
-      "npx",
-      ["--yes", "@ccusage/codex@latest", "daily", "--json", "--since", "20250601", "--until", "20250601"],
-      expect.objectContaining({ encoding: "utf-8" }),
-    );
-  });
-});
 
 describe("runCodexRaw", () => {
   beforeEach(() => {

@@ -1,5 +1,6 @@
 import Image from "next/image";
 import { cn } from "@/lib/utils/cn";
+import { getInitials } from "@/lib/utils/format";
 
 type AvatarSize = "xs" | "sm" | "md" | "lg" | "xl";
 
@@ -18,14 +19,6 @@ const sizeMap: Record<AvatarSize, { px: number; text: string }> = {
   lg: { px: 80, text: "text-xl" },
   xl: { px: 120, text: "text-3xl" },
 };
-
-function getInitials(name: string): string {
-  return name
-    .split(/\s+/)
-    .slice(0, 2)
-    .map((s) => s[0]?.toUpperCase() ?? "")
-    .join("");
-}
 
 export function Avatar({ src, alt = "", size = "md", fallback, className }: AvatarProps) {
   const { px, text } = sizeMap[size];

@@ -1,32 +1,11 @@
 import { execFileSync } from "node:child_process";
 import type { CcusageDailyEntry } from "./ccusage.js";
 
-/** Per-model cost entry for breakdown tracking. */
-export interface ModelBreakdownEntry {
-  model: string;
-  cost_usd: number;
-}
-
 export interface CodexOutput {
   data: CcusageDailyEntry[];
 }
 
 const CODEX_PKG = "@ccusage/codex@latest";
-
-/**
- * Run `@ccusage/codex daily --json` for the given date range.
- * Always uses bunx/npx — never a global binary (name conflicts with Codex CLI).
- * Returns empty data on any failure — never blocks a push.
- */
-export function runCodex(sinceDate: string, untilDate: string): CodexOutput {
-  try {
-    const raw = execCodex(["daily", "--json", "--since", sinceDate, "--until", untilDate]);
-    return parseCodexOutput(raw);
-  } catch {
-    // Silent fallback — Codex data is optional
-    return { data: [] };
-  }
-}
 
 /** Returns the raw JSON string from @ccusage/codex (for hashing). Empty string on failure. */
 export function runCodexRaw(sinceDate: string, untilDate: string): string {

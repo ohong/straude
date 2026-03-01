@@ -1,33 +1,12 @@
 import Link from "next/link";
 import { createClient } from "@/lib/supabase/server";
-import { formatTokens } from "@/lib/utils/format";
+import { formatTokens, timeAgo, getInitials } from "@/lib/utils/format";
 
 /** ISO date string for N days ago */
 function daysAgo(n: number): string {
   const d = new Date();
   d.setDate(d.getDate() - n);
   return d.toISOString();
-}
-
-function getInitials(name: string | null): string {
-  if (!name) return "??";
-  return name
-    .split(" ")
-    .map((w) => w[0])
-    .join("")
-    .toUpperCase()
-    .slice(0, 2);
-}
-
-function timeAgo(dateStr: string): string {
-  const ms = Date.now() - new Date(dateStr).getTime();
-  const mins = Math.floor(ms / 60_000);
-  if (mins < 1) return "Just now";
-  if (mins < 60) return `${mins}m ago`;
-  const hrs = Math.floor(mins / 60);
-  if (hrs < 24) return `${hrs}h ago`;
-  const days = Math.floor(hrs / 24);
-  return `${days}d ago`;
 }
 
 /** Current ISO week number */
@@ -45,6 +24,19 @@ function isoWeek(): number {
         7
     )
   );
+}
+
+interface FeedPost {
+  id: string;
+  title: string | null;
+  created_at: string;
+  user: { display_name: string | null; username: string; is_public: boolean };
+  daily_usage: { models: string[]; total_tokens: number; cost_usd: number } | null;
+}
+
+interface LeaderRow {
+  username: string;
+  total_output_tokens: number;
 }
 
 export async function GlobalFeed() {
@@ -85,18 +77,18 @@ export async function GlobalFeed() {
 
     if (posts) {
       // Top 3 by spend, then display newest-first
-      const top3 = [...posts]
+      const top3 = ([...posts] as FeedPost[])
         .sort(
-          (a: any, b: any) =>
+          (a, b) =>
             (b.daily_usage?.cost_usd ?? 0) - (a.daily_usage?.cost_usd ?? 0)
         )
         .slice(0, 3)
         .sort(
-          (a: any, b: any) =>
+          (a, b) =>
             new Date(b.created_at).getTime() - new Date(a.created_at).getTime()
         );
 
-      feedItems = top3.map((p: any) => ({
+      feedItems = top3.map((p) => ({
         id: p.id,
         initials: getInitials(p.user?.display_name ?? p.user?.username),
         title: p.title || "Untitled session",
@@ -107,7 +99,7 @@ export async function GlobalFeed() {
     }
 
     if (leaders) {
-      leaderboard = leaders.map((l: any, i: number) => ({
+      leaderboard = (leaders as LeaderRow[]).map((l, i) => ({
         rank: String(i + 1).padStart(2, "0"),
         handle: `@${l.username}`,
         score: formatTokens(l.total_output_tokens ?? 0),

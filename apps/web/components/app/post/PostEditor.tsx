@@ -102,7 +102,7 @@ export function PostEditor({ post, autoEdit = false }: { post: Post; autoEdit?: 
     });
     if (res.ok) {
       setEditing(false);
-      window.location.reload();
+      router.refresh();
     }
     setSaving(false);
   }
