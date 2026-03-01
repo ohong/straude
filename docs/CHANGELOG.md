@@ -2,6 +2,10 @@
 
 ## Unreleased
 
+### Added
+
+- **Weekly digest activation email.** One-time blast to unactivated users showing this week's leaderboard top 5, new features (Codex tracking, achievements, public profiles), and a CTA to sync. Subject line includes dynamic weekly spend total. Route at `/api/cron/weekly-digest`, protected by `CRON_SECRET`.
+
 ### Changed
 
 - **CLI: parallelize ccusage + codex subprocesses.** Both data sources now run concurrently via async `execFile` + `Promise.all`, eliminating the full codex execution time from the critical path (~1-5s saved).
