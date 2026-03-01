@@ -3,6 +3,7 @@
 import { useState, useEffect } from "react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
+import { Home, Trophy } from "lucide-react";
 import { cn } from "@/lib/utils/cn";
 
 const navLinks = [
@@ -35,7 +36,7 @@ export function GuestHeader() {
       </Link>
 
       <div className="flex items-center gap-3">
-        <nav className="flex items-center gap-1">
+        <nav className="hidden items-center gap-1 sm:flex">
           {navLinks.map(({ href, label }) => (
             <Link
               key={href}
@@ -59,5 +60,35 @@ export function GuestHeader() {
         </Link>
       </div>
     </header>
+  );
+}
+
+const mobileNavItems = [
+  { href: "/feed", label: "Home", icon: Home },
+  { href: "/leaderboard", label: "Leaderboard", icon: Trophy },
+] as const;
+
+export function GuestMobileNav() {
+  const pathname = usePathname();
+
+  return (
+    <nav
+      className="fixed inset-x-0 bottom-0 z-50 flex h-[60px] items-center justify-around border-t border-border bg-background sm:hidden"
+      style={{ paddingBottom: "env(safe-area-inset-bottom)" }}
+    >
+      {mobileNavItems.map(({ href, label, icon: Icon }) => (
+        <Link
+          key={href}
+          href={href}
+          className={cn(
+            "flex flex-col items-center gap-0.5 text-muted",
+            pathname.startsWith(href) && "text-accent"
+          )}
+        >
+          <Icon size={24} aria-hidden="true" />
+          <span className="text-[10px] font-semibold">{label}</span>
+        </Link>
+      ))}
+    </nav>
   );
 }
