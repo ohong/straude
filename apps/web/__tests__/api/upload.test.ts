@@ -11,6 +11,7 @@ vi.mock("heic-convert", () => ({
 
 import { POST } from "@/app/api/upload/route";
 import { createClient } from "@/lib/supabase/server";
+import convert from "heic-convert";
 
 function mockSupabase(opts: {
   user?: { id: string } | null;
@@ -156,6 +157,23 @@ describe("POST /api/upload", () => {
     expect(json.url).toBeDefined();
   });
 
+  it("detects HEIC by magic bytes when MIME is empty", async () => {
+    mockSupabase({ publicUrl: "https://cdn.example.com/user-1/abc.jpg" });
+
+    const res = await POST(
+      makeUploadRequest({
+        name: "IMG_9999.HEIC",
+        type: "",
+        size: 12,
+        buffer: makeHeicBuffer("heic"),
+      })
+    );
+    const json = await res.json();
+
+    expect(res.status).toBe(200);
+    expect(json.url).toBeDefined();
+  });
+
   it("detects HEIC by magic bytes for mif1 brand", async () => {
     mockSupabase({ publicUrl: "https://cdn.example.com/user-1/abc.jpg" });
 
@@ -269,5 +287,18 @@ describe("POST /api/upload", () => {
 
     expect(res.status).toBe(500);
     expect(json.error).toBe("Storage full");
+  });
+
+  it("returns 400 when HEIC conversion fails", async () => {
+    mockSupabase({});
+    (convert as any).mockRejectedValueOnce(new Error("decode failed"));
+
+    const res = await POST(
+      makeUploadRequest({ name: "photo.heic", type: "image/heic", size: 100 })
+    );
+    const json = await res.json();
+
+    expect(res.status).toBe(400);
+    expect(json.error).toContain("Unable to process HEIC/HEIF image");
   });
 });

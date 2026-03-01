@@ -11,6 +11,7 @@ const ALLOWED_TYPES = [
   "image/heic",
   "image/heif",
   "application/octet-stream", // iOS sometimes sends HEIC with this MIME type
+  "", // Some browsers may omit MIME for HEIC files
 ];
 const HEIC_MIME_TYPES = ["image/heic", "image/heif"];
 const MAX_SIZE = 20 * 1024 * 1024; // 20MB
@@ -44,7 +45,22 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ error: "No file provided" }, { status: 400 });
   }
 
-  if (!ALLOWED_TYPES.includes(file.type)) {
+  if (file.size > MAX_SIZE) {
+    return NextResponse.json(
+      { error: "File too large. Maximum size is 20MB" },
+      { status: 400 }
+    );
+  }
+
+  const mimeType = (file.type ?? "").toLowerCase();
+  let buffer: Buffer = Buffer.from(await file.arrayBuffer());
+  let contentType = mimeType;
+  let ext: string;
+
+  // Detect HEIC by magic bytes OR MIME type — iOS sometimes mislabels HEIC files
+  const isHeic = HEIC_MIME_TYPES.includes(mimeType) || isHeicByMagicBytes(buffer);
+
+  if (!ALLOWED_TYPES.includes(mimeType) && !isHeic) {
     return NextResponse.json(
       {
         error:
@@ -54,27 +70,20 @@ export async function POST(request: NextRequest) {
     );
   }
 
-  if (file.size > MAX_SIZE) {
-    return NextResponse.json(
-      { error: "File too large. Maximum size is 20MB" },
-      { status: 400 }
-    );
-  }
-
-  let buffer: Buffer = Buffer.from(await file.arrayBuffer());
-  let contentType = file.type;
-  let ext: string;
-
-  // Detect HEIC by magic bytes OR MIME type — iOS sometimes mislabels HEIC files
-  const isHeic = HEIC_MIME_TYPES.includes(file.type) || isHeicByMagicBytes(buffer);
-
   if (isHeic) {
     // Use heic-convert (pure JS, no native deps) for reliable HEIC→JPEG conversion
-    const jpegBuf = await convert({ buffer: buffer.buffer.slice(buffer.byteOffset, buffer.byteOffset + buffer.byteLength), format: "JPEG", quality: 0.9 });
-    buffer = Buffer.from(jpegBuf);
+    try {
+      const jpegBuf = await convert({ buffer: buffer.buffer.slice(buffer.byteOffset, buffer.byteOffset + buffer.byteLength), format: "JPEG", quality: 0.9 });
+      buffer = Buffer.from(jpegBuf);
+    } catch {
+      return NextResponse.json(
+        { error: "Unable to process HEIC/HEIF image. Try re-exporting as JPEG and upload again." },
+        { status: 400 }
+      );
+    }
     contentType = "image/jpeg";
     ext = "jpg";
-  } else if (file.type === "application/octet-stream") {
+  } else if (mimeType === "application/octet-stream" || mimeType === "") {
     // octet-stream that isn't HEIC — reject
     return NextResponse.json(
       { error: "File type not allowed. Accepted: JPEG, PNG, WebP, GIF, HEIC, HEIF" },
@@ -82,7 +91,7 @@ export async function POST(request: NextRequest) {
     );
   } else {
     const EXT_MAP: Record<string, string> = { jpeg: "jpg" };
-    const rawExt = file.type.split("/")[1];
+    const rawExt = mimeType.split("/")[1];
     ext = EXT_MAP[rawExt] ?? rawExt;
   }
 

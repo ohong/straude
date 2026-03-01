@@ -11,7 +11,38 @@ import type { Post } from "@/types";
 
 const MAX_DIMENSION = 2400;
 const MAX_BYTES = 4 * 1024 * 1024; // 4MB — stay under Vercel's 4.5MB body limit
-const HEIC_TYPES = ["image/heic", "image/heif"];
+
+function createCompressionCanvas(width: number, height: number): OffscreenCanvas | HTMLCanvasElement {
+  if (typeof OffscreenCanvas !== "undefined") {
+    return new OffscreenCanvas(width, height);
+  }
+  const canvas = document.createElement("canvas");
+  canvas.width = width;
+  canvas.height = height;
+  return canvas;
+}
+
+async function canvasToJpegBlob(
+  canvas: OffscreenCanvas | HTMLCanvasElement,
+  quality: number,
+): Promise<Blob> {
+  if ("convertToBlob" in canvas) {
+    return canvas.convertToBlob({ type: "image/jpeg", quality });
+  }
+  return new Promise<Blob>((resolve, reject) => {
+    (canvas as HTMLCanvasElement).toBlob(
+      (blob) => {
+        if (!blob) {
+          reject(new Error("Failed to process image"));
+          return;
+        }
+        resolve(blob);
+      },
+      "image/jpeg",
+      quality,
+    );
+  });
+}
 
 /**
  * Compress an image client-side using Canvas API.
@@ -22,9 +53,6 @@ const HEIC_TYPES = ["image/heic", "image/heif"];
 async function compressImage(file: File): Promise<File> {
   // Skip compression for small files and GIFs (preserve animation)
   if (file.size <= MAX_BYTES || file.type === "image/gif") return file;
-
-  // HEIC: try to load via Canvas (works on Safari/iOS), pass through if it fails
-  const isHeic = HEIC_TYPES.includes(file.type) || /\.hei[cf]$/i.test(file.name);
 
   const bitmap = await createImageBitmap(file).catch(() => null);
   if (!bitmap) {
@@ -39,14 +67,17 @@ async function compressImage(file: File): Promise<File> {
     height = Math.round(height * scale);
   }
 
-  const canvas = new OffscreenCanvas(width, height);
-  const ctx = canvas.getContext("2d")!;
+  const canvas = createCompressionCanvas(width, height);
+  const ctx = canvas.getContext("2d") as OffscreenCanvasRenderingContext2D | CanvasRenderingContext2D | null;
+  if (!ctx) {
+    throw new Error("Failed to process image");
+  }
   ctx.drawImage(bitmap, 0, 0, width, height);
   bitmap.close();
 
   // Binary search for the best quality that fits under MAX_BYTES
   let lo = 0.5, hi = 0.92;
-  let blob = await canvas.convertToBlob({ type: "image/jpeg", quality: hi });
+  let blob = await canvasToJpegBlob(canvas, hi);
 
   if (blob.size <= MAX_BYTES) {
     return new File([blob], file.name.replace(/\.[^.]+$/, ".jpg"), { type: "image/jpeg" });
@@ -54,7 +85,7 @@ async function compressImage(file: File): Promise<File> {
 
   for (let i = 0; i < 4 && hi - lo > 0.05; i++) {
     const mid = (lo + hi) / 2;
-    blob = await canvas.convertToBlob({ type: "image/jpeg", quality: mid });
+    blob = await canvasToJpegBlob(canvas, mid);
     if (blob.size <= MAX_BYTES) {
       lo = mid;
     } else {
@@ -62,7 +93,7 @@ async function compressImage(file: File): Promise<File> {
     }
   }
 
-  blob = await canvas.convertToBlob({ type: "image/jpeg", quality: lo });
+  blob = await canvasToJpegBlob(canvas, lo);
   return new File([blob], file.name.replace(/\.[^.]+$/, ".jpg"), { type: "image/jpeg" });
 }
 
@@ -184,19 +215,31 @@ export function PostEditor({ post, autoEdit = false }: { post: Post; autoEdit?: 
     if (remaining <= 0) return;
     const toUpload = files.slice(0, remaining);
 
+    setError(null);
     setUploadingCount((c) => c + toUpload.length);
 
     await Promise.all(
       toUpload.map(async (file) => {
-        const compressed = await compressImage(file);
-        const form = new FormData();
-        form.append("file", compressed);
         try {
+          const compressed = await compressImage(file);
+          const form = new FormData();
+          form.append("file", compressed);
           const res = await fetch("/api/upload", { method: "POST", body: form });
           if (res.ok) {
             const { url } = await res.json();
             setImages((prev) => [...prev, url]);
+            return;
           }
+          let message = "Image upload failed. Please try again.";
+          try {
+            const body = await res.json();
+            if (typeof body?.error === "string" && body.error.trim().length > 0) {
+              message = body.error;
+            }
+          } catch {}
+          setError(message);
+        } catch (err) {
+          setError((err as Error).message || "Image upload failed. Please try again.");
         } finally {
           setUploadingCount((c) => c - 1);
         }
