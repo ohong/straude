@@ -14,6 +14,12 @@
   --color-hover: rgba(223, 86, 31, 0.05);
   --font-sans: var(--font-main);
   --font-mono: var(--font-mono);
+  --color-landing-bg: #050505;
+  --color-landing-surface: #111111;
+  --color-landing-border: #222222;
+  --color-landing-text: #F0F0F0;
+  --color-landing-muted: #888888;
+  --color-landing-dim: #555555;
 }
 
 button:enabled {

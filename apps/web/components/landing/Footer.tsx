@@ -17,15 +17,15 @@ export function Footer() {
   }, []);
 
   return (
-    <footer className="border-t border-[#222] px-8 py-10 flex flex-col gap-8 md:flex-row md:justify-between md:items-end">
+    <footer className="border-t border-landing-border px-8 py-10 flex flex-col gap-8 md:flex-row md:justify-between md:items-end">
       {/* Brand */}
-      <div className="flex items-center gap-2 font-[family-name:var(--font-mono)] font-bold text-base text-[#F0F0F0]">
+      <div className="flex items-center gap-2 font-[family-name:var(--font-mono)] font-bold text-base text-landing-text">
         <BoltIcon className="w-4 h-4 text-accent" />
         STRAUDE
       </div>
 
       {/* Status */}
-      <div className="font-[family-name:var(--font-mono)] text-xs text-[#888] flex flex-col gap-1">
+      <div className="font-[family-name:var(--font-mono)] text-xs text-landing-muted flex flex-col gap-1">
         <div>
           STATUS: <span className="text-accent">ONLINE</span>
         </div>
@@ -34,17 +34,17 @@ export function Footer() {
       </div>
 
       {/* Links + copyright */}
-      <div className="font-[family-name:var(--font-mono)] text-xs text-[#888] flex flex-col gap-1 md:text-right">
+      <div className="font-[family-name:var(--font-mono)] text-xs text-landing-muted flex flex-col gap-1 md:text-right">
         <div className="flex gap-4 md:justify-end">
           <Link
             href="/privacy"
-            className="hover:text-[#F0F0F0] transition-colors"
+            className="hover:text-landing-text transition-colors"
           >
             Privacy
           </Link>
           <Link
             href="/terms"
-            className="hover:text-[#F0F0F0] transition-colors"
+            className="hover:text-landing-text transition-colors"
           >
             Terms
           </Link>
@@ -52,7 +52,7 @@ export function Footer() {
             href="https://github.com/ohong/straude"
             target="_blank"
             rel="noopener noreferrer"
-            className="hover:text-[#F0F0F0] transition-colors"
+            className="hover:text-landing-text transition-colors"
           >
             GitHub
           </a>

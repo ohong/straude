@@ -13,11 +13,13 @@ export function FollowButton({
   const [loading, setLoading] = useState(false);
 
   async function toggle() {
+    const prevFollowing = following;
+    setFollowing(!following);
     setLoading(true);
-    const method = following ? "DELETE" : "POST";
+    const method = prevFollowing ? "DELETE" : "POST";
     const res = await fetch(`/api/follow/${username}`, { method });
-    if (res.ok) {
-      setFollowing(!following);
+    if (!res.ok) {
+      setFollowing(prevFollowing);
     }
     setLoading(false);
   }

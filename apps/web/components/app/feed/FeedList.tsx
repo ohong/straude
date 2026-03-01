@@ -83,6 +83,33 @@ export function FeedList({
   cursorRef.current = cursor;
   feedTypeRef.current = feedType;
 
+  // Restore scroll position on mount
+  useEffect(() => {
+    const saved = sessionStorage.getItem("straude_feed_scroll");
+    if (saved) {
+      const main = document.querySelector("main");
+      if (main) main.scrollTop = Number(saved);
+    }
+  }, []);
+
+  // Save scroll position on scroll (debounced)
+  useEffect(() => {
+    const main = document.querySelector("main");
+    if (!main) return;
+    let timer: ReturnType<typeof setTimeout>;
+    function handleScroll() {
+      clearTimeout(timer);
+      timer = setTimeout(() => {
+        sessionStorage.setItem("straude_feed_scroll", String(main!.scrollTop));
+      }, 200);
+    }
+    main.addEventListener("scroll", handleScroll);
+    return () => {
+      clearTimeout(timer);
+      main.removeEventListener("scroll", handleScroll);
+    };
+  }, []);
+
   // Close dropdown on outside click or Escape
   useEffect(() => {
     function handleClick(e: MouseEvent) {

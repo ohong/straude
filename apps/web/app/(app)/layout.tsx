@@ -6,7 +6,8 @@ import { TopHeader } from "@/components/app/shared/TopHeader";
 import { Sidebar } from "@/components/app/shared/Sidebar";
 import { RightSidebar } from "@/components/app/shared/RightSidebar";
 import { MobileNav } from "@/components/app/shared/MobileNav";
-import { GuestHeader } from "@/components/app/shared/GuestHeader";
+import { GuestHeader, GuestMobileNav } from "@/components/app/shared/GuestHeader";
+import { CommandPalette } from "@/components/app/shared/CommandPalette";
 
 // Pages that are publicly accessible without login
 const PUBLIC_PAGES = ["/feed", "/leaderboard"];
@@ -28,9 +29,12 @@ export default async function AppLayout({
         <GuestHeader />
         <div className="mx-auto flex min-h-0 w-full max-w-[1600px] flex-1 border-x border-border">
           <main className="min-w-0 flex-1 overflow-y-auto" style={{ scrollbarWidth: "none", overscrollBehavior: "contain" }}>
-            {children}
+            <div className="pb-[60px] sm:pb-0">
+              {children}
+            </div>
           </main>
         </div>
+        <GuestMobileNav />
       </div>
     );
   }
@@ -110,70 +114,72 @@ export default async function AppLayout({
   });
 
   return (
-    <div className="fixed inset-0 flex flex-col overflow-hidden">
-      {onboardingIncomplete && (
-        <div className="flex items-center justify-center gap-2 border-b border-border bg-accent/5 px-4 py-2 text-sm">
-          <span className="text-muted">Finish setting up your profile</span>
-          <Link href="/onboarding" className="font-medium text-accent hover:underline">
-            Complete onboarding
-          </Link>
-        </div>
-      )}
-      {showPhotoNudge && (
-        <div className="flex items-center justify-center gap-2 border-b border-border bg-accent/5 px-4 py-2 text-sm">
-          <span className="text-muted">Unlock achievements by adding a photo to your post</span>
-          <Link href={`/post/${latestPosts[0]?.id}`} className="font-medium text-accent hover:underline">
-            Add a photo
-          </Link>
-        </div>
-      )}
-      <TopHeader
-        username={profile?.username ?? null}
-        avatarUrl={profile?.avatar_url ?? null}
-      />
-
-      <div className="mx-auto flex min-h-0 w-full max-w-[1600px] flex-1 border-x border-border">
-        {/* Left sidebar — hidden below lg */}
-        <aside className="hidden w-60 shrink-0 overflow-y-auto overscroll-contain border-r border-border lg:flex lg:flex-col">
-          <Sidebar
-            username={profile?.username ?? null}
-            avatarUrl={profile?.avatar_url ?? null}
-            displayName={profile?.display_name ?? null}
-            followingCount={followingCount}
-            followersCount={followersCount}
-            postsCount={postsCount}
-            streak={streak}
-            streakFreezes={profile?.streak_freezes ?? 0}
-            latestPosts={latestPosts}
-            totalOutputTokens={totalOutputTokens}
-            totalCost={totalCost}
-          />
-        </aside>
-
-        {/* Main content */}
-        <main className="min-w-0 flex-1 overflow-y-auto" style={{ scrollbarWidth: "none", overscrollBehavior: "contain" }}>
-          <div className="pb-[60px] lg:pb-0">
-            {children}
+    <CommandPalette username={profile?.username ?? null}>
+      <div className="fixed inset-0 flex flex-col overflow-hidden">
+        {onboardingIncomplete && (
+          <div className="flex items-center justify-center gap-2 border-b border-border bg-accent/5 px-4 py-2 text-sm">
+            <span className="text-muted">Finish setting up your profile</span>
+            <Link href="/onboarding" className="font-medium text-accent hover:underline">
+              Complete onboarding
+            </Link>
           </div>
-        </main>
+        )}
+        {showPhotoNudge && (
+          <div className="flex items-center justify-center gap-2 border-b border-border bg-accent/5 px-4 py-2 text-sm">
+            <span className="text-muted">Unlock achievements by adding a photo to your post</span>
+            <Link href={`/post/${latestPosts[0]?.id}`} className="font-medium text-accent hover:underline">
+              Add a photo
+            </Link>
+          </div>
+        )}
+        <TopHeader
+          username={profile?.username ?? null}
+          avatarUrl={profile?.avatar_url ?? null}
+        />
 
-        {/* Right sidebar — hidden below xl */}
-        <aside className="hidden w-80 shrink-0 overflow-y-auto overscroll-contain border-l border-border xl:flex xl:flex-col">
-          <RightSidebar userId={user.id} />
-        </aside>
+        <div className="mx-auto flex min-h-0 w-full max-w-[1600px] flex-1 border-x border-border">
+          {/* Left sidebar — hidden below lg */}
+          <aside className="hidden w-60 shrink-0 overflow-y-auto overscroll-contain border-r border-border lg:flex lg:flex-col">
+            <Sidebar
+              username={profile?.username ?? null}
+              avatarUrl={profile?.avatar_url ?? null}
+              displayName={profile?.display_name ?? null}
+              followingCount={followingCount}
+              followersCount={followersCount}
+              postsCount={postsCount}
+              streak={streak}
+              streakFreezes={profile?.streak_freezes ?? 0}
+              latestPosts={latestPosts}
+              totalOutputTokens={totalOutputTokens}
+              totalCost={totalCost}
+            />
+          </aside>
+
+          {/* Main content */}
+          <main className="min-w-0 flex-1 overflow-y-auto" style={{ scrollbarWidth: "none", overscrollBehavior: "contain" }}>
+            <div className="pb-[60px] lg:pb-0">
+              {children}
+            </div>
+          </main>
+
+          {/* Right sidebar — hidden below xl */}
+          <aside className="hidden w-80 shrink-0 overflow-y-auto overscroll-contain border-l border-border xl:flex xl:flex-col">
+            <RightSidebar userId={user.id} />
+          </aside>
+        </div>
+
+        {/* Mobile bottom nav */}
+        <MobileNav username={profile?.username} />
+
+        <a
+          href="https://x.com/oscrhong"
+          target="_blank"
+          rel="noopener noreferrer"
+          className="fixed bottom-3 right-3 hidden text-sm text-muted hover:text-foreground lg:block"
+        >
+          Feedback? DM us.
+        </a>
       </div>
-
-      {/* Mobile bottom nav */}
-      <MobileNav username={profile?.username} />
-
-      <a
-        href="https://x.com/oscrhong"
-        target="_blank"
-        rel="noopener noreferrer"
-        className="fixed bottom-3 right-3 hidden text-sm text-muted hover:text-foreground lg:block"
-      >
-        Feedback? DM us.
-      </a>
-    </div>
+    </CommandPalette>
   );
 }

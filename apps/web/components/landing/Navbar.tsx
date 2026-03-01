@@ -16,11 +16,11 @@ export function Navbar({ variant = "dark" }: { variant?: "dark" | "light" }) {
   }, []);
 
   const light = variant === "light";
-  const text = light ? "text-[#111]" : "text-[#F0F0F0]";
-  const hoverCta = light ? "hover:text-[#111]" : "hover:text-[#F0F0F0]";
+  const text = light ? "text-[#111]" : "text-landing-text";
+  const hoverCta = light ? "hover:text-[#111]" : "hover:text-landing-text";
   const mobileBg = light
     ? "border-[#ddd] bg-white/95"
-    : "border-[#222] bg-[#050505]/95";
+    : "border-landing-border bg-landing-bg/95";
 
   return (
     <nav className="fixed top-0 left-0 w-full z-50">

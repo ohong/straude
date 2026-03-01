@@ -61,10 +61,12 @@ export function CommentThread({
   postId,
   initialComments,
   userId,
+  currentUser,
 }: {
   postId: string;
   initialComments: Comment[];
   userId: string | null;
+  currentUser?: { username: string; avatar_url: string | null };
 }) {
   const [comments, setComments] = useState<Comment[]>(initialComments);
   const [content, setContent] = useState("");
@@ -76,21 +78,41 @@ export function CommentThread({
     if (!content.trim() || submitting) return;
     setSubmitting(true);
 
+    const tempId = `temp-${Date.now()}`;
+    const tempComment: Comment = {
+      id: tempId,
+      post_id: postId,
+      user_id: userId!,
+      content: content.trim(),
+      created_at: new Date().toISOString(),
+      updated_at: new Date().toISOString(),
+      user: currentUser
+        ? { username: currentUser.username, avatar_url: currentUser.avatar_url } as Comment["user"]
+        : undefined,
+    };
+
+    const prevContent = content;
+    setComments((prev) => [...prev, tempComment]);
+    setContent("");
+
     const res = await fetch(`/api/posts/${postId}/comments`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ content: content.trim() }),
+      body: JSON.stringify({ content: prevContent.trim() }),
     });
 
     if (res.ok) {
       const comment = await res.json();
-      setComments((prev) => [...prev, comment]);
-      setContent("");
+      setComments((prev) => prev.map((c) => (c.id === tempId ? comment : c)));
+    } else {
+      setComments((prev) => prev.filter((c) => c.id !== tempId));
+      setContent(prevContent);
     }
     setSubmitting(false);
   }
 
   async function handleDelete(commentId: string) {
+    if (!confirm("Delete this comment?")) return;
     const res = await fetch(`/api/comments/${commentId}`, { method: "DELETE" });
     if (res.ok) {
       setComments((prev) => prev.filter((c) => c.id !== commentId));

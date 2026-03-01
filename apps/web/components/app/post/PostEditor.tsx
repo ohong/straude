@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useRef } from "react";
+import { useState, useRef, useEffect } from "react";
 import { useRouter } from "next/navigation";
 import Image from "next/image";
 import { Pencil, X, Sparkles, Upload, Loader2, Trash2, ChevronLeft, ChevronRight } from "lucide-react";
@@ -76,21 +76,62 @@ export function PostEditor({ post, autoEdit = false }: { post: Post; autoEdit?: 
   const [generating, setGenerating] = useState(false);
   const [deleting, setDeleting] = useState(false);
   const [uploadingCount, setUploadingCount] = useState(0);
+  const [error, setError] = useState<string | null>(null);
   const fileRef = useRef<HTMLInputElement>(null);
   const dragIndexRef = useRef<number | null>(null);
+
+  // Restore draft from localStorage when entering edit mode
+  useEffect(() => {
+    if (!editing) return;
+    const saved = localStorage.getItem(`straude_draft_${post.id}`);
+    if (saved) {
+      try {
+        const draft = JSON.parse(saved);
+        if (draft.title !== undefined) setTitle(draft.title);
+        if (draft.description !== undefined) setDescription(draft.description);
+        if (draft.images !== undefined) setImages(draft.images);
+      } catch {}
+    }
+  }, [editing, post.id]);
+
+  // Debounce-save draft to localStorage while editing
+  useEffect(() => {
+    if (!editing) return;
+    const timer = setTimeout(() => {
+      localStorage.setItem(`straude_draft_${post.id}`, JSON.stringify({ title, description, images }));
+    }, 500);
+    return () => clearTimeout(timer);
+  }, [editing, title, description, images, post.id]);
+
+  // Warn before leaving with unsaved changes
+  useEffect(() => {
+    if (!editing) return;
+    const isDirty = title !== (post.title ?? "") || description !== (post.description ?? "") || JSON.stringify(images) !== JSON.stringify(post.images ?? []);
+    if (!isDirty) return;
+    function handler(e: BeforeUnloadEvent) {
+      e.preventDefault();
+    }
+    window.addEventListener("beforeunload", handler);
+    return () => window.removeEventListener("beforeunload", handler);
+  }, [editing, title, description, images, post.title, post.description, post.images]);
 
   async function handleDelete() {
     if (!confirm("Delete this post? This cannot be undone.")) return;
     setDeleting(true);
+    setError(null);
     const res = await fetch(`/api/posts/${post.id}`, { method: "DELETE" });
     if (res.ok) {
+      localStorage.removeItem(`straude_draft_${post.id}`);
       router.push("/feed");
+    } else {
+      setError("Failed to delete. Please try again.");
     }
     setDeleting(false);
   }
 
   async function handleSave() {
     setSaving(true);
+    setError(null);
     const res = await fetch(`/api/posts/${post.id}`, {
       method: "PATCH",
       headers: { "Content-Type": "application/json" },
@@ -101,8 +142,11 @@ export function PostEditor({ post, autoEdit = false }: { post: Post; autoEdit?: 
       }),
     });
     if (res.ok) {
+      localStorage.removeItem(`straude_draft_${post.id}`);
       setEditing(false);
       router.refresh();
+    } else {
+      setError("Failed to save. Please try again.");
     }
     setSaving(false);
   }
@@ -357,6 +401,7 @@ export function PostEditor({ post, autoEdit = false }: { post: Post; autoEdit?: 
           )}
         </div>
 
+        {error && <p className="text-sm text-error">{error}</p>}
         <div className="flex justify-end gap-2 mt-1">
           <Button variant="secondary" size="sm" onClick={() => setEditing(false)}>
             Cancel

@@ -112,11 +112,11 @@ export async function GlobalFeed() {
   const weekNum = isoWeek();
 
   return (
-    <section className="grid grid-cols-1 lg:grid-cols-12 border-t border-[#222]">
+    <section className="grid grid-cols-1 lg:grid-cols-12 border-t border-landing-border">
       {/* Feed column */}
-      <div className="lg:col-span-8 border-b lg:border-r border-[#222]">
-        <div className="px-8 py-6 border-b border-[#222] flex justify-between items-center bg-[#050505]">
-          <h3 className="font-[family-name:var(--font-mono)] text-sm uppercase tracking-wider text-[#F0F0F0]">
+      <div className="lg:col-span-8 border-b lg:border-r border-landing-border">
+        <div className="px-8 py-6 border-b border-landing-border flex justify-between items-center bg-landing-bg">
+          <h3 className="font-[family-name:var(--font-mono)] text-sm uppercase tracking-wider text-landing-text">
             GLOBAL_FEED.LOG
           </h3>
           <span className="font-[family-name:var(--font-mono)] text-sm uppercase text-accent">
@@ -128,25 +128,25 @@ export async function GlobalFeed() {
           <Link
             key={item.id}
             href={`/post/${item.id}`}
-            className="px-8 py-6 border-b border-[#222] grid grid-cols-1 md:grid-cols-[auto_1fr_auto] items-center gap-4 md:gap-8 hover:bg-white/[0.03] transition-colors"
+            className="px-8 py-6 border-b border-landing-border grid grid-cols-1 md:grid-cols-[auto_1fr_auto] items-center gap-4 md:gap-8 hover:bg-white/[0.03] transition-colors"
           >
-            <div className="w-10 h-10 bg-[#222] flex items-center justify-center font-[family-name:var(--font-mono)] text-sm text-[#F0F0F0]">
+            <div className="w-10 h-10 bg-landing-border flex items-center justify-center font-[family-name:var(--font-mono)] text-sm text-landing-text">
               {item.initials}
             </div>
             <div>
-              <div className="font-medium text-[#F0F0F0] mb-1">
+              <div className="font-medium text-landing-text mb-1">
                 {item.title}
               </div>
-              <div className="flex gap-6 font-[family-name:var(--font-mono)] text-xs text-[#888]">
+              <div className="flex gap-6 font-[family-name:var(--font-mono)] text-xs text-landing-muted">
                 <span>
-                  Model: <span className="text-[#F0F0F0]">{item.model}</span>
+                  Model: <span className="text-landing-text">{item.model}</span>
                 </span>
                 <span>
-                  Tokens: <span className="text-[#F0F0F0]">{item.tokens}</span>
+                  Tokens: <span className="text-landing-text">{item.tokens}</span>
                 </span>
               </div>
             </div>
-            <div className="font-[family-name:var(--font-mono)] text-sm text-[#888] text-right">
+            <div className="font-[family-name:var(--font-mono)] text-sm text-landing-muted text-right">
               {item.time}
             </div>
           </Link>
@@ -154,16 +154,16 @@ export async function GlobalFeed() {
 
         <Link
           href="/feed"
-          className="block px-8 py-6 text-center border-t border-[#222] font-[family-name:var(--font-mono)] text-sm text-[#888] hover:text-[#F0F0F0] transition-colors"
+          className="block px-8 py-6 text-center border-t border-landing-border font-[family-name:var(--font-mono)] text-sm text-landing-muted hover:text-landing-text transition-colors"
         >
           &gt; LOAD_MORE
         </Link>
       </div>
 
       {/* Leaderboard column */}
-      <div className="lg:col-span-4 border-b border-[#222] bg-[#050505] flex flex-col">
-        <div className="px-8 py-6 border-b border-[#222]">
-          <h3 className="font-[family-name:var(--font-mono)] text-sm uppercase tracking-wider text-[#F0F0F0]">
+      <div className="lg:col-span-4 border-b border-landing-border bg-landing-bg flex flex-col">
+        <div className="px-8 py-6 border-b border-landing-border">
+          <h3 className="font-[family-name:var(--font-mono)] text-sm uppercase tracking-wider text-landing-text">
             TOP_CODERS // WK_{weekNum}
           </h3>
         </div>
@@ -173,11 +173,11 @@ export async function GlobalFeed() {
             <Link
               key={row.rank}
               href="/leaderboard"
-              className="flex justify-between px-8 py-4 border-b border-[#222] font-[family-name:var(--font-mono)] text-sm hover:bg-white/[0.03] transition-colors"
+              className="flex justify-between px-8 py-4 border-b border-landing-border font-[family-name:var(--font-mono)] text-sm hover:bg-white/[0.03] transition-colors"
             >
               <div className="flex gap-4">
-                <span className="text-[#888] w-6">{row.rank}</span>
-                <span className="text-[#F0F0F0]">{row.handle}</span>
+                <span className="text-landing-muted w-6">{row.rank}</span>
+                <span className="text-landing-text">{row.handle}</span>
               </div>
               <span className="text-accent">{row.score}</span>
             </Link>

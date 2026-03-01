@@ -48,7 +48,7 @@ function WallOfLoveCard({
       href={post.url}
       target="_blank"
       rel="noopener noreferrer"
-      className="block break-inside-avoid mb-5 border border-[#222] bg-white/[0.03] p-6 transition-[border-color] duration-300 hover:border-accent/40"
+      className="block break-inside-avoid mb-5 border border-landing-border bg-white/[0.03] p-6 transition-[border-color] duration-300 hover:border-accent/40"
       custom={index}
       variants={wallCardVariants}
       initial="hidden"
@@ -66,30 +66,30 @@ function WallOfLoveCard({
             className="h-11 w-11 shrink-0 rounded-full object-cover"
           />
         ) : (
-          <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-full bg-[#222] text-xs font-semibold text-[#888]">
+          <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-full bg-landing-border text-xs font-semibold text-landing-muted">
             {initials}
           </div>
         )}
 
         <div className="min-w-0 flex-1">
-          <span className="block truncate text-[0.9375rem] font-bold leading-tight text-[#F0F0F0]">
+          <span className="block truncate text-[0.9375rem] font-bold leading-tight text-landing-text">
             {post.author_name}
           </span>
-          <span className="block text-sm text-[#888]">
+          <span className="block text-sm text-landing-muted">
             {post.author_handle}
           </span>
         </div>
 
-        <XIcon className="h-5 w-5 shrink-0 text-[#333]" />
+        <XIcon className="h-5 w-5 shrink-0 text-landing-dim" />
       </div>
 
       {/* Post text */}
-      <p className="mt-4 text-[0.9375rem] leading-relaxed text-[#aaa]">
+      <p className="mt-4 text-[0.9375rem] leading-relaxed text-landing-muted">
         {post.text}
       </p>
 
       {/* Date */}
-      <p className="mt-4 text-xs text-[#555] font-[family-name:var(--font-mono)]">
+      <p className="mt-4 text-xs text-landing-dim font-[family-name:var(--font-mono)]">
         {post.date}
       </p>
     </motion.a>
@@ -100,7 +100,7 @@ export function WallOfLove({ posts }: { posts: WallOfLovePost[] }) {
   if (posts.length === 0) return null;
 
   return (
-    <section className="border-t border-[#222] py-24 md:py-32">
+    <section className="border-t border-landing-border py-24 md:py-32">
       <div className="mx-auto max-w-[1280px] px-8">
         <motion.div
           className="flex flex-col items-center text-center mb-14"
@@ -109,7 +109,7 @@ export function WallOfLove({ posts }: { posts: WallOfLovePost[] }) {
           viewport={{ once: true, amount: 0.5 }}
           transition={{ duration: 0.5, ease: "easeOut" }}
         >
-          <h2 className="text-[clamp(2rem,4vw,3.5rem)] font-medium tracking-[-0.03em] text-balance text-[#F0F0F0]">
+          <h2 className="text-[clamp(2rem,4vw,3.5rem)] font-medium tracking-[-0.03em] text-balance text-landing-text">
             Everybody is <span className="text-accent">Claudemaxxing</span>.
             Are you?
           </h2>

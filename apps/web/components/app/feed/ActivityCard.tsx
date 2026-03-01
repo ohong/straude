@@ -124,6 +124,8 @@ export function ActivityCard({ post, userId }: { post: Post; userId?: string | n
   const usage = post.daily_usage;
 
   async function toggleKudos() {
+    const prevKudosed = kudosed;
+    const prevCount = kudosCount;
     const method = kudosed ? "DELETE" : "POST";
     setKudosed(!kudosed);
     setKudosCount((c) => (kudosed ? c - 1 : c + 1));
@@ -131,7 +133,11 @@ export function ActivityCard({ post, userId }: { post: Post; userId?: string | n
       setAnimating(true);
       setTimeout(() => setAnimating(false), 200);
     }
-    await fetch(`/api/posts/${post.id}/kudos`, { method });
+    const res = await fetch(`/api/posts/${post.id}/kudos`, { method });
+    if (!res.ok) {
+      setKudosed(prevKudosed);
+      setKudosCount(prevCount);
+    }
   }
 
   return (

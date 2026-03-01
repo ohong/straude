@@ -9,10 +9,10 @@ function TickerStrip({ items }: { items: TickerItem[] }) {
       {items.map((item) => (
         <span
           key={item.label}
-          className="inline-block px-8 font-[family-name:var(--font-mono)] text-sm uppercase text-[#888]"
+          className="inline-block px-8 font-[family-name:var(--font-mono)] text-sm uppercase text-landing-muted"
         >
           {item.label}{" "}
-          <span className="text-[#F0F0F0] ml-2">{item.value}</span>
+          <span className="text-landing-text ml-2">{item.value}</span>
         </span>
       ))}
     </>
@@ -21,7 +21,7 @@ function TickerStrip({ items }: { items: TickerItem[] }) {
 
 export function Ticker({ items }: { items: TickerItem[] }) {
   return (
-    <div className="w-full overflow-hidden border-t border-b border-[#222] py-3 relative z-10 bg-[#050505]">
+    <div className="w-full overflow-hidden border-t border-b border-landing-border py-3 relative z-10 bg-landing-bg">
       <div className="inline-block whitespace-nowrap animate-ticker">
         <TickerStrip items={items} />
         <TickerStrip items={items} />
