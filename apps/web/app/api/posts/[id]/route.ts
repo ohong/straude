@@ -205,20 +205,27 @@ export async function PATCH(request: NextRequest, context: RouteContext) {
               .single();
             const actorUsername = actor?.username ?? "Someone";
 
-            for (const u of toNotify) {
-              Promise.all([
-                db
-                  .from("users")
-                  .select("email_mention_notifications")
-                  .eq("id", u.id)
-                  .single(),
-                db.auth.admin.getUserById(u.id),
-              ])
-                .then(([profileRes, authRes]) => {
+            await Promise.allSettled(
+              toNotify.map(async (u) => {
+                try {
+                  const [profileRes, authRes] = await Promise.all([
+                    db
+                      .from("users")
+                      .select("email_mention_notifications")
+                      .eq("id", u.id)
+                      .single(),
+                    db.auth.admin.getUserById(u.id),
+                  ]);
+
+                  if (profileRes.error) {
+                    console.error("[email] failed to load mention preferences:", profileRes.error.message);
+                    return;
+                  }
+
                   const email = authRes.data?.user?.email;
                   if (!profileRes.data?.email_mention_notifications || !email) return;
 
-                  return sendNotificationEmail({
+                  await sendNotificationEmail({
                     recipientUserId: u.id,
                     recipientEmail: email,
                     actorUsername,
@@ -228,9 +235,11 @@ export async function PATCH(request: NextRequest, context: RouteContext) {
                     postTitle: (post.title as string) ?? null,
                     idempotencyKey: `mention-post/${id}/${u.id}`,
                   });
-                })
-                .catch((err) => console.error("[email] mention notification failed:", err));
-            }
+                } catch (err) {
+                  console.error("[email] mention notification failed:", err);
+                }
+              })
+            );
           }
         }
       }

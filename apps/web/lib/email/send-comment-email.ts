@@ -34,7 +34,10 @@ export async function sendNotificationEmail({
   idempotencyKey,
 }: SendNotificationEmailParams): Promise<void> {
   const resend = getResend();
-  if (!resend) return;
+  if (!resend) {
+    console.error("[email] RESEND_API_KEY not configured; skipping notification email");
+    return;
+  }
 
   const appUrl = (
     process.env.NEXT_PUBLIC_APP_URL ?? "https://straude.com"

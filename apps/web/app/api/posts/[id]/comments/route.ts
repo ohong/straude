@@ -10,52 +10,65 @@ type RouteContext = { params: Promise<{ id: string }> };
 
 /**
  * Fire-and-forget: look up a user's email preference and send a notification email.
- * Never blocks the response or throws.
+ * Never throws.
  */
-function fireNotificationEmail(opts: {
+async function fireNotificationEmail(opts: {
   recipientUserId: string;
   actorUsername: string;
   type: "comment" | "mention";
   content: string;
   postId: string;
   idempotencyKey: string;
-}) {
+}): Promise<void> {
   const prefField =
     opts.type === "mention"
       ? "email_mention_notifications"
       : "email_notifications";
 
-  // Defer getServiceClient() inside the promise to avoid calling it
-  // when env vars aren't set (e.g. in tests).
-  Promise.resolve()
-    .then(() => {
-      const db = getServiceClient();
-      return Promise.all([
-        db
-          .from("users")
-          .select(prefField)
-          .eq("id", opts.recipientUserId)
-          .single(),
-        db.auth.admin.getUserById(opts.recipientUserId),
-        db.from("posts").select("title").eq("id", opts.postId).single(),
-      ]);
-    })
-    .then(([profileRes, authRes, postRes]) => {
-      const email = authRes.data?.user?.email;
-      if (!(profileRes.data as Record<string, unknown>)?.[prefField] || !email) return;
+  try {
+    if (!process.env.NEXT_PUBLIC_SUPABASE_URL || !process.env.SUPABASE_SECRET_KEY) {
+      console.error("[email] Supabase service env missing; skipping notification email");
+      return;
+    }
 
-      return sendNotificationEmail({
-        recipientUserId: opts.recipientUserId,
-        recipientEmail: email,
-        actorUsername: opts.actorUsername,
-        type: opts.type,
-        content: opts.content,
-        postId: opts.postId,
-        postTitle: (postRes.data?.title as string) ?? null,
-        idempotencyKey: opts.idempotencyKey,
-      });
-    })
-    .catch((err) => console.error("[email] notification failed:", err));
+    const db = getServiceClient();
+    const [profileRes, authRes, postRes] = await Promise.all([
+      db
+        .from("users")
+        .select(prefField)
+        .eq("id", opts.recipientUserId)
+        .single(),
+      db.auth.admin.getUserById(opts.recipientUserId),
+      db.from("posts").select("title").eq("id", opts.postId).single(),
+    ]);
+
+    if (profileRes.error) {
+      console.error("[email] failed to load notification preferences:", profileRes.error.message);
+      return;
+    }
+    if (!(profileRes.data as Record<string, unknown>)?.[prefField]) return;
+
+    if (authRes.error) {
+      console.error("[email] failed to load recipient auth record:", authRes.error.message);
+      return;
+    }
+
+    const email = authRes.data?.user?.email;
+    if (!email) return;
+
+    await sendNotificationEmail({
+      recipientUserId: opts.recipientUserId,
+      recipientEmail: email,
+      actorUsername: opts.actorUsername,
+      type: opts.type,
+      content: opts.content,
+      postId: opts.postId,
+      postTitle: (postRes.data?.title as string) ?? null,
+      idempotencyKey: opts.idempotencyKey,
+    });
+  } catch (err) {
+    console.error("[email] notification failed:", err);
+  }
 }
 
 export async function POST(request: NextRequest, context: RouteContext) {
@@ -109,7 +122,7 @@ export async function POST(request: NextRequest, context: RouteContext) {
         (comment.user as Record<string, unknown>)?.username as string ??
         "Someone";
 
-      fireNotificationEmail({
+      await fireNotificationEmail({
         recipientUserId: post.user_id,
         actorUsername: commenterUsername,
         type: "comment",
@@ -147,16 +160,18 @@ export async function POST(request: NextRequest, context: RouteContext) {
         (comment.user as Record<string, unknown>)?.username as string ??
         "Someone";
 
-      for (const u of toNotify) {
-        fireNotificationEmail({
-          recipientUserId: u.id,
-          actorUsername,
-          type: "mention",
-          content,
-          postId: id,
-          idempotencyKey: `mention-notif/${comment.id}/${u.id}`,
-        });
-      }
+      await Promise.allSettled(
+        toNotify.map((u) =>
+          fireNotificationEmail({
+            recipientUserId: u.id,
+            actorUsername,
+            type: "mention",
+            content,
+            postId: id,
+            idempotencyKey: `mention-notif/${comment.id}/${u.id}`,
+          })
+        )
+      );
     }
 
     // Award comment achievements
