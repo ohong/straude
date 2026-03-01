@@ -2,6 +2,13 @@
 
 ## Unreleased
 
+### Simplify
+
+- **Consolidated duplicate `timeAgo` and `getInitials`.** Three copies across `notifications.ts`, `GlobalFeed.tsx`, and `Avatar.tsx` replaced with shared functions in `lib/utils/format.ts`. Net −40 lines.
+- **Removed dead code from CLI.** Deleted unused `runCodex` export and duplicate `ModelBreakdownEntry` interface from `codex.ts` (already defined in `ccusage.ts`).
+- **Typed GlobalFeed Supabase queries.** Replaced 5 `as any` casts with `FeedPost` and `LeaderRow` interfaces.
+- **PostEditor uses `router.refresh()`.** Replaced `window.location.reload()` with Next.js App Router refresh for faster post-save UX.
+
 ### Changed
 
 - **Landing page redesign.** Dark terminal aesthetic with WebGL halftone shader background, new hero ("Code like an athlete."), scrolling stats ticker, 12-column features grid, live global feed + weekly leaderboard, and redesigned Wall of Love / CTA / footer. Replaces the previous parallax hero, Stats, ProductShowcase, and Features components.
