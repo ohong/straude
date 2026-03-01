@@ -77,7 +77,7 @@ export async function GlobalFeed() {
 
     if (posts) {
       // Top 3 by spend, then display newest-first
-      const top3 = ([...posts] as FeedPost[])
+      const top3 = ([...posts] as unknown as FeedPost[])
         .sort(
           (a, b) =>
             (b.daily_usage?.cost_usd ?? 0) - (a.daily_usage?.cost_usd ?? 0)

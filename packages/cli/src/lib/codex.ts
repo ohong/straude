@@ -1,16 +1,27 @@
-import { execFileSync } from "node:child_process";
+import { execFileSync, execFile as execFileCb } from "node:child_process";
 import type { CcusageDailyEntry } from "./ccusage.js";
 
 export interface CodexOutput {
   data: CcusageDailyEntry[];
 }
 
-const CODEX_PKG = "@ccusage/codex@latest";
+// Pin to major version so bunx/npx can use the cached copy without a registry roundtrip.
+// @latest forces a registry check on every invocation (~200-1000ms penalty).
+const CODEX_PKG = "@ccusage/codex@18";
 
 /** Returns the raw JSON string from @ccusage/codex (for hashing). Empty string on failure. */
 export function runCodexRaw(sinceDate: string, untilDate: string): string {
   try {
     return execCodex(["daily", "--json", "--since", sinceDate, "--until", untilDate]);
+  } catch {
+    return "";
+  }
+}
+
+/** Async version — returns raw JSON string without blocking. Empty string on failure. */
+export async function runCodexRawAsync(sinceDate: string, untilDate: string): Promise<string> {
+  try {
+    return await execCodexAsync(["daily", "--json", "--since", sinceDate, "--until", untilDate]);
   } catch {
     return "";
   }
@@ -24,6 +35,22 @@ function execCodex(args: string[]): string {
     encoding: "utf-8",
     timeout: 120_000,
     maxBuffer: 10 * 1024 * 1024,
+  });
+}
+
+function execCodexAsync(args: string[]): Promise<string> {
+  const cmd = process.versions.bun !== undefined ? "bunx" : "npx";
+  const prefix = process.versions.bun !== undefined ? ["--bun"] : ["--yes"];
+
+  return new Promise((resolve, reject) => {
+    execFileCb(cmd, [...prefix, CODEX_PKG, ...args], {
+      encoding: "utf-8",
+      timeout: 120_000,
+      maxBuffer: 10 * 1024 * 1024,
+    }, (err, stdout) => {
+      if (err) reject(err);
+      else resolve(stdout);
+    });
   });
 }
 

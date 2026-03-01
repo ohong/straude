@@ -2,9 +2,9 @@ import { createHash } from "node:crypto";
 import { requireAuth, updateLastPushDate } from "../lib/auth.js";
 import type { StraudeConfig } from "../lib/auth.js";
 import { apiRequest } from "../lib/api.js";
-import { runCcusageRaw, parseCcusageOutput } from "../lib/ccusage.js";
+import { runCcusageRawAsync, parseCcusageOutput } from "../lib/ccusage.js";
 import type { CcusageDailyEntry, ModelBreakdownEntry } from "../lib/ccusage.js";
-import { runCodexRaw, parseCodexOutput } from "../lib/codex.js";
+import { runCodexRawAsync, parseCodexOutput } from "../lib/codex.js";
 import { MAX_BACKFILL_DAYS } from "../config.js";
 
 interface UsageSubmitRequest {
@@ -161,14 +161,18 @@ export async function pushCommand(options: PushOptions, configOverride?: Straude
       : `Pushing usage for ${formatDate(sinceDate)} to ${formatDate(untilDate)}...`,
   );
 
-  // Get raw JSON for hashing — Claude source
-  let claudeRaw: string;
-  try {
-    claudeRaw = runCcusageRaw(sinceStr, untilStr);
-  } catch (err) {
-    console.error((err as Error).message);
+  // Run ccusage + codex in parallel — the single biggest perf win
+  const [claudeResult, codexRaw] = await Promise.all([
+    runCcusageRawAsync(sinceStr, untilStr).catch((err: Error) => err),
+    runCodexRawAsync(sinceStr, untilStr),
+  ]);
+
+  // Claude data is required — fail if it errored
+  if (claudeResult instanceof Error) {
+    console.error(claudeResult.message);
     process.exit(1);
   }
+  const claudeRaw: string = claudeResult;
 
   let claudeEntries: CcusageDailyEntry[];
   try {
@@ -178,8 +182,7 @@ export async function pushCommand(options: PushOptions, configOverride?: Straude
     process.exit(1);
   }
 
-  // Get Codex data — silent on failure
-  const codexRaw = runCodexRaw(sinceStr, untilStr);
+  // Codex data — silent on failure (empty string = failed or no data)
   const codexEntries = codexRaw ? parseCodexOutput(codexRaw).data : [];
 
   // Merge Claude + Codex entries by date

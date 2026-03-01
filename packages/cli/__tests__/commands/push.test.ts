@@ -10,26 +10,26 @@ vi.mock("../../src/lib/api.js", () => ({
 }));
 
 vi.mock("../../src/lib/ccusage.js", () => ({
-  runCcusageRaw: vi.fn(),
+  runCcusageRawAsync: vi.fn(),
   parseCcusageOutput: vi.fn(),
 }));
 
 vi.mock("../../src/lib/codex.js", () => ({
-  runCodexRaw: vi.fn(),
+  runCodexRawAsync: vi.fn(),
   parseCodexOutput: vi.fn(),
 }));
 
 import { pushCommand, mergeEntries } from "../../src/commands/push.js";
 import { requireAuth } from "../../src/lib/auth.js";
 import { apiRequest } from "../../src/lib/api.js";
-import { runCcusageRaw, parseCcusageOutput } from "../../src/lib/ccusage.js";
-import { runCodexRaw, parseCodexOutput } from "../../src/lib/codex.js";
+import { runCcusageRawAsync, parseCcusageOutput } from "../../src/lib/ccusage.js";
+import { runCodexRawAsync, parseCodexOutput } from "../../src/lib/codex.js";
 
 const mockRequireAuth = vi.mocked(requireAuth);
 const mockApiRequest = vi.mocked(apiRequest);
-const mockRunCcusageRaw = vi.mocked(runCcusageRaw);
+const mockRunCcusageRawAsync = vi.mocked(runCcusageRawAsync);
 const mockParseCcusageOutput = vi.mocked(parseCcusageOutput);
-const mockRunCodexRaw = vi.mocked(runCodexRaw);
+const mockRunCodexRawAsync = vi.mocked(runCodexRawAsync);
 const mockParseCodexOutput = vi.mocked(parseCodexOutput);
 
 const fakeConfig = { token: "tok", username: "alice", api_url: "https://straude.com" };
@@ -54,7 +54,7 @@ beforeEach(() => {
   vi.clearAllMocks();
   mockRequireAuth.mockReturnValue(fakeConfig);
   // Default: no Codex data
-  mockRunCodexRaw.mockReturnValue("");
+  mockRunCodexRawAsync.mockResolvedValue("");
   mockParseCodexOutput.mockReturnValue({ data: [] });
   vi.spyOn(console, "log").mockImplementation(() => {});
   vi.spyOn(console, "error").mockImplementation(() => {});
@@ -69,7 +69,7 @@ afterEach(() => {
 
 describe("pushCommand", () => {
   it("dry-run prints summary without API call", async () => {
-    mockRunCcusageRaw.mockReturnValue("{}");
+    mockRunCcusageRawAsync.mockResolvedValue("{}");
     mockParseCcusageOutput.mockReturnValue({
       data: [
         {
@@ -96,7 +96,7 @@ describe("pushCommand", () => {
   it("submits today's data and prints post URL", async () => {
     const today = todayStr();
 
-    mockRunCcusageRaw.mockReturnValue("{}");
+    mockRunCcusageRawAsync.mockResolvedValue("{}");
     mockParseCcusageOutput.mockReturnValue({
       data: [
         {
@@ -131,7 +131,7 @@ describe("pushCommand", () => {
   });
 
   it("handles empty ccusage output", async () => {
-    mockRunCcusageRaw.mockReturnValue("[]");
+    mockRunCcusageRawAsync.mockResolvedValue("[]");
     mockParseCcusageOutput.mockReturnValue({ data: [] });
 
     await pushCommand({});
@@ -153,7 +153,7 @@ describe("pushCommand", () => {
   });
 
   it("handles API submission failure", async () => {
-    mockRunCcusageRaw.mockReturnValue("{}");
+    mockRunCcusageRawAsync.mockResolvedValue("{}");
     mockParseCcusageOutput.mockReturnValue({
       data: [
         {
@@ -184,22 +184,22 @@ describe("pushCommand", () => {
     const dateStr = `${y}-${m}-${d}`;
     const compactStr = `${y}${m}${d}`;
 
-    mockRunCcusageRaw.mockReturnValue("[]");
+    mockRunCcusageRawAsync.mockResolvedValue("[]");
     mockParseCcusageOutput.mockReturnValue({ data: [] });
 
     await pushCommand({ date: dateStr });
 
-    expect(mockRunCcusageRaw).toHaveBeenCalledWith(compactStr, compactStr);
+    expect(mockRunCcusageRawAsync).toHaveBeenCalledWith(compactStr, compactStr);
   });
 
   it("passes --days option correctly", async () => {
-    mockRunCcusageRaw.mockReturnValue("[]");
+    mockRunCcusageRawAsync.mockResolvedValue("[]");
     mockParseCcusageOutput.mockReturnValue({ data: [] });
 
     await pushCommand({ days: 3 });
 
-    expect(mockRunCcusageRaw).toHaveBeenCalledTimes(1);
-    const [sinceArg, untilArg] = mockRunCcusageRaw.mock.calls[0]!;
+    expect(mockRunCcusageRawAsync).toHaveBeenCalledTimes(1);
+    const [sinceArg, untilArg] = mockRunCcusageRawAsync.mock.calls[0]!;
     const today = new Date();
     const todayCompact = `${today.getFullYear()}${String(today.getMonth() + 1).padStart(2, "0")}${String(today.getDate()).padStart(2, "0")}`;
     expect(untilArg).toBe(todayCompact);
@@ -209,7 +209,7 @@ describe("pushCommand", () => {
   it("merges Claude + Codex data for the same day", async () => {
     const today = todayStr();
 
-    mockRunCcusageRaw.mockReturnValue("{}");
+    mockRunCcusageRawAsync.mockResolvedValue("{}");
     mockParseCcusageOutput.mockReturnValue({
       data: [
         {
@@ -225,7 +225,7 @@ describe("pushCommand", () => {
       ],
     });
 
-    mockRunCodexRaw.mockReturnValue('{"daily":[]}');
+    mockRunCodexRawAsync.mockResolvedValue('{"daily":[]}');
     mockParseCodexOutput.mockReturnValue({
       data: [
         {
@@ -268,7 +268,7 @@ describe("pushCommand", () => {
   it("proceeds with Claude data only when Codex fails", async () => {
     const today = todayStr();
 
-    mockRunCcusageRaw.mockReturnValue("{}");
+    mockRunCcusageRawAsync.mockResolvedValue("{}");
     mockParseCcusageOutput.mockReturnValue({
       data: [
         {
@@ -285,7 +285,7 @@ describe("pushCommand", () => {
     });
 
     // Codex fails silently
-    mockRunCodexRaw.mockReturnValue("");
+    mockRunCodexRawAsync.mockResolvedValue("");
     mockParseCodexOutput.mockReturnValue({ data: [] });
 
     mockApiRequest.mockResolvedValue({

@@ -3,6 +3,7 @@ import { parseCodexOutput, runCodexRaw } from "../src/lib/codex.js";
 
 vi.mock("node:child_process", () => ({
   execFileSync: vi.fn(),
+  execFile: vi.fn(),
 }));
 
 import { execFileSync } from "node:child_process";

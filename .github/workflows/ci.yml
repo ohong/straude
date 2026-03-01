@@ -28,6 +28,10 @@ jobs:
           restore-keys: |
             ${{ runner.os }}-bun-
 
+      - name: Typecheck
+        run: bun run typecheck
+        working-directory: apps/web
+
       - name: Build
         run: bun run build
         env:

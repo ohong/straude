@@ -8,10 +8,18 @@ import {
 
 vi.mock("node:child_process", () => ({
   execFileSync: vi.fn(),
+  execFile: vi.fn(),
 }));
 
+vi.mock("node:fs", async (importOriginal) => {
+  const actual = await importOriginal<typeof import("node:fs")>();
+  return { ...actual, existsSync: vi.fn(() => false) };
+});
+
 import { execFileSync } from "node:child_process";
+import { existsSync } from "node:fs";
 const mockExecFileSync = vi.mocked(execFileSync);
+const mockExistsSync = vi.mocked(existsSync);
 
 /** Build a valid ccusage v18 JSON string. */
 function validOutput() {
@@ -157,14 +165,12 @@ describe("runCcusage", () => {
   });
 
   it("calls ccusage directly when globally installed", () => {
+    // Simulate ccusage binary found on PATH
+    mockExistsSync.mockReturnValue(true);
+
     runCcusage("20250601", "20250601");
-    // First call is the ccusage --version probe
-    expect(mockExecFileSync).toHaveBeenCalledWith(
-      "ccusage",
-      ["--version"],
-      expect.objectContaining({ stdio: "pipe", timeout: 3_000 }),
-    );
-    // Second call is the actual ccusage invocation (direct, no bunx wrapper)
+    // No --version probe — PATH check is pure fs now
+    expect(mockExecFileSync).toHaveBeenCalledTimes(1);
     expect(mockExecFileSync).toHaveBeenCalledWith(
       "ccusage",
       ["daily", "--json", "--breakdown", "--since", "20250601", "--until", "20250601"],
@@ -173,24 +179,15 @@ describe("runCcusage", () => {
   });
 
   it("falls back to package runner when ccusage is not globally installed", () => {
-    // Version probe fails, rest succeed
-    mockExecFileSync
-      .mockImplementationOnce(() => { throw new Error("not found"); })
-      .mockReturnValue(validOutput() as never);
+    // ccusage not found on PATH
+    mockExistsSync.mockReturnValue(false);
 
     runCcusage("20250601", "20250601");
 
-    // First call: version probe (fails)
-    expect(mockExecFileSync).toHaveBeenNthCalledWith(
-      1,
-      "ccusage",
-      ["--version"],
-      expect.objectContaining({ stdio: "pipe" }),
-    );
-    // Second call: npx fallback (process.versions.bun is undefined in Vitest env;
+    // Single call: npx fallback (process.versions.bun is undefined in Vitest env;
     // bunx path is exercised when the CLI actually runs under bun)
-    expect(mockExecFileSync).toHaveBeenNthCalledWith(
-      2,
+    expect(mockExecFileSync).toHaveBeenCalledTimes(1);
+    expect(mockExecFileSync).toHaveBeenCalledWith(
       "npx",
       ["--yes", "ccusage@17", "daily", "--json", "--breakdown", "--since", "20250601", "--until", "20250601"],
       expect.objectContaining({ encoding: "utf-8" }),

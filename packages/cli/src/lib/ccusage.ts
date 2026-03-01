@@ -1,6 +1,8 @@
-import { execFileSync } from "node:child_process";
+import { execFileSync, execFile as execFileCb } from "node:child_process";
+import { existsSync } from "node:fs";
+import { delimiter, join } from "node:path";
 
-/** Type-safe representation of the error thrown by execFileSync. */
+/** Type-safe representation of the error thrown by execFileSync / execFile. */
 interface ExecError extends Error {
   code?: string;
   status?: number | null;
@@ -17,6 +19,12 @@ let _resolved: { cmd: string; args: string[] } | undefined;
 // drops `runtime:` or npm adds support for it.
 const CCUSAGE_PKG = "ccusage@17";
 
+/** Check if a binary exists on PATH without spawning a subprocess. */
+function isOnPath(binary: string): boolean {
+  const dirs = (process.env.PATH || "").split(delimiter);
+  return dirs.some((dir) => existsSync(join(dir, binary)));
+}
+
 /**
  * Resolve the fastest available way to run ccusage.
  * 1. Direct `ccusage` binary on PATH (globally installed) — fastest
@@ -26,12 +34,11 @@ const CCUSAGE_PKG = "ccusage@17";
 function resolveCcusageCommand(): { cmd: string; args: string[] } {
   if (_resolved) return _resolved;
 
-  // 1. Try direct ccusage binary (globally installed)
-  try {
-    execFileSync("ccusage", ["--version"], { stdio: "pipe", timeout: 3_000 });
+  // 1. Check if ccusage binary exists on PATH (pure fs, no subprocess)
+  if (isOnPath("ccusage")) {
     _resolved = { cmd: "ccusage", args: [] };
     return _resolved;
-  } catch { /* not installed globally */ }
+  }
 
   // 2. Prefer bunx if running under Bun
   if (process.versions.bun !== undefined) {
@@ -81,6 +88,38 @@ function execCcusage(args: string[]): string {
     const detail = error.stderr?.trim() || error.message || "unknown error";
     throw new Error(`ccusage failed: ${detail}`);
   }
+}
+
+/** Async version of execCcusage — runs ccusage in a child process without blocking. */
+function execCcusageAsync(args: string[]): Promise<string> {
+  const { cmd, args: prefix } = resolveCcusageCommand();
+  const pkg = cmd === "ccusage" ? null : CCUSAGE_PKG;
+  const cmdArgs = pkg ? [...prefix, pkg, ...args] : args;
+
+  return new Promise((resolve, reject) => {
+    execFileCb(cmd, cmdArgs, {
+      encoding: "utf-8",
+      timeout: 120_000,
+      maxBuffer: 10 * 1024 * 1024,
+    }, (err, stdout) => {
+      if (!err) {
+        resolve(stdout);
+        return;
+      }
+      const error = err as ExecError;
+      if (error.killed || error.signal === "SIGTERM") {
+        const hint = pkg
+          ? `${cmd} ${prefix.join(" ")} ${pkg} daily --json`
+          : "ccusage daily --json";
+        reject(new Error(
+          `ccusage timed out. Try running \`${hint}\` directly to verify it works.`,
+        ));
+        return;
+      }
+      const detail = error.stderr?.trim() || error.message || "unknown error";
+      reject(new Error(`ccusage failed: ${detail}`));
+    });
+  });
 }
 
 /** Per-model cost entry for breakdown tracking. */
@@ -144,6 +183,12 @@ export function runCcusage(sinceDate: string, untilDate: string): CcusageOutput 
 export function runCcusageRaw(sinceDate: string, untilDate: string): string {
   const args = ["daily", "--json", "--breakdown", "--since", sinceDate, "--until", untilDate];
   return execCcusage(args);
+}
+
+/** Async version — returns raw JSON string without blocking the event loop. */
+export function runCcusageRawAsync(sinceDate: string, untilDate: string): Promise<string> {
+  const args = ["daily", "--json", "--breakdown", "--since", sinceDate, "--until", untilDate];
+  return execCcusageAsync(args);
 }
 
 /** Normalize a v18 entry into our canonical format. */

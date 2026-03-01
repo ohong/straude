@@ -18,9 +18,23 @@ import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
 const mockFetch = vi.fn();
 vi.stubGlobal("fetch", mockFetch);
 
+const { _execFileSync } = vi.hoisted(() => ({
+  _execFileSync: vi.fn(),
+}));
+
 vi.mock("node:child_process", () => ({
   exec: vi.fn(),
-  execFileSync: vi.fn(),
+  execFileSync: _execFileSync,
+  // Async execFile delegates to execFileSync's mock implementation via callback
+  execFile: vi.fn((...args: unknown[]) => {
+    const callback = args[args.length - 1] as (err: Error | null, stdout: string, stderr: string) => void;
+    try {
+      const result = _execFileSync(...(args.slice(0, -1) as [string, string[]]));
+      callback(null, result as string, "");
+    } catch (err) {
+      callback(err as Error, "", "");
+    }
+  }),
 }));
 
 // Speed up login polling in tests
@@ -45,13 +59,12 @@ vi.mock("node:fs", () => ({
 // Imports (after mocks)
 // ---------------------------------------------------------------------------
 
-import { execFileSync } from "node:child_process";
 import { syncCommand } from "../../src/commands/sync.js";
 import { pushCommand } from "../../src/commands/push.js";
 import { CONFIG_FILE } from "../../src/config.js";
 import { _resetCcusageResolver } from "../../src/lib/ccusage.js";
 
-const mockExecFileSync = vi.mocked(execFileSync);
+const mockExecFileSync = _execFileSync;
 
 // ---------------------------------------------------------------------------
 // Helpers
@@ -233,8 +246,8 @@ describe("sync flow", () => {
 
     // Re-syncs today's data (1 API call)
     expect(mockFetch).toHaveBeenCalledTimes(1);
-    // 3 execFileSync calls: ccusage --version probe + actual ccusage daily + codex attempt (fails silently)
-    expect(mockExecFileSync).toHaveBeenCalledTimes(3);
+    // 2 calls: ccusage daily + codex attempt (no more --version probe)
+    expect(mockExecFileSync).toHaveBeenCalledTimes(2);
     const saved = readPersistedConfig();
     expect(saved.last_push_date).toBe(today);
   });
@@ -249,8 +262,8 @@ describe("sync flow", () => {
 
     await syncCommand();
 
-    // 3 execFileSync calls: ccusage --version probe + actual ccusage daily + codex attempt
-    expect(mockExecFileSync).toHaveBeenCalledTimes(3);
+    // 2 calls: ccusage daily + codex attempt (no more --version probe)
+    expect(mockExecFileSync).toHaveBeenCalledTimes(2);
     expect(mockFetch).toHaveBeenCalledTimes(1);
 
     const saved = readPersistedConfig();
@@ -266,10 +279,10 @@ describe("sync flow", () => {
 
     await syncCommand();
 
-    // 3 execFileSync calls: ccusage --version probe + actual ccusage daily + codex attempt
-    expect(mockExecFileSync).toHaveBeenCalledTimes(3);
-    // calls[0] = version probe, calls[1] = actual ccusage daily
-    const args = mockExecFileSync.mock.calls[1]!;
+    // 2 calls: ccusage daily + codex attempt (no more --version probe)
+    expect(mockExecFileSync).toHaveBeenCalledTimes(2);
+    // calls[0] = actual ccusage daily
+    const args = mockExecFileSync.mock.calls[0]!;
     // ccusage is called with: ["daily", "--json", "--since", ..., "--until", ...]
     const sinceIdx = (args[1] as string[]).indexOf("--since");
     const sinceDate = (args[1] as string[])[sinceIdx + 1]!;
