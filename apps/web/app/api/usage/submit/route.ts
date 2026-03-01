@@ -132,14 +132,18 @@ export async function POST(request: Request) {
 
     // Build auto-title from usage data (only used for new posts)
     const models = entry.data.models;
-    const hasCodex = models?.some((m) => m.includes("gpt") || m.includes("o3") || m.includes("o4"));
     const hasClaude = models?.some((m) => m.includes("claude") || m.includes("opus") || m.includes("sonnet") || m.includes("haiku"));
     const claudeLabel = models?.some((m) => m.includes("opus")) ? "Claude Opus"
       : models?.some((m) => m.includes("sonnet")) ? "Claude Sonnet"
       : models?.some((m) => m.includes("haiku")) ? "Claude Haiku" : null;
-    const codexLabel = models?.some((m) => m.includes("gpt-5")) ? "GPT-5"
-      : models?.some((m) => m.includes("gpt-4o")) ? "GPT-4o"
-      : models?.some((m) => m.includes("o3")) ? "o3" : null;
+    const codexModel = models?.find((m) => /^gpt-/i.test(m) || /^o3/i.test(m) || /^o4/i.test(m));
+    const codexLabel = codexModel
+      ? /^gpt-/i.test(codexModel)
+        ? codexModel.replace(/^gpt/i, "GPT").replace(/-codex$/i, "-Codex")
+        : /^o3/i.test(codexModel) ? "o3"
+        : /^o4/i.test(codexModel) ? "o4"
+        : codexModel
+      : null;
     const toolLabels = [claudeLabel, codexLabel].filter(Boolean);
     const modelLabel = toolLabels.length > 0 ? toolLabels.join(" + ") : (hasClaude ? "Claude" : null);
     const dateLabel = new Date(entry.date).toLocaleDateString("en-US", { month: "short", day: "numeric" });

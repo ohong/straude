@@ -36,13 +36,18 @@ function timeAgo(dateStr: string, usageDate?: string | null) {
 }
 
 function prettifyModel(model: string): string {
+  const normalized = model.trim();
   if (/claude-opus-4/i.test(model)) return "Claude Opus";
   if (/claude-sonnet-4/i.test(model)) return "Claude Sonnet";
   if (/claude-haiku-4/i.test(model)) return "Claude Haiku";
-  if (/gpt-5/i.test(model)) return "GPT-5";
-  if (/gpt-4o/i.test(model)) return "GPT-4o";
-  if (/^o3/i.test(model)) return "o3";
+  // Preserve full OpenAI model names (e.g. gpt-5.3-codex -> GPT-5.3-Codex)
+  if (/^gpt-/i.test(normalized)) {
+    return normalized
+      .replace(/^gpt/i, "GPT")
+      .replace(/-codex$/i, "-Codex");
+  }
   if (/^o4/i.test(model)) return "o4";
+  if (/^o3/i.test(model)) return "o3";
   // Legacy: broader Claude matching
   if (model.includes("opus")) return "Claude Opus";
   if (model.includes("sonnet")) return "Claude Sonnet";

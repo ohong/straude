@@ -399,6 +399,34 @@ describe("POST /api/usage/submit", () => {
     ]);
   });
 
+  it("auto-title keeps full GPT Codex model version", async () => {
+    (verifyCliToken as any).mockReturnValue("user-1");
+    const svc = mockServiceClient();
+    svc.single
+      .mockResolvedValueOnce({ data: { id: "usage-1" }, error: null })
+      .mockResolvedValueOnce({ data: { id: "post-1" }, error: null });
+
+    const res = await POST(
+      mockRequest({
+        entries: [
+          makeEntry(todayStr(), {
+            models: ["gpt-5.3-codex"],
+            costUSD: 3.2,
+            inputTokens: 2100,
+            outputTokens: 900,
+            totalTokens: 3000,
+            modelBreakdown: [{ model: "gpt-5.3-codex", cost_usd: 3.2 }],
+          }),
+        ],
+        source: "cli",
+      })
+    );
+
+    expect(res.status).toBe(200);
+    const postInsertCall = svc.insert.mock.calls[0];
+    expect(postInsertCall[0].title).toContain("GPT-5.3-Codex");
+  });
+
   it("accepts merged Claude + Codex usage in a single entry", async () => {
     (verifyCliToken as any).mockReturnValue("user-1");
     const svc = mockServiceClient();
