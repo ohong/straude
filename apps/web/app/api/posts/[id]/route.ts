@@ -151,7 +151,8 @@ export async function PATCH(request: NextRequest, context: RouteContext) {
     if (body.description !== undefined && post.description) {
       const mentionedUsernames = parseMentions(post.description);
       if (mentionedUsernames.length > 0) {
-        const { data: mentionedUsers } = await supabase
+        const db = getServiceClient();
+        const { data: mentionedUsers } = await db
           .from("users")
           .select("id, username")
           .in("username", mentionedUsernames);
@@ -161,13 +162,20 @@ export async function PATCH(request: NextRequest, context: RouteContext) {
         );
 
         if (candidates.length > 0) {
-          // Deduplicate: skip users who already have a mention notification for this post
-          const { data: existingNotifs } = await supabase
+          // Deduplicate: skip users who already have a mention notification for this post.
+          // Must use service client — RLS restricts notification reads to the owner,
+          // so the post author can't see other users' notifications for dedup.
+          const { data: existingNotifs, error: dedupError } = await db
             .from("notifications")
             .select("user_id")
             .eq("type", "mention")
             .eq("post_id", id)
             .in("user_id", candidates.map((u) => u.id));
+
+          if (dedupError) {
+            console.error("[notifications] dedup query failed, skipping:", dedupError.message);
+            return;
+          }
 
           const alreadyNotified = new Set(
             (existingNotifs ?? []).map((n) => n.user_id),
@@ -182,12 +190,14 @@ export async function PATCH(request: NextRequest, context: RouteContext) {
           }));
 
           if (mentionNotifs.length > 0) {
-            await supabase.from("notifications").insert(mentionNotifs);
+            const { error: insertError } = await db.from("notifications").insert(mentionNotifs);
+            if (insertError) {
+              console.error("[notifications] insert failed:", insertError.message);
+            }
           }
 
           // Fire mention emails
           if (toNotify.length > 0) {
-            const db = getServiceClient();
             const { data: actor } = await db
               .from("users")
               .select("username")
@@ -196,14 +206,13 @@ export async function PATCH(request: NextRequest, context: RouteContext) {
             const actorUsername = actor?.username ?? "Someone";
 
             for (const u of toNotify) {
-              const sdb = getServiceClient();
               Promise.all([
-                sdb
+                db
                   .from("users")
                   .select("email_mention_notifications")
                   .eq("id", u.id)
                   .single(),
-                sdb.auth.admin.getUserById(u.id),
+                db.auth.admin.getUserById(u.id),
               ])
                 .then(([profileRes, authRes]) => {
                   const email = authRes.data?.user?.email;

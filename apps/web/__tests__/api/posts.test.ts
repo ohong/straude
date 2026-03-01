@@ -3,15 +3,19 @@ import { describe, it, expect, vi, beforeEach } from "vitest";
 vi.mock("@/lib/supabase/server", () => ({
   createClient: vi.fn(),
 }));
+const mockServiceFrom = vi.fn().mockReturnValue({
+  select: vi.fn().mockReturnThis(),
+  eq: vi.fn().mockReturnThis(),
+  in: vi.fn().mockReturnThis(),
+  single: vi.fn().mockResolvedValue({ data: { username: "author" }, error: null }),
+});
+const mockServiceClient = {
+  from: mockServiceFrom,
+  auth: { admin: { getUserById: vi.fn().mockResolvedValue({ data: { user: null } }) } },
+  rpc: vi.fn().mockResolvedValue({ data: null, error: null }),
+};
 vi.mock("@/lib/supabase/service", () => ({
-  getServiceClient: vi.fn(() => ({
-    from: vi.fn().mockReturnValue({
-      select: vi.fn().mockReturnThis(),
-      eq: vi.fn().mockReturnThis(),
-      single: vi.fn().mockResolvedValue({ data: { username: "author" }, error: null }),
-    }),
-    auth: { admin: { getUserById: vi.fn().mockResolvedValue({ data: { user: null } }) } },
-  })),
+  getServiceClient: vi.fn(() => mockServiceClient),
 }));
 vi.mock("@/lib/email/send-comment-email", () => ({
   sendNotificationEmail: vi.fn().mockResolvedValue(undefined),
@@ -82,6 +86,8 @@ function makeRequest(
 
 beforeEach(() => {
   vi.clearAllMocks();
+  // Reset service client to default mock between tests
+  mockServiceClient.from = mockServiceFrom;
 });
 
 describe("GET /api/posts/[id]", () => {
@@ -229,7 +235,7 @@ describe("PATCH /api/posts/[id]", () => {
   it("does not insert mention notifications when only images change", async () => {
     const insertFn = vi.fn().mockResolvedValue({ error: null });
 
-    const client = mockSupabase({
+    mockSupabase({
       user: { id: "user-1" },
       tableHandlers: {
         posts: (c) => {
@@ -241,9 +247,8 @@ describe("PATCH /api/posts/[id]", () => {
       },
     });
 
-    // Wire up users + notifications so that removing the gate would reach insert
-    const originalFrom = client.from;
-    client.from = vi.fn().mockImplementation((table: string) => {
+    // Wire up service client so that removing the gate would reach insert
+    mockServiceClient.from = vi.fn().mockImplementation((table: string) => {
       if (table === "users") {
         const chain = buildChain();
         chain.in.mockResolvedValue({
@@ -264,7 +269,7 @@ describe("PATCH /api/posts/[id]", () => {
           }),
         };
       }
-      return originalFrom(table);
+      return mockServiceFrom(table);
     });
 
     // Only images in the body — no description
@@ -280,7 +285,7 @@ describe("PATCH /api/posts/[id]", () => {
   it("skips notification query when mentioned users do not exist", async () => {
     const notificationFrom = vi.fn();
 
-    const client = mockSupabase({
+    mockSupabase({
       user: { id: "user-1" },
       tableHandlers: {
         posts: (c) => {
@@ -292,8 +297,7 @@ describe("PATCH /api/posts/[id]", () => {
       },
     });
 
-    const originalFrom = client.from;
-    client.from = vi.fn().mockImplementation((table: string) => {
+    mockServiceClient.from = vi.fn().mockImplementation((table: string) => {
       if (table === "users") {
         const chain = buildChain();
         // No matching users found in the database
@@ -304,7 +308,7 @@ describe("PATCH /api/posts/[id]", () => {
         notificationFrom();
         return buildChain();
       }
-      return originalFrom(table);
+      return mockServiceFrom(table);
     });
 
     const res = await PATCH(
@@ -313,13 +317,17 @@ describe("PATCH /api/posts/[id]", () => {
     );
 
     expect(res.status).toBe(200);
+
+    // Flush microtasks from the deferred `after()` callback
+    await new Promise((r) => setTimeout(r, 0));
+
     expect(notificationFrom).not.toHaveBeenCalled();
   });
 
   it("inserts mention notifications for new mentions in description", async () => {
     const insertFn = vi.fn().mockResolvedValue({ error: null });
 
-    const client = mockSupabase({
+    mockSupabase({
       user: { id: "user-1" },
       tableHandlers: {
         posts: (c) => {
@@ -331,8 +339,7 @@ describe("PATCH /api/posts/[id]", () => {
       },
     });
 
-    const originalFrom = client.from;
-    client.from = vi.fn().mockImplementation((table: string) => {
+    mockServiceClient.from = vi.fn().mockImplementation((table: string) => {
       if (table === "users") {
         const chain = buildChain();
         chain.in.mockResolvedValue({
@@ -353,7 +360,7 @@ describe("PATCH /api/posts/[id]", () => {
           }),
         };
       }
-      return originalFrom(table);
+      return mockServiceFrom(table);
     });
 
     const res = await PATCH(
@@ -374,7 +381,7 @@ describe("PATCH /api/posts/[id]", () => {
   it("skips mention notification for already-notified users", async () => {
     const insertFn = vi.fn().mockResolvedValue({ error: null });
 
-    const client = mockSupabase({
+    mockSupabase({
       user: { id: "user-1" },
       tableHandlers: {
         posts: (c) => {
@@ -386,8 +393,7 @@ describe("PATCH /api/posts/[id]", () => {
       },
     });
 
-    const originalFrom = client.from;
-    client.from = vi.fn().mockImplementation((table: string) => {
+    mockServiceClient.from = vi.fn().mockImplementation((table: string) => {
       if (table === "users") {
         const chain = buildChain();
         chain.in.mockResolvedValue({
@@ -411,7 +417,7 @@ describe("PATCH /api/posts/[id]", () => {
           }),
         };
       }
-      return originalFrom(table);
+      return mockServiceFrom(table);
     });
 
     const res = await PATCH(
