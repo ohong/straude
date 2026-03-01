@@ -74,8 +74,15 @@ function formatModels(
     // Sort by cost descending
     const sorted = [...byCostMap.entries()].sort((a, b) => b[1] - a[1]);
 
-    return sorted
-      .map(([name, cost]) => `${Math.round((cost / totalCost) * 100)}% ${name}`)
+    const percentages = sorted
+      .map(([name, cost]) => ({ name, pct: Math.round((cost / totalCost) * 100) }))
+      .filter((entry) => entry.pct > 0);
+
+    // If tiny slices all round to 0%, fall back to the top model label
+    if (percentages.length === 0) return sorted[0]?.[0] ?? null;
+
+    return percentages
+      .map((entry) => `${entry.pct}% ${entry.name}`)
       .join(", ");
   }
 
@@ -85,6 +92,102 @@ function formatModels(
   if (models.some((m) => m.includes("sonnet"))) return "Claude Sonnet";
   if (models.some((m) => m.includes("haiku"))) return "Claude Haiku";
   return prettifyModel(models[0]!);
+}
+
+interface ModelUsageSegment {
+  name: string;
+  pct: number;
+  widthPct: number;
+}
+
+function buildModelUsageSegments(
+  breakdown: ModelBreakdownEntry[] | null | undefined,
+): ModelUsageSegment[] | null {
+  if (!breakdown || breakdown.length === 0) return null;
+
+  const totalCost = breakdown.reduce((sum, e) => sum + e.cost_usd, 0);
+  if (totalCost <= 0) return null;
+
+  const byCostMap = new Map<string, number>();
+  for (const entry of breakdown) {
+    const name = prettifyModel(entry.model);
+    byCostMap.set(name, (byCostMap.get(name) ?? 0) + entry.cost_usd);
+  }
+
+  const sorted = [...byCostMap.entries()]
+    .sort((a, b) => b[1] - a[1])
+    .map(([name, cost]) => ({
+      name,
+      cost,
+      pct: Math.round((cost / totalCost) * 100),
+    }))
+    .filter((entry) => entry.pct > 0);
+
+  if (sorted.length === 0) return null;
+
+  const visibleTotal = sorted.reduce((sum, entry) => sum + entry.cost, 0);
+  if (visibleTotal <= 0) return null;
+
+  return sorted.map((entry) => ({
+    name: entry.name,
+    pct: entry.pct,
+    widthPct: (entry.cost / visibleTotal) * 100,
+  }));
+}
+
+function hashString(input: string): number {
+  let hash = 0;
+  for (let i = 0; i < input.length; i++) {
+    hash = ((hash << 5) - hash) + input.charCodeAt(i);
+    hash |= 0;
+  }
+  return Math.abs(hash);
+}
+
+function modelColor(name: string): string {
+  if (/Claude Opus/.test(name)) return "#DF561F";
+  if (/Claude Sonnet/.test(name)) return "#F08A5D";
+  if (/Claude Haiku/.test(name)) return "#F7B267";
+  if (/GPT-5/.test(name)) return "#2A9D8F";
+  if (/GPT-4o/.test(name)) return "#4C78A8";
+  if (/^o3/i.test(name)) return "#3B82F6";
+  if (/^o4/i.test(name)) return "#6366F1";
+
+  const palette = ["#EF4444", "#F59E0B", "#10B981", "#06B6D4", "#8B5CF6", "#EC4899"];
+  return palette[hashString(name) % palette.length]!;
+}
+
+function ModelUsageBar({ segments }: { segments: ModelUsageSegment[] }) {
+  const tooltip = segments.map((entry) => `${entry.pct}% ${entry.name}`).join(", ");
+
+  return (
+    <span className="group relative inline-flex items-center">
+      <button
+        type="button"
+        aria-label={`Model usage: ${tooltip}`}
+        className="inline-flex h-2 w-28 cursor-help overflow-hidden rounded-full bg-subtle focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent focus-visible:ring-offset-2"
+      >
+        {segments.map((entry) => (
+          <span
+            key={entry.name}
+            className="h-full"
+            style={{
+              width: `${entry.widthPct}%`,
+              backgroundColor: modelColor(entry.name),
+            }}
+          />
+        ))}
+      </button>
+
+      <span className="pointer-events-none absolute left-1/2 top-full z-30 mt-2 hidden min-w-[180px] -translate-x-1/2 rounded-md border border-border bg-background px-2 py-1.5 text-[11px] text-foreground shadow-lg group-hover:block group-focus-within:block">
+        {segments.map((entry) => (
+          <span key={`tooltip-${entry.name}`} className="block whitespace-nowrap">
+            {entry.pct}% {entry.name}
+          </span>
+        ))}
+      </span>
+    </span>
+  );
 }
 
 function CompletenessRing({ post }: { post: Post }) {
@@ -127,6 +230,8 @@ export function ActivityCard({ post, userId }: { post: Post; userId?: string | n
   const recentComments = post.recent_comments ?? [];
   const user = post.user;
   const usage = post.daily_usage;
+  const modelSegments = buildModelUsageSegments(usage?.model_breakdown);
+  const modelSummary = formatModels(usage?.models, usage?.model_breakdown);
 
   async function toggleKudos() {
     const prevKudosed = kudosed;
@@ -168,10 +273,12 @@ export function ActivityCard({ post, userId }: { post: Post; userId?: string | n
           </div>
           <div className="flex items-center gap-2 text-xs text-muted">
             <span suppressHydrationWarning>{timeAgo(post.created_at, usage?.date)}</span>
-            {usage?.models && usage.models.length > 0 && (
+            {(modelSegments || modelSummary) && (
               <>
                 <span>&middot;</span>
-                <span>{formatModels(usage.models, usage.model_breakdown)}</span>
+                {modelSegments
+                  ? <ModelUsageBar segments={modelSegments} />
+                  : <span>{modelSummary}</span>}
               </>
             )}
             {usage?.is_verified && (
@@ -264,8 +371,8 @@ export function ActivityCard({ post, userId }: { post: Post; userId?: string | n
             ) : (
               <p className="col-span-2 text-xs text-muted">
                 Uploaded by the user via JSON
-                {usage.models && usage.models.length > 0 && (
-                  <> &middot; {formatModels(usage.models, usage.model_breakdown)}</>
+                {modelSummary && (
+                  <> &middot; {modelSummary}</>
                 )}
               </p>
             )}

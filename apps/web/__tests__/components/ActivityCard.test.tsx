@@ -64,7 +64,9 @@ describe("ActivityCard", () => {
   it("renders merged Claude + Codex breakdown labels in session summary", () => {
     render(<ActivityCard post={makePost() as any} />);
 
-    expect(screen.getByText("77% Claude Opus, 23% GPT-5-Codex")).toBeInTheDocument();
+    expect(
+      screen.getByLabelText("Model usage: 77% Claude Opus, 23% GPT-5-Codex")
+    ).toBeInTheDocument();
   });
 
   it("renders Codex-only model with full model name in session summary", () => {
@@ -80,7 +82,7 @@ describe("ActivityCard", () => {
       />
     );
 
-    expect(screen.getByText("100% GPT-5-Codex")).toBeInTheDocument();
+    expect(screen.getByLabelText("Model usage: 100% GPT-5-Codex")).toBeInTheDocument();
   });
 
   it("renders GPT-5.3-Codex with full version name in session summary", () => {
@@ -96,6 +98,26 @@ describe("ActivityCard", () => {
       />
     );
 
-    expect(screen.getByText("100% GPT-5.3-Codex")).toBeInTheDocument();
+    expect(screen.getByLabelText("Model usage: 100% GPT-5.3-Codex")).toBeInTheDocument();
+  });
+
+  it("does not show models rounded down to 0%", () => {
+    render(
+      <ActivityCard
+        post={makePost({
+          daily_usage: {
+            ...makePost().daily_usage,
+            models: ["claude-opus-4-20250505", "gpt-5.3-codex"],
+            model_breakdown: [
+              { model: "claude-opus-4-20250505", cost_usd: 1000 },
+              { model: "gpt-5.3-codex", cost_usd: 0.4 },
+            ],
+          },
+        }) as any}
+      />
+    );
+
+    expect(screen.getByLabelText("Model usage: 100% Claude Opus")).toBeInTheDocument();
+    expect(screen.queryByText(/GPT-5\.3-Codex/)).not.toBeInTheDocument();
   });
 });
