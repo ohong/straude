@@ -362,6 +362,10 @@ describe("PATCH /api/posts/[id]", () => {
     );
 
     expect(res.status).toBe(200);
+
+    // Flush microtasks from the deferred `after()` callback
+    await new Promise((r) => setTimeout(r, 0));
+
     expect(insertFn).toHaveBeenCalledWith([
       { user_id: "alice-id", actor_id: "user-1", type: "mention", post_id: "post-1" },
     ]);

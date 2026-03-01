@@ -2,6 +2,10 @@
 
 ## Unreleased
 
+### Fixed
+
+- **`after()` test failures.** Route handlers using Next.js `after()` for deferred work (notifications, achievements) threw outside a request scope in unit tests. Created `lib/utils/after.ts` shim so tests can mock it without loading the full `next/server` module. Added microtask flush to the mention-notification assertion.
+
 ### Simplify
 
 - **Consolidated duplicate `timeAgo` and `getInitials`.** Three copies across `notifications.ts`, `GlobalFeed.tsx`, and `Avatar.tsx` replaced with shared functions in `lib/utils/format.ts`. Net −40 lines.
