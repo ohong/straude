@@ -1,5 +1,18 @@
 # Architecture & Design Decisions
 
+## CLI Perf: Async Parallel Subprocesses + PATH-Based Resolution (2026-02-28)
+
+**Decision:** Converted ccusage and codex subprocess calls from sequential `execFileSync` to parallel async `execFile` via `Promise.all`. Replaced the `execFileSync("ccusage", ["--version"])` binary probe with a pure-fs PATH scan (`existsSync`). Pinned `@ccusage/codex` from `@latest` to `@18`.
+
+**Alternatives considered:**
+1. **Keep sync, reorder calls** — could run codex first (shorter), then ccusage, but still sequential. No parallelism gain.
+2. **Worker threads** — overkill for two independent subprocesses. `Promise.all` with callback-based `execFile` achieves the same concurrency with zero overhead.
+3. **Skip codex entirely if not cached** — reduces latency but loses data. Users who use both Claude and Codex would have incomplete posts.
+
+**Why `existsSync` over `which`:** `which` spawns a subprocess (~100ms). Scanning PATH directories with `existsSync` is pure fs (~1ms). The old approach spawned `ccusage --version` with a 3s timeout — worst case for users without a global install.
+
+**Why pin `@18` not `@latest`:** `@latest` forces a registry check on every `bunx`/`npx` invocation (~200-1000ms). Pinning to a major version lets the package runner use its local cache. Matches the existing `ccusage@17` pin pattern.
+
 ## Codex Integration: Merged Data, Not Separate Rows (2026-02-27)
 
 **Decision:** Claude and Codex usage on the same day are merged into a single `daily_usage` row and a single post. Per-model costs are stored in a new `model_breakdown jsonb` column for percentage display.

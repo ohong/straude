@@ -2,6 +2,12 @@
 
 ## Unreleased
 
+### Changed
+
+- **CLI: parallelize ccusage + codex subprocesses.** Both data sources now run concurrently via async `execFile` + `Promise.all`, eliminating the full codex execution time from the critical path (~1-5s saved).
+- **CLI: pin `@ccusage/codex` to major version.** Changed `@ccusage/codex@latest` → `@ccusage/codex@18` so bunx/npx uses the cached copy without a registry roundtrip (~200-1000ms saved).
+- **CLI: replace binary resolution subprocess with PATH scan.** The `ccusage --version` probe (up to 3s timeout) is replaced with a pure-fs `existsSync` check on PATH directories (~100-300ms saved).
+
 ### Fixed
 
 - **`after()` test failures.** Route handlers using Next.js `after()` for deferred work (notifications, achievements) threw outside a request scope in unit tests. Created `lib/utils/after.ts` shim so tests can mock it without loading the full `next/server` module. Added microtask flush to the mention-notification assertion.
