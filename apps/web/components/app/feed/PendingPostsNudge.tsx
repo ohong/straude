@@ -19,20 +19,31 @@ function primaryModel(models: string[] | undefined): string {
 }
 
 export function PendingPostsNudge({ posts }: { posts: Post[] }) {
-  const [dismissed, setDismissed] = useState(false);
+  const [dismissedPostIds, setDismissedPostIds] = useState<Set<string>>(
+    () => new Set(),
+  );
+  const visiblePosts = posts.filter((post) => !dismissedPostIds.has(post.id));
 
-  if (dismissed || posts.length === 0) return null;
+  if (visiblePosts.length === 0) return null;
 
   return (
     <div className="border-b border-border bg-accent/5 px-4 py-3">
       <div className="flex items-center justify-between mb-2">
         <p className="text-sm text-muted">
-          You have {posts.length} session{posts.length !== 1 ? "s" : ""} without
+          You have {visiblePosts.length} session{visiblePosts.length !== 1 ? "s" : ""} without
           details
         </p>
         <button
           type="button"
-          onClick={() => setDismissed(true)}
+          onClick={() => {
+            setDismissedPostIds((prev) => {
+              const next = new Set(prev);
+              for (const post of visiblePosts) {
+                next.add(post.id);
+              }
+              return next;
+            });
+          }}
           className="text-muted hover:text-foreground"
           aria-label="Dismiss"
         >
@@ -40,7 +51,7 @@ export function PendingPostsNudge({ posts }: { posts: Post[] }) {
         </button>
       </div>
       <div className="space-y-1">
-        {posts.map((post) => (
+        {visiblePosts.map((post) => (
           <Link
             key={post.id}
             href={`/post/${post.id}?edit=1`}

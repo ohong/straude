@@ -1,4 +1,5 @@
 import { describe, it, expect, vi, beforeEach } from "vitest";
+import { resetRateLimiters } from "@/lib/rate-limit";
 
 vi.mock("@/lib/supabase/server", () => ({
   createClient: vi.fn(),
@@ -81,6 +82,7 @@ function makeUploadRequest(
 
 beforeEach(() => {
   vi.clearAllMocks();
+  resetRateLimiters();
 });
 
 describe("POST /api/upload", () => {

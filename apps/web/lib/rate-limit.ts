@@ -71,6 +71,11 @@ function getLimiter(name: string, config: RateLimitConfig): RateLimiter {
   return limiter;
 }
 
+/** Reset all limiter state. Useful in tests. */
+export function resetRateLimiters(): void {
+  limiters.clear();
+}
+
 /**
  * Check rate limit for a user. Returns a 429 NextResponse if the limit
  * is exceeded, or `null` if the request is allowed.
