@@ -171,15 +171,16 @@ export function SubmitPromptWidget({ username }: SubmitPromptWidgetProps) {
         ref={triggerRef}
         type="button"
         size="sm"
+        aria-label="Submit a prompt"
+        title="Submit a prompt"
         onClick={() => {
           setOpen(true);
           setView("submit");
           setError(null);
         }}
-        className="fixed right-3 bottom-[72px] z-40 gap-2 sm:right-4 sm:bottom-4"
+        className="fixed right-3 bottom-[72px] z-40 h-11 w-11 rounded-full border border-black/10 bg-gradient-to-b from-accent to-accent/80 p-0 shadow-[0_10px_20px_rgba(0,0,0,0.25),inset_0_1px_0_rgba(255,255,255,0.35)] transition-[transform,box-shadow,filter] duration-150 hover:-translate-y-0.5 hover:shadow-[0_14px_24px_rgba(0,0,0,0.28),inset_0_1px_0_rgba(255,255,255,0.4)] active:translate-y-0 active:shadow-[0_6px_14px_rgba(0,0,0,0.22),inset_0_1px_0_rgba(255,255,255,0.25)] sm:right-4 sm:bottom-4"
       >
         <Sparkles size={14} aria-hidden />
-        Submit a prompt
       </Button>
 
       {open &&
