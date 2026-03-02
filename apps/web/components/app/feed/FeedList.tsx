@@ -68,11 +68,12 @@ export function FeedList({
   const [dropdownOpen, setDropdownOpen] = useState(false);
   const dropdownRef = useRef<HTMLDivElement>(null);
   const [posts, setPosts] = useState<Post[]>(initialPosts);
-  const [cursor, setCursor] = useState<string | null>(
-    initialPosts.length >= 20
-      ? initialPosts[initialPosts.length - 1].created_at
-      : null
-  );
+  const [cursor, setCursor] = useState<string | null>(() => {
+    if (initialPosts.length < 20) return null;
+    const last = initialPosts[initialPosts.length - 1];
+    const date = last.daily_usage?.date;
+    return date ? `${date}|${last.created_at}` : null;
+  });
   const [loading, setLoading] = useState(false);
   const [switching, setSwitching] = useState(false);
   const cursorRef = useRef(cursor);

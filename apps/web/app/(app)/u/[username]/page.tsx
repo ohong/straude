@@ -112,21 +112,12 @@ export default async function ProfilePage({
     has_post: postDateSet.has(c.date),
   }));
 
-  // Recent posts
-  const { data: posts } = await supabase
-    .from("posts")
-    .select(
-      `
-      *,
-      user:users!posts_user_id_fkey(*),
-      daily_usage:daily_usage!posts_daily_usage_id_fkey(*),
-      kudos_count:kudos(count),
-      comment_count:comments(count)
-    `
-    )
-    .eq("user_id", profile.id)
-    .order("created_at", { ascending: false })
-    .limit(20);
+  // Recent posts — sorted by session date via unified RPC
+  const { data: posts } = await supabase.rpc("get_feed", {
+    p_type: "mine",
+    p_user_id: profile.id,
+    p_limit: 20,
+  });
 
   let normalizedPosts: any[] = [];
   if (posts && posts.length > 0) {
@@ -180,9 +171,9 @@ export default async function ProfilePage({
 
     normalizedPosts = posts.map((p: any) => ({
       ...p,
-      kudos_count: p.kudos_count?.[0]?.count ?? 0,
+      kudos_count: typeof p.kudos_count === "number" ? p.kudos_count : p.kudos_count?.[0]?.count ?? 0,
       kudos_users: kudosUsersMap.get(p.id) ?? [],
-      comment_count: p.comment_count?.[0]?.count ?? 0,
+      comment_count: typeof p.comment_count === "number" ? p.comment_count : p.comment_count?.[0]?.count ?? 0,
       recent_comments: commentsMap.get(p.id) ?? [],
       has_kudosed: kudosedSet.has(p.id),
     }));

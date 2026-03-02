@@ -22,39 +22,13 @@ export default async function FeedPage({
       ? params.tab
       : "global";
 
-  const baseFields = `
-    *,
-    daily_usage:daily_usage!posts_daily_usage_id_fkey(*),
-    kudos_count:kudos(count),
-    comment_count:comments(count)
-  `;
-
-  let posts: any[] = [];
-
-  if (feedType === "global") {
-    const { data } = await supabase
-      .from("posts")
-      .select(`${baseFields}, user:users!posts_user_id_fkey!inner(*)`)
-      .eq("user.is_public", true)
-      .order("created_at", { ascending: false })
-      .limit(20);
-    posts = data ?? [];
-  } else if (feedType === "mine") {
-    const { data } = await supabase
-      .from("posts")
-      .select(`${baseFields}, user:users!posts_user_id_fkey(*)`)
-      .eq("user_id", user!.id)
-      .order("created_at", { ascending: false })
-      .limit(20);
-    posts = data ?? [];
-  } else {
-    // following: own posts + followed users' posts (single join via RPC)
-    const { data } = await supabase.rpc("get_following_feed", {
-      p_user_id: user!.id,
-      p_limit: 20,
-    });
-    posts = data ?? [];
-  }
+  // Unified RPC — sorts by daily_usage.date DESC, posts.created_at DESC
+  const { data } = await supabase.rpc("get_feed", {
+    p_type: feedType,
+    p_user_id: user?.id ?? null,
+    p_limit: 20,
+  });
+  let posts: any[] = data ?? [];
 
   // Fetch incomplete posts for the logged-in user (bare synced sessions).
   // Only needed on the "mine" tab where PendingPostsNudge is relevant.
@@ -126,9 +100,9 @@ export default async function FeedPage({
 
     posts = posts.map((p: any) => ({
       ...p,
-      kudos_count: Array.isArray(p.kudos_count) ? p.kudos_count[0]?.count ?? 0 : p.kudos_count ?? 0,
+      kudos_count: typeof p.kudos_count === "number" ? p.kudos_count : p.kudos_count?.[0]?.count ?? 0,
       kudos_users: kudosUsersMap.get(p.id) ?? [],
-      comment_count: Array.isArray(p.comment_count) ? p.comment_count[0]?.count ?? 0 : p.comment_count ?? 0,
+      comment_count: typeof p.comment_count === "number" ? p.comment_count : p.comment_count?.[0]?.count ?? 0,
       recent_comments: commentsMap.get(p.id) ?? [],
       has_kudosed: kudosedSet.has(p.id),
     }));

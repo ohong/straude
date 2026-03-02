@@ -17,56 +17,34 @@ export async function GET(request: NextRequest) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
 
-  const baseFields = `
-    daily_usage:daily_usage!posts_daily_usage_id_fkey(*),
-    kudos_count:kudos(count),
-    comment_count:comments(count)
-  `;
-
-  let query;
-
-  if (type === "global") {
-    // Use !inner join to filter posts where the user is public
-    query = supabase
-      .from("posts")
-      .select(`*, user:users!posts_user_id_fkey!inner(*), ${baseFields}`)
-      .eq("user.is_public", true)
-      .order("created_at", { ascending: false })
-      .limit(limit);
-  } else {
-    query = supabase
-      .from("posts")
-      .select(`*, user:users!posts_user_id_fkey(*), ${baseFields}`)
-      .order("created_at", { ascending: false })
-      .limit(limit);
-
-    if (type === "mine") {
-      query = query.eq("user_id", user!.id);
+  // Parse composite cursor: "date|created_at"
+  let cursorDate: string | null = null;
+  let cursorCreatedAt: string | null = null;
+  if (cursor) {
+    const sep = cursor.indexOf("|");
+    if (sep !== -1) {
+      cursorDate = cursor.slice(0, sep);
+      cursorCreatedAt = cursor.slice(sep + 1);
     } else {
-      // following: own posts + posts from followed users
-      const { data: followData } = await supabase
-        .from("follows")
-        .select("following_id")
-        .eq("follower_id", user!.id);
-
-      const followingIds = (followData ?? []).map((f) => f.following_id);
-      const feedUserIds = [user!.id, ...followingIds];
-      query = query.in("user_id", feedUserIds);
+      // Legacy cursor format (plain created_at)
+      cursorCreatedAt = cursor;
     }
   }
 
-  if (cursor) {
-    query = query.lt("created_at", cursor);
-  }
-
-  const { data: posts, error } = await query;
+  const { data: posts, error } = await supabase.rpc("get_feed", {
+    p_type: type,
+    p_user_id: user?.id ?? null,
+    p_limit: limit,
+    p_cursor_date: cursorDate,
+    p_cursor_created_at: cursorCreatedAt,
+  });
 
   if (error) {
     return NextResponse.json({ error: error.message }, { status: 500 });
   }
 
   // Enrich with kudos status, kudos users, and recent comments — all in parallel
-  const postIds = (posts ?? []).map((p) => p.id);
+  const postIds = (posts ?? []).map((p: any) => p.id);
 
   const [{ data: userKudos }, { data: recentKudos, error: kudosError }, { data: recentComments }] =
     postIds.length
@@ -121,19 +99,24 @@ export async function GET(request: NextRequest) {
     list.reverse();
   }
 
-  const enriched = (posts ?? []).map((p) => ({
+  const enriched = (posts ?? []).map((p: any) => ({
     ...p,
-    kudos_count: p.kudos_count?.[0]?.count ?? 0,
+    kudos_count: typeof p.kudos_count === "number" ? p.kudos_count : p.kudos_count?.[0]?.count ?? 0,
     kudos_users: kudosUsersMap.get(p.id) ?? [],
-    comment_count: p.comment_count?.[0]?.count ?? 0,
+    comment_count: typeof p.comment_count === "number" ? p.comment_count : p.comment_count?.[0]?.count ?? 0,
     recent_comments: commentsMap.get(p.id) ?? [],
     has_kudosed: kudosedSet.has(p.id),
   }));
 
-  const next_cursor =
-    enriched.length === limit
-      ? enriched[enriched.length - 1]?.created_at
-      : undefined;
+  // Build composite cursor: "date|created_at"
+  let next_cursor: string | undefined;
+  if (enriched.length === limit) {
+    const last = enriched[enriched.length - 1];
+    const date = last.daily_usage?.date;
+    if (date) {
+      next_cursor = `${date}|${last.created_at}`;
+    }
+  }
 
   return NextResponse.json({ posts: enriched, next_cursor });
 }
