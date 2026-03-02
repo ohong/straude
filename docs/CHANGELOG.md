@@ -5,17 +5,25 @@
 ### Added
 
 - **Weekly digest activation email.** One-time blast to unactivated users showing this week's leaderboard top 5, new features (Codex tracking, achievements, public profiles), and a CTA to sync. Subject line includes dynamic weekly spend total. Route at `/api/cron/weekly-digest`, protected by `CRON_SECRET`.
+- **Rate limiting on write endpoints.** New `lib/rate-limit.ts` with in-memory sliding window limiter keyed by user ID. Applied to `/api/upload` (10/min), `/api/usage/submit` (20/min), and social actions — comments, follows, kudos (30/min shared window). Returns 429 with `Retry-After` header.
+- **WoW spend growth on admin dashboard.** Replaced MAU stat card with week-over-week spend growth percentage, computed from existing `spendData` with no new query.
+- **Following feed RPC.** New `get_following_feed` Postgres function replaces the client-side IN clause for the following tab, joining `follows` and `posts` in a single query with cursor-based pagination.
 
 ### Changed
 
 - **CLI: parallelize ccusage + codex subprocesses.** Both data sources now run concurrently via async `execFile` + `Promise.all`, eliminating the full codex execution time from the critical path (~1-5s saved).
 - **CLI: pin `@ccusage/codex` to major version.** Changed `@ccusage/codex@latest` → `@ccusage/codex@18` so bunx/npx uses the cached copy without a registry roundtrip (~200-1000ms saved).
 - **CLI: replace binary resolution subprocess with PATH scan.** The `ccusage --version` probe (up to 3s timeout) is replaced with a pure-fs `existsSync` check on PATH directories (~100-300ms saved).
+- **CLI version reads from package.json.** `CLI_VERSION` now uses `createRequire` to read `package.json` at runtime instead of a hardcoded string that drifted out of sync.
+- **Parallelized `/usage/submit` entry processing.** Sequential `for` loop replaced with `Promise.allSettled` so all entries process concurrently. Returns 207 for partial failures.
+- **Lazy-loaded heavy admin dashboard RPCs.** Cohort retention, revenue concentration, and time-to-first-sync now fetch client-side via dedicated `/api/admin/*` routes, reducing initial `Promise.all` from 10 to 7 queries and eliminating timeout errors.
+- **Admin page auth guard.** Added auth + `isAdmin` check directly in the page component so Supabase queries don't fire for unauthenticated visitors (Next.js renders pages in parallel with layouts).
 
 ### Fixed
 
 - **Mention notification duplicates on post edit.** The dedup query used the user-authenticated Supabase client, but RLS restricts notification reads to the owner. Switched to service client so the post author can see other users' existing notifications and skip re-inserting them.
 - **`after()` test failures.** Route handlers using Next.js `after()` for deferred work (notifications, achievements) threw outside a request scope in unit tests. Created `lib/utils/after.ts` shim so tests can mock it without loading the full `next/server` module. Added microtask flush to the mention-notification assertion.
+- **Feed page skips unnecessary query.** `pendingPosts` query now only fires on the "mine" tab instead of every authenticated feed load.
 
 ### Simplify
 
