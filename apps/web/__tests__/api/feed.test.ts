@@ -12,6 +12,7 @@ function buildChain(terminal: Record<string, any> = {}) {
   const chain: Record<string, any> = {
     select: vi.fn().mockReturnThis(),
     eq: vi.fn().mockReturnThis(),
+    is: vi.fn().mockReturnThis(),
     in: vi.fn().mockReturnThis(),
     lt: vi.fn().mockReturnThis(),
     order: vi.fn().mockReturnThis(),
@@ -23,20 +24,17 @@ function buildChain(terminal: Record<string, any> = {}) {
 
 function mockSupabase(opts: {
   user?: { id: string } | null;
-  follows?: any[];
   posts?: any[];
   postsError?: any;
   kudos?: any[];
 }) {
   const {
     user = { id: "user-1" },
-    follows = [],
     posts = [],
     postsError = null,
     kudos = [],
   } = opts;
 
-  let callCount = 0;
   const client: Record<string, any> = {
     auth: {
       getUser: vi.fn().mockResolvedValue({
@@ -44,52 +42,26 @@ function mockSupabase(opts: {
         error: null,
       }),
     },
+    rpc: vi.fn().mockResolvedValue({ data: posts, error: postsError }),
     from: vi.fn().mockImplementation((table: string) => {
-      if (table === "follows") {
-        return buildChain({
-          eq: vi.fn().mockReturnValue({
-            select: vi.fn().mockReturnValue({
-              eq: vi.fn().mockResolvedValue({
-                data: follows,
-                error: null,
-              }),
-            }),
-            // Direct chain for follows query
-            data: follows,
-            error: null,
-          }),
-        });
-      }
-      if (table === "posts") {
-        return buildChain({
-          select: vi.fn().mockReturnValue({
-            in: vi.fn().mockReturnValue({
-              order: vi.fn().mockReturnValue({
-                limit: vi.fn().mockReturnValue({
-                  lt: vi.fn().mockResolvedValue({
-                    data: posts,
-                    error: postsError,
-                  }),
-                  // No cursor case
-                  then: (resolve: any) =>
-                    resolve({ data: posts, error: postsError }),
-                }),
-              }),
-            }),
-          }),
-        });
-      }
       if (table === "kudos") {
-        return buildChain({
-          select: vi.fn().mockReturnValue({
-            eq: vi.fn().mockReturnValue({
-              in: vi.fn().mockResolvedValue({
-                data: kudos,
-                error: null,
-              }),
-            }),
-          }),
-        });
+        const c = buildChain();
+        c.select.mockReturnValue(c);
+        c.eq.mockReturnValue(c);
+        c.in.mockReturnValue(c);
+        c.order.mockReturnValue(c);
+        c.limit.mockResolvedValue({ data: kudos, error: null });
+        c.then = (resolve: any) => Promise.resolve({ data: kudos, error: null }).then(resolve);
+        return c;
+      }
+      if (table === "comments") {
+        const c = buildChain();
+        c.select.mockReturnValue(c);
+        c.in.mockReturnValue(c);
+        c.order.mockReturnValue(c);
+        c.limit.mockResolvedValue({ data: [], error: null });
+        c.then = (resolve: any) => Promise.resolve({ data: [], error: null }).then(resolve);
+        return c;
       }
       return buildChain();
     }),
@@ -113,27 +85,7 @@ beforeEach(() => {
 
 describe("GET /api/feed", () => {
   it("allows unauthenticated access to global feed", async () => {
-    // Global feed is public — unauth users get 200 with posts
-    const client: Record<string, any> = {
-      auth: {
-        getUser: vi.fn().mockResolvedValue({
-          data: { user: null },
-          error: null,
-        }),
-      },
-      from: vi.fn().mockImplementation((table: string) => {
-        if (table === "posts") {
-          const c = buildChain();
-          c.select.mockReturnValue(c);
-          c.eq.mockReturnValue(c);
-          c.order.mockReturnValue(c);
-          c.limit.mockResolvedValue({ data: [], error: null });
-          return c;
-        }
-        return buildChain();
-      }),
-    };
-    (createClient as any).mockResolvedValue(client);
+    mockSupabase({ user: null, posts: [] });
 
     const res = await GET(makeRequest());
     const json = await res.json();
@@ -153,25 +105,7 @@ describe("GET /api/feed", () => {
   });
 
   it("returns empty array when user follows nobody", async () => {
-    // Mock follows query to return empty
-    const client: Record<string, any> = {
-      auth: {
-        getUser: vi.fn().mockResolvedValue({
-          data: { user: { id: "user-1" } },
-          error: null,
-        }),
-      },
-      from: vi.fn().mockImplementation((table: string) => {
-        if (table === "follows") {
-          const c = buildChain();
-          c.select.mockReturnValue(c);
-          c.eq.mockResolvedValue({ data: [], error: null });
-          return c;
-        }
-        return buildChain();
-      }),
-    };
-    (createClient as any).mockResolvedValue(client);
+    mockSupabase({ posts: [] });
 
     const res = await GET(makeRequest());
     const json = await res.json();
@@ -188,55 +122,16 @@ describe("GET /api/feed", () => {
         user_id: "followed-1",
         created_at: "2026-01-01T12:00:00Z",
         user: { id: "followed-1", username: "alice" },
-        daily_usage: { cost_usd: 1.5 },
-        kudos_count: [{ count: 5 }],
-        comment_count: [{ count: 3 }],
+        daily_usage: { date: "2026-01-01", cost_usd: 1.5 },
+        kudos_count: 5,
+        comment_count: 3,
       },
     ];
 
-    // Use a more granular mock
-    const client: Record<string, any> = {
-      auth: {
-        getUser: vi.fn().mockResolvedValue({
-          data: { user: { id: "user-1" } },
-          error: null,
-        }),
-      },
-      from: vi.fn().mockImplementation((table: string) => {
-        if (table === "follows") {
-          const c = buildChain();
-          c.select.mockReturnValue(c);
-          c.eq.mockResolvedValue({
-            data: [{ following_id: "followed-1" }],
-            error: null,
-          });
-          return c;
-        }
-        if (table === "posts") {
-          const c = buildChain();
-          c.select.mockReturnValue(c);
-          c.in.mockReturnValue(c);
-          c.order.mockReturnValue(c);
-          c.limit.mockResolvedValue({
-            data: mockPosts,
-            error: null,
-          });
-          return c;
-        }
-        if (table === "kudos") {
-          const c = buildChain();
-          c.select.mockReturnValue(c);
-          c.eq.mockReturnValue(c);
-          c.in.mockReturnValue(c);
-          c.order.mockReturnValue(c);
-          c.then = (resolve: any) =>
-            resolve({ data: [{ post_id: "post-1" }], error: null });
-          return c;
-        }
-        return buildChain();
-      }),
-    };
-    (createClient as any).mockResolvedValue(client);
+    const client = mockSupabase({
+      posts: mockPosts,
+      kudos: [{ post_id: "post-1" }],
+    });
 
     const res = await GET(makeRequest());
     const json = await res.json();
@@ -256,50 +151,12 @@ describe("GET /api/feed", () => {
         id: "post-1",
         user_id: "followed-1",
         created_at: "2026-01-01T12:00:00Z",
-        kudos_count: [{ count: 2 }],
-        comment_count: [{ count: 0 }],
+        kudos_count: 2,
+        comment_count: 0,
       },
     ];
 
-    const client: Record<string, any> = {
-      auth: {
-        getUser: vi.fn().mockResolvedValue({
-          data: { user: { id: "user-1" } },
-          error: null,
-        }),
-      },
-      from: vi.fn().mockImplementation((table: string) => {
-        if (table === "follows") {
-          const c = buildChain();
-          c.select.mockReturnValue(c);
-          c.eq.mockResolvedValue({
-            data: [{ following_id: "followed-1" }],
-            error: null,
-          });
-          return c;
-        }
-        if (table === "posts") {
-          const c = buildChain();
-          c.select.mockReturnValue(c);
-          c.in.mockReturnValue(c);
-          c.order.mockReturnValue(c);
-          c.limit.mockResolvedValue({ data: mockPosts, error: null });
-          return c;
-        }
-        if (table === "kudos") {
-          const c = buildChain();
-          c.select.mockReturnValue(c);
-          c.eq.mockReturnValue(c);
-          c.in.mockReturnValue(c);
-          c.order.mockReturnValue(c);
-          c.then = (resolve: any) =>
-            resolve({ data: [], error: null });
-          return c;
-        }
-        return buildChain();
-      }),
-    };
-    (createClient as any).mockResolvedValue(client);
+    mockSupabase({ posts: mockPosts, kudos: [] });
 
     const res = await GET(makeRequest());
     const json = await res.json();
@@ -308,59 +165,22 @@ describe("GET /api/feed", () => {
   });
 
   it("includes next_cursor when posts reach limit", async () => {
-    // Default limit is 20, so return 20 posts
     const mockPosts = Array.from({ length: 20 }, (_, i) => ({
       id: `post-${i}`,
       user_id: "followed-1",
       created_at: `2026-01-${String(20 - i).padStart(2, "0")}T12:00:00Z`,
-      kudos_count: [{ count: 0 }],
-      comment_count: [{ count: 0 }],
+      daily_usage: { date: `2026-01-${String(20 - i).padStart(2, "0")}` },
+      kudos_count: 0,
+      comment_count: 0,
     }));
 
-    const client: Record<string, any> = {
-      auth: {
-        getUser: vi.fn().mockResolvedValue({
-          data: { user: { id: "user-1" } },
-          error: null,
-        }),
-      },
-      from: vi.fn().mockImplementation((table: string) => {
-        if (table === "follows") {
-          const c = buildChain();
-          c.select.mockReturnValue(c);
-          c.eq.mockResolvedValue({
-            data: [{ following_id: "followed-1" }],
-            error: null,
-          });
-          return c;
-        }
-        if (table === "posts") {
-          const c = buildChain();
-          c.select.mockReturnValue(c);
-          c.in.mockReturnValue(c);
-          c.order.mockReturnValue(c);
-          c.limit.mockResolvedValue({ data: mockPosts, error: null });
-          return c;
-        }
-        if (table === "kudos") {
-          const c = buildChain();
-          c.select.mockReturnValue(c);
-          c.eq.mockReturnValue(c);
-          c.in.mockReturnValue(c);
-          c.order.mockReturnValue(c);
-          c.then = (resolve: any) =>
-            resolve({ data: [], error: null });
-          return c;
-        }
-        return buildChain();
-      }),
-    };
-    (createClient as any).mockResolvedValue(client);
+    mockSupabase({ posts: mockPosts });
 
     const res = await GET(makeRequest());
     const json = await res.json();
 
     expect(json.next_cursor).toBeDefined();
-    expect(json.next_cursor).toBe(mockPosts[19].created_at);
+    const last = mockPosts[19];
+    expect(json.next_cursor).toBe(`${last.daily_usage.date}|${last.created_at}`);
   });
 });
