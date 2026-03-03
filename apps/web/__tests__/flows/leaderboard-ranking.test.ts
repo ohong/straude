@@ -26,7 +26,7 @@ function chainBuilder(resolvedData: Record<string, unknown> = { data: [], error:
   const chain: Record<string, any> = {};
   const methods = [
     "select", "insert", "update", "upsert", "delete",
-    "eq", "neq", "gt", "lt", "gte", "lte", "in",
+    "eq", "neq", "gt", "lt", "gte", "lte", "in", "is",
     "order", "limit",
   ];
   for (const m of methods) {

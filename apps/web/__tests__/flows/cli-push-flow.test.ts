@@ -34,7 +34,7 @@ function chainBuilder(resolved: Record<string, unknown> = {}) {
   const chain: Record<string, any> = {};
   const methods = [
     "select", "insert", "update", "upsert", "delete",
-    "eq", "neq", "gt", "lt", "gte", "lte", "in",
+    "eq", "neq", "gt", "lt", "gte", "lte", "in", "is",
     "order", "limit", "maybeSingle",
   ];
   for (const m of methods) {

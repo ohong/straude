@@ -32,6 +32,7 @@ function chainBuilder(terminal: Record<string, unknown> = {}) {
     "gte",
     "lte",
     "in",
+    "is",
     "order",
     "limit",
     "maybeSingle",
