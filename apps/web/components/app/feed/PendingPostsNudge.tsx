@@ -1,9 +1,11 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import Link from "next/link";
 import { X } from "lucide-react";
 import type { Post } from "@/types";
+
+const STORAGE_KEY = "straude_nudge_dismissed";
 
 function formatDate(dateStr: string) {
   return new Date(dateStr).toLocaleDateString("en-US", {
@@ -18,13 +20,35 @@ function primaryModel(models: string[] | undefined): string {
   return models[0].replace("claude-", "Claude ").replace(/-\d{8}$/, "");
 }
 
+function loadDismissed(): Set<string> {
+  try {
+    const raw = localStorage.getItem(STORAGE_KEY);
+    if (raw) return new Set(JSON.parse(raw));
+  } catch {}
+  return new Set();
+}
+
+function saveDismissed(ids: Set<string>) {
+  try {
+    localStorage.setItem(STORAGE_KEY, JSON.stringify([...ids]));
+  } catch {}
+}
+
 export function PendingPostsNudge({ posts }: { posts: Post[] }) {
   const [dismissedPostIds, setDismissedPostIds] = useState<Set<string>>(
     () => new Set(),
   );
+  const [loaded, setLoaded] = useState(false);
+
+  // Load persisted dismissed IDs from localStorage on mount
+  useEffect(() => {
+    setDismissedPostIds(loadDismissed());
+    setLoaded(true);
+  }, []);
+
   const visiblePosts = posts.filter((post) => !dismissedPostIds.has(post.id));
 
-  if (visiblePosts.length === 0) return null;
+  if (!loaded || visiblePosts.length === 0) return null;
 
   return (
     <div className="border-b border-border bg-accent/5 px-4 py-3">
@@ -41,6 +65,7 @@ export function PendingPostsNudge({ posts }: { posts: Post[] }) {
               for (const post of visiblePosts) {
                 next.add(post.id);
               }
+              saveDismissed(next);
               return next;
             });
           }}
