@@ -145,7 +145,8 @@ export function parseCodexOutput(raw: string): CodexOutput {
     .map((e) => ({
       date: normalizeDate(e.date),
       models: extractModels(e),
-      inputTokens: e.inputTokens ?? 0,
+      // cachedInputTokens is a subset of inputTokens in Codex — subtract to avoid double-counting
+      inputTokens: (e.inputTokens ?? 0) - (e.cachedInputTokens ?? e.cacheReadTokens ?? 0),
       outputTokens: e.outputTokens ?? 0,
       cacheCreationTokens: e.cacheCreationTokens ?? 0,
       // cachedInputTokens (codex) maps to cacheReadTokens in our canonical format

@@ -77,7 +77,8 @@ describe("parseCodexOutput", () => {
     expect(entry.date).toBe("2026-02-03");
     expect(entry.costUSD).toBe(3.33);
     expect(entry.models).toEqual(["gpt-5.2-codex"]);
-    expect(entry.inputTokens).toBe(8247567);
+    // inputTokens excludes cachedInputTokens (8247567 - 7428352 = 819215)
+    expect(entry.inputTokens).toBe(819215);
     expect(entry.outputTokens).toBe(42769);
     expect(entry.totalTokens).toBe(8290336);
     // cachedInputTokens maps to cacheReadTokens in our canonical format

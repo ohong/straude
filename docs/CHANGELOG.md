@@ -27,6 +27,7 @@
 - **Mention notification duplicates on post edit.** The dedup query used the user-authenticated Supabase client, but RLS restricts notification reads to the owner. Switched to service client so the post author can see other users' existing notifications and skip re-inserting them.
 - **`after()` test failures.** Route handlers using Next.js `after()` for deferred work (notifications, achievements) threw outside a request scope in unit tests. Created `lib/utils/after.ts` shim so tests can mock it without loading the full `next/server` module. Added microtask flush to the mention-notification assertion.
 - **Feed page skips unnecessary query.** `pendingPosts` query now only fires on the "mine" tab instead of every authenticated feed load.
+- **Codex cached tokens double-counted as input tokens.** In the `@ccusage/codex` format, `cachedInputTokens` is a subset of `inputTokens`. The parser was passing `inputTokens` through unchanged while also mapping `cachedInputTokens` to `cacheReadTokens`, causing cached tokens to be counted twice. Now subtracts cached tokens from `inputTokens` during parsing.
 
 ### Simplify
 
