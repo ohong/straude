@@ -1,5 +1,20 @@
 # Architecture & Design Decisions
 
+## Multi-Device Usage: Hybrid Child Table (2026-03-02)
+
+**Decision:** New `device_usage` table stores per-device usage rows keyed on `(user_id, date, device_id)`. `daily_usage` stays as the single aggregated row per `(user_id, date)`. On push with a `device_id`, the API upserts into `device_usage`, then recalculates `daily_usage` by summing all device rows for that date. Pushes without `device_id` (old CLIs) use the existing legacy upsert path unchanged.
+
+**Problem:** `daily_usage` has a `UNIQUE(user_id, date)` constraint. The upsert replaces entirely — if two machines push for the same day, the last one wins and the other device's data is lost.
+
+**Alternatives considered:**
+1. **Per-device rows in daily_usage** — add `device_id` to the unique constraint, making daily_usage hold multiple rows per (user_id, date). Breaks every downstream query (leaderboards, feed, streaks, contributions, profile) that assumes one row per user per day. Massive migration effort.
+2. **Client-side aggregation** — CLI merges data from all devices before pushing. Requires cross-device coordination (shared filesystem or API fetch), which is impractical for offline/disconnected machines.
+3. **Hybrid child table** (chosen) — `device_usage` stores the raw per-device data; `daily_usage` is recalculated as the aggregate. All downstream queries remain unchanged since they only read `daily_usage`. Old CLIs work without changes.
+
+**Device ID:** Auto-generated UUID v4 stored in `~/.straude/config.json` alongside the auth token. Generated on first push. Also stores `os.hostname()` as `device_name` for future display.
+
+**Backwards compatibility:** Pushes without `device_id` (older CLI versions) fall through to the existing legacy upsert path, bypassing `device_usage` entirely. No breaking changes for existing users.
+
 ## CLI Perf: Async Parallel Subprocesses + PATH-Based Resolution (2026-02-28)
 
 **Decision:** Converted ccusage and codex subprocess calls from sequential `execFileSync` to parallel async `execFile` via `Promise.all`. Replaced the `execFileSync("ccusage", ["--version"])` binary probe with a pure-fs PATH scan (`existsSync`). Pinned `@ccusage/codex` from `@latest` to `@18`.

@@ -6,6 +6,8 @@ export interface StraudeConfig {
   username: string;
   api_url: string;
   last_push_date?: string;
+  device_id?: string;
+  device_name?: string;
 }
 
 export function loadConfig(): StraudeConfig | null {
@@ -19,6 +21,8 @@ export function loadConfig(): StraudeConfig | null {
       username: parsed.username ?? "",
       api_url: parsed.api_url ?? DEFAULT_API_URL,
       last_push_date: parsed.last_push_date ?? undefined,
+      device_id: parsed.device_id ?? undefined,
+      device_name: parsed.device_name ?? undefined,
     };
   } catch {
     return null;

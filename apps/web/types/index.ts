@@ -119,6 +119,26 @@ export interface CcusageOutput {
   };
 }
 
+export interface DeviceUsage {
+  id: string;
+  user_id: string;
+  device_id: string;
+  device_name: string | null;
+  date: string;
+  cost_usd: number;
+  input_tokens: number;
+  output_tokens: number;
+  cache_creation_tokens: number;
+  cache_read_tokens: number;
+  total_tokens: number;
+  models: string[];
+  model_breakdown: ModelBreakdownEntry[] | null;
+  session_count: number;
+  raw_hash: string | null;
+  created_at: string;
+  updated_at: string;
+}
+
 // API request/response types
 export interface UsageSubmitRequest {
   entries: Array<{
@@ -127,6 +147,8 @@ export interface UsageSubmitRequest {
   }>;
   hash?: string;
   source: "cli" | "web";
+  device_id?: string;
+  device_name?: string;
 }
 
 export interface UsageSubmitResponse {

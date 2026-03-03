@@ -12,7 +12,7 @@ vi.mock("@supabase/supabase-js", () => ({
   createClient: vi.fn(),
 }));
 
-import { POST } from "@/app/api/usage/submit/route";
+import { POST, aggregateDeviceRows } from "@/app/api/usage/submit/route";
 import { createClient } from "@/lib/supabase/server";
 import { verifyCliToken } from "@/lib/api/cli-auth";
 import { createClient as createServiceClient } from "@supabase/supabase-js";
@@ -427,6 +427,110 @@ describe("POST /api/usage/submit", () => {
     expect(postInsertCall[0].title).toContain("GPT-5.3-Codex");
   });
 
+  // -------------------------------------------------------------------------
+  // Multi-device tests
+  // -------------------------------------------------------------------------
+
+  it("multi-device: device_id triggers device_usage upsert path", async () => {
+    (verifyCliToken as any).mockReturnValue("user-1");
+
+    const deviceRows = [
+      {
+        cost_usd: 0.05,
+        input_tokens: 1000,
+        output_tokens: 500,
+        cache_creation_tokens: 0,
+        cache_read_tokens: 0,
+        total_tokens: 1500,
+        models: ["claude-sonnet-4-5-20250929"],
+        model_breakdown: null,
+      },
+    ];
+
+    // Build a per-table mock that distinguishes device_usage from daily_usage
+    const deviceUpsertChain: Record<string, any> = {
+      upsert: vi.fn().mockReturnThis(),
+      select: vi.fn().mockReturnThis(),
+      single: vi.fn().mockResolvedValue({ data: { id: "dev-1" }, error: null }),
+    };
+    const deviceFetchChain: Record<string, any> = {
+      select: vi.fn().mockReturnThis(),
+      eq: vi.fn().mockImplementation(() => ({
+        eq: vi.fn().mockResolvedValue({ data: deviceRows, error: null }),
+      })),
+    };
+    const dailyChain: Record<string, any> = {
+      select: vi.fn().mockReturnThis(),
+      upsert: vi.fn().mockReturnThis(),
+      eq: vi.fn().mockReturnThis(),
+      maybeSingle: vi.fn().mockResolvedValue({ data: null, error: null }),
+      single: vi.fn().mockResolvedValue({ data: { id: "usage-1" }, error: null }),
+    };
+    const postChain: Record<string, any> = {
+      select: vi.fn().mockReturnThis(),
+      insert: vi.fn().mockReturnThis(),
+      eq: vi.fn().mockReturnThis(),
+      maybeSingle: vi.fn().mockResolvedValue({ data: null, error: null }),
+      single: vi.fn().mockResolvedValue({ data: { id: "post-1" }, error: null }),
+    };
+
+    let deviceFromCallCount = 0;
+    const fromFn = vi.fn((table: string) => {
+      if (table === "device_usage") {
+        deviceFromCallCount++;
+        return deviceFromCallCount === 1 ? deviceUpsertChain : deviceFetchChain;
+      }
+      if (table === "daily_usage") return dailyChain;
+      if (table === "posts") return postChain;
+      return dailyChain;
+    });
+
+    (createServiceClient as any).mockReturnValue({ from: fromFn });
+
+    const res = await POST(
+      mockRequest({
+        entries: [makeEntry(todayStr())],
+        source: "cli",
+        device_id: "aaaaaaaa-bbbb-cccc-dddd-eeeeeeeeeeee",
+        device_name: "work-laptop",
+      })
+    );
+    const json = await res.json();
+
+    expect(res.status).toBe(200);
+    expect(json.results).toHaveLength(1);
+    // Verify device_usage table was targeted
+    expect(fromFn).toHaveBeenCalledWith("device_usage");
+    // Verify device_usage upsert was called with device_id conflict
+    expect(deviceUpsertChain.upsert).toHaveBeenCalled();
+    expect(deviceUpsertChain.upsert.mock.calls[0][1]).toEqual({ onConflict: "user_id,date,device_id" });
+    // Verify daily_usage was upserted with aggregated values
+    expect(dailyChain.upsert).toHaveBeenCalled();
+    expect(dailyChain.upsert.mock.calls[0][0].cost_usd).toBe(0.05);
+    expect(dailyChain.upsert.mock.calls[0][0].session_count).toBe(1);
+  });
+
+  it("multi-device: backwards compat — no device_id uses legacy path", async () => {
+    (verifyCliToken as any).mockReturnValue("user-1");
+    const svc = mockServiceClient();
+    svc.single
+      .mockResolvedValueOnce({ data: { id: "usage-1" }, error: null })
+      .mockResolvedValueOnce({ data: { id: "post-1" }, error: null });
+
+    const res = await POST(
+      mockRequest({ entries: [makeEntry(todayStr())], source: "cli" })
+    );
+    const json = await res.json();
+
+    expect(res.status).toBe(200);
+    // Legacy path: upsert directly to daily_usage, device_usage never touched
+    const fromCalls = svc.from.mock.calls.map((c: any[]) => c[0]);
+    expect(fromCalls).not.toContain("device_usage");
+    expect(svc.upsert).toHaveBeenCalled();
+    const upsertCall = svc.upsert.mock.calls[0];
+    expect(upsertCall[1]).toEqual({ onConflict: "user_id,date" });
+  });
+
   it("accepts merged Claude + Codex usage in a single entry", async () => {
     (verifyCliToken as any).mockReturnValue("user-1");
     const svc = mockServiceClient();
@@ -464,5 +568,117 @@ describe("POST /api/usage/submit", () => {
       { model: "claude-opus-4-20250505", cost_usd: 10.0 },
       { model: "gpt-5-codex", cost_usd: 3.0 },
     ]);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// aggregateDeviceRows
+// ---------------------------------------------------------------------------
+
+describe("aggregateDeviceRows", () => {
+  it("sums numeric fields across two device rows", () => {
+    const rows = [
+      {
+        cost_usd: 5.0,
+        input_tokens: 1000,
+        output_tokens: 500,
+        cache_creation_tokens: 100,
+        cache_read_tokens: 50,
+        total_tokens: 1650,
+        models: ["claude-opus-4-20250505"],
+        model_breakdown: [{ model: "claude-opus-4-20250505", cost_usd: 5.0 }],
+      },
+      {
+        cost_usd: 3.0,
+        input_tokens: 2000,
+        output_tokens: 800,
+        cache_creation_tokens: 0,
+        cache_read_tokens: 0,
+        total_tokens: 2800,
+        models: ["claude-sonnet-4-5-20250929"],
+        model_breakdown: [{ model: "claude-sonnet-4-5-20250929", cost_usd: 3.0 }],
+      },
+    ];
+
+    const agg = aggregateDeviceRows(rows);
+
+    expect(agg.cost_usd).toBe(8.0);
+    expect(agg.input_tokens).toBe(3000);
+    expect(agg.output_tokens).toBe(1300);
+    expect(agg.cache_creation_tokens).toBe(100);
+    expect(agg.cache_read_tokens).toBe(50);
+    expect(agg.total_tokens).toBe(4450);
+    expect(agg.session_count).toBe(2);
+  });
+
+  it("deduplicates models across devices", () => {
+    const rows = [
+      {
+        cost_usd: 5.0,
+        input_tokens: 1000, output_tokens: 500,
+        cache_creation_tokens: 0, cache_read_tokens: 0,
+        total_tokens: 1500,
+        models: ["claude-opus-4-20250505"],
+        model_breakdown: null,
+      },
+      {
+        cost_usd: 3.0,
+        input_tokens: 2000, output_tokens: 800,
+        cache_creation_tokens: 0, cache_read_tokens: 0,
+        total_tokens: 2800,
+        models: ["claude-opus-4-20250505"],
+        model_breakdown: null,
+      },
+    ];
+
+    const agg = aggregateDeviceRows(rows);
+    expect(agg.models).toEqual(["claude-opus-4-20250505"]);
+  });
+
+  it("merges model_breakdown by summing cost per model name", () => {
+    const rows = [
+      {
+        cost_usd: 5.0,
+        input_tokens: 1000, output_tokens: 500,
+        cache_creation_tokens: 0, cache_read_tokens: 0,
+        total_tokens: 1500,
+        models: ["claude-opus-4-20250505"],
+        model_breakdown: [{ model: "claude-opus-4-20250505", cost_usd: 5.0 }],
+      },
+      {
+        cost_usd: 7.0,
+        input_tokens: 2000, output_tokens: 800,
+        cache_creation_tokens: 0, cache_read_tokens: 0,
+        total_tokens: 2800,
+        models: ["claude-opus-4-20250505"],
+        model_breakdown: [{ model: "claude-opus-4-20250505", cost_usd: 7.0 }],
+      },
+    ];
+
+    const agg = aggregateDeviceRows(rows);
+    expect(agg.model_breakdown).toEqual([
+      { model: "claude-opus-4-20250505", cost_usd: 12.0 },
+    ]);
+  });
+
+  it("session_count reflects number of device rows", () => {
+    const rows = [
+      { cost_usd: 1, input_tokens: 0, output_tokens: 0, cache_creation_tokens: 0, cache_read_tokens: 0, total_tokens: 0, models: [], model_breakdown: null },
+      { cost_usd: 2, input_tokens: 0, output_tokens: 0, cache_creation_tokens: 0, cache_read_tokens: 0, total_tokens: 0, models: [], model_breakdown: null },
+      { cost_usd: 3, input_tokens: 0, output_tokens: 0, cache_creation_tokens: 0, cache_read_tokens: 0, total_tokens: 0, models: [], model_breakdown: null },
+    ];
+
+    const agg = aggregateDeviceRows(rows);
+    expect(agg.session_count).toBe(3);
+    expect(agg.cost_usd).toBe(6);
+  });
+
+  it("returns null model_breakdown when no devices have breakdowns", () => {
+    const rows = [
+      { cost_usd: 1, input_tokens: 0, output_tokens: 0, cache_creation_tokens: 0, cache_read_tokens: 0, total_tokens: 0, models: [], model_breakdown: null },
+    ];
+
+    const agg = aggregateDeviceRows(rows);
+    expect(agg.model_breakdown).toBeNull();
   });
 });

@@ -380,6 +380,111 @@ describe("Flow: CLI Push", () => {
     ]);
   });
 
+  it("two devices push same day — daily_usage shows summed totals", async () => {
+    const userId = "user-cli-1";
+    (verifyCliToken as ReturnType<typeof vi.fn>).mockReturnValue(userId);
+    mockSessionClient.auth.getUser.mockResolvedValue({ data: { user: null } });
+
+    const today = new Date().toISOString().split("T")[0]!;
+
+    // After first device push, device_usage will have one row
+    // After second device push, device_usage will have two rows
+    const deviceRowsAfterSecondPush = [
+      {
+        cost_usd: 5.0,
+        input_tokens: 1000,
+        output_tokens: 500,
+        cache_creation_tokens: 100,
+        cache_read_tokens: 50,
+        total_tokens: 1650,
+        models: ["claude-opus-4-20250505"],
+        model_breakdown: [{ model: "claude-opus-4-20250505", cost_usd: 5.0 }],
+      },
+      {
+        cost_usd: 3.0,
+        input_tokens: 2000,
+        output_tokens: 800,
+        cache_creation_tokens: 0,
+        cache_read_tokens: 0,
+        total_tokens: 2800,
+        models: ["claude-sonnet-4-5-20250929"],
+        model_breakdown: [{ model: "claude-sonnet-4-5-20250929", cost_usd: 3.0 }],
+      },
+    ];
+
+    // Build a chain that handles both device_usage and daily_usage operations
+    const deviceUsageChain = chainBuilder({ data: { id: "device-2" }, error: null });
+    const dailyUsageChain = chainBuilder({ data: { id: "usage-1" }, error: null });
+    const postChain = chainBuilder({ data: { id: "post-1" }, error: null });
+
+    // Override device_usage select to return the aggregated rows
+    const deviceFetchChain: Record<string, any> = {};
+    deviceFetchChain.eq = vi.fn(() => ({
+      eq: vi.fn(() => Promise.resolve({ data: deviceRowsAfterSecondPush, error: null })),
+    }));
+    deviceFetchChain.select = vi.fn(() => deviceFetchChain);
+
+    let deviceUpsertDone = false;
+    mockServiceClient.from.mockImplementation((table: string) => {
+      if (table === "device_usage") {
+        if (!deviceUpsertDone) {
+          // First call: upsert
+          deviceUpsertDone = true;
+          return deviceUsageChain;
+        }
+        // Second call: fetch all device rows
+        return deviceFetchChain;
+      }
+      if (table === "daily_usage") return dailyUsageChain;
+      if (table === "posts") return postChain;
+      return chainBuilder();
+    });
+
+    const { POST } = await import("@/app/api/usage/submit/route");
+    const req = makeRequest("http://localhost:3000/api/usage/submit", {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        Authorization: "Bearer mock-cli-jwt-token",
+      },
+      body: JSON.stringify({
+        entries: [
+          {
+            date: today,
+            data: {
+              date: today,
+              models: ["claude-sonnet-4-5-20250929"],
+              inputTokens: 2000,
+              outputTokens: 800,
+              cacheCreationTokens: 0,
+              cacheReadTokens: 0,
+              totalTokens: 2800,
+              costUSD: 3.0,
+              modelBreakdown: [{ model: "claude-sonnet-4-5-20250929", cost_usd: 3.0 }],
+            },
+          },
+        ],
+        hash: "device-2-hash",
+        source: "cli",
+        device_id: "22222222-2222-2222-2222-222222222222",
+        device_name: "home-desktop",
+      }),
+    });
+    const res = await POST(req);
+    const data = await res.json();
+
+    expect(res.status).toBe(200);
+    expect(data.results).toHaveLength(1);
+
+    // Verify daily_usage was upserted with aggregated data (5 + 3 = 8)
+    const dailyUpsertCall = (dailyUsageChain.upsert as ReturnType<typeof vi.fn>).mock.calls[0];
+    expect(dailyUpsertCall[0].cost_usd).toBe(8.0);
+    expect(dailyUpsertCall[0].input_tokens).toBe(3000);
+    expect(dailyUpsertCall[0].output_tokens).toBe(1300);
+    expect(dailyUpsertCall[0].total_tokens).toBe(4450);
+    expect(dailyUpsertCall[0].session_count).toBe(2);
+  });
+
   it("rejects push without authentication", async () => {
     (verifyCliToken as ReturnType<typeof vi.fn>).mockReturnValue(null);
     mockSessionClient.auth.getUser.mockResolvedValue({ data: { user: null } });

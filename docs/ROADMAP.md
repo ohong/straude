@@ -2,6 +2,14 @@
 
 Sorted from lowest to highest technical lift.
 
+## Per-Device Breakdown UI + Device Management
+
+Now that `device_usage` stores per-device data, future work could expose this in the UI:
+
+- **Per-device breakdown on post/profile pages**: Show "Work Laptop: $5.20, Home Desktop: $3.10" in an expandable section on the post detail page. Data already exists in `device_usage` — this is a read-only UI addition.
+- **Device management page**: Let users view, rename, and deactivate devices. Show last active date per device. Requires a new `/settings/devices` page and a simple API route reading `device_usage` grouped by `device_id`.
+- **Device inactivity alerts**: Notify users if a known device hasn't pushed in N days ("Your work-laptop hasn't synced in 5 days"). Could be part of the daily digest email.
+
 ## Daily Digest Email (Streak Reminders + Social Nudges)
 
 A daily email at ~6 PM local time: "Your 12-day streak is at risk — push today." Include a social nugget ("@alice gave you kudos") and leaderboard position update. Core email infra is live (React Email, Resend, notification preferences, cron-backed nudge emails), but this specific digest is not built yet. This is the single cheapest way to bring lapsed users back — it's the **trigger** in the habit loop.

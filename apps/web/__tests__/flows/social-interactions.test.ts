@@ -96,8 +96,10 @@ describe("Flow: Social Interactions", () => {
       comment_count: 0,
     };
 
+    // Feed route uses rpc("get_feed") to get posts
     mockSupabase.rpc.mockResolvedValue({ data: [bobPost], error: null });
 
+    // Enrichment queries: kudos (user's own + recent) and comments
     const kudosChain = chainBuilder({ data: [] });
     const commentsChain = chainBuilder({ data: [] });
 

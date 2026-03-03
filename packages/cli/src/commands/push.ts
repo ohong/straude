@@ -1,5 +1,6 @@
-import { createHash } from "node:crypto";
-import { requireAuth, updateLastPushDate } from "../lib/auth.js";
+import { createHash, randomUUID } from "node:crypto";
+import { hostname } from "node:os";
+import { requireAuth, updateLastPushDate, saveConfig } from "../lib/auth.js";
 import type { StraudeConfig } from "../lib/auth.js";
 import { apiRequest } from "../lib/api.js";
 import { runCcusageRawAsync, parseCcusageOutput } from "../lib/ccusage.js";
@@ -14,6 +15,8 @@ interface UsageSubmitRequest {
   }>;
   hash?: string;
   source: "cli" | "web";
+  device_id?: string;
+  device_name?: string;
 }
 
 interface UsageSubmitResponse {
@@ -125,6 +128,14 @@ export function mergeEntries(
 
 export async function pushCommand(options: PushOptions, configOverride?: StraudeConfig): Promise<void> {
   const config = configOverride ?? requireAuth();
+
+  // Ensure device_id exists — generate on first push
+  if (!config.device_id) {
+    config.device_id = randomUUID();
+    config.device_name = hostname();
+    saveConfig(config);
+  }
+
   const today = new Date();
 
   let sinceDate: Date;
@@ -219,6 +230,8 @@ export async function pushCommand(options: PushOptions, configOverride?: Straude
     })),
     hash,
     source: "cli",
+    device_id: config.device_id,
+    device_name: config.device_name,
   };
 
   let response: UsageSubmitResponse;

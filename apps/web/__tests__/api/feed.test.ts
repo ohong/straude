@@ -27,12 +27,16 @@ function mockSupabase(opts: {
   posts?: any[];
   postsError?: any;
   kudos?: any[];
+  userKudos?: any[];
+  comments?: any[];
 }) {
   const {
     user = { id: "user-1" },
     posts = [],
     postsError = null,
     kudos = [],
+    userKudos,
+    comments = [],
   } = opts;
 
   const client: Record<string, any> = {
@@ -45,23 +49,38 @@ function mockSupabase(opts: {
     rpc: vi.fn().mockResolvedValue({ data: posts, error: postsError }),
     from: vi.fn().mockImplementation((table: string) => {
       if (table === "kudos") {
-        const c = buildChain();
-        c.select.mockReturnValue(c);
-        c.eq.mockReturnValue(c);
-        c.in.mockReturnValue(c);
-        c.order.mockReturnValue(c);
-        c.limit.mockResolvedValue({ data: kudos, error: null });
-        c.then = (resolve: any) => Promise.resolve({ data: kudos, error: null }).then(resolve);
-        return c;
+        return buildChain({
+          select: vi.fn().mockReturnValue({
+            eq: vi.fn().mockReturnValue({
+              in: vi.fn().mockResolvedValue({
+                data: userKudos ?? [],
+                error: null,
+              }),
+            }),
+            in: vi.fn().mockReturnValue({
+              order: vi.fn().mockReturnValue({
+                limit: vi.fn().mockResolvedValue({
+                  data: kudos,
+                  error: null,
+                }),
+              }),
+            }),
+          }),
+        });
       }
       if (table === "comments") {
-        const c = buildChain();
-        c.select.mockReturnValue(c);
-        c.in.mockReturnValue(c);
-        c.order.mockReturnValue(c);
-        c.limit.mockResolvedValue({ data: [], error: null });
-        c.then = (resolve: any) => Promise.resolve({ data: [], error: null }).then(resolve);
-        return c;
+        return buildChain({
+          select: vi.fn().mockReturnValue({
+            in: vi.fn().mockReturnValue({
+              order: vi.fn().mockReturnValue({
+                limit: vi.fn().mockResolvedValue({
+                  data: comments,
+                  error: null,
+                }),
+              }),
+            }),
+          }),
+        });
       }
       return buildChain();
     }),
@@ -128,9 +147,10 @@ describe("GET /api/feed", () => {
       },
     ];
 
-    const client = mockSupabase({
+    mockSupabase({
       posts: mockPosts,
-      kudos: [{ post_id: "post-1" }],
+      userKudos: [{ post_id: "post-1" }],
+      kudos: [{ post_id: "post-1", user: { avatar_url: null, username: "bob" } }],
     });
 
     const res = await GET(makeRequest());
@@ -156,7 +176,7 @@ describe("GET /api/feed", () => {
       },
     ];
 
-    mockSupabase({ posts: mockPosts, kudos: [] });
+    mockSupabase({ posts: mockPosts, userKudos: [] });
 
     const res = await GET(makeRequest());
     const json = await res.json();

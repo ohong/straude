@@ -4,6 +4,7 @@
 
 ### Added
 
+- **Multi-device usage support.** Users who code on multiple machines now get their stats summed instead of overwritten. New `device_usage` table stores per-device rows; `daily_usage` is recalculated as the aggregate. CLI auto-generates a `device_id` (UUID v4) on first push, stored in `~/.straude/config.json`. Old CLIs without `device_id` continue to work via the legacy upsert path. UI is unchanged — viewers see summed totals only.
 - **Weekly digest activation email.** One-time blast to unactivated users showing this week's leaderboard top 5, new features (Codex tracking, achievements, public profiles), and a CTA to sync. Subject line includes dynamic weekly spend total. Route at `/api/cron/weekly-digest`, protected by `CRON_SECRET`.
 - **Rate limiting on write endpoints.** New `lib/rate-limit.ts` with in-memory sliding window limiter keyed by user ID. Applied to `/api/upload` (10/min), `/api/usage/submit` (20/min), and social actions — comments, follows, kudos (30/min shared window). Returns 429 with `Retry-After` header.
 - **WoW spend growth on admin dashboard.** Replaced MAU stat card with week-over-week spend growth percentage, computed from existing `spendData` with no new query.
@@ -21,6 +22,7 @@
 
 ### Fixed
 
+- **Feed test mocks updated for `get_feed` RPC.** `feed.test.ts`, `privacy-visibility.test.ts`, and `social-interactions.test.ts` were mocking the old `from("posts")` chain but the feed route now uses `supabase.rpc("get_feed")`. Updated all three test files to mock `rpc()` correctly.
 - **Feed sorted by session date, not post date.** Feed, profile pages, and infinite scroll now sort by `daily_usage.date DESC` instead of `posts.created_at DESC`. Backfilled sessions (e.g. via CLI) appear in the correct chronological position. New unified `get_feed` RPC replaces per-tab Supabase queries with composite cursor pagination (`date|created_at`).
 - **Mention notification duplicates on post edit.** The dedup query used the user-authenticated Supabase client, but RLS restricts notification reads to the owner. Switched to service client so the post author can see other users' existing notifications and skip re-inserting them.
 - **`after()` test failures.** Route handlers using Next.js `after()` for deferred work (notifications, achievements) threw outside a request scope in unit tests. Created `lib/utils/after.ts` shim so tests can mock it without loading the full `next/server` module. Added microtask flush to the mention-notification assertion.

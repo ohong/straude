@@ -3,6 +3,7 @@ import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
 vi.mock("../../src/lib/auth.js", () => ({
   requireAuth: vi.fn(),
   updateLastPushDate: vi.fn(),
+  saveConfig: vi.fn(),
 }));
 
 vi.mock("../../src/lib/api.js", () => ({
@@ -20,12 +21,13 @@ vi.mock("../../src/lib/codex.js", () => ({
 }));
 
 import { pushCommand, mergeEntries } from "../../src/commands/push.js";
-import { requireAuth } from "../../src/lib/auth.js";
+import { requireAuth, saveConfig } from "../../src/lib/auth.js";
 import { apiRequest } from "../../src/lib/api.js";
 import { runCcusageRawAsync, parseCcusageOutput } from "../../src/lib/ccusage.js";
 import { runCodexRawAsync, parseCodexOutput } from "../../src/lib/codex.js";
 
 const mockRequireAuth = vi.mocked(requireAuth);
+const mockSaveConfig = vi.mocked(saveConfig);
 const mockApiRequest = vi.mocked(apiRequest);
 const mockRunCcusageRawAsync = vi.mocked(runCcusageRawAsync);
 const mockParseCcusageOutput = vi.mocked(parseCcusageOutput);
@@ -263,6 +265,122 @@ describe("pushCommand", () => {
     expect(entry.modelBreakdown).toHaveLength(2);
     expect(entry.modelBreakdown[0]).toEqual({ model: "claude-opus-4-20250505", cost_usd: 10.0 });
     expect(entry.modelBreakdown[1]).toEqual({ model: "gpt-5-codex", cost_usd: 3.0 });
+  });
+
+  it("generates device_id on first push and persists to config", async () => {
+    const today = todayStr();
+    // Config without device_id
+    const configWithoutDevice = { token: "tok", username: "alice", api_url: "https://straude.com" };
+    mockRequireAuth.mockReturnValue(configWithoutDevice);
+
+    mockRunCcusageRawAsync.mockResolvedValue("{}");
+    mockParseCcusageOutput.mockReturnValue({
+      data: [
+        {
+          date: today,
+          models: ["claude-sonnet-4-5-20250929"],
+          inputTokens: 1000, outputTokens: 500,
+          cacheCreationTokens: 0, cacheReadTokens: 0,
+          totalTokens: 1500, costUSD: 0.05,
+        },
+      ],
+    });
+
+    mockApiRequest.mockResolvedValue({
+      results: [
+        { date: today, usage_id: "u-1", post_id: "p-1", post_url: "https://straude.com/post/p-1", action: "created" },
+      ],
+    });
+
+    await pushCommand({});
+
+    // saveConfig should have been called with the generated device_id
+    expect(mockSaveConfig).toHaveBeenCalled();
+    const savedConfig = mockSaveConfig.mock.calls[0]![0];
+    expect(savedConfig.device_id).toBeDefined();
+    expect(savedConfig.device_id).toMatch(/^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i);
+    expect(savedConfig.device_name).toBeDefined();
+
+    // device_id should be included in the API request body
+    const submitCall = mockApiRequest.mock.calls[0]!;
+    const body = JSON.parse(submitCall[2]!.body as string);
+    expect(body.device_id).toBe(savedConfig.device_id);
+    expect(body.device_name).toBe(savedConfig.device_name);
+  });
+
+  it("reuses existing device_id (does not regenerate)", async () => {
+    const today = todayStr();
+    const existingDeviceId = "11111111-2222-3333-4444-555555555555";
+    const configWithDevice = {
+      token: "tok", username: "alice", api_url: "https://straude.com",
+      device_id: existingDeviceId, device_name: "my-desktop",
+    };
+
+    mockRunCcusageRawAsync.mockResolvedValue("{}");
+    mockParseCcusageOutput.mockReturnValue({
+      data: [
+        {
+          date: today,
+          models: ["claude-sonnet-4-5-20250929"],
+          inputTokens: 1000, outputTokens: 500,
+          cacheCreationTokens: 0, cacheReadTokens: 0,
+          totalTokens: 1500, costUSD: 0.05,
+        },
+      ],
+    });
+
+    mockApiRequest.mockResolvedValue({
+      results: [
+        { date: today, usage_id: "u-1", post_id: "p-1", post_url: "https://straude.com/post/p-1", action: "created" },
+      ],
+    });
+
+    await pushCommand({}, configWithDevice);
+
+    // saveConfig should NOT have been called (device_id already existed)
+    expect(mockSaveConfig).not.toHaveBeenCalled();
+
+    // Existing device_id should be in the API request
+    const submitCall = mockApiRequest.mock.calls[0]!;
+    const body = JSON.parse(submitCall[2]!.body as string);
+    expect(body.device_id).toBe(existingDeviceId);
+    expect(body.device_name).toBe("my-desktop");
+  });
+
+  it("includes device_id and device_name in API request body", async () => {
+    const today = todayStr();
+    const configWithDevice = {
+      token: "tok", username: "alice", api_url: "https://straude.com",
+      device_id: "aaaa-bbbb-cccc-dddd", device_name: "work-laptop",
+    };
+
+    mockRunCcusageRawAsync.mockResolvedValue("{}");
+    mockParseCcusageOutput.mockReturnValue({
+      data: [
+        {
+          date: today,
+          models: ["claude-sonnet-4-5-20250929"],
+          inputTokens: 1000, outputTokens: 500,
+          cacheCreationTokens: 0, cacheReadTokens: 0,
+          totalTokens: 1500, costUSD: 0.05,
+        },
+      ],
+    });
+
+    mockApiRequest.mockResolvedValue({
+      results: [
+        { date: today, usage_id: "u-1", post_id: "p-1", post_url: "https://straude.com/post/p-1", action: "created" },
+      ],
+    });
+
+    await pushCommand({}, configWithDevice);
+
+    const submitCall = mockApiRequest.mock.calls[0]!;
+    const body = JSON.parse(submitCall[2]!.body as string);
+    expect(body.device_id).toBe("aaaa-bbbb-cccc-dddd");
+    expect(body.device_name).toBe("work-laptop");
+    expect(body.source).toBe("cli");
+    expect(body.entries).toHaveLength(1);
   });
 
   it("proceeds with Claude data only when Codex fails", async () => {
