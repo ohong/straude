@@ -10,13 +10,6 @@ type RouteContext = { params: Promise<{ id: string }> };
 export async function GET(request: NextRequest, context: RouteContext) {
   const { id } = await context.params;
   const supabase = await createClient();
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
-
-  if (!user) {
-    return new Response("Unauthorized", { status: 401 });
-  }
 
   const themeParam = request.nextUrl.searchParams.get("theme");
   const themeId: ShareThemeId =
@@ -56,7 +49,7 @@ export async function GET(request: NextRequest, context: RouteContext) {
   try {
     const fonts = await loadFonts();
 
-    return new ImageResponse(
+    const response = new ImageResponse(
       <ShareCardImage
         post={{
           title: post.title,
@@ -74,6 +67,13 @@ export async function GET(request: NextRequest, context: RouteContext) {
       />,
       { width: 1080, height: 1080, fonts }
     );
+
+    response.headers.set(
+      "Content-Disposition",
+      `attachment; filename="straude-${id.slice(0, 8)}.png"`
+    );
+
+    return response;
   } catch (err) {
     console.error("Share image generation failed:", err);
     return new Response("Image generation failed", { status: 500 });

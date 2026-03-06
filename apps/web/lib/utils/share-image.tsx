@@ -1,4 +1,5 @@
 import { formatTokens } from "./format";
+import { getShareModelLabel } from "./post-share";
 import type { ShareThemeId } from "../share-themes";
 import { getShareTheme } from "../share-themes";
 
@@ -36,60 +37,202 @@ function stripMarkdown(text: string): string {
 
 function truncate(text: string, max: number): string {
   if (text.length <= max) return text;
-  return text.slice(0, max - 1) + "\u2026";
+  return `${text.slice(0, max - 3)}...`;
 }
 
-function formatModel(models: string[]): string | null {
-  if (!models || models.length === 0) return null;
-  if (models.some((m) => m.includes("opus"))) return "Opus";
-  if (models.some((m) => m.includes("sonnet"))) return "Sonnet";
-  if (models.some((m) => m.includes("haiku"))) return "Haiku";
-  return models[0];
-}
-
-function StatBox({
+function StatCard({
   label,
   value,
-  textPrimary,
-  textTertiary,
-  accentColor,
+  accent,
+  themeId,
 }: {
   label: string;
   value: string;
-  textPrimary: string;
-  textTertiary: string;
-  accentColor?: boolean;
+  accent?: boolean;
+  themeId: ShareThemeId;
 }) {
+  const theme = getShareTheme(themeId);
+  const valueSize = value.length > 12 ? 26 : value.length > 8 ? 30 : 34;
+
   return (
     <div
       style={{
         display: "flex",
-        flexDirection: "column",
         flex: 1,
-        alignItems: "center",
+        minWidth: 0,
+        flexDirection: "column",
+        borderRadius: 28,
+        padding: "18px 20px",
+        backgroundColor: accent ? theme.surface : theme.surfaceSecondary,
+        border: `1px solid ${theme.surfaceBorder}`,
       }}
     >
       <div
         style={{
-          fontSize: 36,
+          fontSize: 13,
+          fontWeight: 600,
+          color: theme.textTertiary,
+          textTransform: "uppercase" as const,
+          letterSpacing: "0.12em",
+        }}
+      >
+        {label}
+      </div>
+      <div
+        style={{
+          marginTop: 10,
+          fontSize: valueSize,
           fontWeight: 700,
-          color: accentColor ? "#DF561F" : textPrimary,
-          letterSpacing: "-0.02em",
+          color: accent ? theme.accent : theme.textPrimary,
+          lineHeight: 1.1,
         }}
       >
         {value}
       </div>
+    </div>
+  );
+}
+
+function MediaTile({
+  src,
+  title,
+  body,
+  footer,
+  themeId,
+  large = false,
+}: {
+  src?: string | null;
+  title: string;
+  body: string;
+  footer?: string;
+  themeId: ShareThemeId;
+  large?: boolean;
+}) {
+  const theme = getShareTheme(themeId);
+  const radius = large ? 36 : 30;
+  const padding = large ? 28 : 22;
+
+  if (src) {
+    return (
       <div
         style={{
-          fontSize: 16,
-          fontWeight: 500,
-          color: textTertiary,
-          textTransform: "uppercase" as const,
-          letterSpacing: "0.08em",
-          marginTop: 4,
+          display: "flex",
+          position: "relative",
+          flex: 1,
+          overflow: "hidden",
+          borderRadius: radius,
+          border: `1px solid ${theme.surfaceBorder}`,
+          backgroundColor: theme.surfaceSecondary,
         }}
       >
-        {label}
+        <img
+          src={src}
+          width={large ? 320 : 152}
+          height={large ? 356 : 146}
+          style={{
+            width: "100%",
+            height: "100%",
+            objectFit: "cover",
+          }}
+        />
+        <div
+          style={{
+            position: "absolute",
+            top: 16,
+            left: 16,
+            display: "flex",
+            borderRadius: 999,
+            backgroundColor: "rgba(10,10,10,0.68)",
+            padding: "8px 12px",
+          }}
+        >
+          <div
+            style={{
+              fontSize: 12,
+              fontWeight: 700,
+              color: "#FFFFFF",
+              letterSpacing: "0.08em",
+              textTransform: "uppercase" as const,
+            }}
+          >
+            {title}
+          </div>
+        </div>
+      </div>
+    );
+  }
+
+  return (
+    <div
+      style={{
+        display: "flex",
+        flex: 1,
+        minWidth: 0,
+        flexDirection: "column",
+        justifyContent: "space-between",
+        borderRadius: radius,
+        padding,
+        backgroundColor: large ? theme.surface : theme.surfaceSecondary,
+        border: `1px solid ${theme.surfaceBorder}`,
+      }}
+    >
+      <div
+        style={{
+          display: "flex",
+          alignItems: "center",
+          gap: 10,
+        }}
+      >
+        <div
+          style={{
+            width: 10,
+            height: 10,
+            borderRadius: 999,
+            backgroundColor: theme.accent,
+          }}
+        />
+        <div
+          style={{
+            fontSize: 12,
+            fontWeight: 700,
+            color: theme.textTertiary,
+            letterSpacing: "0.08em",
+            textTransform: "uppercase" as const,
+          }}
+        >
+          {title}
+        </div>
+      </div>
+
+      <div
+        style={{
+          display: "flex",
+          flexDirection: "column",
+        }}
+      >
+        <div
+          style={{
+            fontSize: large ? 34 : 22,
+            fontWeight: 700,
+            color: theme.textPrimary,
+            lineHeight: 1.1,
+          }}
+        >
+          {body}
+        </div>
+        {footer && (
+          <div
+            style={{
+              marginTop: 8,
+              fontSize: large ? 18 : 15,
+              fontWeight: 500,
+              color: theme.textSecondary,
+              lineHeight: 1.35,
+            }}
+          >
+            {footer}
+          </div>
+        )}
       </div>
     </div>
   );
@@ -104,58 +247,52 @@ export function ShareCardImage({
 }) {
   const theme = getShareTheme(themeId);
   const size = 1080;
-  const padding = 64;
+  const padding = 56;
 
-  const hasTitle = !!post.title;
-  const hasVerifiedCost = post.is_verified && post.cost_usd != null;
-  const model = formatModel(post.models);
-  const imageCount = post.images?.length ?? 0;
-  const visibleImages = (post.images ?? []).slice(0, 4);
-  const overflow = imageCount - 4;
-
-  // Hero text
-  let heroText: string;
-  let heroSize: number;
-  let heroColor: string;
-  let heroSubtitle: string | null = null;
-
-  if (hasTitle) {
-    heroText = truncate(post.title!, 80);
-    heroSize = 44;
-    heroColor = theme.textPrimary;
-  } else if (hasVerifiedCost) {
-    heroText = `$${Number(post.cost_usd).toFixed(2)}`;
-    heroSize = 80;
-    heroColor = theme.accent;
-    heroSubtitle = "session cost";
-  } else {
-    heroText = `@${post.username}'s coding session`;
-    heroSize = 44;
-    heroColor = theme.textPrimary;
-  }
-
-  // Description
-  const desc = post.description
+  const description = post.description
     ? truncate(stripMarkdown(post.description), 150)
     : null;
+  const model = getShareModelLabel(post.models);
+  const cost =
+    typeof post.cost_usd === "number" && Number.isFinite(post.cost_usd)
+      ? `$${post.cost_usd.toFixed(2)}`
+      : null;
+  const visibleImages = (post.images ?? []).slice(0, 3);
+  const imageCount = post.images?.length ?? 0;
 
-  // Stats to show
-  const stats: { label: string; value: string; accent?: boolean }[] = [];
-  if (hasVerifiedCost) {
-    stats.push({
-      label: "Cost",
-      value: `$${Number(post.cost_usd).toFixed(2)}`,
-      accent: true,
-    });
-  }
-  if (post.input_tokens > 0) {
-    stats.push({ label: "Input", value: formatTokens(post.input_tokens) });
-  }
+  const heroLabel = post.is_verified
+    ? "Verified Claude Code session"
+    : "Claude Code session";
+
+  const heroText = post.title?.trim()
+    ? truncate(post.title.trim(), 84)
+    : cost
+      ? `${cost} of coding energy`
+      : `@${post.username}'s build log`;
+
+  const heroSize = cost && !post.title ? 84 : heroText.length > 42 ? 52 : 62;
+  const heroSupport =
+    description ??
+    (imageCount > 0
+      ? `${imageCount} screenshot${imageCount === 1 ? "" : "s"} from the session, ready to post on X, LinkedIn, or stories.`
+      : "Track the work, package the proof, and turn every session into something worth sharing.");
+
+  const stats: Array<{ label: string; value: string; accent?: boolean }> = [];
+  if (cost) stats.push({ label: "Spend", value: cost, accent: post.is_verified });
   if (post.output_tokens > 0) {
     stats.push({ label: "Output", value: formatTokens(post.output_tokens) });
   }
   if (model) {
     stats.push({ label: "Model", value: model });
+  }
+  if (stats.length < 3 && imageCount > 0) {
+    stats.push({
+      label: "Shots",
+      value: `${imageCount}`,
+    });
+  }
+  if (stats.length < 3 && post.input_tokens > 0) {
+    stats.push({ label: "Input", value: formatTokens(post.input_tokens) });
   }
 
   return (
@@ -164,12 +301,11 @@ export function ShareCardImage({
         width: size,
         height: size,
         display: "flex",
-        flexDirection: "column",
-        fontFamily: "Inter",
         position: "relative",
+        overflow: "hidden",
+        fontFamily: "Inter",
       }}
     >
-      {/* Background */}
       <div
         style={{
           position: "absolute",
@@ -180,7 +316,6 @@ export function ShareCardImage({
           background: theme.background,
         }}
       />
-      {/* Overlay for gradient themes */}
       {theme.overlay && (
         <div
           style={{
@@ -193,18 +328,50 @@ export function ShareCardImage({
           }}
         />
       )}
-
-      {/* Content */}
       <div
         style={{
+          position: "absolute",
+          top: -100,
+          right: -70,
+          width: 340,
+          height: 340,
+          borderRadius: 999,
+          backgroundColor: theme.spotlightPrimary,
+        }}
+      />
+      <div
+        style={{
+          position: "absolute",
+          bottom: 120,
+          left: -60,
+          width: 260,
+          height: 260,
+          borderRadius: 999,
+          backgroundColor: theme.spotlightSecondary,
+        }}
+      />
+      <div
+        style={{
+          position: "absolute",
+          right: 44,
+          bottom: 44,
+          width: 220,
+          height: 220,
+          borderRadius: 42,
+          border: `1px solid ${theme.surfaceBorder}`,
+          opacity: 0.8,
+        }}
+      />
+
+      <div
+        style={{
+          position: "relative",
           display: "flex",
+          flex: 1,
           flexDirection: "column",
           padding,
-          position: "relative",
-          flex: 1,
         }}
       >
-        {/* Header: STRAUDE logo left, avatar + username right */}
         <div
           style={{
             display: "flex",
@@ -213,237 +380,292 @@ export function ShareCardImage({
           }}
         >
           <div
-            style={{ display: "flex", alignItems: "center", gap: 12 }}
+            style={{
+              display: "flex",
+              alignItems: "center",
+              gap: 12,
+              borderRadius: 999,
+              backgroundColor: theme.badgeBackground,
+              border: `1px solid ${theme.badgeBorder}`,
+              padding: "12px 18px",
+            }}
           >
-            <svg width="32" height="32" viewBox="0 0 32 32">
-              <polygon points="6.4,0 25.6,0 32,32 0,32" fill="#DF561F" />
+            <svg width="28" height="28" viewBox="0 0 32 32">
+              <polygon points="6.4,0 25.6,0 32,32 0,32" fill={theme.accent} />
             </svg>
             <div
               style={{
-                fontSize: 20,
+                fontSize: 18,
                 fontWeight: 700,
                 color: theme.textPrimary,
-                letterSpacing: "0.06em",
+                letterSpacing: "0.08em",
                 textTransform: "uppercase" as const,
               }}
             >
               STRAUDE
             </div>
           </div>
+
           <div
-            style={{ display: "flex", alignItems: "center", gap: 10 }}
+            style={{
+              display: "flex",
+              borderRadius: 999,
+              backgroundColor: theme.surfaceSecondary,
+              border: `1px solid ${theme.surfaceBorder}`,
+              padding: "12px 18px",
+            }}
           >
-            {post.avatar_url ? (
-              <img
-                src={post.avatar_url}
-                width={36}
-                height={36}
-                style={{ borderRadius: 18, objectFit: "cover" }}
-              />
-            ) : (
-              <div
-                style={{
-                  width: 36,
-                  height: 36,
-                  borderRadius: 18,
-                  backgroundColor: theme.textTertiary,
-                  display: "flex",
-                  alignItems: "center",
-                  justifyContent: "center",
-                  fontSize: 16,
-                  fontWeight: 700,
-                  color: theme.background === "#0A0A0A" ? "#0A0A0A" : "#fff",
-                }}
-              >
-                {post.username.charAt(0).toUpperCase()}
-              </div>
-            )}
             <div
               style={{
-                fontSize: 18,
-                fontWeight: 500,
+                fontSize: 14,
+                fontWeight: 600,
                 color: theme.textSecondary,
               }}
             >
-              @{post.username}
+              Strava for coding
             </div>
           </div>
         </div>
 
-        {/* Hero */}
         <div
           style={{
             display: "flex",
-            flexDirection: "column",
-            marginTop: 48,
+            flex: 1,
+            gap: 28,
+            marginTop: 32,
           }}
         >
           <div
             style={{
-              fontSize: heroSize,
-              fontWeight: 700,
-              color: heroColor,
-              letterSpacing: "-0.02em",
-              lineHeight: 1.15,
+              display: "flex",
+              flex: 1,
+              minWidth: 0,
+              flexDirection: "column",
             }}
           >
-            {heroText}
-          </div>
-          {heroSubtitle && (
             <div
               style={{
-                fontSize: 20,
-                fontWeight: 500,
-                color: theme.textTertiary,
-                marginTop: 8,
+                display: "flex",
+                fontSize: 14,
+                fontWeight: 700,
+                color: theme.accent,
                 textTransform: "uppercase" as const,
-                letterSpacing: "0.1em",
+                letterSpacing: "0.12em",
               }}
             >
-              {heroSubtitle}
+              {heroLabel}
             </div>
-          )}
-        </div>
 
-        {/* Description */}
-        {desc && (
-          <div
-            style={{
-              fontSize: 22,
-              fontWeight: 500,
-              color: theme.textSecondary,
-              marginTop: 20,
-              lineHeight: 1.5,
-            }}
-          >
-            {desc}
-          </div>
-        )}
+            <div
+              style={{
+                marginTop: 18,
+                fontSize: heroSize,
+                fontWeight: 700,
+                color: theme.textPrimary,
+                lineHeight: 1.02,
+                letterSpacing: "-0.03em",
+              }}
+            >
+              {heroText}
+            </div>
 
-        {/* Stats row */}
-        {stats.length > 0 && (
-          <div
-            style={{
-              display: "flex",
-              marginTop: 40,
-              borderTop: `1px solid ${themeId === "dark" ? "rgba(255,255,255,0.1)" : "rgba(0,0,0,0.08)"}`,
-              borderBottom: `1px solid ${themeId === "dark" ? "rgba(255,255,255,0.1)" : "rgba(0,0,0,0.08)"}`,
-              paddingTop: 24,
-              paddingBottom: 24,
-            }}
-          >
-            {stats.map((s) => (
-              <StatBox
-                key={s.label}
-                label={s.label}
-                value={s.value}
-                textPrimary={theme.textPrimary}
-                textTertiary={theme.textTertiary}
-                accentColor={s.accent}
-              />
-            ))}
-          </div>
-        )}
+            <div
+              style={{
+                marginTop: 22,
+                fontSize: 24,
+                fontWeight: 500,
+                color: theme.textSecondary,
+                lineHeight: 1.45,
+              }}
+            >
+              {heroSupport}
+            </div>
 
-        {/* Image thumbnails */}
-        {visibleImages.length > 0 && (
-          <div
-            style={{
-              display: "flex",
-              gap: 12,
-              marginTop: 32,
-            }}
-          >
-            {visibleImages.map((url, i) => (
+            <div
+              style={{
+                display: "flex",
+                alignItems: "center",
+                gap: 14,
+                marginTop: 28,
+              }}
+            >
+              {post.avatar_url ? (
+                <img
+                  src={post.avatar_url}
+                  width={54}
+                  height={54}
+                  style={{
+                    width: 54,
+                    height: 54,
+                    borderRadius: 999,
+                    objectFit: "cover",
+                    border: `1px solid ${theme.surfaceBorder}`,
+                  }}
+                />
+              ) : (
+                <div
+                  style={{
+                    display: "flex",
+                    width: 54,
+                    height: 54,
+                    borderRadius: 999,
+                    alignItems: "center",
+                    justifyContent: "center",
+                    backgroundColor: theme.surface,
+                    border: `1px solid ${theme.surfaceBorder}`,
+                    color: theme.textPrimary,
+                    fontSize: 24,
+                    fontWeight: 700,
+                  }}
+                >
+                  {post.username.charAt(0).toUpperCase()}
+                </div>
+              )}
+
               <div
-                key={url}
                 style={{
-                  width: 220,
-                  height: 140,
-                  borderRadius: 8,
-                  overflow: "hidden",
-                  position: "relative",
                   display: "flex",
+                  flexDirection: "column",
                 }}
               >
-                <img
-                  src={url}
-                  width={220}
-                  height={140}
-                  style={{ objectFit: "cover", width: 220, height: 140 }}
-                />
-                {i === 3 && overflow > 0 && (
-                  <div
-                    style={{
-                      position: "absolute",
-                      top: 0,
-                      left: 0,
-                      width: 220,
-                      height: 140,
-                      backgroundColor: "rgba(0,0,0,0.55)",
-                      display: "flex",
-                      alignItems: "center",
-                      justifyContent: "center",
-                      fontSize: 28,
-                      fontWeight: 700,
-                      color: "#fff",
-                    }}
-                  >
-                    +{overflow}
-                  </div>
-                )}
+                <div
+                  style={{
+                    fontSize: 24,
+                    fontWeight: 700,
+                    color: theme.textPrimary,
+                  }}
+                >
+                  {`@${post.username}`}
+                </div>
+                <div
+                  style={{
+                    fontSize: 16,
+                    fontWeight: 500,
+                    color: theme.textSecondary,
+                  }}
+                >
+                  Build in public on Straude
+                </div>
               </div>
-            ))}
-          </div>
-        )}
+            </div>
 
-        {/* Footer — pushed to bottom */}
+            <div
+              style={{
+                display: "flex",
+                gap: 14,
+                marginTop: "auto",
+              }}
+            >
+              {stats.slice(0, 3).map((stat) => (
+                <StatCard
+                  key={stat.label}
+                  label={stat.label}
+                  value={stat.value}
+                  accent={stat.accent}
+                  themeId={themeId}
+                />
+              ))}
+            </div>
+          </div>
+
+          <div
+            style={{
+              display: "flex",
+              width: 320,
+              flexDirection: "column",
+              gap: 16,
+            }}
+          >
+            <MediaTile
+              src={visibleImages[0]}
+              title={
+                imageCount > 1 ? `${imageCount} uploads` : visibleImages[0] ? "Session capture" : "Share-ready"
+              }
+              body={cost ?? "Clean social card"}
+              footer={
+                visibleImages[0]
+                  ? undefined
+                  : "Export a square PNG instead of relying on screenshots."
+              }
+              themeId={themeId}
+              large
+            />
+
+            <div
+              style={{
+                display: "flex",
+                gap: 16,
+                height: 146,
+              }}
+            >
+              <MediaTile
+                src={visibleImages[1]}
+                title={visibleImages[1] ? "More context" : "Model"}
+                body={visibleImages[1] ? "" : model ?? "Claude Code"}
+                footer={
+                  visibleImages[1]
+                    ? undefined
+                    : model ? "Most-used model in this session." : "Show what you are building."
+                }
+                themeId={themeId}
+              />
+              <MediaTile
+                src={visibleImages[2]}
+                title={visibleImages[2] ? "Visual proof" : "Call to action"}
+                body={visibleImages[2] ? "" : "straude.com"}
+                footer={
+                  visibleImages[2]
+                    ? undefined
+                    : "Track your Claude Code and turn each session into a post."
+                }
+                themeId={themeId}
+              />
+            </div>
+          </div>
+        </div>
+
         <div
           style={{
             display: "flex",
             alignItems: "center",
             justifyContent: "space-between",
-            marginTop: "auto",
+            marginTop: 26,
+            paddingTop: 22,
+            borderTop: `1px solid ${theme.surfaceBorder}`,
           }}
         >
-          {/* X logo + @StraudeApp */}
           <div
-            style={{ display: "flex", alignItems: "center", gap: 8 }}
+            style={{
+              display: "flex",
+              fontSize: 20,
+              fontWeight: 600,
+              color: theme.textSecondary,
+            }}
           >
-            <svg
-              width="20"
-              height="20"
-              viewBox="0 0 24 24"
-              fill={theme.textTertiary}
-            >
-              <path d="M18.244 2.25h3.308l-7.227 8.26 8.502 11.24H16.17l-5.214-6.817L4.99 21.75H1.68l7.73-8.835L1.254 2.25H8.08l4.713 6.231zm-1.161 17.52h1.833L7.084 4.126H5.117z" />
-            </svg>
-            <div
-              style={{
-                fontSize: 18,
-                fontWeight: 500,
-                color: theme.textTertiary,
-              }}
-            >
-              @StraudeApp
-            </div>
+            Track your Claude Code at straude.com
           </div>
-          {/* straude.com + trapezoid */}
           <div
-            style={{ display: "flex", alignItems: "center", gap: 8 }}
+            style={{
+              display: "flex",
+              alignItems: "center",
+              gap: 10,
+              borderRadius: 999,
+              backgroundColor: theme.badgeBackground,
+              border: `1px solid ${theme.badgeBorder}`,
+              padding: "10px 16px",
+            }}
           >
             <div
               style={{
-                fontSize: 18,
-                fontWeight: 500,
-                color: theme.textTertiary,
+                fontSize: 15,
+                fontWeight: 700,
+                color: theme.accent,
+                letterSpacing: "0.08em",
+                textTransform: "uppercase" as const,
               }}
             >
-              straude.com
+              Share the build
             </div>
-            <svg width="24" height="24" viewBox="0 0 32 32">
-              <polygon points="6.4,0 25.6,0 32,32 0,32" fill="#DF561F" />
-            </svg>
           </div>
         </div>
       </div>

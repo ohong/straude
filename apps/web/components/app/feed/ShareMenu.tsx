@@ -1,182 +1,462 @@
 "use client";
 
 import { useState, useRef, useEffect, useCallback } from "react";
-import { Share2, Link2, Image, Download, Check } from "lucide-react";
+import {
+  Share2,
+  Link2,
+  Image as ImageIcon,
+  Download,
+  Check,
+  ExternalLink,
+  Copy,
+  Send,
+} from "lucide-react";
+import { cn } from "@/lib/utils/cn";
+import { ShareCardImage } from "@/lib/utils/share-image";
+import {
+  buildPostIntentUrl,
+  buildPostShareText,
+  buildPostShareUrl,
+  getPostShareFilename,
+} from "@/lib/utils/post-share";
 import { SHARE_THEMES, type ShareThemeId } from "@/lib/share-themes";
+import type { Post } from "@/types";
+
+const PREVIEW_SIZE = 248;
+const PREVIEW_SCALE = PREVIEW_SIZE / 1080;
 
 const THEME_SWATCH: Record<ShareThemeId, string> = {
-  light: "#FFFFFF",
-  dark: "#0A0A0A",
-  accent: "linear-gradient(135deg, #FF8C42, #FFF275, #FF6B6B)",
+  light: "linear-gradient(135deg, #FFFFFF 0%, #F6F0E6 100%)",
+  dark: "linear-gradient(135deg, #0A0A0A 0%, #2B2B31 100%)",
+  accent: "linear-gradient(135deg, #F7BF5B 0%, #F28F3B 48%, #F7E1B5 100%)",
 };
 
-export function ShareMenu({ postId }: { postId: string }) {
-  const [open, setOpen] = useState(false);
-  const [theme, setTheme] = useState<ShareThemeId>("light");
-  const [generating, setGenerating] = useState(false);
-  const [copiedLink, setCopiedLink] = useState(false);
-  const [copiedImage, setCopiedImage] = useState(false);
-  const menuRef = useRef<HTMLDivElement>(null);
+type BusyAction = "share" | "copy-image" | "download" | null;
 
-  // Close on outside click
+export function ShareMenu({ post }: { post: Post }) {
+  const [open, setOpen] = useState(false);
+  const [theme, setTheme] = useState<ShareThemeId>("accent");
+  const [busyAction, setBusyAction] = useState<BusyAction>(null);
+  const [copiedAction, setCopiedAction] = useState<"link" | "image" | "caption" | null>(null);
+  const [feedback, setFeedback] = useState<{
+    tone: "success" | "error";
+    message: string;
+  } | null>(null);
+  const menuRef = useRef<HTMLDivElement>(null);
+  const blobCacheRef = useRef<Partial<Record<ShareThemeId, Blob>>>({});
+
   useEffect(() => {
     if (!open) return;
-    function handleClick(e: MouseEvent) {
-      if (menuRef.current && !menuRef.current.contains(e.target as Node)) {
+
+    function handlePointerDown(event: MouseEvent) {
+      if (menuRef.current && !menuRef.current.contains(event.target as Node)) {
         setOpen(false);
       }
     }
-    function handleEscape(e: KeyboardEvent) {
-      if (e.key === "Escape") setOpen(false);
+
+    function handleEscape(event: KeyboardEvent) {
+      if (event.key === "Escape") setOpen(false);
     }
-    document.addEventListener("mousedown", handleClick);
+
+    document.addEventListener("mousedown", handlePointerDown);
     document.addEventListener("keydown", handleEscape);
     return () => {
-      document.removeEventListener("mousedown", handleClick);
+      document.removeEventListener("mousedown", handlePointerDown);
       document.removeEventListener("keydown", handleEscape);
     };
   }, [open]);
 
-  const fetchBlob = useCallback(async () => {
-    const res = await fetch(
-      `/api/posts/${postId}/share-image?theme=${theme}`
-    );
-    if (!res.ok) throw new Error(`Server returned ${res.status}`);
-    return res.blob();
-  }, [postId, theme]);
+  const previewPost = {
+    title: post.title,
+    description: post.description,
+    images: post.images ?? [],
+    username: post.user?.username ?? "anonymous",
+    avatar_url: post.user?.avatar_url ?? null,
+    cost_usd: post.daily_usage?.cost_usd ?? null,
+    input_tokens: post.daily_usage?.input_tokens ?? 0,
+    output_tokens: post.daily_usage?.output_tokens ?? 0,
+    models: post.daily_usage?.models ?? [],
+    is_verified: post.daily_usage?.is_verified ?? false,
+  };
+
+  const shareText = buildPostShareText(post);
+  const supportsClipboardText =
+    typeof window !== "undefined" &&
+    typeof navigator.clipboard?.writeText === "function";
+  const supportsClipboardImage =
+    typeof window !== "undefined" &&
+    typeof ClipboardItem !== "undefined" &&
+    typeof navigator.clipboard?.write === "function";
+  const supportsNativeShare =
+    typeof window !== "undefined" && typeof navigator.share === "function";
+
+  function flashCopied(action: "link" | "image" | "caption") {
+    setCopiedAction(action);
+    window.setTimeout(() => {
+      setCopiedAction((current) => (current === action ? null : current));
+    }, 2000);
+  }
+
+  const fetchBlob = useCallback(
+    async (selectedTheme: ShareThemeId = theme) => {
+      const cached = blobCacheRef.current[selectedTheme];
+      if (cached) return cached;
+
+      const response = await fetch(
+        `/api/posts/${post.id}/share-image?theme=${selectedTheme}`,
+        { cache: "no-store" }
+      );
+      if (!response.ok) throw new Error(`Server returned ${response.status}`);
+
+      const blob = await response.blob();
+      blobCacheRef.current[selectedTheme] = blob;
+      return blob;
+    },
+    [post.id, theme]
+  );
 
   async function handleCopyLink() {
-    const url = `${window.location.origin}/post/${postId}`;
-    await navigator.clipboard.writeText(url);
-    setCopiedLink(true);
-    setTimeout(() => setCopiedLink(false), 2000);
+    setFeedback(null);
+    try {
+      if (!supportsClipboardText) {
+        throw new Error("Clipboard text unsupported");
+      }
+
+      const url = buildPostShareUrl(window.location.origin, post.id);
+      await navigator.clipboard.writeText(url);
+      flashCopied("link");
+      setFeedback({
+        tone: "success",
+        message: "Link copied. Drop it into any post or DM.",
+      });
+    } catch (error) {
+      console.error("Copy link failed:", error);
+      setFeedback({
+        tone: "error",
+        message: "Could not copy the link on this browser.",
+      });
+    }
+  }
+
+  async function handleCopyCaption() {
+    setFeedback(null);
+    try {
+      if (!supportsClipboardText) {
+        throw new Error("Clipboard text unsupported");
+      }
+
+      await navigator.clipboard.writeText(shareText);
+      flashCopied("caption");
+      setFeedback({
+        tone: "success",
+        message: "Starter caption copied. Add your take and hit post.",
+      });
+    } catch (error) {
+      console.error("Copy caption failed:", error);
+      setFeedback({
+        tone: "error",
+        message: "Could not copy the caption on this browser.",
+      });
+    }
   }
 
   async function handleCopyImage() {
-    setGenerating(true);
+    setBusyAction("copy-image");
+    setFeedback(null);
+
     try {
       const blob = await fetchBlob();
       await navigator.clipboard.write([
         new ClipboardItem({ "image/png": blob }),
       ]);
-      setCopiedImage(true);
-      setTimeout(() => setCopiedImage(false), 2000);
-    } catch (err) {
-      console.error("Copy image failed:", err);
+      flashCopied("image");
+      setFeedback({
+        tone: "success",
+        message: "Image copied. Paste it directly into X, LinkedIn, or Slack.",
+      });
+    } catch (error) {
+      console.error("Copy image failed:", error);
+      setFeedback({
+        tone: "error",
+        message: "Could not copy the share card. Try Download PNG instead.",
+      });
     } finally {
-      setGenerating(false);
+      setBusyAction(null);
     }
   }
 
   async function handleDownload() {
-    setGenerating(true);
+    setBusyAction("download");
+    setFeedback(null);
+
     try {
       const blob = await fetchBlob();
-      const url = URL.createObjectURL(blob);
-      const a = document.createElement("a");
-      a.href = url;
-      a.download = `straude-${postId.slice(0, 8)}.png`;
-      document.body.appendChild(a);
-      a.click();
-      document.body.removeChild(a);
-      URL.revokeObjectURL(url);
-    } catch (err) {
-      console.error("Download failed:", err);
+      const objectUrl = URL.createObjectURL(blob);
+      const anchor = document.createElement("a");
+      anchor.href = objectUrl;
+      anchor.download = getPostShareFilename(post.id);
+      anchor.style.display = "none";
+      document.body.appendChild(anchor);
+      anchor.click();
+      anchor.remove();
+
+      window.setTimeout(() => URL.revokeObjectURL(objectUrl), 1000);
+
+      setFeedback({
+        tone: "success",
+        message: "PNG downloaded. Drag it into your next post.",
+      });
+    } catch (error) {
+      console.error("Download failed:", error);
+      setFeedback({
+        tone: "error",
+        message: "Could not generate the PNG share card.",
+      });
     } finally {
-      setGenerating(false);
+      setBusyAction(null);
     }
   }
 
-  const supportsClipboardItem = typeof window !== "undefined" && typeof ClipboardItem !== "undefined";
+  async function handleNativeShare() {
+    setBusyAction("share");
+    setFeedback(null);
+
+    try {
+      const title = post.title?.trim() || "Straude session";
+      const url = buildPostShareUrl(window.location.origin, post.id);
+      const blob = await fetchBlob();
+
+      if (typeof File !== "undefined") {
+        const file = new File([blob], getPostShareFilename(post.id), {
+          type: blob.type || "image/png",
+        });
+
+        if (
+          typeof navigator.canShare === "function" &&
+          navigator.canShare({ files: [file] })
+        ) {
+          await navigator.share({
+            title,
+            text: shareText,
+            url,
+            files: [file],
+          });
+          return;
+        }
+      }
+
+      await navigator.share({ title, text: shareText, url });
+    } catch (error) {
+      if (error instanceof DOMException && error.name === "AbortError") {
+        return;
+      }
+
+      console.error("Native share failed:", error);
+      setFeedback({
+        tone: "error",
+        message: "Could not open the native share sheet.",
+      });
+    } finally {
+      setBusyAction(null);
+    }
+  }
+
+  function handleShareToX() {
+    const intentUrl = buildPostIntentUrl(post, window.location.origin);
+    window.open(intentUrl, "_blank", "noopener,noreferrer");
+  }
+
+  const panelId = `share-panel-${post.id}`;
 
   return (
     <div ref={menuRef} className="relative ml-auto">
       <button
         type="button"
-        onClick={() => setOpen(!open)}
+        onClick={() => setOpen((current) => !current)}
         className="flex items-center gap-2 text-sm font-semibold hover:text-accent"
+        aria-expanded={open}
+        aria-haspopup="dialog"
+        aria-controls={panelId}
       >
         Share <Share2 size={16} aria-hidden="true" />
       </button>
 
       {open && (
         <div
-          className="absolute bottom-full right-0 z-20 mb-2 w-52 rounded-lg border border-border bg-background shadow-lg"
-          role="menu"
+          id={panelId}
+          className="absolute bottom-full right-0 z-20 mb-3 w-[22rem] rounded-[28px] border border-border bg-background p-3 shadow-xl"
+          aria-label="Share this post"
         >
-          {/* Theme swatches */}
-          <div className="flex items-center gap-2 border-b border-border px-3 py-2.5">
-            <span className="text-xs font-medium text-muted">Theme</span>
-            <div className="ml-auto flex gap-1.5">
-              {SHARE_THEMES.map((t) => (
+          <div className="rounded-[24px] border border-border bg-subtle/30 p-3">
+            <div>
+              <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-muted">
+                Share This Build
+              </p>
+              <p className="mt-1 text-sm font-semibold text-balance">
+                Export a square card people will actually repost.
+              </p>
+              <p className="mt-1 text-xs text-muted text-pretty">
+                Sized for X, LinkedIn, Instagram, and story screenshots that no
+                longer need to be screenshots.
+              </p>
+            </div>
+
+            <div
+              className="mx-auto mt-3 overflow-hidden rounded-[22px] border border-border bg-background"
+              style={{ width: PREVIEW_SIZE, height: PREVIEW_SIZE }}
+            >
+              <div
+                className="pointer-events-none"
+                style={{
+                  width: 1080,
+                  height: 1080,
+                  transform: `scale(${PREVIEW_SCALE})`,
+                  transformOrigin: "top left",
+                }}
+              >
+                <ShareCardImage post={previewPost} themeId={theme} />
+              </div>
+            </div>
+
+            <div className="mt-3 grid grid-cols-3 gap-2">
+              {SHARE_THEMES.map((shareTheme) => (
                 <button
-                  key={t.id}
+                  key={shareTheme.id}
                   type="button"
-                  onClick={() => setTheme(t.id)}
-                  className="rounded-full"
-                  style={{
-                    width: 24,
-                    height: 24,
-                    background: THEME_SWATCH[t.id],
-                    border:
-                      theme === t.id
-                        ? "2px solid #DF561F"
-                        : "2px solid var(--color-border)",
+                  onClick={() => {
+                    setTheme(shareTheme.id);
+                    setFeedback(null);
                   }}
-                  title={t.label}
-                />
+                  className={cn(
+                    "rounded-2xl border px-2 py-2 text-left transition-colors",
+                    theme === shareTheme.id
+                      ? "border-accent bg-accent/5"
+                      : "border-border bg-background hover:border-accent/40"
+                  )}
+                  aria-pressed={theme === shareTheme.id}
+                  aria-label={`${shareTheme.label} theme`}
+                >
+                  <span
+                    className="block h-8 rounded-xl border border-border/60"
+                    style={{ background: THEME_SWATCH[shareTheme.id] }}
+                  />
+                  <span className="mt-2 block text-xs font-medium">
+                    {shareTheme.label}
+                  </span>
+                </button>
               ))}
             </div>
           </div>
 
-          {/* Actions */}
-          <div className="py-1">
+          <div className="mt-3 grid grid-cols-2 gap-2">
+            {supportsNativeShare && (
+              <button
+                type="button"
+                onClick={handleNativeShare}
+                disabled={busyAction !== null}
+                className="col-span-2 flex items-center justify-center gap-2 rounded-2xl bg-accent px-4 py-3 text-sm font-semibold text-white transition-opacity hover:opacity-90 disabled:opacity-60"
+              >
+                <Send size={16} aria-hidden="true" />
+                {busyAction === "share" ? "Preparing share..." : "Share to apps"}
+              </button>
+            )}
+
+            <button
+              type="button"
+              onClick={handleShareToX}
+              className="flex items-center gap-2 rounded-2xl border border-border bg-background px-4 py-3 text-sm font-medium hover:border-accent/40 hover:text-accent"
+            >
+              <ExternalLink size={16} aria-hidden="true" />
+              Post to X
+            </button>
+
             <button
               type="button"
               onClick={handleCopyLink}
-              className="flex w-full items-center gap-2.5 px-3 py-2 text-sm hover:bg-subtle"
-              role="menuitem"
+              className="flex items-center gap-2 rounded-2xl border border-border bg-background px-4 py-3 text-sm font-medium hover:border-accent/40 hover:text-accent"
             >
-              {copiedLink ? (
-                <Check size={15} className="text-accent" />
+              {copiedAction === "link" ? (
+                <Check size={16} className="text-accent" aria-hidden="true" />
               ) : (
-                <Link2 size={15} className="text-muted" />
+                <Link2 size={16} aria-hidden="true" />
               )}
-              {copiedLink ? "Copied!" : "Copy Link"}
+              {copiedAction === "link" ? "Copied" : "Copy link"}
             </button>
 
-            {supportsClipboardItem && (
+            {supportsClipboardImage && (
               <button
                 type="button"
                 onClick={handleCopyImage}
-                disabled={generating}
-                className="flex w-full items-center gap-2.5 px-3 py-2 text-sm hover:bg-subtle disabled:opacity-50"
-                role="menuitem"
+                disabled={busyAction !== null}
+                className="flex items-center gap-2 rounded-2xl border border-border bg-background px-4 py-3 text-sm font-medium hover:border-accent/40 hover:text-accent disabled:opacity-60"
               >
-                {copiedImage ? (
-                  <Check size={15} className="text-accent" />
+                {copiedAction === "image" ? (
+                  <Check size={16} className="text-accent" aria-hidden="true" />
                 ) : (
-                  <Image size={15} className="text-muted" />
+                  <ImageIcon size={16} aria-hidden="true" />
                 )}
-                {generating
-                  ? "Generating..."
-                  : copiedImage
-                    ? "Copied!"
-                    : "Copy Image"}
+                {busyAction === "copy-image"
+                  ? "Preparing..."
+                  : copiedAction === "image"
+                    ? "Copied"
+                    : "Copy image"}
               </button>
             )}
 
             <button
               type="button"
               onClick={handleDownload}
-              disabled={generating}
-              className="flex w-full items-center gap-2.5 px-3 py-2 text-sm hover:bg-subtle disabled:opacity-50"
-              role="menuitem"
+              disabled={busyAction !== null}
+              className={cn(
+                "flex items-center gap-2 rounded-2xl border border-border bg-background px-4 py-3 text-sm font-medium hover:border-accent/40 hover:text-accent disabled:opacity-60",
+                !supportsClipboardImage && "col-span-2"
+              )}
             >
-              <Download size={15} className="text-muted" />
-              {generating ? "Generating..." : "Download PNG"}
+              <Download size={16} aria-hidden="true" />
+              {busyAction === "download" ? "Preparing..." : "Download PNG"}
             </button>
           </div>
+
+          <div className="mt-3 rounded-[22px] border border-border bg-subtle/30 p-3">
+            <div className="flex items-start justify-between gap-3">
+              <div className="min-w-0">
+                <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-muted">
+                  Starter Caption
+                </p>
+                <p className="mt-1 whitespace-pre-line text-sm text-foreground/85 text-pretty">
+                  {shareText}
+                </p>
+              </div>
+
+              <button
+                type="button"
+                onClick={handleCopyCaption}
+                className="shrink-0 rounded-xl border border-border bg-background px-3 py-2 text-xs font-medium hover:border-accent/40 hover:text-accent"
+              >
+                <span className="flex items-center gap-1.5">
+                  {copiedAction === "caption" ? (
+                    <Check size={14} className="text-accent" aria-hidden="true" />
+                  ) : (
+                    <Copy size={14} aria-hidden="true" />
+                  )}
+                  {copiedAction === "caption" ? "Copied" : "Copy"}
+                </span>
+              </button>
+            </div>
+          </div>
+
+          {feedback && (
+            <div
+              className={cn(
+                "mt-3 rounded-2xl border px-3 py-2 text-sm",
+                feedback.tone === "error"
+                  ? "border-red-200 bg-red-50 text-red-700"
+                  : "border-accent/20 bg-accent/5 text-foreground"
+              )}
+            >
+              {feedback.message}
+            </div>
+          )}
         </div>
       )}
     </div>

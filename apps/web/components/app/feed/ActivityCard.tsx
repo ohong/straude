@@ -431,7 +431,7 @@ export function ActivityCard({ post, userId }: { post: Post; userId?: string | n
           <MessageCircle size={16} aria-hidden="true" />
           {commentCount} {commentCount === 1 ? "comment" : "comments"}
         </Link>
-        <ShareMenu postId={post.id} />
+        <ShareMenu post={post} />
       </div>
 
       {/* Lightbox */}
