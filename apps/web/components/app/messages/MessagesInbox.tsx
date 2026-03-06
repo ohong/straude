@@ -177,7 +177,7 @@ export function MessagesInbox({
   const showThreadList = !activeUsername;
 
   return (
-    <div className="flex min-h-[70vh] flex-col md:flex-row">
+    <div className="flex min-h-[calc(100dvh-7rem)] flex-col md:flex-row">
       <aside
         className={cn(
           "border-b border-border md:block md:w-80 md:shrink-0 md:border-b-0 md:border-r",
@@ -290,7 +290,7 @@ export function MessagesInbox({
 
       <section
         className={cn(
-          "flex min-h-[70vh] flex-1 flex-col",
+          "flex flex-1 flex-col",
           activeUsername ? "flex" : "hidden md:flex"
         )}
       >
@@ -370,7 +370,7 @@ export function MessagesInbox({
             </div>
           ) : (
             <>
-              <div className="flex-1 space-y-3 overflow-y-auto pb-4">
+              <div className="flex flex-1 flex-col justify-end space-y-3 overflow-y-auto pb-4">
                 {messages.length === 0 ? (
                   <div className="rounded-2xl border border-dashed border-border px-4 py-5 text-sm text-muted text-pretty">
                     No messages yet. Send the first note to @{counterpart.username}.
@@ -432,9 +432,9 @@ export function MessagesInbox({
                     id="dm-composer-help"
                     className="text-xs text-muted tabular-nums"
                   >
-                    {draft.trim().length === 0
-                      ? "Type a message to send."
-                      : `${draft.length}/1000 characters`}
+                    {draft.trim().length > 0
+                      ? `${draft.length}/1000`
+                      : "\u00A0"}
                   </p>
                   <Button
                     type="submit"

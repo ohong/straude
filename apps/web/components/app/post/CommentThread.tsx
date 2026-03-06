@@ -402,20 +402,24 @@ export function CommentThread({
             {opts.submitting ? `${opts.submitLabel}...` : opts.submitLabel}
           </button>
         </div>
-        <div className="mt-2 flex items-center justify-between gap-3">
-          <p id={helperId} className="text-xs text-muted">
-            {opts.helperText}
-          </p>
-          {opts.onCancel && (
-            <button
-              type="button"
-              onClick={opts.onCancel}
-              className="text-xs text-muted hover:text-foreground"
-            >
-              Cancel
-            </button>
-          )}
-        </div>
+        {(opts.helperText || opts.onCancel) && (
+          <div className="mt-2 flex items-center justify-between gap-3">
+            {opts.helperText ? (
+              <p id={helperId} className="text-xs text-muted">
+                {opts.helperText}
+              </p>
+            ) : <span />}
+            {opts.onCancel && (
+              <button
+                type="button"
+                onClick={opts.onCancel}
+                className="text-xs text-muted hover:text-foreground"
+              >
+                Cancel
+              </button>
+            )}
+          </div>
+        )}
         {opts.error && (
           <p
             id={errorId}
@@ -492,7 +496,7 @@ export function CommentThread({
                   submitLabel: "Save",
                   submitting: savingEdit,
                   error: editError,
-                  helperText: "Press Enter to save your edit.",
+                  helperText: "",
                 })}
               </div>
             ) : (
@@ -518,8 +522,8 @@ export function CommentThread({
                     onClick={() => toggleReaction(comment)}
                     aria-label={
                       comment.has_reacted
-                        ? "Remove reaction from comment"
-                        : "React to comment"
+                        ? "Unlike comment"
+                        : "Like comment"
                     }
                     aria-pressed={comment.has_reacted}
                     disabled={!userId || isReactionPending}
@@ -534,7 +538,7 @@ export function CommentThread({
                       aria-hidden="true"
                     />
                     <span className="tabular-nums">
-                      {comment.reaction_count ? comment.reaction_count : "React"}
+                      {comment.reaction_count ? comment.reaction_count : "Like"}
                     </span>
                   </button>
 
@@ -629,7 +633,7 @@ export function CommentThread({
                   submitLabel: "Reply",
                   submitting: replySubmitting,
                   error: replyError,
-                  helperText: "Replies stay grouped in this thread.",
+                  helperText: "",
                 })}
               </div>
             )}
@@ -657,7 +661,7 @@ export function CommentThread({
         <ol className="flex flex-col">{threadedComments.map((comment) => renderComment(comment))}</ol>
       )}
 
-      {userId && (
+      {userId && !replyingTo && (
         <div className="border-t border-border px-4 py-4 sm:px-6">
           {renderComposer({
             id: "new-comment",
@@ -668,7 +672,7 @@ export function CommentThread({
             submitLabel: "Post",
             submitting,
             error: composerError,
-            helperText: "Press Enter to post.",
+            helperText: "",
           })}
         </div>
       )}

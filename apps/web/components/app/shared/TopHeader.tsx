@@ -165,7 +165,7 @@ export function TopHeader({ username, avatarUrl }: TopHeaderProps) {
           >
             <MessageSquare size={20} aria-hidden="true" />
             {messageUnreadCount > 0 && (
-              <span className="absolute -top-1 -right-1 h-2 w-2 rounded-full bg-accent" />
+              <span className="absolute top-0.5 right-0.5 h-2 w-2 rounded-full bg-accent" />
             )}
           </Link>
 
@@ -179,14 +179,14 @@ export function TopHeader({ username, avatarUrl }: TopHeaderProps) {
                   return !v;
                 });
               }}
-              className="relative text-muted hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent focus-visible:ring-offset-2 rounded"
+              className="relative rounded p-1.5 text-muted hover:bg-subtle hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent focus-visible:ring-offset-2"
               aria-label="Notifications"
               aria-haspopup="true"
               aria-expanded={notifOpen}
             >
               <Bell size={20} aria-hidden="true" />
               {unreadCount > 0 && (
-                <span className="absolute -top-1 -right-1 h-2 w-2 rounded-full bg-accent" />
+                <span className="absolute top-0.5 right-0.5 h-2 w-2 rounded-full bg-accent" />
               )}
             </button>
 
@@ -272,7 +272,7 @@ export function TopHeader({ username, avatarUrl }: TopHeaderProps) {
               aria-label="Profile menu"
               aria-haspopup="true"
               aria-expanded={profileOpen}
-              className="rounded focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent focus-visible:ring-offset-2"
+              className="rounded p-1.5 hover:bg-subtle focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent focus-visible:ring-offset-2"
             >
               <Avatar
                 src={avatarUrl}
