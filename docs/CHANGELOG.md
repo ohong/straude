@@ -4,6 +4,7 @@
 
 ### Added
 
+- **Markdown rendering in comments.** Comments now render markdown (bold, italic, code, lists, blockquotes, links) via ReactMarkdown, matching the activity description rendering. Applies to both the full comment thread and inline feed previews.
 - **CLI first-push backfill.** New users now get their last 3 days of usage on first `straude` push instead of today-only, so profiles aren't empty on signup.
 - **`GET /api/usage/status` endpoint.** Returns aggregated usage stats and leaderboard rank for the authenticated user, used by the onboarding polling flow.
 - **Live onboarding step 3.** `Step3LogSession` now polls `/api/usage/status` every 4 seconds and transitions to a success state with stats grid and leaderboard rank when data arrives.

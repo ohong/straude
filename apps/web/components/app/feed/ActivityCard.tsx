@@ -465,7 +465,18 @@ export function ActivityCard({ post, userId }: { post: Post; userId?: string | n
                     {timeAgo(c.created_at)}
                   </span>
                 </div>
-                <p className="mt-0.5 text-foreground/80">{c.content}</p>
+                <div className="mt-0.5 text-foreground/80 [&_p+p]:mt-2 [&_a]:text-accent [&_a]:underline [&_code]:bg-subtle [&_code]:px-1 [&_code]:py-0.5 [&_code]:font-[family-name:var(--font-mono)] [&_code]:text-xs [&_pre]:mt-1 [&_pre]:overflow-x-auto [&_pre]:border-l-2 [&_pre]:border-l-accent [&_pre]:bg-subtle [&_pre]:p-2 [&_pre]:font-[family-name:var(--font-mono)] [&_pre]:text-xs [&_ul]:mt-1 [&_ul]:list-disc [&_ul]:pl-5 [&_ol]:mt-1 [&_ol]:list-decimal [&_ol]:pl-5 [&_li]:mt-0.5 [&_blockquote]:mt-1 [&_blockquote]:border-l-2 [&_blockquote]:border-l-muted [&_blockquote]:pl-3 [&_blockquote]:text-muted [&_strong]:font-semibold [&_em]:italic [&_del]:text-muted [&_del]:line-through">
+                  <ReactMarkdown
+                    remarkPlugins={[remarkBreaks]}
+                    allowedElements={[
+                      "p", "strong", "em", "del", "code", "pre", "a", "br",
+                      "ul", "ol", "li", "blockquote",
+                    ]}
+                    unwrapDisallowed
+                  >
+                    {mentionsToMarkdownLinks(c.content)}
+                  </ReactMarkdown>
+                </div>
               </div>
             </div>
           ))}

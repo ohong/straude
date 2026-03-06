@@ -3,10 +3,15 @@
 import { useState } from "react";
 import Link from "next/link";
 import { Avatar } from "@/components/ui/Avatar";
+import { mentionsToMarkdownLinks } from "@/lib/utils/mentions";
 import type { Comment } from "@/types";
 import { MentionInput } from "@/components/app/shared/MentionInput";
+import dynamic from "next/dynamic";
+import remarkBreaks from "remark-breaks";
 
-const MENTION_RE = /(?:^|(?<=\s))@([a-zA-Z0-9_-]{1,39})\b/g;
+const ReactMarkdown = dynamic(() => import("react-markdown"), {
+  loading: () => null,
+});
 
 function timeAgo(dateStr: string) {
   const diff = Date.now() - new Date(dateStr).getTime();
@@ -19,42 +24,22 @@ function timeAgo(dateStr: string) {
   return `${days}d ago`;
 }
 
-/** Render comment text with @mentions as accent-colored links. */
-function MentionText({ text }: { text: string }) {
-  const parts: React.ReactNode[] = [];
-  let lastIndex = 0;
-
-  for (const match of text.matchAll(MENTION_RE)) {
-    const start = match.index;
-    const username = match[1];
-    const fullMatch = match[0];
-
-    // Text before the mention (include leading whitespace that's part of the lookbehind)
-    if (start > lastIndex) {
-      parts.push(text.slice(lastIndex, start));
-    }
-
-    // Leading whitespace within the match (e.g. space before @)
-    const prefix = fullMatch.startsWith("@") ? "" : fullMatch[0];
-    if (prefix) parts.push(prefix);
-
-    parts.push(
-      <Link
-        key={`${start}-${username}`}
-        href={`/u/${username.toLowerCase()}`}
-        className="font-semibold text-accent hover:underline"
+/** Render comment text as markdown with @mention support. */
+function CommentBody({ text }: { text: string }) {
+  return (
+    <div className="mt-0.5 text-sm [&_p+p]:mt-2 [&_a]:text-accent [&_a]:underline [&_code]:bg-subtle [&_code]:px-1 [&_code]:py-0.5 [&_code]:font-[family-name:var(--font-mono)] [&_code]:text-xs [&_pre]:mt-2 [&_pre]:overflow-x-auto [&_pre]:border-l-2 [&_pre]:border-l-accent [&_pre]:bg-subtle [&_pre]:p-3 [&_pre]:font-[family-name:var(--font-mono)] [&_pre]:text-xs [&_ul]:mt-1.5 [&_ul]:list-disc [&_ul]:pl-5 [&_ol]:mt-1.5 [&_ol]:list-decimal [&_ol]:pl-5 [&_li]:mt-0.5 [&_blockquote]:mt-2 [&_blockquote]:border-l-2 [&_blockquote]:border-l-muted [&_blockquote]:pl-3 [&_blockquote]:text-muted [&_strong]:font-semibold [&_em]:italic [&_del]:text-muted [&_del]:line-through">
+      <ReactMarkdown
+        remarkPlugins={[remarkBreaks]}
+        allowedElements={[
+          "p", "strong", "em", "del", "code", "pre", "a", "br",
+          "ul", "ol", "li", "blockquote",
+        ]}
+        unwrapDisallowed
       >
-        @{username}
-      </Link>,
-    );
-    lastIndex = start + fullMatch.length;
-  }
-
-  if (lastIndex < text.length) {
-    parts.push(text.slice(lastIndex));
-  }
-
-  return <p className="mt-0.5 text-sm">{parts}</p>;
+        {mentionsToMarkdownLinks(text)}
+      </ReactMarkdown>
+    </div>
+  );
 }
 
 export function CommentThread({
@@ -195,7 +180,7 @@ export function CommentThread({
                     </button>
                   </div>
                 ) : (
-                  <MentionText text={comment.content} />
+                  <CommentBody text={comment.content} />
                 )}
                 {userId === comment.user_id && editingId !== comment.id && (
                   <div className="mt-1 flex gap-3">
