@@ -4,7 +4,7 @@ import { useState, type ReactNode } from "react";
 import Link from "next/link";
 import dynamic from "next/dynamic";
 import { AlertDialog } from "@base-ui-components/react/alert-dialog";
-import { Heart, Reply } from "lucide-react";
+import { ChevronDown, ChevronRight, Heart, Reply } from "lucide-react";
 import remarkBreaks from "remark-breaks";
 import { Avatar } from "@/components/ui/Avatar";
 import { MentionInput } from "@/components/app/shared/MentionInput";
@@ -101,6 +101,7 @@ export function CommentThread({
   const [editError, setEditError] = useState<string | null>(null);
   const [deleteError, setDeleteError] = useState<string | null>(null);
   const [actionErrors, setActionErrors] = useState<Record<string, string>>({});
+  const [collapsedThreads, setCollapsedThreads] = useState<Set<string>>(new Set());
 
   const threadedComments = buildCommentTree(comments);
 
@@ -638,11 +639,39 @@ export function CommentThread({
               </div>
             )}
 
-            {comment.replies && comment.replies.length > 0 && (
-              <ol className="mt-3 border-l border-border pl-4">
-                {comment.replies.map((reply) => renderComment(reply, depth + 1))}
-              </ol>
-            )}
+            {comment.replies && comment.replies.length > 0 && (() => {
+              const isCollapsed = collapsedThreads.has(comment.id);
+              const count = comment.replies.length;
+              return (
+                <>
+                  <button
+                    type="button"
+                    onClick={() =>
+                      setCollapsedThreads((prev) => {
+                        const next = new Set(prev);
+                        if (next.has(comment.id)) next.delete(comment.id);
+                        else next.add(comment.id);
+                        return next;
+                      })
+                    }
+                    aria-expanded={!isCollapsed}
+                    className="mt-2 inline-flex items-center gap-1 text-xs text-muted hover:text-foreground"
+                  >
+                    {isCollapsed ? (
+                      <ChevronRight size={14} aria-hidden="true" />
+                    ) : (
+                      <ChevronDown size={14} aria-hidden="true" />
+                    )}
+                    {count} {count === 1 ? "reply" : "replies"}
+                  </button>
+                  {!isCollapsed && (
+                    <ol className="mt-1 border-l border-border pl-4">
+                      {comment.replies.map((reply) => renderComment(reply, depth + 1))}
+                    </ol>
+                  )}
+                </>
+              );
+            })()}
           </div>
         </article>
       </li>
