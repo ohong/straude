@@ -25,6 +25,9 @@ describe("type shapes", () => {
       is_public: true,
       timezone: "America/New_York",
       email_notifications: true,
+      email_mention_notifications: true,
+      email_dm_notifications: true,
+      streak_freezes: 0,
       created_at: "2025-01-01T00:00:00Z",
       updated_at: "2025-01-01T00:00:00Z",
     };
@@ -47,6 +50,9 @@ describe("type shapes", () => {
       is_public: false,
       timezone: "UTC",
       email_notifications: true,
+      email_mention_notifications: true,
+      email_dm_notifications: true,
+      streak_freezes: 0,
       created_at: "2025-01-01T00:00:00Z",
       updated_at: "2025-01-01T00:00:00Z",
     };

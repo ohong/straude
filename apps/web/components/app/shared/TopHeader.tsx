@@ -10,6 +10,7 @@ import {
   Settings,
   LogOut,
   BarChart3,
+  MessageSquare,
 } from "lucide-react";
 import { Avatar } from "@/components/ui/Avatar";
 import { cn } from "@/lib/utils/cn";
@@ -40,6 +41,7 @@ export function TopHeader({ username, avatarUrl }: TopHeaderProps) {
 
   const [notifications, setNotifications] = useState<Notification[]>([]);
   const [unreadCount, setUnreadCount] = useState(0);
+  const [messageUnreadCount, setMessageUnreadCount] = useState(0);
 
   // Close dropdowns on outside click or Escape
   useEffect(() => {
@@ -76,16 +78,29 @@ export function TopHeader({ username, avatarUrl }: TopHeaderProps) {
     setUnreadCount(data.unread_count ?? 0);
   }, []);
 
+  const fetchMessageUnreadCount = useCallback(async () => {
+    const res = await fetch("/api/messages/threads?limit=1");
+    if (!res.ok) return;
+    const data = await res.json();
+    setMessageUnreadCount(data.unread_count ?? 0);
+  }, []);
+
   // Initial unread count fetch + mark as returning user + listen for external changes
   useEffect(() => {
     fetchNotifications();
+    fetchMessageUnreadCount();
     try { localStorage.setItem("straude_returning", "1"); } catch {}
     function handleSync() {
       fetchNotifications();
+      fetchMessageUnreadCount();
     }
     window.addEventListener("notifications-updated", handleSync);
-    return () => window.removeEventListener("notifications-updated", handleSync);
-  }, [fetchNotifications]);
+    window.addEventListener("messages-updated", handleSync);
+    return () => {
+      window.removeEventListener("notifications-updated", handleSync);
+      window.removeEventListener("messages-updated", handleSync);
+    };
+  }, [fetchMessageUnreadCount, fetchNotifications]);
 
   async function handleLogout() {
     const supabase = createClient();
@@ -143,6 +158,17 @@ export function TopHeader({ username, avatarUrl }: TopHeaderProps) {
 
         {/* Right — Actions */}
         <div className="flex items-center gap-3">
+          <Link
+            href="/messages"
+            className="relative rounded p-1.5 text-muted hover:bg-subtle hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent focus-visible:ring-offset-2"
+            aria-label="Messages"
+          >
+            <MessageSquare size={20} aria-hidden="true" />
+            {messageUnreadCount > 0 && (
+              <span className="absolute -top-1 -right-1 h-2 w-2 rounded-full bg-accent" />
+            )}
+          </Link>
+
           {/* Notifications */}
           <div ref={notifRef} className="relative">
             <button

@@ -203,6 +203,7 @@ describe("PATCH /api/users/me", () => {
       makeRequest("PATCH", "/api/users/me", {
         username: "new_name",
         bio: "New bio",
+        email_dm_notifications: false,
       })
     );
     const json = await res.json();

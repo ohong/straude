@@ -13,6 +13,7 @@ const NOTIFICATION_TYPES = [
   { value: "kudos", label: "Kudos" },
   { value: "comment", label: "Comments" },
   { value: "mention", label: "Mentions" },
+  { value: "message", label: "Messages" },
 ] as const;
 
 const PAGE_SIZE = 20;

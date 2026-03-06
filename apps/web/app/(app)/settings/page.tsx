@@ -28,6 +28,7 @@ export default function SettingsPage() {
   const [isPublic, setIsPublic] = useState(true);
   const [emailNotifications, setEmailNotifications] = useState(true);
   const [emailMentionNotifications, setEmailMentionNotifications] = useState(true);
+  const [emailDmNotifications, setEmailDmNotifications] = useState(true);
   const [timezone, setTimezone] = useState("");
 
   useEffect(() => {
@@ -55,6 +56,7 @@ export default function SettingsPage() {
         setIsPublic(data.is_public);
         setEmailNotifications(data.email_notifications ?? true);
         setEmailMentionNotifications(data.email_mention_notifications ?? true);
+        setEmailDmNotifications(data.email_dm_notifications ?? true);
         setTimezone(data.timezone ?? Intl.DateTimeFormat().resolvedOptions().timeZone);
       }
     }
@@ -80,6 +82,7 @@ export default function SettingsPage() {
         is_public: isPublic,
         email_notifications: emailNotifications,
         email_mention_notifications: emailMentionNotifications,
+        email_dm_notifications: emailDmNotifications,
         timezone,
       }),
     });
@@ -278,6 +281,26 @@ export default function SettingsPage() {
             {emailMentionNotifications
               ? "You\u2019ll receive an email when someone @mentions you in a post or comment."
               : "Email notifications for mentions are turned off."}
+          </p>
+        </div>
+
+        <div className="space-y-1.5">
+          <div className="flex items-center gap-3">
+            <input
+              type="checkbox"
+              checked={emailDmNotifications}
+              onChange={(e) => setEmailDmNotifications(e.target.checked)}
+              id="email_dm_notifications"
+              className="accent-accent"
+            />
+            <label htmlFor="email_dm_notifications" className="text-sm font-medium">
+              Direct message emails
+            </label>
+          </div>
+          <p className="pl-7 text-xs text-muted">
+            {emailDmNotifications
+              ? "You\u2019ll receive an email when someone sends you a direct message."
+              : "Email notifications for direct messages are turned off."}
           </p>
         </div>
 

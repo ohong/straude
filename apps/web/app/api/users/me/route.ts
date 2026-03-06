@@ -17,6 +17,7 @@ const ALLOWED_FIELDS = [
   "onboarding_completed",
   "email_notifications",
   "email_mention_notifications",
+  "email_dm_notifications",
 ] as const;
 
 export async function GET() {

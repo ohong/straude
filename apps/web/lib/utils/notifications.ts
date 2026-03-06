@@ -12,6 +12,8 @@ export function notificationMessage(n: Notification): string {
       return `${actor} commented on your post`;
     case "mention":
       return `${actor} mentioned you in a ${n.comment_id ? "comment" : "post"}`;
+    case "message":
+      return `${actor} sent you a direct message`;
     default:
       return `${actor} interacted with you`;
   }
@@ -25,6 +27,10 @@ export function notificationHref(n: Notification): string {
     case "comment":
     case "mention":
       return n.post_id ? `/post/${n.post_id}` : "/notifications";
+    case "message":
+      return n.actor?.username
+        ? `/messages?with=${encodeURIComponent(n.actor.username)}`
+        : "/messages";
     default:
       return "/notifications";
   }

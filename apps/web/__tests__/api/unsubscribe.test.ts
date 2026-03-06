@@ -66,4 +66,22 @@ describe("GET /api/unsubscribe", () => {
     expect(res.status).toBe(400);
     expect(json.error).toBe("Invalid token");
   });
+
+  it("can unsubscribe from DM emails specifically", async () => {
+    (verifyUnsubscribeToken as any).mockReturnValue("user-123");
+
+    const mockUpdate = vi.fn().mockReturnValue({
+      eq: vi.fn().mockResolvedValue({ error: null }),
+    });
+    (getServiceClient as any).mockReturnValue({
+      from: vi.fn().mockReturnValue({ update: mockUpdate }),
+    });
+
+    const res = await GET(makeRequest("/api/unsubscribe?token=valid-token&kind=dm"));
+
+    expect(res.status).toBe(200);
+    const html = await res.text();
+    expect(html).toContain("direct messages");
+    expect(mockUpdate).toHaveBeenCalledWith({ email_dm_notifications: false });
+  });
 });

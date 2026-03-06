@@ -16,6 +16,7 @@ export interface User {
   timezone: string;
   email_notifications: boolean;
   email_mention_notifications: boolean;
+  email_dm_notifications?: boolean;
   streak_freezes: number;
   created_at: string;
   updated_at: string;
@@ -170,12 +171,36 @@ export interface Notification {
   id: string;
   user_id: string;
   actor_id: string;
-  type: "follow" | "kudos" | "comment" | "mention";
+  type: "follow" | "kudos" | "comment" | "mention" | "message";
   post_id: string | null;
   comment_id: string | null;
   read: boolean;
   created_at: string;
   actor?: Pick<User, "username" | "avatar_url">;
+}
+
+export interface DirectMessage {
+  id: string;
+  sender_id: string;
+  recipient_id: string;
+  content: string;
+  read_at: string | null;
+  created_at: string;
+  sender?: Pick<User, "id" | "username" | "avatar_url" | "display_name">;
+  recipient?: Pick<User, "id" | "username" | "avatar_url" | "display_name">;
+}
+
+export interface DirectMessageThread {
+  counterpart_id: string;
+  counterpart_username: string | null;
+  counterpart_avatar_url: string | null;
+  counterpart_display_name: string | null;
+  last_message_id: string;
+  last_message_content: string;
+  last_message_created_at: string;
+  last_message_sender_id: string;
+  last_message_is_from_me: boolean;
+  unread_count: number;
 }
 
 export type PromptSubmissionStatus =

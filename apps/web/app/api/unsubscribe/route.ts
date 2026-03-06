@@ -4,6 +4,7 @@ import { getServiceClient } from "@/lib/supabase/service";
 
 export async function GET(request: NextRequest) {
   const token = request.nextUrl.searchParams.get("token");
+  const kind = request.nextUrl.searchParams.get("kind") === "dm" ? "dm" : "comment";
   if (!token) {
     return NextResponse.json({ error: "Missing token" }, { status: 400 });
   }
@@ -16,7 +17,11 @@ export async function GET(request: NextRequest) {
   const db = getServiceClient();
   await db
     .from("users")
-    .update({ email_notifications: false })
+    .update(
+      kind === "dm"
+        ? { email_dm_notifications: false }
+        : { email_notifications: false }
+    )
     .eq("id", userId);
 
   const appUrl = (
@@ -29,7 +34,7 @@ export async function GET(request: NextRequest) {
 <body style="font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif;display:flex;justify-content:center;padding:80px 16px;">
   <div style="max-width:400px;text-align:center;">
     <h2 style="margin:0 0 8px;">Unsubscribed</h2>
-    <p style="color:#666;">You will no longer receive email notifications for comments.</p>
+    <p style="color:#666;">You will no longer receive email notifications for ${kind === "dm" ? "direct messages" : "comments"}.</p>
     <p style="margin-top:24px;"><a href="${appUrl}/settings" style="color:#DF561F;">Manage settings</a></p>
   </div>
 </body></html>`,
