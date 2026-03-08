@@ -4,6 +4,8 @@ import type { Metadata } from "next";
 
 export const metadata: Metadata = {
   title: "Terms of Service — Straude",
+  description:
+    "Terms governing your use of Straude, the social platform for tracking and sharing Claude Code usage.",
 };
 
 export default function TermsPage() {
