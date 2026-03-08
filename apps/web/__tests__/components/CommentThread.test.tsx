@@ -211,10 +211,10 @@ describe("CommentThread", () => {
       />,
     );
 
-    fireEvent.click(screen.getByRole("button", { name: /react to comment/i }));
+    fireEvent.click(screen.getByRole("button", { name: /like comment/i }));
 
     await waitFor(() => {
-      expect(screen.getByRole("button", { name: /remove reaction from comment/i })).toBeInTheDocument();
+      expect(screen.getByRole("button", { name: /unlike comment/i })).toBeInTheDocument();
       expect(screen.getByText("1")).toBeInTheDocument();
     });
 

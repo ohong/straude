@@ -235,12 +235,6 @@ export async function POST(request: NextRequest) {
   };
 
   after(async () => {
-    await supabase.from("notifications").insert({
-      user_id: counterpart.id,
-      actor_id: user.id,
-      type: "message",
-    });
-
     await fireDirectMessageNotificationEmail({
       recipientUserId: counterpart.id,
       actorUsername: sender.username ?? "Someone",

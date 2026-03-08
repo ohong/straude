@@ -1,7 +1,7 @@
 import { NextResponse, type NextRequest } from "next/server";
 import { createClient } from "@/lib/supabase/server";
 
-const VALID_TYPES = new Set(["follow", "kudos", "comment", "mention", "message", "referral"]);
+const VALID_TYPES = new Set(["follow", "kudos", "comment", "mention", "referral"]);
 
 export async function GET(request: NextRequest) {
   const supabase = await createClient();
@@ -23,6 +23,7 @@ export async function GET(request: NextRequest) {
     .from("notifications")
     .select("*, actor:users!notifications_actor_id_fkey(username, avatar_url)")
     .eq("user_id", user.id)
+    .neq("type", "message")
     .order("created_at", { ascending: false })
     .range(offset, offset + limit - 1);
 
@@ -34,7 +35,8 @@ export async function GET(request: NextRequest) {
     .from("notifications")
     .select("id", { count: "exact", head: true })
     .eq("user_id", user.id)
-    .eq("read", false);
+    .eq("read", false)
+    .neq("type", "message");
 
   const [notificationsRes, unreadRes] = await Promise.all([query, countQuery]);
 

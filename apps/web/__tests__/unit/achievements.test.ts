@@ -18,6 +18,8 @@ function makeStats(overrides: Partial<AchievementStats> = {}): AchievementStats 
     commentsReceived: 0,
     commentsSent: 0,
     hasPhoto: false,
+    crewSize: 0,
+    crewTotalSpend: 0,
     ...overrides,
   };
 }
@@ -36,7 +38,7 @@ describe("achievement definitions", () => {
 
   it("every achievement has a valid trigger", () => {
     for (const a of ACHIEVEMENTS) {
-      expect(["usage", "kudos", "comment", "photo"]).toContain(a.trigger);
+      expect(["usage", "kudos", "comment", "photo", "referral"]).toContain(a.trigger);
     }
   });
 
@@ -54,6 +56,10 @@ describe("achievement definitions", () => {
 
   it("has 1 photo achievement", () => {
     expect(ACHIEVEMENTS.filter((a) => a.trigger === "photo")).toHaveLength(1);
+  });
+
+  it("has 4 referral achievements", () => {
+    expect(ACHIEVEMENTS.filter((a) => a.trigger === "referral")).toHaveLength(4);
   });
 });
 
