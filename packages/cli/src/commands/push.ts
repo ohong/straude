@@ -36,6 +36,10 @@ interface PushOptions {
   dryRun?: boolean;
 }
 
+function isMissingClaudeDataError(error: Error): boolean {
+  return error.message.includes("No valid Claude data directories found");
+}
+
 function formatDate(d: Date): string {
   const y = d.getFullYear();
   const m = String(d.getMonth() + 1).padStart(2, "0");
@@ -220,22 +224,28 @@ export async function pushCommand(options: PushOptions, apiUrlOverride?: string)
     runCodexRawAsync(sinceStr, untilStr),
   ]);
 
-  // Claude data is required — fail if it errored
-  if (claudeResult instanceof Error) {
-    console.error(claudeResult.message);
-    process.exit(1);
-  }
-  const claudeRaw: string = claudeResult;
-
-  let claudeEntries: CcusageDailyEntry[];
+  let claudeRaw = "";
+  let claudeEntries: CcusageDailyEntry[] = [];
   let claudeAnomalies: Array<{ confidence: "high" | "medium" | "low"; mode: string }> = [];
-  try {
-    const parsed = parseCcusageOutput(claudeRaw);
-    claudeEntries = parsed.data;
-    claudeAnomalies = (parsed.anomalies ?? []).map((a) => ({ confidence: a.confidence, mode: a.mode }));
-  } catch (err) {
-    console.error((err as Error).message);
-    process.exit(1);
+
+  if (claudeResult instanceof Error) {
+    // Codex-only users do not have local Claude data; keep other Claude failures fatal.
+    if (isMissingClaudeDataError(claudeResult)) {
+      console.log("No Claude Code data found locally; syncing Codex usage only.");
+    } else {
+      console.error(claudeResult.message);
+      process.exit(1);
+    }
+  } else {
+    claudeRaw = claudeResult;
+    try {
+      const parsed = parseCcusageOutput(claudeRaw);
+      claudeEntries = parsed.data;
+      claudeAnomalies = (parsed.anomalies ?? []).map((a) => ({ confidence: a.confidence, mode: a.mode }));
+    } catch (err) {
+      console.error((err as Error).message);
+      process.exit(1);
+    }
   }
 
   // Codex data — silent on fetch failure (empty string), but surface parser anomalies.

@@ -424,6 +424,92 @@ describe("pushCommand", () => {
     expect(mockApiRequest).toHaveBeenCalled();
   });
 
+  it("proceeds with Codex data only when Claude local data is missing", async () => {
+    const today = todayStr();
+
+    mockRunCcusageRawAsync.mockRejectedValue(
+      new Error("ccusage failed: No valid Claude data directories found"),
+    );
+    mockRunCodexRawAsync.mockResolvedValue('{"daily":[]}');
+    mockParseCodexOutput.mockReturnValue({
+      data: [
+        {
+          date: today,
+          models: ["gpt-5-codex"],
+          inputTokens: 2000,
+          outputTokens: 800,
+          cacheCreationTokens: 0,
+          cacheReadTokens: 0,
+          totalTokens: 2800,
+          costUSD: 3.0,
+        },
+      ],
+    });
+
+    mockApiRequest.mockResolvedValue({
+      results: [
+        { date: today, usage_id: "u-1", post_id: "p-1", post_url: "https://straude.com/post/p-1", action: "created" },
+      ],
+    });
+
+    await pushCommand({});
+
+    expect(mockParseCcusageOutput).not.toHaveBeenCalled();
+    expect(console.log).toHaveBeenCalledWith(
+      "No Claude Code data found locally; syncing Codex usage only.",
+    );
+
+    const submitCall = mockApiRequest.mock.calls[0]!;
+    const body = JSON.parse(submitCall[2]!.body as string);
+    expect(body.entries).toHaveLength(1);
+    expect(body.entries[0]!.data.models).toEqual(["gpt-5-codex"]);
+    expect(body.entries[0]!.data.costUSD).toBe(3.0);
+  });
+
+  it("shows no usage when Claude local data is missing and Codex has no data", async () => {
+    mockRunCcusageRawAsync.mockRejectedValue(
+      new Error("ccusage failed: No valid Claude data directories found"),
+    );
+    mockRunCodexRawAsync.mockResolvedValue("");
+
+    await pushCommand({});
+
+    expect(mockApiRequest).not.toHaveBeenCalled();
+    expect(console.log).toHaveBeenCalledWith(
+      "No Claude Code data found locally; syncing Codex usage only.",
+    );
+    expect(console.log).toHaveBeenCalledWith(
+      expect.stringContaining("No usage data found"),
+    );
+  });
+
+  it("still fails on generic Claude errors even if Codex has data", async () => {
+    const today = todayStr();
+
+    mockRunCcusageRawAsync.mockRejectedValue(
+      new Error("ccusage failed: unexpected runtime error"),
+    );
+    mockRunCodexRawAsync.mockResolvedValue('{"daily":[]}');
+    mockParseCodexOutput.mockReturnValue({
+      data: [
+        {
+          date: today,
+          models: ["gpt-5-codex"],
+          inputTokens: 2000,
+          outputTokens: 800,
+          cacheCreationTokens: 0,
+          cacheReadTokens: 0,
+          totalTokens: 2800,
+          costUSD: 3.0,
+        },
+      ],
+    });
+
+    await expect(pushCommand({})).rejects.toThrow(ExitError);
+    expect(process.exit).toHaveBeenCalledWith(1);
+    expect(mockApiRequest).not.toHaveBeenCalled();
+  });
+
   it("skips unresolved codex rows without dropping Claude rows on the same date", async () => {
     const today = todayStr();
 

@@ -440,6 +440,38 @@ describe("Codex integration", () => {
     const errorCalls = (console.error as any).mock.calls.map((c: any[]) => c[0]);
     expect(errorCalls.every((msg: string) => !msg.includes("codex"))).toBe(true);
   });
+
+  it("missing local Claude data falls back to Codex-only sync", async () => {
+    seedConfig();
+    const today = todayStr();
+
+    mockExecFileSync.mockImplementation(((cmd: string, args: string[]) => {
+      if (args?.some?.((a: string) => typeof a === "string" && a.includes("@ccusage/codex"))) {
+        return codexJson([today]);
+      }
+
+      throw new Error(`No valid Claude data directories found. Please ensure at least one of the following exists:
+- /Users/test/.config/claude/projects
+- /Users/test/.claude/projects`);
+    }) as typeof execFileSync);
+
+    mockSuccessfulSubmit([today]);
+
+    await pushCommand({});
+
+    expect(mockFetch).toHaveBeenCalledTimes(1);
+    expect(console.log).toHaveBeenCalledWith(
+      "No Claude Code data found locally; syncing Codex usage only.",
+    );
+
+    const [, options] = mockFetch.mock.calls[0]!;
+    const body = JSON.parse(options.body);
+    const data = body.entries[0].data;
+
+    expect(data.models).toEqual(["gpt-5-codex"]);
+    expect(data.costUSD).toBe(3.0);
+    expect(data.modelBreakdown).toEqual([{ model: "gpt-5-codex", cost_usd: 3.0 }]);
+  });
 });
 
 // ===========================================================================
