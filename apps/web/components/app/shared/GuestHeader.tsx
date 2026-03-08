@@ -22,7 +22,7 @@ export function GuestHeader() {
   }, []);
 
   return (
-    <header className="flex h-14 shrink-0 items-center justify-between border-b border-border bg-background px-4 sm:px-6">
+    <header className="safe-top flex h-14 shrink-0 items-center justify-between border-b border-border bg-background px-4 sm:px-6">
       <Link href="/" className="flex items-center gap-2">
         <div
           className="h-5 w-5 bg-accent"
@@ -73,8 +73,7 @@ export function GuestMobileNav() {
 
   return (
     <nav
-      className="fixed inset-x-0 bottom-0 z-50 flex h-[60px] items-center justify-around border-t border-border bg-background sm:hidden"
-      style={{ paddingBottom: "env(safe-area-inset-bottom)" }}
+      className="fixed inset-x-0 bottom-0 z-50 flex h-[60px] items-center justify-around border-t border-border bg-background safe-bottom sm:hidden"
     >
       {mobileNavItems.map(({ href, label, icon: Icon }) => (
         <Link

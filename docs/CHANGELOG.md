@@ -4,6 +4,8 @@
 
 ### Added
 
+- **PWA manifest and mobile standalone support.** Created `manifest.ts` for Add-to-Home-Screen with standalone display mode. Added `viewportFit: "cover"` to viewport config and safe area inset utility classes for notched devices.
+- **Referral CTA in feed sidebar.** Added "Grow Your Crew" section with invite button to `RightSidebar`.
 - **Referral system.** Users can share `straude.com/join/[username]` to invite others. The join page shows competitive stats (weekly spend, streak, total spend) with provocative copy to drive sign-ups. Referral attribution is tracked via a `referred_by` column on `users`, set automatically when a referred user completes onboarding. Referrals create mutual follows, send a notification and email to the referrer, and trigger four new achievements (First Recruit, Crew of 5, Pace Group, Coach). Profile pages show "Recruited by" badges and crew counts. Settings page includes a referral link with copy button.
 - **Collapsible threaded replies.** Reply threads on comments are now collapsible via a toggle button showing the reply count. Threads start expanded by default.
 - **Comment threads and comment reactions.** Post detail comments now support YouTube-style reply threads and Strava-style reactions on individual comments. Added `parent_comment_id` on `comments`, a new `comment_reactions` table, and `POST`/`DELETE /api/comments/[id]/reactions`. The comment UI now groups replies beneath their root comment with inline reply/edit composers and a confirmation dialog for delete.
@@ -19,6 +21,10 @@
 
 ### Fixed
 
+- **Mobile notification dropdown overflow.** Notification and profile dropdowns now use fixed full-width positioning on mobile instead of absolute right-aligned, preventing off-screen overflow. Notification scroll area uses `max-h-[60vh]` on mobile for better usability.
+- **Mobile touch polish.** Disabled `-webkit-tap-highlight-color` and `overscroll-behavior` on body for native app feel. Applied safe area insets to `TopHeader`, `MobileNav`, `GuestHeader`, and `GuestMobileNav`.
+- **Join page improvements.** Headline now shows all-time total spend with dynamic tool detection (Claude Code vs Codex based on model breakdown). Added `HalftoneCanvas` background, mobile-responsive layout, and `revalidate = 0` for fresh data. Footer hides logo on join page via new `hideLogo` prop.
+- **Notification dot positioning.** Moved unread indicator dots from `top-0.5 right-0.5` to `top-0 right-0` for both messages and bell icons.
 - **CLI verify page dead-end for logged-out users.** The `/cli/verify` page now detects unauthenticated users on mount and shows a "Sign in to authorize" button that redirects to `/login?next=` with return URL, instead of a dead-end error message.
 - **`text-balance` on all headings.** Added `text-balance` class to `<h1>`–`<h4>` elements across landing and app components to prevent orphaned words.
 - **Hardcoded colors on landing page.** Replaced `text-[#111]`, `text-[#ddd]`, `bg-[#050505]`, `text-[#F0F0F0]` in Navbar and landing page with theme tokens (`text-foreground`, `border-border`, `bg-landing-bg`, `text-landing-text`).
