@@ -1,12 +1,13 @@
 import { createClient } from "@/lib/supabase/server";
 import { notFound } from "next/navigation";
 import Link from "next/link";
-import { MapPin, LinkIcon, Github, Flame, Zap } from "lucide-react";
+import { MapPin, LinkIcon, Github, Flame, Zap, Users } from "lucide-react";
 import { Avatar } from "@/components/ui/Avatar";
 import { AchievementBadges } from "@/components/app/profile/AchievementBadges";
 import { ContributionGraph } from "@/components/app/profile/ContributionGraph";
 import { FeedList } from "@/components/app/feed/FeedList";
 import { FollowButton } from "@/components/app/profile/FollowButton";
+import { InviteButton } from "@/components/app/profile/InviteButton";
 import { formatTokens } from "@/lib/utils/format";
 import type { Metadata } from "next";
 
@@ -50,6 +51,8 @@ export default async function ProfilePage({
     { data: totalSpendRows },
     { data: achievements },
     { data: followRow },
+    { data: referrerData },
+    { count: crewCount },
   ] = await Promise.all([
     supabase
       .from("follows")
@@ -80,6 +83,17 @@ export default async function ProfilePage({
           .eq("following_id", profile.id)
           .maybeSingle()
       : Promise.resolve({ data: null }),
+    profile.referred_by
+      ? supabase
+          .from("users")
+          .select("username, avatar_url")
+          .eq("id", profile.referred_by)
+          .single()
+      : Promise.resolve({ data: null }),
+    supabase
+      .from("users")
+      .select("id", { count: "exact", head: true })
+      .eq("referred_by", profile.id),
   ]);
   const isFollowing = !!followRow;
   const totalSpend = totalSpendRows?.reduce((s, r) => s + Number(r.cost_usd), 0) ?? 0;
@@ -211,13 +225,16 @@ export default async function ProfilePage({
                 </>
               )}
               {isOwn && (
-                <Link
-                  href="/settings"
-                  className="border border-border px-3 py-1 text-sm font-semibold hover:bg-subtle"
-                  style={{ borderRadius: 4 }}
-                >
-                  Edit Profile
-                </Link>
+                <>
+                  <Link
+                    href="/settings"
+                    className="border border-border px-3 py-1 text-sm font-semibold hover:bg-subtle"
+                    style={{ borderRadius: 4 }}
+                  >
+                    Edit Profile
+                  </Link>
+                  <InviteButton username={username} />
+                </>
               )}
             </div>
             {profile.display_name && (
@@ -249,6 +266,14 @@ export default async function ProfilePage({
                 >
                   <Github size={14} /> {profile.github_username}
                 </a>
+              )}
+              {referrerData?.username && (
+                <span className="inline-flex items-center gap-1">
+                  <Users size={14} /> Recruited by{" "}
+                  <Link href={`/u/${referrerData.username}`} className="text-accent hover:underline">
+                    @{referrerData.username}
+                  </Link>
+                </span>
               )}
             </div>
             <div className="mt-3 flex gap-6 text-sm">
@@ -290,6 +315,15 @@ export default async function ProfilePage({
               ${totalSpend.toFixed(2)}
             </p>
           </div>
+          {(crewCount ?? 0) > 0 && (
+            <div>
+              <p className="text-[0.7rem] uppercase tracking-widest text-muted">Crew</p>
+              <p className="inline-flex items-center gap-1 font-[family-name:var(--font-mono)] text-lg font-medium tabular-nums">
+                <Users size={16} className="text-accent" />
+                {crewCount}
+              </p>
+            </div>
+          )}
         </div>
 
         {/* Achievement badges */}

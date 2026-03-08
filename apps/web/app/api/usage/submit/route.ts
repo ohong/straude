@@ -371,6 +371,21 @@ export async function POST(request: Request) {
 
   checkAndAwardAchievements(userId, "usage").catch(() => {});
 
+  // Recheck referrer's crew-spend achievements when a referred user logs usage
+  Promise.resolve(
+    getServiceClient()
+      .from("users")
+      .select("referred_by")
+      .eq("id", userId)
+      .single(),
+  )
+    .then(({ data }) => {
+      if (data?.referred_by) {
+        checkAndAwardAchievements(data.referred_by, "referral").catch(() => {});
+      }
+    })
+    .catch(() => {});
+
   const response: UsageSubmitResponse = { results };
   if (errors.length > 0) {
     return NextResponse.json({ ...response, errors }, { status: 207 });

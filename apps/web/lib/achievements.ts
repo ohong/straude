@@ -1,6 +1,6 @@
 import { getServiceClient } from "@/lib/supabase/service";
 
-export type AchievementTrigger = "usage" | "kudos" | "comment" | "photo";
+export type AchievementTrigger = "usage" | "kudos" | "comment" | "photo" | "referral";
 
 export interface AchievementStats {
   totalCost: number;
@@ -18,6 +18,8 @@ export interface AchievementStats {
   commentsReceived: number;
   commentsSent: number;
   hasPhoto: boolean;
+  crewSize: number;
+  crewTotalSpend: number;
 }
 
 export interface AchievementDef {
@@ -310,6 +312,38 @@ export const ACHIEVEMENTS: AchievementDef[] = [
     trigger: "comment",
     check: (s) => s.commentsSent >= 500,
   },
+  {
+    slug: "first-recruit",
+    title: "First Recruit",
+    description: "Bring a training partner to Straude",
+    emoji: "\u{1F3CB}\uFE0F",
+    trigger: "referral",
+    check: (s) => s.crewSize >= 1,
+  },
+  {
+    slug: "crew-of-5",
+    title: "Crew of 5",
+    description: "Recruit 5 members to your crew",
+    emoji: "\u{1F6B4}",
+    trigger: "referral",
+    check: (s) => s.crewSize >= 5,
+  },
+  {
+    slug: "crew-of-25",
+    title: "Pace Group",
+    description: "Recruit 25 members to your crew",
+    emoji: "\u{1F3C3}",
+    trigger: "referral",
+    check: (s) => s.crewSize >= 25,
+  },
+  {
+    slug: "crew-spend-1k",
+    title: "Coach",
+    description: "Your crew's combined spend passes $1,000",
+    emoji: "\u{1F3C5}",
+    trigger: "referral",
+    check: (s) => s.crewTotalSpend >= 1000,
+  },
 ];
 
 function fetchIf<T>(condition: boolean, fn: () => PromiseLike<T>): Promise<T | null> {
@@ -346,7 +380,7 @@ export async function checkAndAwardAchievements(
   const needs = (...triggers: AchievementTrigger[]) =>
     !trigger || triggers.includes(trigger);
 
-  const [usageResult, streakResult, socialResult, photoResult, firstWeekResult] = await Promise.all([
+  const [usageResult, streakResult, socialResult, photoResult, firstWeekResult, referralResult] = await Promise.all([
     fetchIf(needs("usage"), () => db.rpc("get_achievement_stats", { p_user_id: userId }).single()),
     fetchIf(needs("usage"), () => db.rpc("calculate_user_streak", { p_user_id: userId })),
     fetchIf(needs("kudos", "comment"), () => db.rpc("get_social_achievement_stats", { p_user_id: userId }).single()),
@@ -360,6 +394,26 @@ export async function checkAndAwardAchievements(
         .eq("user_id", userId)
         .lte("date", firstWeekEnd);
       return { count: count ?? 0 };
+    }),
+    fetchIf(needs("referral"), async () => {
+      const { count } = await db
+        .from("users")
+        .select("id", { count: "exact", head: true })
+        .eq("referred_by", userId);
+      const { data: crewMembers } = await db
+        .from("users")
+        .select("id")
+        .eq("referred_by", userId);
+      let crewTotalSpend = 0;
+      if (crewMembers && crewMembers.length > 0) {
+        const crewIds = crewMembers.map((m) => m.id);
+        const { data: spendRows } = await db
+          .from("daily_usage")
+          .select("cost_usd")
+          .in("user_id", crewIds);
+        crewTotalSpend = spendRows?.reduce((s, r) => s + Number(r.cost_usd), 0) ?? 0;
+      }
+      return { crewSize: count ?? 0, crewTotalSpend };
     }),
   ]);
 
@@ -383,6 +437,8 @@ export async function checkAndAwardAchievements(
     commentsReceived: Number(socialRow?.comments_received ?? 0),
     commentsSent: Number(socialRow?.comments_sent ?? 0),
     hasPhoto: (photoResult?.data as any[] | null)?.length ? true : false,
+    crewSize: (referralResult as any)?.crewSize ?? 0,
+    crewTotalSpend: (referralResult as any)?.crewTotalSpend ?? 0,
   };
 
   const newAwards = candidates.filter(

@@ -14,6 +14,8 @@ export function notificationMessage(n: Notification): string {
       return `${actor} mentioned you in a ${n.comment_id ? "comment" : "post"}`;
     case "message":
       return `${actor} sent you a direct message`;
+    case "referral":
+      return `${actor} joined your crew`;
     default:
       return `${actor} interacted with you`;
   }
@@ -31,6 +33,8 @@ export function notificationHref(n: Notification): string {
       return n.actor?.username
         ? `/messages?with=${encodeURIComponent(n.actor.username)}`
         : "/messages";
+    case "referral":
+      return n.actor?.username ? `/u/${n.actor.username}` : "/notifications";
     default:
       return "/notifications";
   }

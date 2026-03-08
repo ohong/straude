@@ -230,10 +230,9 @@ export default function OnboardingPage() {
   const [usernameStatus, setUsernameStatus] = useState<UsernameStatus>("idle");
   const debounceRef = useRef<ReturnType<typeof setTimeout>>(undefined);
 
-  const [profileLoaded, setProfileLoaded] = useState(false);
-
   // Step 2
   const [bio, setBio] = useState("");
+  const [heardAbout, setHeardAbout] = useState("");
   const [country, setCountry] = useState("");
   const [githubUsername, setGithubUsername] = useState("");
 
@@ -266,8 +265,8 @@ export default function OnboardingPage() {
         if (profile.display_name) setDisplayName(profile.display_name);
         if (profile.country) setCountry(profile.country);
         if (profile.bio) setBio(profile.bio);
+        if (profile.heard_about) setHeardAbout(profile.heard_about);
       }
-      setProfileLoaded(true);
     }
     loadProfile();
   }, []);
@@ -313,6 +312,7 @@ export default function OnboardingPage() {
     if (username) body.username = username;
     if (displayName) body.display_name = displayName;
     if (bio) body.bio = bio;
+    body.heard_about = heardAbout.trim() || null;
     if (country) body.country = country;
     if (githubUsername) body.github_username = githubUsername;
 
@@ -446,102 +446,125 @@ export default function OnboardingPage() {
 
   if (step === 2) {
     return (
-    <>
-      <div className="mb-8">
-        <span
-          className="inline-block h-6 w-6 bg-accent"
-          style={{
-            clipPath: "polygon(20% 0%, 80% 0%, 100% 100%, 0% 100%)",
-          }}
-        />
-      </div>
-
-      <h1
-        className="text-2xl font-medium tracking-tight"
-        style={{ letterSpacing: "-0.03em" }}
-      >
-        Almost there
-      </h1>
-      <p className="mt-1 mb-6 text-sm text-muted">
-        Optional details to round out your profile. You can always change these
-        later in Settings.
-      </p>
-
-      <div className="space-y-4">
-        <div>
-          <label htmlFor="onboard-bio" className="mb-1 block text-xs font-semibold uppercase tracking-widest text-muted">
-            Bio
-          </label>
-          <Textarea
-            id="onboard-bio"
-            name="bio"
-            value={bio}
-            onChange={(e) => setBio(e.target.value)}
-            placeholder="What are you building with Claude\u2026"
-            maxLength={160}
-            rows={2}
-            className="min-h-0"
-          />
-          <p className="mt-1 text-xs text-muted">{bio.length}/160</p>
-        </div>
-
-        <div>
-          <label htmlFor="onboard-country" className="mb-1 block text-xs font-semibold uppercase tracking-widest text-muted">
-            Country
-          </label>
-          <CountryPicker
-            id="onboard-country"
-            name="country"
-            value={country}
-            onChange={setCountry}
+      <>
+        <div className="mb-8">
+          <span
+            className="inline-block h-6 w-6 bg-accent"
+            style={{
+              clipPath: "polygon(20% 0%, 80% 0%, 100% 100%, 0% 100%)",
+            }}
           />
         </div>
 
-        <div>
-          <label htmlFor="onboard-github" className="mb-1 block text-xs font-semibold uppercase tracking-widest text-muted">
-            GitHub username
-          </label>
-          <Input
-            id="onboard-github"
-            name="github_username"
-            value={githubUsername}
-            onChange={(e) => setGithubUsername(e.target.value)}
-            placeholder="your-github"
-          />
-        </div>
-      </div>
-
-      {error && <p className="mt-3 text-sm text-red-500">{error}</p>}
-
-      <div className="mt-6 flex items-center gap-3">
-        <button
-          type="button"
-          onClick={() => setStep(1)}
-          className="text-sm text-muted hover:text-foreground"
+        <h1
+          className="text-2xl font-medium tracking-tight"
+          style={{ letterSpacing: "-0.03em" }}
         >
-          Back
-        </button>
-        <Button
-          onClick={handleFinish}
-          disabled={saving}
-          className="flex-1 py-3"
-        >
-          {saving ? "Setting up\u2026" : "Start logging"}
-        </Button>
-      </div>
+          Almost there
+        </h1>
+        <p className="mt-1 mb-6 text-sm text-muted">
+          Optional details to round out your profile. You can always change these
+          later in Settings.
+        </p>
 
-      <div className="mt-3 text-center">
-        <Link href="/feed" className="text-sm text-muted hover:text-foreground">
-          Skip for now
-        </Link>
-      </div>
+        <div className="space-y-4">
+          <div>
+            <label htmlFor="onboard-bio" className="mb-1 block text-xs font-semibold uppercase tracking-widest text-muted">
+              Bio
+            </label>
+            <Textarea
+              id="onboard-bio"
+              name="bio"
+              value={bio}
+              onChange={(e) => setBio(e.target.value)}
+              placeholder="What are you building with Claude\u2026"
+              maxLength={160}
+              rows={2}
+              className="min-h-0"
+            />
+            <p className="mt-1 text-xs text-muted">{bio.length}/160</p>
+          </div>
 
-      <div className="mt-4 flex justify-center gap-1.5">
-        <span className="h-1.5 w-6 rounded-full bg-accent" />
-        <span className="h-1.5 w-6 rounded-full bg-accent" />
-        <span className="h-1.5 w-6 rounded-full bg-border" />
-      </div>
-    </>
+          <div>
+            <label htmlFor="onboard-heard-about" className="mb-1 block text-xs font-semibold uppercase tracking-widest text-muted">
+              How did you hear about us?
+            </label>
+            <Textarea
+              id="onboard-heard-about"
+              name="heard_about"
+              value={heardAbout}
+              onChange={(e) => setHeardAbout(e.target.value)}
+              placeholder="Friend, GitHub, X, newsletter, podcast..."
+              maxLength={500}
+              rows={3}
+              className="min-h-0"
+              aria-describedby="onboard-heard-about-hint"
+            />
+            <div className="mt-1 flex items-center justify-between gap-3 text-xs text-muted">
+              <p id="onboard-heard-about-hint" className="text-pretty">
+                Optional. Free-form so you can be as specific as you want.
+              </p>
+              <span>{heardAbout.length}/500</span>
+            </div>
+          </div>
+
+          <div>
+            <label htmlFor="onboard-country" className="mb-1 block text-xs font-semibold uppercase tracking-widest text-muted">
+              Country
+            </label>
+            <CountryPicker
+              id="onboard-country"
+              name="country"
+              value={country}
+              onChange={setCountry}
+            />
+          </div>
+
+          <div>
+            <label htmlFor="onboard-github" className="mb-1 block text-xs font-semibold uppercase tracking-widest text-muted">
+              GitHub username
+            </label>
+            <Input
+              id="onboard-github"
+              name="github_username"
+              value={githubUsername}
+              onChange={(e) => setGithubUsername(e.target.value)}
+              placeholder="your-github"
+            />
+          </div>
+        </div>
+
+        {error && <p className="mt-3 text-sm text-red-500">{error}</p>}
+
+        <div className="mt-6 flex items-center gap-3">
+          <button
+            type="button"
+            onClick={() => setStep(1)}
+            className="text-sm text-muted hover:text-foreground"
+          >
+            Back
+          </button>
+          <Button
+            onClick={handleFinish}
+            disabled={saving}
+            className="flex-1 py-3"
+          >
+            {saving ? "Setting up\u2026" : "Start logging"}
+          </Button>
+        </div>
+
+        <div className="mt-3 text-center">
+          <Link href="/feed" className="text-sm text-muted hover:text-foreground">
+            Skip for now
+          </Link>
+        </div>
+
+        <div className="mt-4 flex justify-center gap-1.5">
+          <span className="h-1.5 w-6 rounded-full bg-accent" />
+          <span className="h-1.5 w-6 rounded-full bg-accent" />
+          <span className="h-1.5 w-6 rounded-full bg-border" />
+        </div>
+      </>
     );
   }
 

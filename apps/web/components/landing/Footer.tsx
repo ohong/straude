@@ -4,7 +4,7 @@ import { useEffect, useState } from "react";
 import Link from "next/link";
 import { BoltIcon } from "@/components/landing/icons";
 
-export function Footer() {
+export function Footer({ hideLogo = false }: { hideLogo?: boolean }) {
   const [utc, setUtc] = useState("UTC 00:00:00");
 
   useEffect(() => {
@@ -19,10 +19,12 @@ export function Footer() {
   return (
     <footer className="border-t border-landing-border px-8 py-10 flex flex-col gap-8 md:flex-row md:justify-between md:items-end">
       {/* Brand */}
-      <div className="flex items-center gap-2 font-[family-name:var(--font-mono)] font-bold text-base text-landing-text">
-        <BoltIcon className="w-4 h-4 text-accent" />
-        STRAUDE
-      </div>
+      {!hideLogo && (
+        <div className="flex items-center gap-2 font-[family-name:var(--font-mono)] font-bold text-base text-landing-text">
+          <BoltIcon className="w-4 h-4 text-accent" />
+          STRAUDE
+        </div>
+      )}
 
       {/* Status */}
       <div className="font-[family-name:var(--font-mono)] text-xs text-landing-muted flex flex-col gap-1">

@@ -3,11 +3,13 @@ import { createClient } from "@/lib/supabase/server";
 import { getServiceClient } from "@/lib/supabase/service";
 import { COUNTRY_TO_REGION } from "@/lib/constants/regions";
 import { sendWelcomeEmail } from "@/lib/email/send-welcome-email";
+import { attributeReferral } from "@/lib/referral";
 
 const ALLOWED_FIELDS = [
   "username",
   "display_name",
   "bio",
+  "heard_about",
   "country",
   "link",
   "is_public",
@@ -19,6 +21,9 @@ const ALLOWED_FIELDS = [
   "email_mention_notifications",
   "email_dm_notifications",
 ] as const;
+
+const BIO_MAX_LENGTH = 160;
+const HEARD_ABOUT_MAX_LENGTH = 500;
 
 export async function GET() {
   const supabase = await createClient();
@@ -74,11 +79,40 @@ export async function PATCH(request: NextRequest) {
   }
 
   // Validate bio length
-  if (updates.bio !== undefined && typeof updates.bio === "string" && updates.bio.length > 160) {
+  if (
+    updates.bio !== undefined &&
+    typeof updates.bio === "string" &&
+    updates.bio.length > BIO_MAX_LENGTH
+  ) {
     return NextResponse.json(
-      { error: "Bio must be at most 160 characters" },
+      { error: `Bio must be at most ${BIO_MAX_LENGTH} characters` },
       { status: 400 }
     );
+  }
+
+  if (updates.heard_about !== undefined) {
+    if (updates.heard_about === null) {
+      // Allow callers to clear the field explicitly.
+    } else if (typeof updates.heard_about === "string") {
+      const heardAbout = updates.heard_about.trim();
+
+      if (heardAbout.length > HEARD_ABOUT_MAX_LENGTH) {
+        return NextResponse.json(
+          {
+            error:
+              `How you heard about Straude must be at most ${HEARD_ABOUT_MAX_LENGTH} characters`,
+          },
+          { status: 400 }
+        );
+      }
+
+      updates.heard_about = heardAbout || null;
+    } else {
+      return NextResponse.json(
+        { error: "How you heard about Straude must be text" },
+        { status: 400 }
+      );
+    }
   }
 
   // Auto-derive region from country
@@ -129,6 +163,12 @@ export async function PATCH(request: NextRequest) {
   // Auto-follow top active users so new users see content in their feed
   if (isOnboardingUpdate) {
     autoFollowTopUsers(user.id).catch(() => {});
+
+    // Attribute referral from cookie
+    const refUsername = request.cookies.get("ref")?.value;
+    if (refUsername) {
+      attributeReferral(user.id, refUsername).catch(() => {});
+    }
   }
 
   return NextResponse.json(profile);

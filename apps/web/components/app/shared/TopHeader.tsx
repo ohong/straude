@@ -119,7 +119,7 @@ export function TopHeader({ username, avatarUrl }: TopHeaderProps) {
   }
 
   return (
-    <header className="z-20 shrink-0 border-b border-border bg-background">
+    <header className="z-20 shrink-0 border-b border-border bg-background safe-top">
       <div className="mx-auto flex h-14 max-w-[1600px] items-center justify-between px-4 lg:px-6">
         {/* Left — Brand */}
         <Link
@@ -165,7 +165,7 @@ export function TopHeader({ username, avatarUrl }: TopHeaderProps) {
           >
             <MessageSquare size={20} aria-hidden="true" />
             {messageUnreadCount > 0 && (
-              <span className="absolute top-0.5 right-0.5 h-2 w-2 rounded-full bg-accent" />
+              <span className="absolute top-0 right-0 h-2 w-2 rounded-full bg-accent" />
             )}
           </Link>
 
@@ -186,12 +186,12 @@ export function TopHeader({ username, avatarUrl }: TopHeaderProps) {
             >
               <Bell size={20} aria-hidden="true" />
               {unreadCount > 0 && (
-                <span className="absolute top-0.5 right-0.5 h-2 w-2 rounded-full bg-accent" />
+                <span className="absolute top-0 right-0 h-2 w-2 rounded-full bg-accent" />
               )}
             </button>
 
             {notifOpen && (
-              <div className="absolute right-0 top-full mt-1 w-[calc(100vw-2rem)] rounded border border-border bg-background shadow-lg sm:w-80">
+              <div className="fixed inset-x-0 top-[57px] z-50 mx-2 rounded border border-border bg-background shadow-lg sm:absolute sm:inset-auto sm:right-0 sm:top-full sm:mx-0 sm:mt-1 sm:w-80">
                 <div className="flex items-center justify-between border-b border-border px-4 py-2.5">
                   <span className="text-sm font-semibold">Notifications</span>
                   {unreadCount > 0 && (
@@ -204,7 +204,7 @@ export function TopHeader({ username, avatarUrl }: TopHeaderProps) {
                     </button>
                   )}
                 </div>
-                <div className="max-h-80 overflow-y-auto">
+                <div className="max-h-[60vh] overflow-y-auto sm:max-h-80" style={{ WebkitOverflowScrolling: "touch" }}>
                   {notifications.length === 0 ? (
                     <p className="px-4 py-6 text-center text-sm text-muted">
                       No notifications yet
@@ -282,7 +282,7 @@ export function TopHeader({ username, avatarUrl }: TopHeaderProps) {
             </button>
 
             {profileOpen && (
-              <div className="absolute right-0 top-full mt-1 w-48 rounded border border-border bg-background shadow-lg">
+              <div className="fixed right-2 top-[57px] z-50 w-48 rounded border border-border bg-background shadow-lg sm:absolute sm:right-0 sm:top-full sm:mt-1">
                 <Link
                   href={`/u/${username ?? ""}`}
                   className="flex items-center gap-3 px-4 py-2.5 text-sm hover:bg-subtle"

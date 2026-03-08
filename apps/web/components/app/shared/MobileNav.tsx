@@ -17,8 +17,7 @@ export function MobileNav({ username }: { username: string | null }) {
 
   return (
     <nav
-      className="fixed inset-x-0 bottom-0 z-50 flex h-[60px] items-center justify-around border-t border-border bg-background lg:hidden"
-      style={{ paddingBottom: "env(safe-area-inset-bottom)" }}
+      className="fixed inset-x-0 bottom-0 z-50 flex h-[60px] items-center justify-around border-t border-border bg-background safe-bottom lg:hidden"
     >
       {ITEMS.map(({ href, label, icon: Icon }) => {
         const resolvedHref =

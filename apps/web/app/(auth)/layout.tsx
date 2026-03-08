@@ -2,6 +2,8 @@ import type { Metadata } from "next";
 
 export const metadata: Metadata = {
   title: "Sign in to Straude",
+  description:
+    "Sign in or create an account to start tracking your Claude Code sessions on Straude.",
 };
 
 export default function AuthLayout({

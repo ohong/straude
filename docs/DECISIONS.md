@@ -15,6 +15,15 @@
 - Mistral Vibe: direct read of `~/.vibe/logs/session/session_*/meta.json` (AgentStats with prompt/completion tokens)
 
 **Cost tracking:** Gemini CLI and Qwen Code are free-tier — `costUSD` is 0. Mistral Vibe estimates cost from `input_price_per_million` / `output_price_per_million` in session metadata when available.
+## Referral System: Column on Users, Not Separate Table (2026-03-07)
+
+**Decision:** Added a single `referred_by UUID` column to `users` instead of creating a separate `referrals` table. Crew stats (count, total spend) are derived via joins.
+
+**Alternatives considered:**
+1. **Separate `referrals` table** — stores referral codes, click tracking, conversion funnels. Overkill for our needs; we only care about who referred whom.
+2. **`referred_by` column** (chosen) — minimal schema change, idempotent, and crew stats are simple aggregations. Referral attribution happens server-side via a `ref` cookie (30-day expiry) set on the `/join/[username]` page.
+
+**Attribution flow:** Join page sets cookie → user signs up via OAuth → onboarding PATCH sets `referred_by` via service client → creates mutual follows + notification + email. The service client bypass means no RLS policy changes needed for the `referred_by` column.
 
 ## Comment Threads + Reactions: Single-Level UI, Separate Reaction Table (2026-03-06)
 

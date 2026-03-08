@@ -3,12 +3,13 @@ import { formatTokens } from "@/lib/utils/format";
 import Link from "next/link";
 import { Avatar } from "@/components/ui/Avatar";
 import { FollowButton } from "@/components/app/profile/FollowButton";
+import { InviteButton } from "@/components/app/profile/InviteButton";
 
 export async function RightSidebar({ userId }: { userId: string }) {
   const supabase = await createClient();
 
   // Start independent queries in parallel (avoid waterfall)
-  const [{ data: topUsers }, { data: following }, { data: userUsage }] = await Promise.all([
+  const [{ data: topUsers }, { data: following }, { data: userUsage }, { data: userProfile }] = await Promise.all([
     supabase
       .from("leaderboard_weekly")
       .select("user_id, username, avatar_url, total_cost")
@@ -22,6 +23,11 @@ export async function RightSidebar({ userId }: { userId: string }) {
       .from("daily_usage")
       .select("output_tokens")
       .eq("user_id", userId),
+    supabase
+      .from("users")
+      .select("username")
+      .eq("id", userId)
+      .single(),
   ]);
 
   const followingIds = following?.map((f) => f.following_id) ?? [];
@@ -171,6 +177,19 @@ export async function RightSidebar({ userId }: { userId: string }) {
           <span className="text-base font-light">&rarr;</span>
         </Link>
       </div>
+
+      {/* Referral CTA */}
+      {userProfile?.username && (
+        <div className="border-b border-border p-6">
+          <p className="mb-1 text-xs font-semibold uppercase tracking-widest text-muted">
+            Grow Your Crew
+          </p>
+          <p className="mb-3 text-sm text-muted">
+            Invite a training partner. See who racks up more.
+          </p>
+          <InviteButton username={userProfile.username} />
+        </div>
+      )}
 
     </div>
   );

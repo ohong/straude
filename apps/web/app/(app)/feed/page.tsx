@@ -3,7 +3,11 @@ import { getAuthUser } from "@/lib/supabase/auth";
 import { FeedList } from "@/components/app/feed/FeedList";
 import type { Metadata } from "next";
 
-export const metadata: Metadata = { title: "Feed" };
+export const metadata: Metadata = {
+  title: "Feed",
+  description:
+    "See the latest Claude Code sessions from the Straude community.",
+};
 
 type FeedType = "global" | "following" | "mine";
 

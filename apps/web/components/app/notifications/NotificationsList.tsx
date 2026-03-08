@@ -14,6 +14,7 @@ const NOTIFICATION_TYPES = [
   { value: "comment", label: "Comments" },
   { value: "mention", label: "Mentions" },
   { value: "message", label: "Messages" },
+  { value: "referral", label: "Referrals" },
 ] as const;
 
 const PAGE_SIZE = 20;

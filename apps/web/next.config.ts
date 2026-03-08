@@ -40,7 +40,7 @@ const nextConfig: NextConfig = {
             ].join("; "),
           },
           { key: "Cross-Origin-Opener-Policy", value: "same-origin" },
-          { key: "Cross-Origin-Resource-Policy", value: "same-origin" },
+          { key: "Cross-Origin-Resource-Policy", value: "cross-origin" },
           { key: "X-Permitted-Cross-Domain-Policies", value: "none" },
         ],
       },

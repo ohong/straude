@@ -9,7 +9,7 @@ import { Input } from "@/components/ui/Input";
 import { Textarea } from "@/components/ui/Textarea";
 import { Button } from "@/components/ui/Button";
 import { Avatar } from "@/components/ui/Avatar";
-import { LogOut } from "lucide-react";
+import { LogOut, Copy, Check } from "lucide-react";
 import { CountryPicker } from "@/components/ui/CountryPicker";
 
 export default function SettingsPage() {
@@ -22,6 +22,7 @@ export default function SettingsPage() {
   const [username, setUsername] = useState("");
   const [displayName, setDisplayName] = useState("");
   const [bio, setBio] = useState("");
+  const [heardAbout, setHeardAbout] = useState("");
   const [link, setLink] = useState("");
   const [country, setCountry] = useState("");
   const [githubUsername, setGithubUsername] = useState("");
@@ -30,6 +31,8 @@ export default function SettingsPage() {
   const [emailMentionNotifications, setEmailMentionNotifications] = useState(true);
   const [emailDmNotifications, setEmailDmNotifications] = useState(true);
   const [timezone, setTimezone] = useState("");
+  const [crewCount, setCrewCount] = useState(0);
+  const [refCopied, setRefCopied] = useState(false);
 
   useEffect(() => {
     async function load() {
@@ -50,6 +53,7 @@ export default function SettingsPage() {
         setUsername(data.username ?? "");
         setDisplayName(data.display_name ?? "");
         setBio(data.bio ?? "");
+        setHeardAbout(data.heard_about ?? "");
         setLink(data.link ?? "");
         setCountry(data.country ?? "");
         setGithubUsername(data.github_username ?? "");
@@ -58,6 +62,13 @@ export default function SettingsPage() {
         setEmailMentionNotifications(data.email_mention_notifications ?? true);
         setEmailDmNotifications(data.email_dm_notifications ?? true);
         setTimezone(data.timezone ?? Intl.DateTimeFormat().resolvedOptions().timeZone);
+
+        // Fetch crew count
+        const { count } = await supabase
+          .from("users")
+          .select("id", { count: "exact", head: true })
+          .eq("referred_by", data.id);
+        setCrewCount(count ?? 0);
       }
     }
     load();
@@ -76,6 +87,7 @@ export default function SettingsPage() {
         username: username || undefined,
         display_name: displayName || undefined,
         bio: bio || undefined,
+        heard_about: heardAbout.trim() || null,
         link: link || undefined,
         country: country || undefined,
         github_username: githubUsername || undefined,
@@ -173,6 +185,29 @@ export default function SettingsPage() {
         </div>
 
         <div className="border-b border-border pb-6">
+          <label htmlFor="settings-heard-about" className="mb-1 block text-xs font-semibold uppercase tracking-widest text-muted">
+            How did you hear about us?
+          </label>
+          <Textarea
+            id="settings-heard-about"
+            name="heard_about"
+            value={heardAbout}
+            onChange={(e) => setHeardAbout(e.target.value)}
+            placeholder="Friend, GitHub, X, newsletter, podcast..."
+            maxLength={500}
+            rows={3}
+            className="min-h-0"
+            aria-describedby="settings-heard-about-hint"
+          />
+          <div className="mt-1 flex items-center justify-between gap-3 text-xs text-muted">
+            <p id="settings-heard-about-hint" className="text-pretty">
+              Optional. This helps us understand where people are finding Straude.
+            </p>
+            <span>{heardAbout.length}/500</span>
+          </div>
+        </div>
+
+        <div className="border-b border-border pb-6">
           <label htmlFor="settings-country" className="mb-1 block text-xs font-semibold uppercase tracking-widest text-muted">
             Country
           </label>
@@ -223,6 +258,33 @@ export default function SettingsPage() {
             onChange={(e) => setTimezone(e.target.value)}
           />
         </div>
+
+        {username && (
+          <div className="border-b border-border pb-6">
+            <p className="mb-1 text-xs font-semibold uppercase tracking-widest text-muted">Referral Link</p>
+            <div className="flex items-center gap-2">
+              <code className="flex-1 overflow-x-auto rounded border border-border bg-subtle px-3 py-2 font-[family-name:var(--font-mono)] text-sm">
+                straude.com/join/{username}
+              </code>
+              <button
+                type="button"
+                onClick={() => {
+                  navigator.clipboard.writeText(`https://straude.com/join/${username}`);
+                  setRefCopied(true);
+                  setTimeout(() => setRefCopied(false), 2000);
+                }}
+                className="inline-flex items-center gap-1.5 border border-border px-3 py-2 text-sm font-semibold hover:bg-subtle"
+                style={{ borderRadius: 4 }}
+              >
+                {refCopied ? <Check size={14} className="text-accent" /> : <Copy size={14} />}
+                {refCopied ? "Copied" : "Copy"}
+              </button>
+            </div>
+            <p className="mt-1 text-xs text-muted">
+              Share this link to invite others.{crewCount > 0 ? ` ${crewCount} recruited so far.` : ""}
+            </p>
+          </div>
+        )}
 
         <div className="space-y-1.5">
           <div className="flex items-center gap-3">

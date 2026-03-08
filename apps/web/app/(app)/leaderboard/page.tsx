@@ -3,7 +3,11 @@ import { getAuthUser } from "@/lib/supabase/auth";
 import { LeaderboardTable } from "@/components/app/leaderboard/LeaderboardTable";
 import type { Metadata } from "next";
 
-export const metadata: Metadata = { title: "Leaderboard" };
+export const metadata: Metadata = {
+  title: "Leaderboard",
+  description:
+    "See who's leading the pack. Weekly, monthly, and all-time Claude Code spend rankings.",
+};
 
 export default async function LeaderboardPage({
   searchParams,

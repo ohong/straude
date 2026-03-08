@@ -175,6 +175,7 @@ describe("PATCH /api/users/me", () => {
       id: "u-1",
       username: "new_name",
       bio: "New bio",
+      heard_about: "A friend mentioned it",
     };
 
     const client: Record<string, any> = {
@@ -203,6 +204,7 @@ describe("PATCH /api/users/me", () => {
       makeRequest("PATCH", "/api/users/me", {
         username: "new_name",
         bio: "New bio",
+        heard_about: "A friend mentioned it",
         email_dm_notifications: false,
       })
     );
@@ -268,6 +270,27 @@ describe("PATCH /api/users/me", () => {
 
     expect(res.status).toBe(400);
     expect(json.error).toContain("160 characters");
+  });
+
+  it("validates how you heard about Straude length (max 500)", async () => {
+    const client: Record<string, any> = {
+      auth: {
+        getUser: vi.fn().mockResolvedValue({
+          data: { user: { id: "u-1" } },
+          error: null,
+        }),
+      },
+      from: vi.fn(),
+    };
+    (createClient as any).mockResolvedValue(client);
+
+    const res = await PATCH(
+      makeRequest("PATCH", "/api/users/me", { heard_about: "x".repeat(501) })
+    );
+    const json = await res.json();
+
+    expect(res.status).toBe(400);
+    expect(json.error).toContain("500 characters");
   });
 
   it("auto-derives region from country", async () => {

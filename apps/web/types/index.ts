@@ -7,6 +7,7 @@ export interface User {
   username: string | null;
   display_name: string | null;
   bio: string | null;
+  heard_about: string | null;
   avatar_url: string | null;
   country: string | null;
   region: string | null;
@@ -18,6 +19,7 @@ export interface User {
   email_mention_notifications: boolean;
   email_dm_notifications?: boolean;
   streak_freezes: number;
+  referred_by?: string | null;
   created_at: string;
   updated_at: string;
 }
@@ -171,7 +173,7 @@ export interface Notification {
   id: string;
   user_id: string;
   actor_id: string;
-  type: "follow" | "kudos" | "comment" | "mention" | "message";
+  type: "follow" | "kudos" | "comment" | "mention" | "message" | "referral";
   post_id: string | null;
   comment_id: string | null;
   read: boolean;

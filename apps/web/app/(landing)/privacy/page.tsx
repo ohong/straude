@@ -4,6 +4,8 @@ import type { Metadata } from "next";
 
 export const metadata: Metadata = {
   title: "Privacy Policy — Straude",
+  description:
+    "How Straude collects, uses, and protects your data. Learn about the information we gather from your Claude Code sessions and your rights.",
 };
 
 export default function PrivacyPage() {

@@ -7,11 +7,15 @@
     "build": "next build",
     "start": "next start",
     "lint": "eslint",
+    "generate:og": "bun run ./scripts/generate-og.ts",
+    "generate:og:refine": "bun run ./scripts/generate-og-real-users.ts",
+    "generate:og:athletic": "bun run ./scripts/generate-og-athletic-surge.ts",
     "typecheck": "tsc --noEmit -p tsconfig.check.json",
     "test": "vitest run",
     "test:e2e": "playwright test"
   },
   "dependencies": {
+    "@fal-ai/client": "^1.4.0",
     "@anthropic-ai/sdk": "^0.39",
     "@base-ui-components/react": "1.0.0-rc.0",
     "@react-email/components": "^1.0.8",
@@ -31,6 +35,7 @@
     "recharts": "^3.7.0",
     "remark-breaks": "^4.0.0",
     "resend": "^6.9.2",
+    "sharp": "^0.34.5",
     "tailwind-merge": "^3"
   },
   "devDependencies": {
