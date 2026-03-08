@@ -4,6 +4,7 @@
 
 ### Added
 
+- **Open Graph image and social meta tags.** Created `/og-image` preview page matching the landing page design system (dark background, bolt icon, tagline, terminal snippet). Captured 1200x630 screenshot to `/public/og-image.png`. Updated root layout with `og:image` and `twitter:image` meta tags including dimensions and alt text.
 - **PWA manifest and mobile standalone support.** Created `manifest.ts` for Add-to-Home-Screen with standalone display mode. Added `viewportFit: "cover"` to viewport config and safe area inset utility classes for notched devices.
 - **Referral CTA in feed sidebar.** Added "Grow Your Crew" section with invite button to `RightSidebar`.
 - **Referral system.** Users can share `straude.com/join/[username]` to invite others. The join page shows competitive stats (weekly spend, streak, total spend) with provocative copy to drive sign-ups. Referral attribution is tracked via a `referred_by` column on `users`, set automatically when a referred user completes onboarding. Referrals create mutual follows, send a notification and email to the referrer, and trigger four new achievements (First Recruit, Crew of 5, Pace Group, Coach). Profile pages show "Recruited by" badges and crew counts. Settings page includes a referral link with copy button.
