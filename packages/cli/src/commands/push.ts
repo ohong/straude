@@ -7,6 +7,9 @@ import { apiRequest } from "../lib/api.js";
 import { runCcusageRawAsync, parseCcusageOutput } from "../lib/ccusage.js";
 import type { CcusageDailyEntry, ModelBreakdownEntry } from "../lib/ccusage.js";
 import { runCodexRawAsync, parseCodexOutput } from "../lib/codex.js";
+import { runGeminiRawAsync, parseGeminiOutput } from "../lib/gemini.js";
+import { runQwenRawAsync, parseQwenOutput } from "../lib/qwen.js";
+import { runMistralRawAsync, parseMistralOutput } from "../lib/mistral.js";
 import { MAX_BACKFILL_DAYS } from "../config.js";
 
 interface UsageSubmitRequest {
@@ -92,42 +95,40 @@ function buildBreakdown(entry: CcusageDailyEntry): ModelBreakdownEntry[] {
 }
 
 /**
- * Merge Claude and Codex daily entries by date.
+ * Merge daily entries from multiple providers by date.
  * Sums tokens/costs, unions models, builds model_breakdown.
  */
 export function mergeEntries(
   claudeEntries: CcusageDailyEntry[],
   codexEntries: CcusageDailyEntry[],
+  ...additionalSources: CcusageDailyEntry[][]
 ): CcusageDailyEntry[] {
-  const byDate = new Map<string, { claude?: CcusageDailyEntry; codex?: CcusageDailyEntry }>();
+  const allSources = [claudeEntries, codexEntries, ...additionalSources];
+  const byDate = new Map<string, CcusageDailyEntry[]>();
 
-  for (const e of claudeEntries) {
-    byDate.set(e.date, { ...byDate.get(e.date), claude: e });
-  }
-  for (const e of codexEntries) {
-    byDate.set(e.date, { ...byDate.get(e.date), codex: e });
+  for (const source of allSources) {
+    for (const e of source) {
+      const existing = byDate.get(e.date) ?? [];
+      existing.push(e);
+      byDate.set(e.date, existing);
+    }
   }
 
   const merged: CcusageDailyEntry[] = [];
 
-  for (const [date, { claude, codex }] of byDate) {
-    const claudeBreakdown = claude ? buildBreakdown(claude) : [];
-    const codexBreakdown = codex ? buildBreakdown(codex) : [];
-    const modelBreakdown = [...claudeBreakdown, ...codexBreakdown];
+  for (const [date, entries] of byDate) {
+    const allBreakdowns = entries.flatMap((e) => buildBreakdown(e));
 
     merged.push({
       date,
-      models: [
-        ...(claude?.models ?? []),
-        ...(codex?.models ?? []),
-      ],
-      inputTokens: (claude?.inputTokens ?? 0) + (codex?.inputTokens ?? 0),
-      outputTokens: (claude?.outputTokens ?? 0) + (codex?.outputTokens ?? 0),
-      cacheCreationTokens: (claude?.cacheCreationTokens ?? 0) + (codex?.cacheCreationTokens ?? 0),
-      cacheReadTokens: (claude?.cacheReadTokens ?? 0) + (codex?.cacheReadTokens ?? 0),
-      totalTokens: (claude?.totalTokens ?? 0) + (codex?.totalTokens ?? 0),
-      costUSD: (claude?.costUSD ?? 0) + (codex?.costUSD ?? 0),
-      modelBreakdown: modelBreakdown.length > 0 ? modelBreakdown : undefined,
+      models: entries.flatMap((e) => e.models),
+      inputTokens: entries.reduce((sum, e) => sum + e.inputTokens, 0),
+      outputTokens: entries.reduce((sum, e) => sum + e.outputTokens, 0),
+      cacheCreationTokens: entries.reduce((sum, e) => sum + e.cacheCreationTokens, 0),
+      cacheReadTokens: entries.reduce((sum, e) => sum + e.cacheReadTokens, 0),
+      totalTokens: entries.reduce((sum, e) => sum + e.totalTokens, 0),
+      costUSD: entries.reduce((sum, e) => sum + e.costUSD, 0),
+      modelBreakdown: allBreakdowns.length > 0 ? allBreakdowns : undefined,
     });
   }
 
@@ -214,10 +215,13 @@ export async function pushCommand(options: PushOptions, apiUrlOverride?: string)
       : `Pushing usage for ${formatDate(sinceDate)} to ${formatDate(untilDate)}...`,
   );
 
-  // Run ccusage + codex in parallel — the single biggest perf win
-  const [claudeResult, codexRaw] = await Promise.all([
+  // Run all providers in parallel — the single biggest perf win
+  const [claudeResult, codexRaw, geminiRaw, qwenRaw, mistralRaw] = await Promise.all([
     runCcusageRawAsync(sinceStr, untilStr).catch((err: Error) => err),
     runCodexRawAsync(sinceStr, untilStr),
+    runGeminiRawAsync(sinceStr, untilStr),
+    runQwenRawAsync(sinceStr, untilStr),
+    runMistralRawAsync(sinceStr, untilStr),
   ]);
 
   // Claude data is required — fail if it errored
@@ -240,7 +244,19 @@ export async function pushCommand(options: PushOptions, apiUrlOverride?: string)
 
   // Codex data — silent on fetch failure (empty string), but surface parser anomalies.
   const codexParsed = codexRaw ? parseCodexOutput(codexRaw) : { data: [], anomalies: [], entryMeta: [] };
-  const allAnomalies = [...claudeAnomalies, ...(codexParsed.anomalies ?? [])];
+
+  // Gemini, Qwen, Mistral — silent on fetch failure
+  const geminiParsed = geminiRaw ? parseGeminiOutput(geminiRaw) : { data: [], anomalies: [], entryMeta: [] };
+  const qwenParsed = qwenRaw ? parseQwenOutput(qwenRaw) : { data: [], anomalies: [], entryMeta: [] };
+  const mistralParsed = mistralRaw ? parseMistralOutput(mistralRaw) : { data: [], anomalies: [], entryMeta: [] };
+
+  const allAnomalies = [
+    ...claudeAnomalies,
+    ...(codexParsed.anomalies ?? []),
+    ...(geminiParsed.anomalies ?? []),
+    ...(qwenParsed.anomalies ?? []),
+    ...(mistralParsed.anomalies ?? []),
+  ];
   const mediumLowCount = allAnomalies.filter((a) => a.confidence !== "high").length;
   if (mediumLowCount > 0) {
     const lowCount = allAnomalies.filter((a) => a.confidence === "low").length;
@@ -267,8 +283,14 @@ export async function pushCommand(options: PushOptions, apiUrlOverride?: string)
 
   const codexEntries = codexParsed.data.filter((entry) => !blockedDates.has(entry.date));
 
-  // Merge Claude + Codex entries by date
-  const entries = mergeEntries(claudeEntries, codexEntries);
+  // Merge all provider entries by date
+  const entries = mergeEntries(
+    claudeEntries,
+    codexEntries,
+    geminiParsed.data,
+    qwenParsed.data,
+    mistralParsed.data,
+  );
 
   if (entries.length === 0) {
     console.log("No usage data found for the specified period.");
@@ -290,8 +312,8 @@ export async function pushCommand(options: PushOptions, apiUrlOverride?: string)
     return;
   }
 
-  // Compute SHA-256 hash of concatenated raw JSONs
-  const hashInput = codexRaw ? claudeRaw + codexRaw : claudeRaw;
+  // Compute SHA-256 hash of concatenated raw JSONs from all providers
+  const hashInput = [claudeRaw, codexRaw, geminiRaw, qwenRaw, mistralRaw].filter(Boolean).join("");
   const hash = createHash("sha256").update(hashInput).digest("hex");
 
   const body: UsageSubmitRequest = {

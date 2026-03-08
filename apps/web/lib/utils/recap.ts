@@ -19,6 +19,16 @@ const MODEL_DISPLAY_NAMES: Record<string, string> = {
   "claude-opus-4": "Claude Opus",
   "claude-sonnet-4": "Claude Sonnet",
   "claude-haiku-4": "Claude Haiku",
+  "gemini-2.5-pro": "Gemini Pro",
+  "gemini-2.5-flash": "Gemini Flash",
+  "gemini-2.0-flash": "Gemini Flash",
+  "gemini-exp": "Gemini Exp",
+  "qwen3-coder": "Qwen Coder",
+  "qwen-coder-plus": "Qwen Coder Plus",
+  "qwen-max": "Qwen Max",
+  "devstral": "Devstral",
+  "codestral": "Codestral",
+  "mistral-large": "Mistral Large",
 };
 
 function resolveModelName(raw: string): string {

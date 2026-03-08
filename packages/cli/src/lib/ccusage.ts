@@ -183,7 +183,7 @@ export interface CcusageOutput {
 
 export interface NormalizationAnomaly {
   date: string;
-  source: "ccusage" | "codex";
+  source: "ccusage" | "codex" | "gemini" | "qwen" | "mistral";
   mode: TokenNormalizationMode;
   confidence: TokenNormalizationConfidence;
   consistencyError: number;

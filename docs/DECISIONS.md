@@ -1,5 +1,21 @@
 # Architecture & Design Decisions
 
+## Multi-Provider Usage Tracking: Gemini, Qwen Code, Mistral Vibe (2026-03-08)
+
+**Decision:** Added three new CLI provider modules alongside the existing Claude (ccusage) and Codex (@ccusage/codex) integrations. Gemini uses the `gcusage` npm package; Qwen Code and Mistral Vibe read local session files directly.
+
+**Alternatives considered:**
+1. **Wait for `@ccusage/*` packages for each provider** — clean architecture but none exist yet for Gemini/Qwen/Mistral, so users would get no data.
+2. **Build a unified session reader** — one generic parser for all tools. Rejected because each tool stores sessions differently (Gemini: telemetry.log via gcusage, Qwen: JSON session files forked from Gemini CLI, Mistral: meta.json with AgentStats in `~/.vibe/logs/session/`).
+3. **Per-provider modules with silent fallback** (chosen) — each provider has its own module following the codex.ts pattern. All run in parallel during push. Missing providers return empty data silently. `mergeEntries` now accepts variadic sources instead of just Claude+Codex.
+
+**Data sources:**
+- Gemini CLI: `gcusage --json --period day` (reads `~/.gemini/telemetry.log`)
+- Qwen Code: direct read of `~/.qwen/tmp/*/chats/session-*.json` (forked from Gemini CLI, same token schema)
+- Mistral Vibe: direct read of `~/.vibe/logs/session/session_*/meta.json` (AgentStats with prompt/completion tokens)
+
+**Cost tracking:** Gemini CLI and Qwen Code are free-tier — `costUSD` is 0. Mistral Vibe estimates cost from `input_price_per_million` / `output_price_per_million` in session metadata when available.
+
 ## Comment Threads + Reactions: Single-Level UI, Separate Reaction Table (2026-03-06)
 
 **Decision:** Added `parent_comment_id` to `comments` and a separate `comment_reactions` table with `UNIQUE(comment_id, user_id)`. The UI renders replies as single-level threads like YouTube: replying anywhere inside a thread attaches the new reply to the thread root, while prefilling `@username` for the specific person being answered. Feed and profile previews continue to show only top-level comments.

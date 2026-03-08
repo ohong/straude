@@ -24,12 +24,30 @@ vi.mock("../../src/lib/codex.js", () => ({
   parseCodexOutput: vi.fn(),
 }));
 
+vi.mock("../../src/lib/gemini.js", () => ({
+  runGeminiRawAsync: vi.fn(),
+  parseGeminiOutput: vi.fn(),
+}));
+
+vi.mock("../../src/lib/qwen.js", () => ({
+  runQwenRawAsync: vi.fn(),
+  parseQwenOutput: vi.fn(),
+}));
+
+vi.mock("../../src/lib/mistral.js", () => ({
+  runMistralRawAsync: vi.fn(),
+  parseMistralOutput: vi.fn(),
+}));
+
 import { pushCommand, mergeEntries } from "../../src/commands/push.js";
 import { loadConfig, saveConfig } from "../../src/lib/auth.js";
 import { loginCommand } from "../../src/commands/login.js";
 import { apiRequest } from "../../src/lib/api.js";
 import { runCcusageRawAsync, parseCcusageOutput } from "../../src/lib/ccusage.js";
 import { runCodexRawAsync, parseCodexOutput } from "../../src/lib/codex.js";
+import { runGeminiRawAsync, parseGeminiOutput } from "../../src/lib/gemini.js";
+import { runQwenRawAsync, parseQwenOutput } from "../../src/lib/qwen.js";
+import { runMistralRawAsync, parseMistralOutput } from "../../src/lib/mistral.js";
 
 const mockLoadConfig = vi.mocked(loadConfig);
 const mockLoginCommand = vi.mocked(loginCommand);
@@ -39,6 +57,12 @@ const mockRunCcusageRawAsync = vi.mocked(runCcusageRawAsync);
 const mockParseCcusageOutput = vi.mocked(parseCcusageOutput);
 const mockRunCodexRawAsync = vi.mocked(runCodexRawAsync);
 const mockParseCodexOutput = vi.mocked(parseCodexOutput);
+const mockRunGeminiRawAsync = vi.mocked(runGeminiRawAsync);
+const mockParseGeminiOutput = vi.mocked(parseGeminiOutput);
+const mockRunQwenRawAsync = vi.mocked(runQwenRawAsync);
+const mockParseQwenOutput = vi.mocked(parseQwenOutput);
+const mockRunMistralRawAsync = vi.mocked(runMistralRawAsync);
+const mockParseMistralOutput = vi.mocked(parseMistralOutput);
 
 const fakeConfig = { token: "tok", username: "alice", api_url: "https://straude.com" };
 
@@ -61,9 +85,15 @@ function todayStr(): string {
 beforeEach(() => {
   vi.clearAllMocks();
   mockLoadConfig.mockReturnValue(fakeConfig);
-  // Default: no Codex data
+  // Default: no Codex/Gemini/Qwen/Mistral data
   mockRunCodexRawAsync.mockResolvedValue("");
   mockParseCodexOutput.mockReturnValue({ data: [] });
+  mockRunGeminiRawAsync.mockResolvedValue("");
+  mockParseGeminiOutput.mockReturnValue({ data: [] });
+  mockRunQwenRawAsync.mockResolvedValue("");
+  mockParseQwenOutput.mockReturnValue({ data: [] });
+  mockRunMistralRawAsync.mockResolvedValue("");
+  mockParseMistralOutput.mockReturnValue({ data: [] });
   vi.spyOn(console, "log").mockImplementation(() => {});
   vi.spyOn(console, "error").mockImplementation(() => {});
   vi.spyOn(process, "exit").mockImplementation((code) => {

@@ -4,6 +4,7 @@
 
 ### Added
 
+- **Gemini CLI, Qwen Code, and Mistral Vibe provider support.** The CLI now reads usage data from Gemini CLI (via `gcusage`), Qwen Code (`~/.qwen/` session files), and Mistral Vibe (`~/.vibe/logs/session/` metadata). All providers run in parallel during `straude push` and merge into the existing daily usage pipeline. Model display names for all three ecosystems are recognized across the web UI (activity cards, recaps, social sharing).
 - **Collapsible threaded replies.** Reply threads on comments are now collapsible via a toggle button showing the reply count. Threads start expanded by default.
 - **Comment threads and comment reactions.** Post detail comments now support YouTube-style reply threads and Strava-style reactions on individual comments. Added `parent_comment_id` on `comments`, a new `comment_reactions` table, and `POST`/`DELETE /api/comments/[id]/reactions`. The comment UI now groups replies beneath their root comment with inline reply/edit composers and a confirmation dialog for delete.
 - **Markdown rendering in comments.** Comments now render markdown (bold, italic, code, lists, blockquotes, links) via ReactMarkdown, matching the activity description rendering. Applies to both the full comment thread and inline feed previews.

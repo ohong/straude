@@ -48,6 +48,21 @@ function prettifyModel(model: string): string {
   }
   if (/^o4/i.test(model)) return "o4";
   if (/^o3/i.test(model)) return "o3";
+  // Gemini models
+  if (/^gemini-2\.5-pro/i.test(normalized)) return "Gemini Pro";
+  if (/^gemini-2\.5-flash/i.test(normalized)) return "Gemini Flash";
+  if (/^gemini-2\.0-flash/i.test(normalized)) return "Gemini Flash";
+  if (/^gemini/i.test(normalized)) return "Gemini";
+  // Qwen models
+  if (/^qwen3-coder/i.test(normalized)) return "Qwen Coder";
+  if (/^qwen-coder/i.test(normalized)) return "Qwen Coder";
+  if (/^qwen-max/i.test(normalized)) return "Qwen Max";
+  if (/^qwen/i.test(normalized)) return "Qwen";
+  // Mistral models
+  if (/^devstral/i.test(normalized)) return "Devstral";
+  if (/^codestral/i.test(normalized)) return "Codestral";
+  if (/^mistral-large/i.test(normalized)) return "Mistral Large";
+  if (/^mistral/i.test(normalized)) return "Mistral";
   // Legacy: broader Claude matching
   if (model.includes("opus")) return "Claude Opus";
   if (model.includes("sonnet")) return "Claude Sonnet";
