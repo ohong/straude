@@ -4,6 +4,7 @@
 
 ### Added
 
+- **Gemini CLI, Qwen Code, and Mistral Vibe provider support.** The CLI now reads usage data from Gemini CLI (via `gcusage`), Qwen Code (`~/.qwen/` session files), and Mistral Vibe (`~/.vibe/logs/session/` metadata). All providers run in parallel during `straude push` and merge into the existing daily usage pipeline. Model display names for all three ecosystems are recognized across the web UI (activity cards, recaps, social sharing).
 - **Open Graph image and social meta tags.** Created `/og-image` preview page matching the landing page design system (dark background, bolt icon, tagline, terminal snippet). Captured 1200x630 screenshot to `/public/og-image.png`. Updated root layout with `og:image` and `twitter:image` meta tags including dimensions and alt text.
 - **PWA manifest and mobile standalone support.** Created `manifest.ts` for Add-to-Home-Screen with standalone display mode. Added `viewportFit: "cover"` to viewport config and safe area inset utility classes for notched devices.
 - **Referral CTA in feed sidebar.** Added "Grow Your Crew" section with invite button to `RightSidebar`.

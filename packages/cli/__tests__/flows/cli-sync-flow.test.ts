@@ -245,8 +245,8 @@ describe("sync flow", () => {
 
     // Re-syncs today's data (1 API call)
     expect(mockFetch).toHaveBeenCalledTimes(1);
-    // 2 calls: ccusage daily + codex attempt (no more --version probe)
-    expect(mockExecFileSync).toHaveBeenCalledTimes(2);
+    // 3 calls: ccusage daily + codex attempt + gcusage attempt
+    expect(mockExecFileSync).toHaveBeenCalledTimes(3);
     const saved = readPersistedConfig();
     expect(saved.last_push_date).toBe(today);
   });
@@ -261,8 +261,8 @@ describe("sync flow", () => {
 
     await pushCommand({});
 
-    // 2 calls: ccusage daily + codex attempt (no more --version probe)
-    expect(mockExecFileSync).toHaveBeenCalledTimes(2);
+    // 3 calls: ccusage daily + codex attempt + gcusage attempt
+    expect(mockExecFileSync).toHaveBeenCalledTimes(3);
     expect(mockFetch).toHaveBeenCalledTimes(1);
 
     const saved = readPersistedConfig();
@@ -278,8 +278,8 @@ describe("sync flow", () => {
 
     await pushCommand({});
 
-    // 2 calls: ccusage daily + codex attempt (no more --version probe)
-    expect(mockExecFileSync).toHaveBeenCalledTimes(2);
+    // 3 calls: ccusage daily + codex attempt + gcusage attempt
+    expect(mockExecFileSync).toHaveBeenCalledTimes(3);
     // calls[0] = actual ccusage daily
     const args = mockExecFileSync.mock.calls[0]!;
     // ccusage is called with: ["daily", "--json", "--since", ..., "--until", ...]
@@ -318,13 +318,18 @@ describe("Codex integration", () => {
     });
   }
 
-  /** Mock that returns ccusage JSON for ccusage calls and codex JSON for codex calls. */
+  /** Mock that returns ccusage JSON for ccusage calls and codex JSON for codex calls.
+   *  Other providers (gcusage, etc.) throw so their async wrappers return empty. */
   function mockBothSources(ccJson: string, codexJsonStr: string) {
     mockExecFileSync.mockImplementation(((cmd: string, args: string[]) => {
       if (args?.some?.((a: string) => typeof a === "string" && a.includes("@ccusage/codex"))) {
         return codexJsonStr;
       }
-      return ccJson;
+      if (args?.some?.((a: string) => typeof a === "string" && (a.includes("ccusage") || a === "daily"))) {
+        return ccJson;
+      }
+      // Unknown provider — throw so async wrappers return empty string
+      throw new Error("not installed");
     }) as typeof execFileSync);
   }
 

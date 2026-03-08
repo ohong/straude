@@ -23,6 +23,26 @@ function prettifyModel(model: string): string {
 
   if (/^o4/i.test(normalized)) return "o4";
   if (/^o3/i.test(normalized)) return "o3";
+
+  // Gemini models
+  if (/^gemini-2\.5-pro/i.test(normalized)) return "Gemini Pro";
+  if (/^gemini-2\.5-flash/i.test(normalized)) return "Gemini Flash";
+  if (/^gemini-2\.0-flash/i.test(normalized)) return "Gemini Flash";
+  if (/^gemini-exp/i.test(normalized)) return "Gemini Exp";
+  if (/^gemini/i.test(normalized)) return "Gemini";
+
+  // Qwen models
+  if (/^qwen3-coder/i.test(normalized)) return "Qwen Coder";
+  if (/^qwen-coder/i.test(normalized)) return "Qwen Coder";
+  if (/^qwen-max/i.test(normalized)) return "Qwen Max";
+  if (/^qwen/i.test(normalized)) return "Qwen";
+
+  // Mistral models
+  if (/^devstral/i.test(normalized)) return "Devstral";
+  if (/^codestral/i.test(normalized)) return "Codestral";
+  if (/^mistral-large/i.test(normalized)) return "Mistral Large";
+  if (/^mistral/i.test(normalized)) return "Mistral";
+
   return normalized;
 }
 
@@ -30,11 +50,19 @@ export function getShareModelLabel(
   models: string[] | null | undefined
 ): string | null {
   if (!models || models.length === 0) return null;
+  // Priority order: Claude > Gemini > Qwen > Mistral > Codex > first model
   if (models.some((model) => /claude-opus-4/i.test(model))) return "Claude Opus";
-  if (models.some((model) => /claude-sonnet-4/i.test(model))) {
-    return "Claude Sonnet";
-  }
+  if (models.some((model) => /claude-sonnet-4/i.test(model))) return "Claude Sonnet";
   if (models.some((model) => /claude-haiku-4/i.test(model))) return "Claude Haiku";
+  if (models.some((model) => /^gemini/i.test(model))) {
+    return prettifyModel(models.find((m) => /^gemini/i.test(m))!);
+  }
+  if (models.some((model) => /^qwen/i.test(model))) {
+    return prettifyModel(models.find((m) => /^qwen/i.test(m))!);
+  }
+  if (models.some((model) => /^devstral|^codestral|^mistral/i.test(model))) {
+    return prettifyModel(models.find((m) => /^devstral|^codestral|^mistral/i.test(m))!);
+  }
   return prettifyModel(models[0]!);
 }
 
