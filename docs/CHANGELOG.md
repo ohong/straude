@@ -2,6 +2,10 @@
 
 ## Unreleased
 
+### Fixed
+
+- **Suggested friends empty for power users.** Removed `is_public` filter from suggested friends queries in `RightSidebar`. Users who follow everyone public saw zero suggestions because private users with usernames were excluded. Privacy controls profile content visibility, not discoverability.
+
 ### Added
 
 - **Dark mode and theming system.** Added CSS custom property layer (`--app-*`, `--landing-*`) in `globals.css` with light/dark value sets driven by `html[data-theme]`. Created `ThemeProvider` context, `lib/theme.ts` bootstrap script (runs before paint to avoid FOUC), and wired theme into the root layout. Command palette now includes Light/Dark/System theme actions. Admin shell delegates to the global theme instead of managing its own. Login, signup, and country picker components updated to use theme-aware tokens (`bg-input`, `bg-overlay`, `ring-offset-background`). Auth pages refactored to use shared `<Button>` and `<Input>` components.

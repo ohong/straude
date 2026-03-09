@@ -43,13 +43,11 @@ export async function RightSidebar({ userId }: { userId: string }) {
         .from("users")
         .select("id, username, avatar_url, bio")
         .eq("username", PINNED_USERNAME)
-        .eq("is_public", true)
         .maybeSingle(),
       // Users with recent activity (have pushed usage data)
       supabase
         .from("daily_usage")
-        .select("user_id, users!inner(id, username, avatar_url, bio, is_public)")
-        .eq("users.is_public", true)
+        .select("user_id, users!inner(id, username, avatar_url, bio)")
         .not("users.username", "is", null)
         .not("user_id", "in", `(${excludeIds.join(",")})`)
         .order("date", { ascending: false })
@@ -58,7 +56,6 @@ export async function RightSidebar({ userId }: { userId: string }) {
       supabase
         .from("users")
         .select("id, username, avatar_url, bio")
-        .eq("is_public", true)
         .not("username", "is", null)
         .not("id", "in", `(${excludeIds.join(",")})`)
         .order("created_at", { ascending: false })
@@ -69,7 +66,7 @@ export async function RightSidebar({ userId }: { userId: string }) {
   const seenIds = new Set<string>();
   const activeUsers: Array<{ id: string; username: string; avatar_url: string | null; bio: string | null }> = [];
   for (const row of recentlyActive ?? []) {
-    const u = row.users as unknown as { id: string; username: string; avatar_url: string | null; bio: string | null; is_public: boolean };
+    const u = row.users as unknown as { id: string; username: string; avatar_url: string | null; bio: string | null };
     if (!seenIds.has(u.id) && u.username !== PINNED_USERNAME) {
       seenIds.add(u.id);
       activeUsers.push({ id: u.id, username: u.username, avatar_url: u.avatar_url, bio: u.bio });
