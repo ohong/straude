@@ -38,8 +38,9 @@ function Step3LogSession({ username }: { username: string }) {
     });
   }, []);
 
-  // Poll for first session data
+  // Poll for NEW session data (ignore pre-existing usage)
   const intervalRef = useRef<ReturnType<typeof setInterval>>(undefined);
+  const baselineRef = useRef<number | null>(null);
 
   useEffect(() => {
     let active = true;
@@ -49,7 +50,16 @@ function Step3LogSession({ username }: { username: string }) {
         const res = await fetch("/api/usage/status");
         if (!res.ok) return;
         const json: UsageStatus = await res.json();
-        if (json.has_data && active) {
+        const count = json.session_count ?? 0;
+
+        // First poll: record the baseline
+        if (baselineRef.current === null) {
+          baselineRef.current = count;
+          return;
+        }
+
+        // Only transition when sessions increase beyond baseline
+        if (count > baselineRef.current && active) {
           setData(json);
           setPhase("success");
           if (intervalRef.current) clearInterval(intervalRef.current);
@@ -489,10 +499,7 @@ export default function OnboardingPage() {
               className="min-h-0"
               aria-describedby="onboard-heard-about-hint"
             />
-            <div className="mt-1 flex items-center justify-between gap-3 text-xs text-muted">
-              <p id="onboard-heard-about-hint" className="text-pretty">
-                Optional. Free-form so you can be as specific as you want.
-              </p>
+            <div className="mt-1 flex items-end justify-end text-xs text-muted">
               <span>{heardAbout.length}/500</span>
             </div>
           </div>
