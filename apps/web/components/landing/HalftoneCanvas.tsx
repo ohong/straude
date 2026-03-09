@@ -56,9 +56,9 @@ const FS_SOURCE = `
     float shape = 1.0 - smoothstep(dotSize - 0.05, dotSize + 0.05, dist);
 
     vec3 bgColor = vec3(0.02, 0.02, 0.02);
-    vec3 dotColor = mix(vec3(0.3), vec3(0.875, 0.337, 0.122), n * 0.5);
+    vec3 dotColor = mix(vec3(0.3), vec3(0.875, 0.337, 0.122), n * 0.7);
 
-    vec3 finalColor = mix(bgColor, dotColor, shape * 0.5);
+    vec3 finalColor = mix(bgColor, dotColor, shape * 0.65);
     gl_FragColor = vec4(finalColor, 1.0);
   }
 `;
