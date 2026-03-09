@@ -41,8 +41,8 @@ export async function RightSidebar({ userId }: { userId: string }) {
   // Always pin the site owner as the first suggestion (if not already followed/self)
   const PINNED_USERNAME = "ohong";
 
-  // Use service client to bypass RLS for suggestions — private users should
-  // be discoverable even though their profile content is protected.
+  // Service client bypasses RLS so we can query users the current user
+  // hasn't followed yet. Filter to is_public=true to exclude dummy/private users.
   const [{ data: pinnedUser }, { data: recentlyActive }, { data: newSignups }] =
     await Promise.all([
       service
@@ -53,7 +53,7 @@ export async function RightSidebar({ userId }: { userId: string }) {
       // Users with recent activity (have pushed usage data)
       service
         .from("daily_usage")
-        .select("user_id, users!inner(id, username, avatar_url, bio)")
+        .select("user_id, users!inner(id, username, avatar_url, bio, is_public)")
         .not("users.username", "is", null)
         .not("user_id", "in", `(${excludeIds.join(",")})`)
         .order("date", { ascending: false })
@@ -62,18 +62,19 @@ export async function RightSidebar({ userId }: { userId: string }) {
       service
         .from("users")
         .select("id, username, avatar_url, bio")
+        .eq("is_public", true)
         .not("username", "is", null)
         .not("id", "in", `(${excludeIds.join(",")})`)
         .order("created_at", { ascending: false })
         .limit(10),
     ]);
 
-  // Deduplicate active users (may appear on multiple days)
+  // Deduplicate active users (may appear on multiple days), skip private users
   const seenIds = new Set<string>();
   const activeUsers: Array<{ id: string; username: string; avatar_url: string | null; bio: string | null }> = [];
   for (const row of recentlyActive ?? []) {
-    const u = row.users as unknown as { id: string; username: string; avatar_url: string | null; bio: string | null };
-    if (!seenIds.has(u.id) && u.username !== PINNED_USERNAME) {
+    const u = row.users as unknown as { id: string; username: string; avatar_url: string | null; bio: string | null; is_public: boolean };
+    if (!seenIds.has(u.id) && u.username !== PINNED_USERNAME && u.is_public) {
       seenIds.add(u.id);
       activeUsers.push({ id: u.id, username: u.username, avatar_url: u.avatar_url, bio: u.bio });
     }
