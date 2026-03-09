@@ -1,7 +1,8 @@
 import { createClient } from "@/lib/supabase/server";
+import { getServiceClient } from "@/lib/supabase/service";
 import { notFound } from "next/navigation";
 import Link from "next/link";
-import { MapPin, LinkIcon, Github, Flame, Zap, Users } from "lucide-react";
+import { MapPin, LinkIcon, Github, Flame, Zap, Users, Lock } from "lucide-react";
 import { Avatar } from "@/components/ui/Avatar";
 import { AchievementBadges } from "@/components/app/profile/AchievementBadges";
 import { ContributionGraph } from "@/components/app/profile/ContributionGraph";
@@ -31,16 +32,51 @@ export default async function ProfilePage({
     data: { user: authUser },
   } = await supabase.auth.getUser();
 
-  const { data: profile } = await supabase
+  // Use service client to bypass RLS so we can distinguish "not found" from "private"
+  const db = getServiceClient();
+  const { data: profile } = await db
     .from("users")
     .select("*")
     .eq("username", username)
     .single();
 
   if (!profile) notFound();
-  if (!profile.is_public && authUser?.id !== profile.id) notFound();
 
   const isOwn = authUser?.id === profile.id;
+  const isPrivate = !profile.is_public && !isOwn;
+
+  if (isPrivate) {
+    return (
+      <>
+        <header className="sticky top-0 z-10 flex h-14 items-center border-b border-border bg-background px-4 sm:px-6">
+          <h3 className="text-lg font-medium">@{username}</h3>
+        </header>
+        <div className="border-b border-border px-4 py-5 sm:p-6">
+          <div className="flex items-start gap-4 sm:gap-5">
+            <Avatar src={profile.avatar_url} alt={profile.username ?? ""} size="lg" fallback={profile.username ?? "?"} />
+            <div className="flex-1">
+              <div className="flex flex-wrap items-center gap-2 sm:gap-3">
+                <h1 className="text-xl font-medium sm:text-2xl" style={{ letterSpacing: "-0.03em" }}>
+                  {profile.display_name ?? profile.username}
+                </h1>
+                {authUser && (
+                  <FollowButton username={username} initialFollowing={false} />
+                )}
+              </div>
+              {profile.display_name && (
+                <p className="text-sm text-muted">@{profile.username}</p>
+              )}
+            </div>
+          </div>
+        </div>
+        <div className="flex flex-col items-center gap-2 px-4 py-16 text-center">
+          <Lock size={32} className="text-muted" />
+          <p className="text-sm font-medium">This profile is private</p>
+          <p className="text-sm text-muted">Follow @{username} to see their activity.</p>
+        </div>
+      </>
+    );
+  }
 
   // Run all independent queries in parallel (including follow check)
   const [

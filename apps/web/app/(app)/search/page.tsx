@@ -46,7 +46,7 @@ function SearchContent() {
             name="q"
             value={query}
             onChange={(e) => handleSearch(e.target.value)}
-            placeholder="Search ThariqS, adocomplete, lydiahallie"
+            placeholder="Search by username or email"
             aria-label="Search users"
             className="flex-1 bg-transparent text-base outline-none placeholder:text-muted"
           />
@@ -56,7 +56,7 @@ function SearchContent() {
       <div>
         {query.length < 2 && !loading && results.length === 0 && (
           <p className="px-6 py-8 text-center text-sm text-muted">
-            Search for users by username
+            Search by username or email
           </p>
         )}
         {loading && (

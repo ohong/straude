@@ -1,4 +1,5 @@
 import { createClient } from "@/lib/supabase/server";
+import { getServiceClient } from "@/lib/supabase/service";
 import { formatTokens } from "@/lib/utils/format";
 import Link from "next/link";
 import { Avatar } from "@/components/ui/Avatar";
@@ -7,6 +8,10 @@ import { InviteButton } from "@/components/app/profile/InviteButton";
 
 export async function RightSidebar({ userId }: { userId: string }) {
   const supabase = await createClient();
+  // Service client bypasses RLS so suggestions can include private users.
+  // The users RLS policy restricts SELECT to is_public=true, which means
+  // power users who follow everyone public see zero suggestions.
+  const service = getServiceClient();
 
   // Start independent queries in parallel (avoid waterfall)
   const [{ data: topUsers }, { data: following }, { data: userUsage }, { data: userProfile }] = await Promise.all([
@@ -36,16 +41,17 @@ export async function RightSidebar({ userId }: { userId: string }) {
   // Always pin the site owner as the first suggestion (if not already followed/self)
   const PINNED_USERNAME = "ohong";
 
-  // Fetch pinned user, recently active users (have daily_usage), and newest signups
+  // Use service client to bypass RLS for suggestions — private users should
+  // be discoverable even though their profile content is protected.
   const [{ data: pinnedUser }, { data: recentlyActive }, { data: newSignups }] =
     await Promise.all([
-      supabase
+      service
         .from("users")
         .select("id, username, avatar_url, bio")
         .eq("username", PINNED_USERNAME)
         .maybeSingle(),
       // Users with recent activity (have pushed usage data)
-      supabase
+      service
         .from("daily_usage")
         .select("user_id, users!inner(id, username, avatar_url, bio)")
         .not("users.username", "is", null)
@@ -53,7 +59,7 @@ export async function RightSidebar({ userId }: { userId: string }) {
         .order("date", { ascending: false })
         .limit(20),
       // New signups who completed onboarding (have a username)
-      supabase
+      service
         .from("users")
         .select("id, username, avatar_url, bio")
         .not("username", "is", null)

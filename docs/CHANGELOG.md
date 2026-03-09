@@ -4,7 +4,14 @@
 
 ### Fixed
 
-- **Suggested friends empty for power users.** Removed `is_public` filter from suggested friends queries in `RightSidebar`. Users who follow everyone public saw zero suggestions because private users with usernames were excluded. Privacy controls profile content visibility, not discoverability.
+- **Broken signup trigger — 16 users lost since March 6.** The Bao migration (`20260306150625`) silently overwrote `handle_new_user()` to insert into `public.profiles` instead of `public.users`. Every signup since March 6 12:19 UTC got an `auth.users` row but no `public.users` row, making them unable to onboard, push CLI data, create posts, or appear anywhere. Restored the trigger to insert into both tables and backfilled all 16 missing users. Added migration safety tests to prevent this class of bug.
+- **Suggested friends empty for power users.** The `RightSidebar` used the publishable key client (RLS-enforced) for suggestion queries. The `users` RLS policy restricts SELECT to `is_public = true`, so power users who follow all public users saw zero suggestions because private users were invisible at the DB layer. Switched suggestion queries to use the service client to bypass RLS — private users are now discoverable even though their profile content remains protected.
+- **Email search broken since security hardening.** The search route called `lookup_user_id_by_email` with the publishable key client, but the security hardening migration revoked EXECUTE from the `authenticated` role (service_role only). Switched to service client for email lookups.
+- **Private profiles returned 404 instead of private stub.** Visiting `/u/<private-user>` showed "This page could not be found" because RLS blocked the query before the code could distinguish "doesn't exist" from "private". Switched to service client for the initial user lookup on both profile and follows pages. Private profiles now show the user's avatar, display name, a follow button, and a "This profile is private" message.
+
+### Changed
+
+- **Dark theme palette aligned with admin dashboard.** Replaced warm charcoal dark theme with the admin's neutral palette: `#0A0A0A` background, `#E0E0E0` foreground, `#111` surfaces, `rgba(255,255,255,0.10)` borders. Improves legibility and consistency across app and admin.
 
 ### Added
 

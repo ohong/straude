@@ -1,4 +1,5 @@
 import { createClient } from "@/lib/supabase/server";
+import { getServiceClient } from "@/lib/supabase/service";
 import { notFound } from "next/navigation";
 import Link from "next/link";
 import { Avatar } from "@/components/ui/Avatar";
@@ -30,7 +31,8 @@ export default async function FollowsPage({
 
   const supabase = await createClient();
 
-  const { data: profile } = await supabase
+  const db = getServiceClient();
+  const { data: profile } = await db
     .from("users")
     .select("id, username, is_public")
     .eq("username", username)

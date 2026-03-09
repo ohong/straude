@@ -25,23 +25,23 @@
 }
 
 html[data-theme="dark"] {
-  --app-background: #050505;
-  --app-foreground: #f3efe7;
+  --app-background: #0a0a0a;
+  --app-foreground: #e0e0e0;
   --app-accent: #df561f;
-  --app-secondary-blue: #66bfd7;
-  --app-secondary-yellow: #cfc86c;
-  --app-border: #2a2824;
-  --app-muted: #a7a09a;
-  --app-subtle: #121110;
-  --app-input: #0c0c0c;
+  --app-secondary-blue: #7bd0e8;
+  --app-secondary-yellow: #e0d97a;
+  --app-border: rgba(255, 255, 255, 0.10);
+  --app-muted: #888888;
+  --app-subtle: #111111;
+  --app-input: #111111;
   --app-error: #ef7b7b;
   --app-highlight-row: rgba(223, 86, 31, 0.18);
-  --app-hover: rgba(223, 86, 31, 0.12);
+  --app-hover: rgba(255, 255, 255, 0.04);
   --app-overlay: rgba(0, 0, 0, 0.72);
-  --landing-bg: #050505;
+  --landing-bg: #0a0a0a;
   --landing-surface: #111111;
-  --landing-border: #222222;
-  --landing-text: #f0f0f0;
+  --landing-border: rgba(255, 255, 255, 0.10);
+  --landing-text: #e0e0e0;
   --landing-muted: #888888;
   --landing-dim: #555555;
   --landing-panel: rgba(255, 255, 255, 0.03);
