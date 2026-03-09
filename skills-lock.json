@@ -1,6 +1,11 @@
 {
   "version": 1,
   "skills": {
+    "email-best-practices": {
+      "source": "resend/email-best-practices",
+      "sourceType": "github",
+      "computedHash": "7e6c8d495e66e88a20dc45d17d24b445d6c5c9072855c78d8800fff994bc813f"
+    },
     "react-email": {
       "source": "resend/react-email",
       "sourceType": "github",

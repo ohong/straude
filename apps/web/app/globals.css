@@ -1,14 +1,14 @@
 @import "tailwindcss";
 
 :root {
-  --app-background: #fcfbf7;
+  --app-background: #ffffff;
   --app-foreground: #111111;
   --app-accent: #df561f;
   --app-secondary-blue: #7bd0e8;
   --app-secondary-yellow: #fdffa4;
   --app-border: #1b1b1b;
   --app-muted: #686868;
-  --app-subtle: #efede8;
+  --app-subtle: #f5f5f5;
   --app-input: #ffffff;
   --app-error: #c94a4a;
   --app-highlight-row: rgba(223, 86, 31, 0.12);
@@ -49,13 +49,13 @@ html[data-theme="dark"] {
 }
 
 html[data-theme="light"] {
-  --landing-bg: #f6f0e6;
-  --landing-surface: #fffaf0;
-  --landing-border: #d8cdbd;
-  --landing-text: #16110d;
-  --landing-muted: #6e665d;
-  --landing-dim: #998f83;
-  --landing-panel: rgba(255, 255, 255, 0.78);
+  --landing-bg: #ffffff;
+  --landing-surface: #f9f9f9;
+  --landing-border: #e0e0e0;
+  --landing-text: #111111;
+  --landing-muted: #666666;
+  --landing-dim: #999999;
+  --landing-panel: rgba(255, 255, 255, 0.80);
   --landing-hover: rgba(255, 255, 255, 0.96);
 }
 
