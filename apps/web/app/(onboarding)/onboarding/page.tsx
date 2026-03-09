@@ -17,8 +17,6 @@ interface UsageStatus {
   total_tokens?: number;
   session_count?: number;
   top_model?: string | null;
-  rank?: number | null;
-  total_users?: number | null;
 }
 
 function formatTokens(n: number): string {
@@ -68,8 +66,6 @@ function Step3LogSession({ username }: { username: string }) {
       if (intervalRef.current) clearInterval(intervalRef.current);
     };
   }, []);
-
-  const displayHandle = username || "yourname";
 
   if (phase === "success" && data) {
     return (
@@ -124,19 +120,12 @@ function Step3LogSession({ username }: { username: string }) {
           </div>
         </div>
 
-        {data.rank != null && data.total_users != null && (
-          <p className="mt-4 text-sm text-muted text-center">
-            You&apos;re <span className="text-foreground font-semibold">#{data.rank}</span> of{" "}
-            <span className="text-foreground font-semibold">{data.total_users}</span> builders.
-          </p>
-        )}
-
         <div className="mt-6 flex items-center gap-3">
           <Button
-            onClick={() => router.push(`/u/${displayHandle}`)}
+            onClick={() => router.push(username ? `/u/${username}` : "/feed")}
             className="flex-1 py-3"
           >
-            View your profile
+            {username ? "View your profile" : "Go to your feed"}
             <ArrowRight size={16} className="ml-1.5" />
           </Button>
         </div>

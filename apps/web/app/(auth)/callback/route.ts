@@ -20,7 +20,7 @@ export async function GET(request: Request) {
       if (user) {
         const { data: profile } = await supabase
           .from("users")
-          .select("username, github_username")
+          .select("username, github_username, onboarding_completed")
           .eq("id", user.id)
           .single();
 
@@ -37,6 +37,11 @@ export async function GET(request: Request) {
               .update({ username: sanitized })
               .eq("id", user.id);
           }
+        }
+
+        // Send new users to onboarding instead of feed
+        if (profile && !profile.onboarding_completed && next === "/feed") {
+          return NextResponse.redirect(`${origin}/onboarding`);
         }
       }
 

@@ -4,6 +4,8 @@
 
 ### Fixed
 
+- **Onboarding: "View your profile" broken for users without a username.** Step 3 success state linked to `/u/yourname` (a literal string) when no username was set. Now routes to `/feed` with appropriate button label.
+- **Onboarding: new users not redirected to onboarding after signup.** Auth callback always redirected to `/feed`, requiring users to notice a small banner to discover onboarding. Now redirects to `/onboarding` for users who haven't completed it.
 - **Broken signup trigger — 16 users lost since March 6.** The Bao migration (`20260306150625`) silently overwrote `handle_new_user()` to insert into `public.profiles` instead of `public.users`. Every signup since March 6 12:19 UTC got an `auth.users` row but no `public.users` row, making them unable to onboard, push CLI data, create posts, or appear anywhere. Restored the trigger to insert into both tables and backfilled all 16 missing users. Added migration safety tests to prevent this class of bug.
 - **Suggested friends empty for power users.** The `RightSidebar` used the publishable key client (RLS-enforced) for suggestion queries. The `users` RLS policy restricts SELECT to `is_public = true`, so power users who follow all public users saw zero suggestions because private users were invisible at the DB layer. Switched suggestion queries to use the service client to bypass RLS — private users are now discoverable even though their profile content remains protected.
 - **Email search broken since security hardening.** The search route called `lookup_user_id_by_email` with the publishable key client, but the security hardening migration revoked EXECUTE from the `authenticated` role (service_role only). Switched to service client for email lookups.

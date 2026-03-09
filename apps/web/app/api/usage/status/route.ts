@@ -36,29 +36,11 @@ export async function GET() {
       ? usageRows[0].models[0]
       : null;
 
-  // Rank from leaderboard_all_time
-  let rank: number | null = null;
-  let total_users: number | null = null;
-
-  const { count: usersAbove } = await supabase
-    .from("leaderboard_all_time")
-    .select("*", { count: "exact", head: true })
-    .gt("total_cost", cost_usd);
-
-  const { count: totalCount } = await supabase
-    .from("leaderboard_all_time")
-    .select("*", { count: "exact", head: true });
-
-  if (usersAbove !== null) rank = usersAbove + 1;
-  if (totalCount !== null) total_users = totalCount;
-
   return NextResponse.json({
     has_data: true,
     cost_usd: Math.round(cost_usd * 100) / 100,
     total_tokens,
     session_count,
     top_model,
-    rank,
-    total_users,
   });
 }
