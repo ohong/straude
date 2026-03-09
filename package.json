@@ -6,7 +6,8 @@
   "scripts": {
     "dev": "turbo dev",
     "build": "turbo build",
-    "lint": "turbo lint"
+    "lint": "turbo lint",
+    "roadmap:entropy": "bun run scripts/roadmap-entropy.ts"
   },
   "devDependencies": {
     "turbo": "^2",

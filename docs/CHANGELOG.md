@@ -4,6 +4,7 @@
 
 ### Added
 
+- **Roadmap entropy detector.** Standalone script (`scripts/roadmap-entropy.ts`) that parses `docs/ROADMAP.md`, uses git history to track evolution, and reports entropy metrics: unshipped item count trend with sparkline, shipped-vs-total ratio, word count growth, stalest unshipped items via git blame, north-star alignment scoring, and a composite entropy score. Runnable via `bun run roadmap:entropy`.
 - **Open Graph image and social meta tags.** Created `/og-image` preview page matching the landing page design system (dark background, bolt icon, tagline, terminal snippet). Captured 1200x630 screenshot to `/public/og-image.png`. Updated root layout with `og:image` and `twitter:image` meta tags including dimensions and alt text.
 - **PWA manifest and mobile standalone support.** Created `manifest.ts` for Add-to-Home-Screen with standalone display mode. Added `viewportFit: "cover"` to viewport config and safe area inset utility classes for notched devices.
 - **Referral CTA in feed sidebar.** Added "Grow Your Crew" section with invite button to `RightSidebar`.
