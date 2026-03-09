@@ -16,7 +16,7 @@ function CopySnippet({ command }: { command: string }) {
   return (
     <button
       onClick={copy}
-      className="inline-flex items-center gap-4 border border-landing-border bg-black/50 px-4 py-3 font-[family-name:var(--font-mono)] text-sm text-landing-muted hover:border-landing-dim transition-colors cursor-pointer"
+      className="inline-flex cursor-pointer items-center gap-4 border border-landing-border bg-landing-panel px-4 py-3 font-[family-name:var(--font-mono)] text-sm text-landing-muted transition-colors hover:border-landing-dim"
     >
       ${" "}
       <span className="text-landing-text">{command}</span>
@@ -44,7 +44,7 @@ export function Hero() {
     <header className="min-h-screen flex flex-col justify-center px-8 lg:px-16 pt-32 relative">
       <div className="max-w-[900px]">
         <p className="font-[family-name:var(--font-mono)] text-sm uppercase tracking-wider text-landing-muted mb-4">
-          // STRAVA FOR CLAUDE CODE
+          {"// STRAVA FOR CLAUDE CODE"}
         </p>
 
         <h1 className="text-[clamp(3rem,8vw,7rem)] font-medium tracking-[-0.03em] leading-[1.1] text-landing-text text-balance mb-8">

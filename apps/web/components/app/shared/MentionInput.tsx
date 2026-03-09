@@ -189,7 +189,7 @@ export function MentionInput({
     "aria-invalid": ariaInvalid || undefined,
     className:
       className ??
-      "w-full border border-border px-3 py-2 text-sm outline-none placeholder:text-muted focus:border-accent",
+      "w-full rounded-[4px] border border-border bg-input px-3 py-2 text-sm text-foreground outline-none placeholder:text-muted focus:border-accent focus:ring-3 focus:ring-accent/15",
     style: { borderRadius: 4 } as React.CSSProperties,
   };
 

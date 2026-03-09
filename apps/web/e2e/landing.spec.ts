@@ -38,4 +38,26 @@ test.describe("Landing page", () => {
     await page.goto("/");
     await expect(page.locator('a[href="/signup"]').first()).toBeVisible();
   });
+
+  test("follows the system dark theme on public pages", async ({ page }) => {
+    await page.emulateMedia({ colorScheme: "dark" });
+
+    await page.goto("/");
+    await expect(page.locator("html")).toHaveAttribute("data-theme", "dark");
+
+    await page.goto("/signup");
+    await expect(page.locator("html")).toHaveAttribute("data-theme", "dark");
+  });
+
+  test("applies a stored dark preference across public pages", async ({ page }) => {
+    await page.addInitScript(() => {
+      window.localStorage.setItem("straude-theme", "dark");
+    });
+
+    await page.goto("/");
+    await expect(page.locator("html")).toHaveAttribute("data-theme", "dark");
+
+    await page.goto("/signup");
+    await expect(page.locator("html")).toHaveAttribute("data-theme", "dark");
+  });
 });

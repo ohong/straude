@@ -24,7 +24,7 @@
   transition: background-color 0.2s ease, color 0.2s ease;
 }
 
-.admin-shell[data-theme="dark"] {
+html[data-theme="dark"] .admin-shell {
   --admin-bg: #0A0A0A;
   --admin-fg: #E0E0E0;
   --admin-fg-secondary: #888;

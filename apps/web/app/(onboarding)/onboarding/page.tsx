@@ -177,7 +177,7 @@ function Step3LogSession({ username }: { username: string }) {
       <button
         type="button"
         onClick={handleCopy}
-        className="flex w-full items-center justify-between gap-3 rounded border border-border bg-subtle px-4 py-3 font-[family-name:var(--font-mono)] text-sm transition-[border-color,background-color] duration-150 hover:border-foreground/20 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent focus-visible:ring-offset-2"
+        className="flex w-full items-center justify-between gap-3 rounded border border-border bg-subtle px-4 py-3 font-[family-name:var(--font-mono)] text-sm transition-[border-color,background-color] duration-150 hover:border-foreground/20 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent focus-visible:ring-offset-2 focus-visible:ring-offset-background"
         aria-label="Copy sync command"
       >
         <span className="text-foreground">{SYNC_COMMAND}</span>

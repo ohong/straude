@@ -15,7 +15,7 @@ export function CopyCommand({ command }: { command: string }) {
   return (
     <button
       onClick={copy}
-      className="group/copy inline-flex items-center gap-2 rounded border border-border bg-subtle px-4 py-2 font-[family-name:var(--font-mono)] text-sm transition-[border-color,background-color] duration-150 hover:border-foreground/20 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent focus-visible:ring-offset-2"
+      className="group/copy inline-flex items-center gap-2 rounded border border-border bg-subtle px-4 py-2 font-[family-name:var(--font-mono)] text-sm transition-[border-color,background-color] duration-150 hover:border-foreground/20 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent focus-visible:ring-offset-2 focus-visible:ring-offset-background"
     >
       <span>{command}</span>
       {copied ? (

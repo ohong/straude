@@ -22,7 +22,7 @@ export function CTASection() {
           <br />
           3. See who else is putting in the work
         </div>
-        <div className="inline-flex items-center gap-4 border border-landing-border bg-black/50 px-6 py-3 font-[family-name:var(--font-mono)] text-lg text-landing-muted">
+        <div className="inline-flex items-center gap-4 border border-landing-border bg-landing-panel px-6 py-3 font-[family-name:var(--font-mono)] text-lg text-landing-muted">
           ${" "}
           <span className="text-landing-text">
             bunx straude push --days 7

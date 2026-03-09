@@ -4,6 +4,8 @@
 
 ### Added
 
+- **Dark mode and theming system.** Added CSS custom property layer (`--app-*`, `--landing-*`) in `globals.css` with light/dark value sets driven by `html[data-theme]`. Created `ThemeProvider` context, `lib/theme.ts` bootstrap script (runs before paint to avoid FOUC), and wired theme into the root layout. Command palette now includes Light/Dark/System theme actions. Admin shell delegates to the global theme instead of managing its own. Login, signup, and country picker components updated to use theme-aware tokens (`bg-input`, `bg-overlay`, `ring-offset-background`). Auth pages refactored to use shared `<Button>` and `<Input>` components.
+
 - **Open Graph image and social meta tags.** Created `/og-image` preview page matching the landing page design system (dark background, bolt icon, tagline, terminal snippet). Captured 1200x630 screenshot to `/public/og-image.png`. Updated root layout with `og:image` and `twitter:image` meta tags including dimensions and alt text.
 - **PWA manifest and mobile standalone support.** Created `manifest.ts` for Add-to-Home-Screen with standalone display mode. Added `viewportFit: "cover"` to viewport config and safe area inset utility classes for notched devices.
 - **Referral CTA in feed sidebar.** Added "Grow Your Crew" section with invite button to `RightSidebar`.

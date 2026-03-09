@@ -3,12 +3,12 @@
 import {
   createContext,
   useContext,
-  useState,
-  useEffect,
+  useSyncExternalStore,
   type ReactNode,
 } from "react";
 import Link from "next/link";
 import { Sun, Moon } from "lucide-react";
+import { useTheme } from "@/components/providers/ThemeProvider";
 
 type Theme = "light" | "dark";
 
@@ -22,24 +22,17 @@ export function useAdminTheme() {
 }
 
 export function AdminShell({ children }: { children: ReactNode }) {
-  const [theme, setTheme] = useState<Theme>("dark");
-
-  useEffect(() => {
-    const saved = localStorage.getItem("admin-theme") as Theme | null;
-    if (saved === "light" || saved === "dark") setTheme(saved);
-  }, []);
-
-  const toggle = () => {
-    const next = theme === "dark" ? "light" : "dark";
-    setTheme(next);
-    localStorage.setItem("admin-theme", next);
-  };
+  const { resolvedTheme, toggleTheme } = useTheme();
+  const theme = useSyncExternalStore<Theme>(
+    () => () => {},
+    () => resolvedTheme,
+    () => "light",
+  );
 
   return (
-    <ThemeCtx.Provider value={{ theme, toggle }}>
+    <ThemeCtx.Provider value={{ theme, toggle: toggleTheme }}>
       <div
         className="admin-shell min-h-screen"
-        data-theme={theme}
         style={{ backgroundColor: "var(--admin-bg)", color: "var(--admin-fg)" }}
       >
         <header
@@ -70,7 +63,7 @@ export function AdminShell({ children }: { children: ReactNode }) {
           <div className="flex items-center gap-4">
             <button
               type="button"
-              onClick={toggle}
+              onClick={toggleTheme}
               className="flex h-7 w-7 items-center justify-center rounded-md"
               style={{ color: "var(--admin-fg-secondary)" }}
               aria-label={`Switch to ${theme === "dark" ? "light" : "dark"} mode`}

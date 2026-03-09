@@ -165,7 +165,7 @@ function ModelUsageBar({ segments }: { segments: ModelUsageSegment[] }) {
       <button
         type="button"
         aria-label={`Model usage: ${tooltip}`}
-        className="inline-flex h-2 w-28 cursor-help overflow-hidden rounded-full bg-subtle focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent focus-visible:ring-offset-2"
+        className="inline-flex h-2 w-28 cursor-help overflow-hidden rounded-full bg-subtle focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent focus-visible:ring-offset-2 focus-visible:ring-offset-background"
       >
         {segments.map((entry) => (
           <span
@@ -320,7 +320,7 @@ export function ActivityCard({ post, userId }: { post: Post; userId?: string | n
 
       {/* Body — clickable card, but not an <a> to avoid nesting with @mention links */}
       <div
-        className="mt-4 cursor-pointer rounded focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent focus-visible:ring-offset-2"
+        className="mt-4 cursor-pointer rounded focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent focus-visible:ring-offset-2 focus-visible:ring-offset-background"
         role="link"
         tabIndex={0}
         onClick={(e) => {

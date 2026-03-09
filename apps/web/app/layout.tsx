@@ -2,6 +2,9 @@ import type { Metadata, Viewport } from "next";
 import { Inter, JetBrains_Mono } from "next/font/google";
 import { Analytics } from "@vercel/analytics/next";
 import { Agentation } from "agentation";
+import Script from "next/script";
+import { ThemeProvider } from "@/components/providers/ThemeProvider";
+import { getThemeBootstrapScript } from "@/lib/theme";
 import "./globals.css";
 
 const inter = Inter({
@@ -72,8 +75,19 @@ export default function RootLayout({
   children: React.ReactNode;
 }>) {
   return (
-    <html lang="en" className={`${inter.variable} ${jetbrainsMono.variable}`}>
-      <body className="font-[family-name:var(--font-main)] antialiased" style={{ isolation: "isolate", position: "relative" }}>
+    <html
+      lang="en"
+      className={`${inter.variable} ${jetbrainsMono.variable}`}
+      data-theme="light"
+      suppressHydrationWarning
+    >
+      <body
+        className="bg-background font-[family-name:var(--font-main)] text-foreground antialiased"
+        style={{ isolation: "isolate", position: "relative" }}
+      >
+        <Script id="straude-theme" strategy="beforeInteractive">
+          {getThemeBootstrapScript()}
+        </Script>
         <script
           type="application/ld+json"
           dangerouslySetInnerHTML={{
@@ -87,7 +101,7 @@ export default function RootLayout({
             }),
           }}
         />
-        {children}
+        <ThemeProvider>{children}</ThemeProvider>
         <Analytics />
         {process.env.NODE_ENV === "development" && <Agentation />}
       </body>

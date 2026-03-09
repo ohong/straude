@@ -87,16 +87,20 @@ export function TopHeader({ username, avatarUrl }: TopHeaderProps) {
 
   // Initial unread count fetch + mark as returning user + listen for external changes
   useEffect(() => {
-    fetchNotifications();
-    fetchMessageUnreadCount();
+    function refreshCounts() {
+      void fetchNotifications();
+      void fetchMessageUnreadCount();
+    }
+
+    const initialRefresh = window.setTimeout(refreshCounts, 0);
     try { localStorage.setItem("straude_returning", "1"); } catch {}
     function handleSync() {
-      fetchNotifications();
-      fetchMessageUnreadCount();
+      refreshCounts();
     }
     window.addEventListener("notifications-updated", handleSync);
     window.addEventListener("messages-updated", handleSync);
     return () => {
+      window.clearTimeout(initialRefresh);
       window.removeEventListener("notifications-updated", handleSync);
       window.removeEventListener("messages-updated", handleSync);
     };
@@ -160,7 +164,7 @@ export function TopHeader({ username, avatarUrl }: TopHeaderProps) {
         <div className="flex items-center gap-3">
           <Link
             href="/messages"
-            className="relative rounded p-1.5 text-muted hover:bg-subtle hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent focus-visible:ring-offset-2"
+            className="relative rounded p-1.5 text-muted hover:bg-subtle hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent focus-visible:ring-offset-2 focus-visible:ring-offset-background"
             aria-label="Messages"
           >
             <MessageSquare size={20} aria-hidden="true" />
@@ -179,7 +183,7 @@ export function TopHeader({ username, avatarUrl }: TopHeaderProps) {
                   return !v;
                 });
               }}
-              className="relative rounded p-1.5 text-muted hover:bg-subtle hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent focus-visible:ring-offset-2"
+              className="relative rounded p-1.5 text-muted hover:bg-subtle hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent focus-visible:ring-offset-2 focus-visible:ring-offset-background"
               aria-label="Notifications"
               aria-haspopup="true"
               aria-expanded={notifOpen}
@@ -272,7 +276,7 @@ export function TopHeader({ username, avatarUrl }: TopHeaderProps) {
               aria-label="Profile menu"
               aria-haspopup="true"
               aria-expanded={profileOpen}
-              className="rounded p-1.5 hover:bg-subtle focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent focus-visible:ring-offset-2"
+              className="rounded p-1.5 hover:bg-subtle focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent focus-visible:ring-offset-2 focus-visible:ring-offset-background"
             >
               <Avatar
                 src={avatarUrl}
@@ -322,7 +326,7 @@ export function TopHeader({ username, avatarUrl }: TopHeaderProps) {
           {/* Create post */}
           <Link
             href="/post/new"
-            className="rounded p-1.5 text-muted hover:bg-subtle hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent focus-visible:ring-offset-2"
+            className="rounded p-1.5 text-muted hover:bg-subtle hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent focus-visible:ring-offset-2 focus-visible:ring-offset-background"
             aria-label="Create post"
           >
             <Plus size={20} aria-hidden="true" />

@@ -128,7 +128,7 @@ export async function GlobalFeed() {
           <Link
             key={item.id}
             href={`/post/${item.id}`}
-            className="px-8 py-6 border-b border-landing-border grid grid-cols-1 md:grid-cols-[auto_1fr_auto] items-center gap-4 md:gap-8 hover:bg-white/[0.03] transition-colors"
+            className="grid grid-cols-1 items-center gap-4 border-b border-landing-border px-8 py-6 transition-colors hover:bg-landing-hover md:grid-cols-[auto_1fr_auto] md:gap-8"
           >
             <div className="w-10 h-10 bg-landing-border flex items-center justify-center font-[family-name:var(--font-mono)] text-sm text-landing-text">
               {item.initials}
@@ -173,7 +173,7 @@ export async function GlobalFeed() {
             <Link
               key={row.rank}
               href="/leaderboard"
-              className="flex justify-between px-8 py-4 border-b border-landing-border font-[family-name:var(--font-mono)] text-sm hover:bg-white/[0.03] transition-colors"
+              className="flex justify-between border-b border-landing-border px-8 py-4 font-[family-name:var(--font-mono)] text-sm transition-colors hover:bg-landing-hover"
             >
               <div className="flex gap-4">
                 <span className="text-landing-muted w-6">{row.rank}</span>

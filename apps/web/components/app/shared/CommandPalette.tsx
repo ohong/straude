@@ -11,6 +11,7 @@ import {
   type Action,
 } from "kbar";
 import { useRouter } from "next/navigation";
+import { useTheme } from "@/components/providers/ThemeProvider";
 
 function RenderResults() {
   const { results } = useMatches();
@@ -43,6 +44,7 @@ export function CommandPalette({
   children: React.ReactNode;
 }) {
   const router = useRouter();
+  const { setTheme } = useTheme();
 
   const actions: Action[] = [
     {
@@ -93,14 +95,35 @@ export function CommandPalette({
       shortcut: [],
       perform: () => router.push(username ? `/u/${username}` : "/feed"),
     },
+    {
+      id: "theme-light",
+      name: "Light theme",
+      section: "Theme",
+      shortcut: [],
+      perform: () => setTheme("light"),
+    },
+    {
+      id: "theme-dark",
+      name: "Dark theme",
+      section: "Theme",
+      shortcut: [],
+      perform: () => setTheme("dark"),
+    },
+    {
+      id: "theme-system",
+      name: "System theme",
+      section: "Theme",
+      shortcut: [],
+      perform: () => setTheme("system"),
+    },
   ];
 
   return (
     <KBarProvider actions={actions}>
       <KBarPortal>
-        <KBarPositioner className="z-50 bg-foreground/40">
+        <KBarPositioner className="z-50 bg-overlay">
           <KBarAnimator className="mx-auto mt-[20vh] w-full max-w-[600px] rounded-[4px] border border-border bg-background">
-            <KBarSearch className="w-full border-b border-border bg-background px-4 py-3 font-mono text-base text-foreground outline-none" />
+            <KBarSearch className="w-full border-b border-border bg-background px-4 py-3 font-mono text-base text-foreground outline-none placeholder:text-muted" />
             <RenderResults />
           </KBarAnimator>
         </KBarPositioner>

@@ -28,6 +28,11 @@ export function CountryPicker({ value, onChange, id, name }: CountryPickerProps)
       )
     : COUNTRIES;
 
+  function selectedIndex(code: string) {
+    const idx = code ? COUNTRIES.findIndex((c) => c.code === code) : 0;
+    return idx >= 0 ? idx : 0;
+  }
+
   // Close on click outside
   useEffect(() => {
     if (!open) return;
@@ -41,14 +46,10 @@ export function CountryPicker({ value, onChange, id, name }: CountryPickerProps)
     return () => document.removeEventListener("mousedown", handleMouseDown);
   }, [open]);
 
-  // Focus search input and set initial highlight when opened
+  // Focus search input when opened
   useEffect(() => {
-    if (open) {
-      inputRef.current?.focus();
-      const idx = value ? COUNTRIES.findIndex((c) => c.code === value) : 0;
-      setHighlight(idx >= 0 ? idx : 0);
-    }
-  }, [open, value]);
+    if (open) inputRef.current?.focus();
+  }, [open]);
 
   // Scroll highlighted item into view
   useEffect(() => {
@@ -61,12 +62,8 @@ export function CountryPicker({ value, onChange, id, name }: CountryPickerProps)
     onChange(code);
     setOpen(false);
     setSearch("");
-  }
-
-  // Reset highlight when filtered list changes
-  useEffect(() => {
     setHighlight(0);
-  }, [search]);
+  }
 
   function handleKeyDown(e: React.KeyboardEvent) {
     if (e.key === "Escape") {
@@ -96,19 +93,26 @@ export function CountryPicker({ value, onChange, id, name }: CountryPickerProps)
           id={id}
           type="text"
           value={search}
-          onChange={(e) => setSearch(e.target.value)}
+          onChange={(e) => {
+            setSearch(e.target.value);
+            setHighlight(0);
+          }}
           onKeyDown={handleKeyDown}
           placeholder={"Search for a country\u2026"}
-          className="w-full rounded-[4px] border border-accent bg-white px-4 py-3 text-base text-foreground placeholder:text-muted outline-none ring-3 ring-accent/15"
+          className="w-full rounded-[4px] border border-accent bg-input px-4 py-3 text-base text-foreground placeholder:text-muted outline-none ring-3 ring-accent/15"
           autoComplete="off"
         />
       ) : (
         <button
           type="button"
           id={id}
-          onClick={() => setOpen(true)}
+          onClick={() => {
+            setHighlight(selectedIndex(value));
+            setSearch("");
+            setOpen(true);
+          }}
           className={cn(
-            "flex w-full items-center rounded-[4px] border border-border bg-white px-4 py-3 text-left text-base outline-none transition-[border-color,box-shadow] duration-150",
+            "flex w-full items-center rounded-[4px] border border-border bg-input px-4 py-3 text-left text-base outline-none transition-[border-color,box-shadow] duration-150",
             "focus-visible:border-accent focus-visible:ring-3 focus-visible:ring-accent/15",
             selected ? "text-foreground" : "text-muted",
           )}
@@ -125,12 +129,14 @@ export function CountryPicker({ value, onChange, id, name }: CountryPickerProps)
               onClick={(e) => {
                 e.stopPropagation();
                 onChange("");
+                setHighlight(0);
               }}
               onKeyDown={(e) => {
                 if (e.key === "Enter" || e.key === " ") {
                   e.preventDefault();
                   e.stopPropagation();
                   onChange("");
+                  setHighlight(0);
                 }
               }}
               className="ml-2 flex-shrink-0 rounded text-muted hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent"
@@ -149,7 +155,7 @@ export function CountryPicker({ value, onChange, id, name }: CountryPickerProps)
           ref={listRef}
           role="listbox"
           aria-label="Countries"
-          className="absolute left-0 right-0 top-full z-20 mt-1 max-h-60 overflow-y-auto rounded-[4px] border border-border bg-white shadow-sm"
+          className="absolute left-0 right-0 top-full z-20 mt-1 max-h-60 overflow-y-auto rounded-[4px] border border-border bg-input shadow-sm"
         >
           {filtered.length === 0 ? (
             <li className="px-4 py-3 text-sm text-muted">No countries found</li>

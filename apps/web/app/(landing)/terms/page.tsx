@@ -12,7 +12,7 @@ export default function TermsPage() {
   return (
     <>
       <Navbar variant="light" />
-      <main className="bg-white py-32 md:py-40">
+      <main className="bg-background py-32 text-foreground md:py-40">
         <article className="mx-auto max-w-2xl px-6 md:px-8">
           <h1 className="text-3xl font-bold tracking-tight md:text-4xl">
             Terms of Service
@@ -27,7 +27,7 @@ export default function TermsPage() {
                 1. Acceptance of Terms
               </h2>
               <p className="mt-2">
-                By accessing or using Straude ("the Service"), you agree to be
+                By accessing or using Straude (&ldquo;the Service&rdquo;), you agree to be
                 bound by these Terms of Service. If you do not agree, do not use
                 the Service.
               </p>
@@ -51,7 +51,7 @@ export default function TermsPage() {
               <p className="mt-2">
                 You are responsible for maintaining the security of your account
                 credentials. You must not share your account or use another
-                person's account without permission.
+                person&apos;s account without permission.
               </p>
             </section>
 
@@ -101,7 +101,7 @@ export default function TermsPage() {
                 7. Disclaimer of Warranties
               </h2>
               <p className="mt-2">
-                The Service is provided "as is" without warranties of any kind,
+                The Service is provided &ldquo;as is&rdquo; without warranties of any kind,
                 express or implied. We do not guarantee that the Service will be
                 uninterrupted, secure, or error-free.
               </p>

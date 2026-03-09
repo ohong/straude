@@ -1,25 +1,88 @@
 @import "tailwindcss";
 
+:root {
+  --app-background: #fcfbf7;
+  --app-foreground: #111111;
+  --app-accent: #df561f;
+  --app-secondary-blue: #7bd0e8;
+  --app-secondary-yellow: #fdffa4;
+  --app-border: #1b1b1b;
+  --app-muted: #686868;
+  --app-subtle: #efede8;
+  --app-input: #ffffff;
+  --app-error: #c94a4a;
+  --app-highlight-row: rgba(223, 86, 31, 0.12);
+  --app-hover: rgba(223, 86, 31, 0.06);
+  --app-overlay: rgba(9, 9, 9, 0.48);
+  --landing-bg: #050505;
+  --landing-surface: #111111;
+  --landing-border: #222222;
+  --landing-text: #f0f0f0;
+  --landing-muted: #888888;
+  --landing-dim: #555555;
+  --landing-panel: rgba(255, 255, 255, 0.03);
+  --landing-hover: rgba(255, 255, 255, 0.05);
+}
+
+html[data-theme="dark"] {
+  --app-background: #050505;
+  --app-foreground: #f3efe7;
+  --app-accent: #df561f;
+  --app-secondary-blue: #66bfd7;
+  --app-secondary-yellow: #cfc86c;
+  --app-border: #2a2824;
+  --app-muted: #a7a09a;
+  --app-subtle: #121110;
+  --app-input: #0c0c0c;
+  --app-error: #ef7b7b;
+  --app-highlight-row: rgba(223, 86, 31, 0.18);
+  --app-hover: rgba(223, 86, 31, 0.12);
+  --app-overlay: rgba(0, 0, 0, 0.72);
+  --landing-bg: #050505;
+  --landing-surface: #111111;
+  --landing-border: #222222;
+  --landing-text: #f0f0f0;
+  --landing-muted: #888888;
+  --landing-dim: #555555;
+  --landing-panel: rgba(255, 255, 255, 0.03);
+  --landing-hover: rgba(255, 255, 255, 0.05);
+}
+
+html[data-theme="light"] {
+  --landing-bg: #f6f0e6;
+  --landing-surface: #fffaf0;
+  --landing-border: #d8cdbd;
+  --landing-text: #16110d;
+  --landing-muted: #6e665d;
+  --landing-dim: #998f83;
+  --landing-panel: rgba(255, 255, 255, 0.78);
+  --landing-hover: rgba(255, 255, 255, 0.96);
+}
+
 @theme inline {
-  --color-background: #ffffff;
-  --color-foreground: #000000;
-  --color-accent: #DF561F;
-  --color-secondary-blue: #7BD0E8;
-  --color-secondary-yellow: #FDFFA4;
-  --color-border: #000000;
-  --color-muted: #666666;
-  --color-subtle: #F5F5F5;
-  --color-error: #C94A4A;
-  --color-highlight-row: rgba(223, 86, 31, 0.12);
-  --color-hover: rgba(223, 86, 31, 0.05);
+  --color-background: var(--app-background);
+  --color-foreground: var(--app-foreground);
+  --color-accent: var(--app-accent);
+  --color-secondary-blue: var(--app-secondary-blue);
+  --color-secondary-yellow: var(--app-secondary-yellow);
+  --color-border: var(--app-border);
+  --color-muted: var(--app-muted);
+  --color-subtle: var(--app-subtle);
+  --color-input: var(--app-input);
+  --color-error: var(--app-error);
+  --color-highlight-row: var(--app-highlight-row);
+  --color-hover: var(--app-hover);
+  --color-overlay: var(--app-overlay);
   --font-sans: var(--font-main);
   --font-mono: var(--font-mono);
-  --color-landing-bg: #050505;
-  --color-landing-surface: #111111;
-  --color-landing-border: #222222;
-  --color-landing-text: #F0F0F0;
-  --color-landing-muted: #888888;
-  --color-landing-dim: #555555;
+  --color-landing-bg: var(--landing-bg);
+  --color-landing-surface: var(--landing-surface);
+  --color-landing-border: var(--landing-border);
+  --color-landing-text: var(--landing-text);
+  --color-landing-muted: var(--landing-muted);
+  --color-landing-dim: var(--landing-dim);
+  --color-landing-panel: var(--landing-panel);
+  --color-landing-hover: var(--landing-hover);
 }
 
 button:enabled {
