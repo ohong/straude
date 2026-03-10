@@ -38,13 +38,13 @@ export function LeaderboardTable({
   currentUserId,
   currentPeriod,
   currentRegion,
-  userCountry,
+  userCountry: _userCountry,
 }: {
   entries: LeaderboardEntry[];
   currentUserId: string | null;
   currentPeriod: string;
   currentRegion: string | null;
-  userCountry: string | null;
+  userCountry?: string | null;
 }) {
   const router = useRouter();
 
@@ -74,24 +74,22 @@ export function LeaderboardTable({
       </div>
 
       {/* Region filter */}
-      {userCountry && (
-        <div className="flex gap-1 overflow-x-auto border-b border-border px-4 py-2">
-          {REGIONS.map(({ value, label }) => (
-            <button
-              key={value}
-              onClick={() => navigate(currentPeriod, value)}
-              className={cn(
-                "shrink-0 rounded-[4px] px-3 py-1 text-xs font-semibold",
-                (currentRegion ?? "") === value
-                  ? "bg-foreground text-background"
-                  : "text-muted hover:text-foreground",
-              )}
-            >
-              {label}
-            </button>
-          ))}
-        </div>
-      )}
+      <div className="flex gap-1 overflow-x-auto border-b border-border px-4 py-2">
+        {REGIONS.map(({ value, label }) => (
+          <button
+            key={value}
+            onClick={() => navigate(currentPeriod, value)}
+            className={cn(
+              "shrink-0 rounded-[4px] px-3 py-1 text-xs font-semibold",
+              (currentRegion ?? "") === value
+                ? "bg-foreground text-background"
+                : "text-muted hover:text-foreground",
+            )}
+          >
+            {label}
+          </button>
+        ))}
+      </div>
 
       {/* Desktop table */}
       <div className="hidden overflow-x-auto sm:block">

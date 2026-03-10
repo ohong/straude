@@ -9,6 +9,8 @@
 
 ### Fixed
 
+- **CLI now works for Codex-only users.** If `ccusage` fails because no local Claude Code data directories exist, `straude` now treats that as a non-fatal absence and continues syncing Codex usage instead of exiting with an error.
+- **Logged-out leaderboard now shows region views.** Guests can access the same regional leaderboard filters as logged-in users instead of being limited to the global view.
 - **CLI broken on Windows.** `execFileSync`/`execFile` can't resolve `.cmd` shims (`ccusage.cmd`, `npx.cmd`, `bunx.cmd`) on Windows without `shell: true`. Added `shell: process.platform === "win32"` to all child process calls in `ccusage.ts` and `codex.ts`. Also fixed `isOnPath()` to check `.cmd`/`.exe` extensions on Windows, and replaced hardcoded `~/.straude/config.json` in login output with the actual resolved path.
 
 - **Onboarding: "View your profile" broken for users without a username.** Step 3 success state linked to `/u/yourname` (a literal string) when no username was set. Now routes to `/feed` with appropriate button label.
