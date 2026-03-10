@@ -4,6 +4,8 @@
 
 ### Fixed
 
+- **CLI broken on Windows.** `execFileSync`/`execFile` can't resolve `.cmd` shims (`ccusage.cmd`, `npx.cmd`, `bunx.cmd`) on Windows without `shell: true`. Added `shell: process.platform === "win32"` to all child process calls in `ccusage.ts` and `codex.ts`. Also fixed `isOnPath()` to check `.cmd`/`.exe` extensions on Windows, and replaced hardcoded `~/.straude/config.json` in login output with the actual resolved path.
+
 - **Onboarding: "View your profile" broken for users without a username.** Step 3 success state linked to `/u/yourname` (a literal string) when no username was set. Now routes to `/feed` with appropriate button label.
 - **Onboarding: new users not redirected to onboarding after signup.** Auth callback always redirected to `/feed`, requiring users to notice a small banner to discover onboarding. Now redirects to `/onboarding` for users who haven't completed it.
 - **Broken signup trigger — 16 users lost since March 6.** The Bao migration (`20260306150625`) silently overwrote `handle_new_user()` to insert into `public.profiles` instead of `public.users`. Every signup since March 6 12:19 UTC got an `auth.users` row but no `public.users` row, making them unable to onboard, push CLI data, create posts, or appear anywhere. Restored the trigger to insert into both tables and backfilled all 16 missing users. Added migration safety tests to prevent this class of bug.

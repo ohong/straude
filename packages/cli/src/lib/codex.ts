@@ -44,6 +44,7 @@ function execCodex(args: string[]): string {
     encoding: "utf-8",
     timeout: 120_000,
     maxBuffer: 10 * 1024 * 1024,
+    shell: process.platform === "win32",
   });
 }
 
@@ -56,6 +57,7 @@ function execCodexAsync(args: string[]): Promise<string> {
       encoding: "utf-8",
       timeout: 120_000,
       maxBuffer: 10 * 1024 * 1024,
+      shell: process.platform === "win32",
     }, (err, stdout) => {
       if (err) reject(err);
       else resolve(stdout);

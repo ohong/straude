@@ -30,7 +30,10 @@ const CCUSAGE_PKG = "ccusage@17";
 /** Check if a binary exists on PATH without spawning a subprocess. */
 function isOnPath(binary: string): boolean {
   const dirs = (process.env.PATH || "").split(delimiter);
-  return dirs.some((dir) => existsSync(join(dir, binary)));
+  const suffixes = process.platform === "win32" ? ["", ".cmd", ".exe"] : [""];
+  return dirs.some((dir) =>
+    suffixes.some((ext) => existsSync(join(dir, binary + ext))),
+  );
 }
 
 /**
@@ -80,6 +83,7 @@ function execCcusage(args: string[]): string {
       encoding: "utf-8",
       timeout: 120_000,
       maxBuffer: 10 * 1024 * 1024,
+      shell: process.platform === "win32",
     });
   } catch (err: unknown) {
     const error = err as ExecError;
@@ -109,6 +113,7 @@ function execCcusageAsync(args: string[]): Promise<string> {
       encoding: "utf-8",
       timeout: 120_000,
       maxBuffer: 10 * 1024 * 1024,
+      shell: process.platform === "win32",
     }, (err, stdout) => {
       if (!err) {
         resolve(stdout);

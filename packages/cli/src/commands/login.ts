@@ -1,5 +1,5 @@
 import { exec } from "node:child_process";
-import { DEFAULT_API_URL, POLL_INTERVAL_MS, POLL_TIMEOUT_MS } from "../config.js";
+import { CONFIG_FILE, DEFAULT_API_URL, POLL_INTERVAL_MS, POLL_TIMEOUT_MS } from "../config.js";
 import { saveConfig } from "../lib/auth.js";
 import { apiRequestNoAuth } from "../lib/api.js";
 
@@ -81,7 +81,7 @@ export async function loginCommand(apiUrlOverride?: string): Promise<void> {
 
       const displayName = pollRes.username ? `@${pollRes.username}` : "successfully";
       console.log(`Logged in as ${displayName}`);
-      console.log(`Token saved to ~/.straude/config.json`);
+      console.log(`Token saved to ${CONFIG_FILE}`);
       return;
     }
 
