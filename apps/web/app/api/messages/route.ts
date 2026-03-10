@@ -137,7 +137,7 @@ export async function GET(request: NextRequest) {
       .single(),
     db
       .from("direct_messages")
-      .select("id, sender_id, recipient_id, content, read_at, created_at")
+      .select("id, sender_id, recipient_id, content, attachments, read_at, created_at")
       .or(buildPairFilter(user.id, counterpart.id))
       .order("created_at", { ascending: false })
       .limit(limit),
@@ -177,20 +177,35 @@ export async function POST(request: NextRequest) {
   const limited = rateLimit("social", user.id, { limit: 30 });
   if (limited) return limited;
 
-  const { recipientUsername, content } = await request.json();
+  const { recipientUsername, content, attachments: rawAttachments } = await request.json();
   const normalizedUsername =
     typeof recipientUsername === "string" ? recipientUsername.trim() : "";
   const normalizedContent =
     typeof content === "string" ? content.trim() : "";
+  const attachments = Array.isArray(rawAttachments)
+    ? rawAttachments.filter(
+        (a: unknown): a is { url: string; name: string; type: string; size: number } =>
+          typeof a === "object" &&
+          a !== null &&
+          typeof (a as Record<string, unknown>).url === "string" &&
+          typeof (a as Record<string, unknown>).name === "string" &&
+          typeof (a as Record<string, unknown>).type === "string" &&
+          typeof (a as Record<string, unknown>).size === "number"
+      ).slice(0, 10)
+    : [];
 
   if (!USERNAME_RE.test(normalizedUsername)) {
     return NextResponse.json({ error: "Invalid recipient" }, { status: 400 });
   }
-  if (!normalizedContent || normalizedContent.length > MAX_MESSAGE_LENGTH) {
+  if (normalizedContent.length > MAX_MESSAGE_LENGTH) {
     return NextResponse.json(
-      {
-        error: `Message must be between 1 and ${MAX_MESSAGE_LENGTH} characters`,
-      },
+      { error: `Message must be at most ${MAX_MESSAGE_LENGTH} characters` },
+      { status: 400 }
+    );
+  }
+  if (!normalizedContent && attachments.length === 0) {
+    return NextResponse.json(
+      { error: "Message must have text or an attachment" },
       { status: 400 }
     );
   }
@@ -214,9 +229,10 @@ export async function POST(request: NextRequest) {
       .insert({
         sender_id: user.id,
         recipient_id: counterpart.id,
-        content: normalizedContent,
+        content: normalizedContent || null,
+        attachments,
       })
-      .select("id, sender_id, recipient_id, content, read_at, created_at")
+      .select("id, sender_id, recipient_id, content, attachments, read_at, created_at")
       .single(),
   ]);
 
@@ -235,10 +251,14 @@ export async function POST(request: NextRequest) {
   };
 
   after(async () => {
+    const emailContent = normalizedContent
+      || (attachments.some((a: { type: string }) => a.type.startsWith("image/"))
+        ? "[Sent an image]"
+        : `[Sent a file: ${attachments[0]?.name ?? "attachment"}]`);
     await fireDirectMessageNotificationEmail({
       recipientUserId: counterpart.id,
       actorUsername: sender.username ?? "Someone",
-      content: normalizedContent,
+      content: emailContent,
       idempotencyKey: `dm-notif/${message.id}`,
     });
   });

@@ -4,7 +4,7 @@ import { rateLimit } from "@/lib/rate-limit";
 import { randomUUID } from "node:crypto";
 import convert from "heic-convert";
 
-const ALLOWED_TYPES = [
+const IMAGE_TYPES = [
   "image/jpeg",
   "image/png",
   "image/webp",
@@ -15,7 +15,29 @@ const ALLOWED_TYPES = [
   "", // Some browsers may omit MIME for HEIC files
 ];
 const HEIC_MIME_TYPES = ["image/heic", "image/heif"];
-const MAX_SIZE = 20 * 1024 * 1024; // 20MB
+
+const DM_FILE_TYPES = [
+  "application/pdf",
+  "text/plain",
+  "text/markdown",
+  "text/csv",
+  "application/json",
+  "application/zip",
+];
+
+const VALID_BUCKETS = ["post-images", "dm-attachments"] as const;
+type BucketId = (typeof VALID_BUCKETS)[number];
+
+const BUCKET_CONFIG: Record<BucketId, { maxSize: number; allowedTypes: string[] }> = {
+  "post-images": {
+    maxSize: 20 * 1024 * 1024,
+    allowedTypes: IMAGE_TYPES,
+  },
+  "dm-attachments": {
+    maxSize: 10 * 1024 * 1024,
+    allowedTypes: [...IMAGE_TYPES, ...DM_FILE_TYPES],
+  },
+};
 
 // HEIC/HEIF files contain an "ftyp" box at offset 4 with one of these brands
 const HEIC_BRANDS = ["heic", "heix", "hevc", "hevx", "heim", "heis", "mif1", "msf1"];
@@ -34,6 +56,27 @@ function isHeicByMagicBytes(buf: Buffer): boolean {
   return HEIC_BRANDS.includes(brand);
 }
 
+function isImageType(mime: string): boolean {
+  return mime.startsWith("image/") || mime === "application/octet-stream" || mime === "";
+}
+
+const EXT_MAP: Record<string, string> = {
+  jpeg: "jpg",
+  "x-zip-compressed": "zip",
+  "vnd.ms-excel": "csv",
+};
+
+function getExtension(mimeType: string, fileName: string): string {
+  // Try to get extension from the original filename
+  const fileExt = fileName.split(".").pop()?.toLowerCase();
+  if (fileExt && fileExt.length <= 5 && fileExt !== fileName.toLowerCase()) {
+    return fileExt;
+  }
+  // Fall back to MIME type
+  const rawExt = mimeType.split("/")[1] ?? "bin";
+  return EXT_MAP[rawExt] ?? rawExt;
+}
+
 export async function POST(request: NextRequest) {
   const supabase = await createClient();
   const {
@@ -47,6 +90,13 @@ export async function POST(request: NextRequest) {
   const limited = rateLimit("upload", user.id, { limit: 10 });
   if (limited) return limited;
 
+  const bucketParam = request.nextUrl.searchParams.get("bucket") ?? "post-images";
+  if (!VALID_BUCKETS.includes(bucketParam as BucketId)) {
+    return NextResponse.json({ error: "Invalid bucket" }, { status: 400 });
+  }
+  const bucket = bucketParam as BucketId;
+  const config = BUCKET_CONFIG[bucket];
+
   const formData = await request.formData();
   const file = formData.get("file") as File | null;
 
@@ -54,9 +104,10 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ error: "No file provided" }, { status: 400 });
   }
 
-  if (file.size > MAX_SIZE) {
+  if (file.size > config.maxSize) {
+    const maxMB = Math.round(config.maxSize / (1024 * 1024));
     return NextResponse.json(
-      { error: "File too large. Maximum size is 20MB" },
+      { error: `File too large. Maximum size is ${maxMB}MB` },
       { status: 400 }
     );
   }
@@ -69,18 +120,14 @@ export async function POST(request: NextRequest) {
   // Detect HEIC by magic bytes OR MIME type — iOS sometimes mislabels HEIC files
   const isHeic = HEIC_MIME_TYPES.includes(mimeType) || isHeicByMagicBytes(buffer);
 
-  if (!ALLOWED_TYPES.includes(mimeType) && !isHeic) {
+  if (!config.allowedTypes.includes(mimeType) && !isHeic) {
     return NextResponse.json(
-      {
-        error:
-          "File type not allowed. Accepted: JPEG, PNG, WebP, GIF, HEIC, HEIF",
-      },
+      { error: "File type not allowed" },
       { status: 400 }
     );
   }
 
   if (isHeic) {
-    // Use heic-convert (pure JS, no native deps) for reliable HEIC→JPEG conversion
     try {
       const jpegBuf = await convertHeic({ buffer, format: "JPEG", quality: 0.9 });
       buffer = ArrayBuffer.isView(jpegBuf)
@@ -94,22 +141,25 @@ export async function POST(request: NextRequest) {
     }
     contentType = "image/jpeg";
     ext = "jpg";
-  } else if (mimeType === "application/octet-stream" || mimeType === "") {
-    // octet-stream that isn't HEIC — reject
-    return NextResponse.json(
-      { error: "File type not allowed. Accepted: JPEG, PNG, WebP, GIF, HEIC, HEIF" },
-      { status: 400 }
-    );
-  } else {
-    const EXT_MAP: Record<string, string> = { jpeg: "jpg" };
+  } else if (isImageType(mimeType)) {
+    if (mimeType === "application/octet-stream" || mimeType === "") {
+      // octet-stream that isn't HEIC — reject
+      return NextResponse.json(
+        { error: "File type not allowed" },
+        { status: 400 }
+      );
+    }
     const rawExt = mimeType.split("/")[1];
     ext = EXT_MAP[rawExt] ?? rawExt;
+  } else {
+    // Non-image file (only allowed for dm-attachments bucket)
+    ext = getExtension(mimeType, file.name);
   }
 
   const fileName = `${user.id}/${randomUUID()}.${ext}`;
 
   const { error: uploadError } = await supabase.storage
-    .from("post-images")
+    .from(bucket)
     .upload(fileName, buffer, {
       contentType,
       upsert: false,
@@ -124,7 +174,12 @@ export async function POST(request: NextRequest) {
 
   const {
     data: { publicUrl },
-  } = supabase.storage.from("post-images").getPublicUrl(fileName);
+  } = supabase.storage.from(bucket).getPublicUrl(fileName);
 
-  return NextResponse.json({ url: publicUrl });
+  return NextResponse.json({
+    url: publicUrl,
+    name: file.name,
+    type: contentType,
+    size: buffer.length,
+  });
 }

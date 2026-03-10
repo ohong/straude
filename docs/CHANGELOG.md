@@ -2,6 +2,10 @@
 
 ## Unreleased
 
+### Added
+
+- **Image and file attachments in DMs.** Users can now send images and files in direct messages. Images are compressed client-side (reusing the same `compressImage` utility from post uploads) and displayed inline with lightbox preview. Files (PDF, text, markdown, CSV, JSON, ZIP) render as download links with filename and size. Extracted `compressImage` to shared `lib/utils/compress-image.ts` for reuse across PostEditor and MessagesInbox. New `dm-attachments` storage bucket with 10MB limit. Messages can now be attachment-only (no text required). Thread previews show "Sent an attachment" for attachment-only messages.
+
 ### Fixed
 
 - **CLI broken on Windows.** `execFileSync`/`execFile` can't resolve `.cmd` shims (`ccusage.cmd`, `npx.cmd`, `bunx.cmd`) on Windows without `shell: true`. Added `shell: process.platform === "win32"` to all child process calls in `ccusage.ts` and `codex.ts`. Also fixed `isOnPath()` to check `.cmd`/`.exe` extensions on Windows, and replaced hardcoded `~/.straude/config.json` in login output with the actual resolved path.

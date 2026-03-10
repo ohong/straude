@@ -181,11 +181,19 @@ export interface Notification {
   actor?: Pick<User, "username" | "avatar_url">;
 }
 
+export interface MessageAttachment {
+  url: string;
+  name: string;
+  type: string;
+  size: number;
+}
+
 export interface DirectMessage {
   id: string;
   sender_id: string;
   recipient_id: string;
-  content: string;
+  content: string | null;
+  attachments: MessageAttachment[];
   read_at: string | null;
   created_at: string;
   sender?: Pick<User, "id" | "username" | "avatar_url" | "display_name">;
@@ -198,11 +206,12 @@ export interface DirectMessageThread {
   counterpart_avatar_url: string | null;
   counterpart_display_name: string | null;
   last_message_id: string;
-  last_message_content: string;
+  last_message_content: string | null;
   last_message_created_at: string;
   last_message_sender_id: string;
   last_message_is_from_me: boolean;
   unread_count: number;
+  last_message_has_attachment: boolean;
 }
 
 export type PromptSubmissionStatus =
