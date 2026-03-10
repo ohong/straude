@@ -3,10 +3,35 @@ import { getAuthUser } from "@/lib/supabase/auth";
 import { LeaderboardTable } from "@/components/app/leaderboard/LeaderboardTable";
 import type { Metadata } from "next";
 
+const LEADERBOARD_DESCRIPTION =
+  "See who's leading the pack. Weekly, monthly, and all-time Claude Code spend rankings.";
+
+const SOCIAL_IMAGE = {
+  url: "/og-image.png?v=2",
+  width: 1200,
+  height: 630,
+  alt: "Straude — Code like an athlete. Track your Claude Code spend, compete with friends, share your breakthrough sessions.",
+  type: "image/png",
+};
+
 export const metadata: Metadata = {
   title: "Leaderboard",
-  description:
-    "See who's leading the pack. Weekly, monthly, and all-time Claude Code spend rankings.",
+  description: LEADERBOARD_DESCRIPTION,
+  alternates: {
+    canonical: "/leaderboard",
+  },
+  openGraph: {
+    url: "https://straude.com/leaderboard",
+    title: "Leaderboard | Straude",
+    description: LEADERBOARD_DESCRIPTION,
+    images: [SOCIAL_IMAGE],
+  },
+  twitter: {
+    card: "summary_large_image",
+    title: "Leaderboard | Straude",
+    description: LEADERBOARD_DESCRIPTION,
+    images: [SOCIAL_IMAGE],
+  },
 };
 
 export default async function LeaderboardPage({

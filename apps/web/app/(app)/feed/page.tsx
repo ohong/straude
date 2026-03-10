@@ -3,10 +3,35 @@ import { getAuthUser } from "@/lib/supabase/auth";
 import { FeedList } from "@/components/app/feed/FeedList";
 import type { Metadata } from "next";
 
+const FEED_DESCRIPTION =
+  "See the latest Claude Code sessions from the Straude community.";
+
+const SOCIAL_IMAGE = {
+  url: "/og-image.png?v=2",
+  width: 1200,
+  height: 630,
+  alt: "Straude — Code like an athlete. Track your Claude Code spend, compete with friends, share your breakthrough sessions.",
+  type: "image/png",
+};
+
 export const metadata: Metadata = {
   title: "Feed",
-  description:
-    "See the latest Claude Code sessions from the Straude community.",
+  description: FEED_DESCRIPTION,
+  alternates: {
+    canonical: "/feed",
+  },
+  openGraph: {
+    url: "https://straude.com/feed",
+    title: "Feed | Straude",
+    description: FEED_DESCRIPTION,
+    images: [SOCIAL_IMAGE],
+  },
+  twitter: {
+    card: "summary_large_image",
+    title: "Feed | Straude",
+    description: FEED_DESCRIPTION,
+    images: [SOCIAL_IMAGE],
+  },
 };
 
 type FeedType = "global" | "following" | "mine";
