@@ -60,7 +60,8 @@ function makeHeicBuffer(brand = "heic"): ArrayBuffer {
  * This avoids jsdom FormData + body streaming incompatibilities.
  */
 function makeUploadRequest(
-  file: { name: string; type: string; size: number; buffer?: ArrayBuffer } | null
+  file: { name: string; type: string; size: number; buffer?: ArrayBuffer } | null,
+  bucket?: string,
 ) {
   const formData = new Map<string, any>();
   if (file) {
@@ -72,7 +73,11 @@ function makeUploadRequest(
     });
   }
 
+  const params = new URLSearchParams();
+  if (bucket) params.set("bucket", bucket);
+
   return {
+    nextUrl: { searchParams: params },
     formData: () =>
       Promise.resolve({
         get: (key: string) => formData.get(key) ?? null,
