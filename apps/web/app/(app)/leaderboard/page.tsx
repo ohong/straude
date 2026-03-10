@@ -55,16 +55,7 @@ export default async function LeaderboardPage({
   if (region) {
     query = query.eq("region", region);
   }
-
-  // Fetch leaderboard + profile in parallel (skip profile for guests)
-  const profilePromise = user
-    ? supabase.from("users").select("country, region").eq("id", user.id).single()
-    : Promise.resolve({ data: null });
-
-  const [{ data: entries }, { data: profile }] = await Promise.all([
-    query,
-    profilePromise,
-  ]);
+  const { data: entries } = await query;
 
   // Fetch streaks for all leaderboard users in a single RPC call
   const userIds = (entries ?? []).map((e: any) => e.user_id);
@@ -94,7 +85,6 @@ export default async function LeaderboardPage({
         currentUserId={user?.id ?? null}
         currentPeriod={period}
         currentRegion={region ?? null}
-        userCountry={profile?.country ?? null}
       />
     </>
   );
