@@ -1,5 +1,7 @@
 import { defineConfig } from "@playwright/test";
 
+const port = process.env.CI ? 3000 : 3099;
+
 export default defineConfig({
   testDir: "./e2e",
   fullyParallel: true,
@@ -8,12 +10,14 @@ export default defineConfig({
   workers: process.env.CI ? 1 : undefined,
   reporter: "html",
   use: {
-    baseURL: "http://localhost:3000",
+    baseURL: `http://localhost:${port}`,
     trace: "on-first-retry",
   },
   webServer: {
-    command: process.env.CI ? "bun run start -p 3000" : "bun run dev",
-    url: "http://localhost:3000",
+    command: process.env.CI
+      ? `bun run start -p ${port}`
+      : `bun run dev --port ${port}`,
+    url: `http://localhost:${port}`,
     reuseExistingServer: !process.env.CI,
     timeout: 60_000,
   },
