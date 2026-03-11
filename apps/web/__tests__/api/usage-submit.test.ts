@@ -448,6 +448,11 @@ describe("POST /api/usage/submit", () => {
     ];
 
     // Build a per-table mock that distinguishes device_usage from daily_usage
+    const deviceGuardChain: Record<string, any> = {
+      select: vi.fn().mockReturnThis(),
+      eq: vi.fn().mockReturnThis(),
+      maybeSingle: vi.fn().mockResolvedValue({ data: null, error: null }),
+    };
     const deviceUpsertChain: Record<string, any> = {
       upsert: vi.fn().mockReturnThis(),
       select: vi.fn().mockReturnThis(),
@@ -478,7 +483,9 @@ describe("POST /api/usage/submit", () => {
     const fromFn = vi.fn((table: string) => {
       if (table === "device_usage") {
         deviceFromCallCount++;
-        return deviceFromCallCount === 1 ? deviceUpsertChain : deviceFetchChain;
+        if (deviceFromCallCount === 1) return deviceGuardChain;
+        if (deviceFromCallCount === 2) return deviceUpsertChain;
+        return deviceFetchChain;
       }
       if (table === "daily_usage") return dailyChain;
       if (table === "posts") return postChain;

@@ -1,5 +1,23 @@
 # Architecture & Design Decisions
 
+## Device Usage Guard: Skip-on-Decrease, Not Max (2026-03-11)
+
+**Decision:** When a CLI push reports lower `cost_usd` for an existing `(user_id, date, device_id)` tuple, skip the device_usage upsert entirely rather than taking the max or merging fields. Same logic applies to the legacy (no-device) daily_usage upsert.
+
+**Alternatives considered:**
+1. **Always overwrite** (previous behavior) — simple, but ccusage log rotation can report lower numbers, silently dropping real usage.
+2. **Take `MAX()` per field** — would require reading the existing row and comparing each field individually. Overly complex; fields are correlated (cost, tokens, models all come from the same ccusage snapshot).
+3. **Skip entire upsert when cost decreases** (chosen) — treats cost as a monotonic high-water mark. If cost went down, the snapshot is stale/truncated, so none of its fields should be trusted. The cross-device aggregation step still runs after the skip, so multi-device sums from other devices remain correct.
+
+## Model Family Classification in Postgres RPC (2026-03-11)
+
+**Decision:** Model spend breakdown (Claude vs Codex) is computed server-side in the `admin_model_usage_by_day()` RPC using `LIKE` pattern matching on the `model` field inside `model_breakdown` JSONB, rather than classifying models client-side or maintaining a model-to-family lookup table.
+
+**Alternatives considered:**
+1. **Client-side classification** — send raw model_breakdown rows and classify in JS. More flexible but transfers much more data and duplicates logic if multiple consumers need the breakdown.
+2. **Lookup table** — a `model_families` table mapping model names to families. Correct for complex taxonomies, but overkill when we only have two families and model names follow consistent prefixes (`claude-%`, `%-codex%`).
+3. **LIKE patterns in RPC** (chosen) — simple, fast, no extra tables. Easy to extend with additional `CASE WHEN` branches if new model families appear. The `LEFT JOIN LATERAL` handles NULL `model_breakdown` rows gracefully for older data.
+
 ## Referral System: Column on Users, Not Separate Table (2026-03-07)
 
 **Decision:** Added a single `referred_by UUID` column to `users` instead of creating a separate `referrals` table. Crew stats (count, total spend) are derived via joins.
