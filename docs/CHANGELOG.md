@@ -4,6 +4,7 @@
 
 ### Added
 
+- **Dependency risk scanner and CI workflow.** New `scripts/dependency-audit.ts` checks for vulnerabilities (via `bun audit`), pre-release dependencies, and wide version ranges. Weekly CI workflow (`.github/workflows/dependency-audit.yml`) runs on Monday and on PRs that modify package files. Run locally with `bun run dependency:audit`. Current findings documented in `docs/SECURITY.md`.
 - **"Empty profile" nudge email for onboarded users who never pushed.** New email template, send function, and cron endpoint (`/api/cron/nudge-empty-profile`) targeting the 53 users who completed onboarding but have zero `daily_usage` rows. Supports dry-run mode (default) — append `?send=true` to actually send. Idempotency key `empty-profile/{userId}` prevents duplicates. Tagged `type: empty-profile` in Resend.
 - **Image and file attachments in DMs.** Users can now send images and files in direct messages. Images are compressed client-side (reusing the same `compressImage` utility from post uploads) and displayed inline with lightbox preview. Files (PDF, text, markdown, CSV, JSON, ZIP) render as download links with filename and size. Extracted `compressImage` to shared `lib/utils/compress-image.ts` for reuse across PostEditor and MessagesInbox. New `dm-attachments` storage bucket with 10MB limit. Messages can now be attachment-only (no text required). Thread previews show "Sent an attachment" for attachment-only messages.
 

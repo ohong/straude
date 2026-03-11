@@ -1,5 +1,18 @@
 # Architecture & Design Decisions
 
+## Automated Dependency Risk Scanning (2026-03-11)
+
+**Decision:** Added a local audit script (`scripts/dependency-audit.ts`) and a weekly CI workflow (`.github/workflows/dependency-audit.yml`) that scans for vulnerabilities, pre-release deps, and wide version ranges. The CI workflow fails on high/critical vulnerabilities.
+
+**Problem:** No prior automated dependency auditing existed. 8 known vulnerabilities (all in devDependency transitive chains) and 1 pre-release dependency were unmonitored.
+
+**Alternatives considered:**
+1. **Third-party SaaS (Snyk, Socket, Renovate)** — full-featured but adds an external dependency, requires account setup, and is overkill for current project scale.
+2. **GitHub Dependabot alerts only** — passive notifications without CI enforcement. Easy to ignore.
+3. **Local script + CI workflow** (chosen) — lightweight, runs `bun audit` plus custom checks (pre-release, wide ranges), fails CI on high/critical issues. Zero external dependencies. Developers can run locally via `bun run dependency:audit`.
+
+**Current findings:** All 8 vulnerabilities are in dev-only transitive chains (minimatch via eslint, ajv via eslint, rollup via vite/vitest). Production risk is low. The rollup path traversal (GHSA-mw96-cpmx-2vgc) is the most actionable — resolvable by updating `@vitejs/plugin-react` and `vitest`.
+
 ## Referral System: Column on Users, Not Separate Table (2026-03-07)
 
 **Decision:** Added a single `referred_by UUID` column to `users` instead of creating a separate `referrals` table. Crew stats (count, total spend) are derived via joins.
