@@ -196,9 +196,15 @@ export async function pushCommand(options: PushOptions, apiUrlOverride?: string)
       untilDate = today;
     } else {
       const gap = daysBetweenStrings(config.last_push_date, todayStr);
-      const days = Math.min(gap, MAX_BACKFILL_DAYS);
-      sinceDate = new Date(today);
-      sinceDate.setDate(sinceDate.getDate() - days + 1);
+      if (gap >= MAX_BACKFILL_DAYS) {
+        // Can't include last pushed date, too far back
+        const days = MAX_BACKFILL_DAYS;
+        sinceDate = new Date(today);
+        sinceDate.setDate(sinceDate.getDate() - days + 1);
+      } else {
+        // Include last pushed date to catch any updates from that day
+        sinceDate = parseDate(config.last_push_date);
+      }
       untilDate = today;
     }
   } else {
