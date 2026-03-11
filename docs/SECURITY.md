@@ -88,6 +88,45 @@ Supabase can check passwords against HaveIBeenPwned to block known-compromised p
 | MEDIUM | 1 | 1 | 0 | 0 |
 | INFO | 2 | 0 | 0 | 2 |
 
+## Dependency Risk
+
+Last scanned: 2026-03-11
+
+**Automated scanning:** Weekly CI workflow (`.github/workflows/dependency-audit.yml`) runs `bun audit` and `scripts/dependency-audit.ts` every Monday. Also triggers on PRs that modify `package.json` or `bun.lock`. Run locally with `bun run dependency:audit`.
+
+### Vulnerabilities (8 total, all in devDependency transitive chains)
+
+| Package | Severity | Advisory | Path |
+|---------|----------|----------|------|
+| minimatch <3.1.3 | HIGH | ReDoS via repeated wildcards ([GHSA-3ppc-4f35-3m26](https://github.com/advisories/GHSA-3ppc-4f35-3m26)) | eslint, eslint-config-next |
+| minimatch <3.1.3 | HIGH | ReDoS via multiple GLOBSTAR segments ([GHSA-7r86-cg39-jmmj](https://github.com/advisories/GHSA-7r86-cg39-jmmj)) | eslint, eslint-config-next |
+| minimatch <3.1.3 | HIGH | ReDoS via nested extglobs ([GHSA-23c5-xmqv-rm74](https://github.com/advisories/GHSA-23c5-xmqv-rm74)) | eslint, eslint-config-next |
+| ajv <6.14.0 | MODERATE | ReDoS with `$data` option ([GHSA-2g4f-4pwh-qvx6](https://github.com/advisories/GHSA-2g4f-4pwh-qvx6)) | eslint |
+| rollup >=4.0.0 <4.59.0 | HIGH | Arbitrary file write via path traversal ([GHSA-mw96-cpmx-2vgc](https://github.com/advisories/GHSA-mw96-cpmx-2vgc)) | @vitejs/plugin-react, vitest |
+
+**Production risk: LOW.** All vulnerabilities are in transitive dependencies of devDependencies (eslint, vite, vitest). None ship in the production bundle.
+
+**Remediation:**
+- minimatch + ajv: Waiting on eslint to update transitive dependencies. No user action possible (locked by eslint's dependency tree).
+- rollup: Update `@vitejs/plugin-react` and `vitest` to versions that depend on rollup >=4.59.0.
+
+### Pre-release Dependencies (1)
+
+| Package | Version | Location |
+|---------|---------|----------|
+| @base-ui-components/react | 1.0.0-rc.0 | apps/web dependencies |
+
+**Risk:** RC releases may have breaking changes before stable. Monitor for 1.0.0 stable release.
+
+### Wide Version Ranges (2)
+
+| Package | Range | Location |
+|---------|-------|----------|
+| turbo | ^2 | root devDependencies |
+| typescript | ^5 | root devDependencies |
+
+**Risk:** Low — these are dev tooling with good semver discipline. The lockfile pins exact versions.
+
 ## Remaining Action Items
 
 1. **Enable leaked password protection** in Supabase dashboard (HIGH)

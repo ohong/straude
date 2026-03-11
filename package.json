@@ -6,7 +6,8 @@
   "scripts": {
     "dev": "turbo dev",
     "build": "turbo build",
-    "lint": "turbo lint"
+    "lint": "turbo lint",
+    "dependency:audit": "bun run scripts/dependency-audit.ts"
   },
   "devDependencies": {
     "turbo": "^2",
