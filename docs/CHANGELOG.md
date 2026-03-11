@@ -9,6 +9,7 @@
 
 ### Fixed
 
+- **prettifyModel inconsistent variable references.** The `prettifyModel` function in `ActivityCard.tsx` used the raw `model` parameter instead of the trimmed `normalized` variable for regex tests and `.includes()` fallbacks. Whitespace-padded model names (e.g., `"  o3-mini"`) would fail anchor-based regex matches (`^o3`, `^o4`) and return the untrimmed string for unknown models. All references now use `normalized`. Added 12 unit tests covering whitespace handling, all provider patterns, and legacy fallbacks. (#32 tracks deduplicating the 3 independent copies of this function.)
 - **CLI now works for Codex-only users.** If `ccusage` fails because no local Claude Code data directories exist, `straude` now treats that as a non-fatal absence and continues syncing Codex usage instead of exiting with an error.
 - **Logged-out leaderboard now shows region views.** Guests can access the same regional leaderboard filters as logged-in users instead of being limited to the global view.
 - **CLI broken on Windows.** `execFileSync`/`execFile` can't resolve `.cmd` shims (`ccusage.cmd`, `npx.cmd`, `bunx.cmd`) on Windows without `shell: true`. Added `shell: process.platform === "win32"` to all child process calls in `ccusage.ts` and `codex.ts`. Also fixed `isOnPath()` to check `.cmd`/`.exe` extensions on Windows, and replaced hardcoded `~/.straude/config.json` in login output with the actual resolved path.

@@ -35,24 +35,24 @@ function timeAgo(dateStr: string, usageDate?: string | null) {
   return new Date(dateStr).toLocaleDateString("en-US", { month: "short", day: "numeric" });
 }
 
-function prettifyModel(model: string): string {
+export function prettifyModel(model: string): string {
   const normalized = model.trim();
-  if (/claude-opus-4/i.test(model)) return "Claude Opus";
-  if (/claude-sonnet-4/i.test(model)) return "Claude Sonnet";
-  if (/claude-haiku-4/i.test(model)) return "Claude Haiku";
+  if (/claude-opus-4/i.test(normalized)) return "Claude Opus";
+  if (/claude-sonnet-4/i.test(normalized)) return "Claude Sonnet";
+  if (/claude-haiku-4/i.test(normalized)) return "Claude Haiku";
   // Preserve full OpenAI model names (e.g. gpt-5.3-codex -> GPT-5.3-Codex)
   if (/^gpt-/i.test(normalized)) {
     return normalized
       .replace(/^gpt/i, "GPT")
       .replace(/-codex$/i, "-Codex");
   }
-  if (/^o4/i.test(model)) return "o4";
-  if (/^o3/i.test(model)) return "o3";
+  if (/^o4/i.test(normalized)) return "o4";
+  if (/^o3/i.test(normalized)) return "o3";
   // Legacy: broader Claude matching
-  if (model.includes("opus")) return "Claude Opus";
-  if (model.includes("sonnet")) return "Claude Sonnet";
-  if (model.includes("haiku")) return "Claude Haiku";
-  return model;
+  if (normalized.includes("opus")) return "Claude Opus";
+  if (normalized.includes("sonnet")) return "Claude Sonnet";
+  if (normalized.includes("haiku")) return "Claude Haiku";
+  return normalized;
 }
 
 function formatModels(
