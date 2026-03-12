@@ -5,6 +5,7 @@
 ### Added
 
 - **Model Usage chart on admin dashboard.** New line chart showing daily Claude vs Codex spend over time, placed after the Cumulative Spend chart. Includes 7D/14D/30D/All time range selector. Backed by a new `admin_model_usage_by_day()` Postgres RPC that splits `model_breakdown` JSONB by model family.
+- **Developer documentation: API, CLI, and Setup guides.** Added `docs/API.md` (complete API endpoint reference for all 36 route files and 49 HTTP method handlers, organized by category with auth requirements, rate limits, request/response shapes, and side effects), `docs/CLI.md` (CLI command reference with installation, authentication flow, data sources, merge logic, config format, multi-device support, and troubleshooting), and `docs/SETUP.md` (developer setup guide with prerequisites, env configuration, database setup, local dev instructions, testing, CI pipeline, and project conventions).
 
 ### Fixed
 
@@ -20,7 +21,6 @@
 - **Dev script uses Portless.** Updated `apps/web` dev script to `portless run next dev --turbopack` for stable named `.localhost` URLs during development.
 
 ### Added
-
 - **"Empty profile" nudge email for onboarded users who never pushed.** New email template, send function, and cron endpoint (`/api/cron/nudge-empty-profile`) targeting the 53 users who completed onboarding but have zero `daily_usage` rows. Supports dry-run mode (default) — append `?send=true` to actually send. Idempotency key `empty-profile/{userId}` prevents duplicates. Tagged `type: empty-profile` in Resend.
 - **Image and file attachments in DMs.** Users can now send images and files in direct messages. Images are compressed client-side (reusing the same `compressImage` utility from post uploads) and displayed inline with lightbox preview. Files (PDF, text, markdown, CSV, JSON, ZIP) render as download links with filename and size. Extracted `compressImage` to shared `lib/utils/compress-image.ts` for reuse across PostEditor and MessagesInbox. New `dm-attachments` storage bucket with 10MB limit. Messages can now be attachment-only (no text required). Thread previews show "Sent an attachment" for attachment-only messages.
 
