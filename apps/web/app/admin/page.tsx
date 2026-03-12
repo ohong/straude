@@ -8,6 +8,7 @@ import { TopUsersTable } from "./components/TopUsersTable";
 import { ActivationFunnel } from "./components/ActivationFunnel";
 import { GrowthMetrics } from "./components/GrowthMetrics";
 import { CohortRetention } from "./components/CohortRetention";
+import { ModelUsageChart } from "./components/ModelUsageChart";
 import { RevenueConcentration } from "./components/RevenueConcentration";
 import { TimeToFirstSync } from "./components/TimeToFirstSync";
 import { PromptInbox } from "./components/PromptInbox";
@@ -147,6 +148,9 @@ export default async function AdminPage() {
 
       {/* North Star chart */}
       <NorthStarChart data={spendData} />
+
+      {/* Model usage — loads client-side */}
+      <ModelUsageChart />
 
       {/* Funnel + Growth side by side */}
       <div className="grid gap-3 lg:grid-cols-2">

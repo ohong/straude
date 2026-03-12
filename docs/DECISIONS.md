@@ -11,6 +11,42 @@
 
 **Port configuration:** Changed Playwright from port 3000 to 3099 for local dev to avoid conflicts with other projects that may occupy the default port. CI still uses 3000. This also fixed 4 pre-existing broken landing tests that were silently running against the wrong server.
 
+## Smart Sync Re-fetches last_push_date (Inclusive) (2026-03-12)
+
+**Decision:** When the CLI computes the smart sync date range, it always includes `last_push_date` as the start of the window (not the day after). The boundary check uses `gap > MAX_BACKFILL_DAYS` (strict greater-than), so a gap of exactly 7 days still syncs from `last_push_date`. Only gaps exceeding 7 are capped.
+
+**Alternatives considered:**
+1. **Start from day after last_push_date** (previous behavior) — simpler, but loses any usage that accumulated after the last push on that day (e.g., evening sessions after a morning push).
+2. **`gap >= MAX_BACKFILL_DAYS`** (PR #41's initial approach) — correctly re-fetches last_push_date for gaps 1–6, but excludes it at exactly gap=7 even though the server accepts 7-day windows.
+3. **`gap > MAX_BACKFILL_DAYS`** (chosen) — includes last_push_date for any gap the server can handle (1–7 days). `--days 1` still means "today only" since it bypasses smart sync entirely.
+
+## Preserve User-Edited Post Titles on Re-Sync (2026-03-11)
+
+**Decision:** When a CLI re-sync triggers a post update, only overwrite the title if it still matches the auto-generated pattern (`/^[A-Z][a-z]{2} \d{1,2}( — .+)?$/`). User-customized titles are left untouched.
+
+**Alternatives considered:**
+1. **`title_user_edited` boolean column** — explicit flag set by the PATCH endpoint. Correct but requires a migration and coordinating two code paths.
+2. **Never update title on re-sync** — simplest, but auto-titles would show stale cost/model info after multi-device aggregation.
+3. **Pattern-match detection** (chosen) — auto-generated titles follow a strict `"Mon DD — Models, $X.XX"` format. If the existing title doesn't match, it was user-edited. No migration needed; auto-titles still refresh with updated data.
+
+## Device Usage Guard: Skip-on-Decrease, Not Max (2026-03-11)
+
+**Decision:** When a CLI push reports lower `cost_usd` for an existing `(user_id, date, device_id)` tuple, skip the device_usage upsert entirely rather than taking the max or merging fields. Same logic applies to the legacy (no-device) daily_usage upsert.
+
+**Alternatives considered:**
+1. **Always overwrite** (previous behavior) — simple, but ccusage log rotation can report lower numbers, silently dropping real usage.
+2. **Take `MAX()` per field** — would require reading the existing row and comparing each field individually. Overly complex; fields are correlated (cost, tokens, models all come from the same ccusage snapshot).
+3. **Skip entire upsert when cost decreases** (chosen) — treats cost as a monotonic high-water mark. If cost went down, the snapshot is stale/truncated, so none of its fields should be trusted. The cross-device aggregation step still runs after the skip, so multi-device sums from other devices remain correct.
+
+## Model Family Classification in Postgres RPC (2026-03-11)
+
+**Decision:** Model spend breakdown (Claude vs Codex) is computed server-side in the `admin_model_usage_by_day()` RPC using `LIKE` pattern matching on the `model` field inside `model_breakdown` JSONB, rather than classifying models client-side or maintaining a model-to-family lookup table.
+
+**Alternatives considered:**
+1. **Client-side classification** — send raw model_breakdown rows and classify in JS. More flexible but transfers much more data and duplicates logic if multiple consumers need the breakdown.
+2. **Lookup table** — a `model_families` table mapping model names to families. Correct for complex taxonomies, but overkill when we only have two families and model names follow consistent prefixes (`claude-%`, `%-codex%`).
+3. **LIKE patterns in RPC** (chosen) — simple, fast, no extra tables. Easy to extend with additional `CASE WHEN` branches if new model families appear. The `LEFT JOIN LATERAL` handles NULL `model_breakdown` rows gracefully for older data.
+
 ## Referral System: Column on Users, Not Separate Table (2026-03-07)
 
 **Decision:** Added a single `referred_by UUID` column to `users` instead of creating a separate `referrals` table. Crew stats (count, total spend) are derived via joins.

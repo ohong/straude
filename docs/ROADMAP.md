@@ -1,78 +1,16 @@
 # Roadmap
 
-Sorted from lowest to highest technical lift.
+Grouped by the pirate metric (AARRR) each feature primarily moves.
 
-## Per-Device Breakdown UI + Device Management
+---
 
-Now that `device_usage` stores per-device data, future work could expose this in the UI:
+## Acquisition
 
-- **Per-device breakdown on post/profile pages**: Show "Work Laptop: $5.20, Home Desktop: $3.10" in an expandable section on the post detail page. Data already exists in `device_usage` — this is a read-only UI addition.
-- **Device management page**: Let users view, rename, and deactivate devices. Show last active date per device. Requires a new `/settings/devices` page and a simple API route reading `device_usage` grouped by `device_id`.
-- **Device inactivity alerts**: Notify users if a known device hasn't pushed in N days ("Your work-laptop hasn't synced in 5 days"). Could be part of the daily digest email.
+### Team / Org Workspaces
 
-## Daily Digest Email (Streak Reminders + Social Nudges)
+Private groups where a company's eng team shares a scoped leaderboard, combined contribution graph, and team streak. A manager signs up, invites 10 engineers, and all 10 become users with a built-in audience. The team admin cares about the spend dashboard the same way they care about a cloud bill — this is a B2B wedge that doesn't require viral growth. Requires invites, permissions, team-scoped views, and billing context.
 
-A daily email at ~6 PM local time: "Your 12-day streak is at risk — push today." Include a social nugget ("@alice gave you kudos") and leaderboard position update. Core email infra is live (React Email, Resend, notification preferences, cron-backed nudge emails), but this specific digest is not built yet. This is the single cheapest way to bring lapsed users back — it's the **trigger** in the habit loop.
-
-Requires: cron job (Vercel Cron or Supabase pg_cron), new email template, smart frequency logic (skip if user already pushed today), timezone-aware send time.
-
-## Efficiency Score + Cost Forecast
-
-Two complementary features that turn Straude from social toy into essential tool:
-
-- **Efficiency Score** (`output_tokens / cost_usd`): a skill-based metric where a $5/day user can outrank a $50/day spender. Rewards better prompting and cache usage, not bigger wallets. Display on profiles, leaderboards, and feed cards.
-- **Cost Forecast**: trailing 7-day average projected forward ("at this pace, you'll spend $420/month"). Optional budget alerts. Creates the "banking app" habit of checking your burn rate.
-
-Both are derived math on existing `daily_usage` data — no new infrastructure. Combined, they give users a reason to check the app daily even with zero followers.
-
-## Healthy Streaks (5-of-7) + Achievement Chains
-
-Streak freezes are now shipped (earned by enriching posts, extend grace window). The remaining work:
-
-- **5-of-7 streaks**: Redesign the core streak calculation to count 5 active days out of any 7-day window instead of strict consecutive days. Requires rewriting `calculate_user_streak` and `calculate_streaks_batch` RPCs.
-- **Achievement chains**: Restructure the flat `ACHIEVEMENTS` array into progression quest lines with visible progress bars ("72% to 90-Day Streak").
-- **Ship Week countdown banner**: Show "4 days left — 3/5 synced" banner for users in their first week. The Ship Week achievement is live but the countdown UI is deferred.
-
-## Rate Limiting on Data Creation Endpoints
-
-The CLI auth init endpoint has rate limiting (5 req/min/IP), but other write endpoints (comments, follows, kudos, upload, usage submit) do not. Consider per-user rate limiting via a shared utility or Supabase Edge Function middleware. Priority: `/api/upload` (file creation), `/api/usage/submit` (data creation), then social actions.
-
-## CSP Hardening (Nonce-Based)
-
-A baseline CSP header is shipped in `next.config.ts`, but it currently allows `'unsafe-inline'`. Remaining work is to move to a strict nonce-based policy for script/style sources. Requires auditing all script sources (Vercel Analytics, Supabase JS client), inline styles (Tailwind), and image origins (Supabase Storage).
-
-## Real-time Notifications
-
-The notifications system is built but uses polling (fetch on dropdown open + initial load). Consider adding Supabase Realtime subscriptions to push new notifications to the client without requiring a page refresh or dropdown toggle.
-
-## Personal Analytics Dashboard
-
-A `/stats` page showing personal usage trends over time: cost and token line charts, model usage breakdown, daily averages, busiest days of the week, and cost-per-token efficiency. All data already exists in `daily_usage` — this is primarily a frontend and visualization effort with a new API route for aggregated stats.
-
-## Session Time Tracking
-
-Track time spent per Claude Code session and display it per-post alongside input/output tokens and cost.
-
-Potential approach: [claude-code-time-tracking](https://github.com/gkastanis/claude-code-time-tracking) — a script that tracks session durations and could feed into the `daily_usage` pipeline.
-
-Requires:
-- New `duration_seconds` (or similar) column on `daily_usage`
-- Corresponding field in `CcusageDailyEntry` type
-- CLI integration to capture and submit duration data
-- UI updates to display time per post
-
-## AI Leaderboard Commentary
-
-Add AI-generated flavor text to leaderboard entries using Sonnet 4.6. Each entry gets a short one-liner that adds narrative context, e.g. "jayz climbed 3 spots this week on the back of a massive Opus session" or "priya_rust is on a 21-day streak and showing no signs of slowing down."
-
-- Generated server-side when the leaderboard is rendered (or cached per refresh cycle)
-- Input to the LLM: user's rank, rank change, top models used, streak length, cost delta vs. previous period
-- Keep it brief (under 80 chars), punchy, and varied — avoid repetitive templates
-- Only generate for the top N entries to control API cost (e.g. top 10 or top 20)
-
-Requires: new server-side call in the leaderboard API route, caching strategy (regenerate daily or on leaderboard refresh), and a text element under each leaderboard row.
-
-## AI Matchup Narratives
+### AI Matchup Narratives
 
 Head-to-head comparison narratives between two users on the leaderboard. When viewing another user's profile or tapping a leaderboard entry, show a short AI-generated comparison: "You and @sqb are neck-and-neck this month. You lead on sessions (23 vs 19) but they outspend you on Opus."
 
@@ -83,7 +21,66 @@ Head-to-head comparison narratives between two users on the leaderboard. When vi
 
 Requires: new API endpoint (e.g. `GET /api/compare?user1=X&user2=Y`), LLM call with both users' period stats, UI placement on profile or leaderboard detail.
 
-## CLI Recap (`straude recap`)
+### AI Leaderboard Commentary
+
+Add AI-generated flavor text to leaderboard entries using Sonnet 4.6. Each entry gets a short one-liner that adds narrative context, e.g. "jayz climbed 3 spots this week on the back of a massive Opus session" or "priya_rust is on a 21-day streak and showing no signs of slowing down."
+
+- Generated server-side when the leaderboard is rendered (or cached per refresh cycle)
+- Input to the LLM: user's rank, rank change, top models used, streak length, cost delta vs. previous period
+- Keep it brief (under 80 chars), punchy, and varied — avoid repetitive templates
+- Only generate for the top N entries to control API cost (e.g. top 10 or top 20)
+
+Requires: new server-side call in the leaderboard API route, caching strategy (regenerate daily or on leaderboard refresh), and a text element under each leaderboard row.
+
+---
+
+## Activation
+
+### Auto-Push Daemon / Post-Session Hook
+
+The biggest activation blocker: users install the CLI but never run `straude push` again. Replace the manual push with a background daemon or a Claude Code post-session hook that auto-syncs after every session. Users who don't push can't activate, can't retain. This is the single highest-leverage feature.
+
+Requires: investigate Claude Code hook system or a lightweight background process, opt-in config in `straude init`, graceful conflict handling with manual pushes.
+
+### Ship Week Countdown Banner
+
+Show "4 days left — 3/5 synced" banner for users in their first week. The Ship Week achievement is live but the countdown UI is deferred. Creates urgency in the critical first 7 days.
+
+---
+
+## Retention / Stickiness
+
+### Daily Digest Email
+
+A daily email at ~6 PM local time: "Your 12-day streak is at risk — push today." Include a social nugget ("@alice gave you kudos") and leaderboard position update. Core email infra is live (React Email, Resend, notification preferences, cron-backed nudge emails), but this specific digest is not built yet. This is the **trigger** in the habit loop — cheapest way to bring lapsed users back.
+
+Requires: cron job (Vercel Cron or Supabase pg_cron), new email template, smart frequency logic (skip if user already pushed today), timezone-aware send time.
+
+### Healthy Streaks (5-of-7) + Achievement Chains
+
+Streak freezes are now shipped (earned by enriching posts, extend grace window). The remaining work:
+
+- **5-of-7 streaks**: Redesign the core streak calculation to count 5 active days out of any 7-day window instead of strict consecutive days. Requires rewriting `calculate_user_streak` and `calculate_streaks_batch` RPCs.
+- **Achievement chains**: Restructure the flat `ACHIEVEMENTS` array into progression quest lines with visible progress bars ("72% to 90-Day Streak").
+
+### Personal Analytics Dashboard
+
+A `/stats` page showing personal usage trends over time: cost and token line charts, model usage breakdown, daily averages, busiest days of the week, and cost-per-token efficiency. All data already exists in `daily_usage` — this is primarily a frontend and visualization effort with a new API route for aggregated stats.
+
+### Efficiency Score + Cost Forecast
+
+Two complementary features that turn Straude from social toy into essential tool:
+
+- **Efficiency Score** (`output_tokens / cost_usd`): a skill-based metric where a $5/day user can outrank a $50/day spender. Rewards better prompting and cache usage, not bigger wallets. Display on profiles, leaderboards, and feed cards.
+- **Cost Forecast**: trailing 7-day average projected forward ("at this pace, you'll spend $420/month"). Optional budget alerts. Creates the "banking app" habit of checking your burn rate.
+
+Both are derived math on existing `daily_usage` data — no new infrastructure. Combined, they give users a reason to check the app daily even with zero followers.
+
+### Global Challenges
+
+Community-wide goals that all users contribute to collectively, like "Race to 1 Billion Output Tokens." A challenge has a target metric, a deadline, and a live progress bar visible to everyone. Individual contributions are attributed and ranked within each challenge. Requires a `challenges` table, a `challenge_contributions` view aggregating from `daily_usage`, a challenge detail page with progress visualization, and a mechanism to create/schedule new challenges.
+
+### CLI Recap (`straude recap`)
 
 A new CLI command that prints an AI-generated narrative summary of the user's recent coding activity directly in the terminal.
 
@@ -95,13 +92,49 @@ A new CLI command that prints an AI-generated narrative summary of the user's re
 
 Requires: new CLI command, new API endpoint (or reuse `/api/recap` with a `format=text` param), LLM call server-side to keep the CLI thin.
 
-## Global Challenges
+---
 
-Community-wide goals that all users contribute to collectively, like "Race to 1 Billion Output Tokens." A challenge has a target metric, a deadline, and a live progress bar visible to everyone. Individual contributions are attributed and ranked within each challenge. Requires a `challenges` table, a `challenge_contributions` view aggregating from `daily_usage`, a challenge detail page with progress visualization, and a mechanism to create/schedule new challenges.
+## Revenue / Monetization
 
-## Team Rooms
+### Team Rooms (Premium)
 
-Private or public groups where teams (company, OSS project, friend group) share a scoped leaderboard, combined contribution graph, and team streak. Highest retention potential but needs critical mass and significant build (invites, permissions, team-scoped views). Right vision for month 6-12.
+Extension of Team/Org Workspaces with premium features: private team leaderboards, spend budgets and alerts, manager dashboards with per-engineer cost breakdowns, SSO. This is the monetization path — free for individuals, paid for teams.
+
+---
+
+## Infrastructure / Housekeeping
+
+### Per-Device Breakdown UI + Device Management
+
+Now that `device_usage` stores per-device data, future work could expose this in the UI:
+
+- **Per-device breakdown on post/profile pages**: Show "Work Laptop: $5.20, Home Desktop: $3.10" in an expandable section on the post detail page. Data already exists in `device_usage` — this is a read-only UI addition.
+- **Device management page**: Let users view, rename, and deactivate devices. Show last active date per device. Requires a new `/settings/devices` page and a simple API route reading `device_usage` grouped by `device_id`.
+- **Device inactivity alerts**: Notify users if a known device hasn't pushed in N days ("Your work-laptop hasn't synced in 5 days"). Could be part of the daily digest email.
+
+### Rate Limiting on Data Creation Endpoints
+
+The CLI auth init endpoint has rate limiting (5 req/min/IP), but other write endpoints (comments, follows, kudos, upload, usage submit) do not. Consider per-user rate limiting via a shared utility or Supabase Edge Function middleware. Priority: `/api/upload` (file creation), `/api/usage/submit` (data creation), then social actions.
+
+## CSP Hardening (Nonce-Based)
+
+A baseline CSP header is shipped in `next.config.ts`, but it currently allows `'unsafe-inline'`. Remaining work is to move to a strict nonce-based policy for script/style sources. Requires auditing all script sources (Vercel Analytics, Supabase JS client), inline styles (Tailwind), and image origins (Supabase Storage).
+
+### Real-time Notifications
+
+The notifications system is built but uses polling (fetch on dropdown open + initial load). Consider adding Supabase Realtime subscriptions to push new notifications to the client without requiring a page refresh or dropdown toggle.
+
+### Session Time Tracking
+
+Track time spent per Claude Code session and display it per-post alongside input/output tokens and cost.
+
+Potential approach: [claude-code-time-tracking](https://github.com/gkastanis/claude-code-time-tracking) — a script that tracks session durations and could feed into the `daily_usage` pipeline.
+
+Requires:
+- New `duration_seconds` (or similar) column on `daily_usage`
+- Corresponding field in `CcusageDailyEntry` type
+- CLI integration to capture and submit duration data
+- UI updates to display time per post
 
 ---
 
