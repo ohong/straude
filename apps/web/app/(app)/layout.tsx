@@ -101,18 +101,17 @@ export default async function AppLayout({
   const totalCost =
     allTimeUsageRes.data?.reduce((s, r) => s + Number(r.cost_usd), 0) ?? 0;
 
-  const latestPosts = (latestPostRes.data ?? []).map((row) => {
-    // Prefer the usage date (user's local date) over created_at (UTC timestamp)
-    const usageDate = (row.daily_usage as any)?.date as string | undefined;
-    const displayDate = usageDate
-      ? new Date(usageDate + "T12:00:00").toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" })
-      : new Date(row.created_at).toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" });
-    return {
-      id: row.id,
-      title: row.title ?? "Untitled",
-      date: displayDate,
-    };
-  });
+  const latestPosts = (latestPostRes.data ?? [])
+    .map((row) => {
+      // Prefer the usage date (user's local date) over created_at (UTC timestamp)
+      const usageDate = (row.daily_usage as any)?.date as string | undefined;
+      const sortKey = usageDate ?? row.created_at;
+      const displayDate = usageDate
+        ? new Date(usageDate + "T12:00:00").toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" })
+        : new Date(row.created_at).toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" });
+      return { id: row.id, title: row.title ?? "Untitled", date: displayDate, sortKey };
+    })
+    .sort((a, b) => b.sortKey.localeCompare(a.sortKey));
 
   return (
     <CommandPalette username={profile?.username ?? null}>

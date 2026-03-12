@@ -424,16 +424,19 @@ describe("Flow: CLI Push", () => {
     }));
     deviceFetchChain.select = vi.fn(() => deviceFetchChain);
 
-    let deviceUpsertDone = false;
+    // Guard chain: check existing device_usage before upsert
+    const deviceGuardChain: Record<string, any> = {};
+    deviceGuardChain.select = vi.fn(() => deviceGuardChain);
+    deviceGuardChain.eq = vi.fn(() => deviceGuardChain);
+    deviceGuardChain.maybeSingle = vi.fn(() => Promise.resolve({ data: null, error: null }));
+
+    let deviceCallCount = 0;
     mockServiceClient.from.mockImplementation((table: string) => {
       if (table === "device_usage") {
-        if (!deviceUpsertDone) {
-          // First call: upsert
-          deviceUpsertDone = true;
-          return deviceUsageChain;
-        }
-        // Second call: fetch all device rows
-        return deviceFetchChain;
+        deviceCallCount++;
+        if (deviceCallCount === 1) return deviceGuardChain;   // guard query
+        if (deviceCallCount === 2) return deviceUsageChain;    // upsert
+        return deviceFetchChain;                                // fetch all
       }
       if (table === "daily_usage") return dailyUsageChain;
       if (table === "posts") return postChain;
