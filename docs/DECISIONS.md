@@ -1,5 +1,14 @@
 # Architecture & Design Decisions
 
+## Preserve User-Edited Post Titles on Re-Sync (2026-03-11)
+
+**Decision:** When a CLI re-sync triggers a post update, only overwrite the title if it still matches the auto-generated pattern (`/^[A-Z][a-z]{2} \d{1,2}( — .+)?$/`). User-customized titles are left untouched.
+
+**Alternatives considered:**
+1. **`title_user_edited` boolean column** — explicit flag set by the PATCH endpoint. Correct but requires a migration and coordinating two code paths.
+2. **Never update title on re-sync** — simplest, but auto-titles would show stale cost/model info after multi-device aggregation.
+3. **Pattern-match detection** (chosen) — auto-generated titles follow a strict `"Mon DD — Models, $X.XX"` format. If the existing title doesn't match, it was user-edited. No migration needed; auto-titles still refresh with updated data.
+
 ## Device Usage Guard: Skip-on-Decrease, Not Max (2026-03-11)
 
 **Decision:** When a CLI push reports lower `cost_usd` for an existing `(user_id, date, device_id)` tuple, skip the device_usage upsert entirely rather than taking the max or merging fields. Same logic applies to the legacy (no-device) daily_usage upsert.

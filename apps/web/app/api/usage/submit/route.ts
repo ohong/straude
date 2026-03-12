@@ -332,10 +332,10 @@ export async function POST(request: Request) {
       const autoTitle = modelLabel ? `${dateLabel} — ${modelLabel}${costLabel}` : `${dateLabel}${costLabel}`;
 
       // Create or update post linked to the daily_usage record
-      // Use separate insert/update to avoid overwriting user-edited titles
+      // Only overwrite the title on re-sync if it's still auto-generated
       const { data: existingPost } = await db
         .from("posts")
-        .select("id")
+        .select("id, title")
         .eq("daily_usage_id", usage.id)
         .maybeSingle();
 
@@ -343,9 +343,14 @@ export async function POST(request: Request) {
       let postError: any = null;
 
       if (existingPost) {
+        // Auto-generated titles match "Mon DD" or "Mon DD — Models, $X.XX"
+        const isAutoTitle = !existingPost.title || /^[A-Z][a-z]{2} \d{1,2}( — .+)?$/.test(existingPost.title);
+        const updateFields: Record<string, unknown> = { updated_at: new Date().toISOString() };
+        if (isAutoTitle) updateFields.title = autoTitle;
+
         const { data, error } = await db
           .from("posts")
-          .update({ title: autoTitle, updated_at: new Date().toISOString() })
+          .update(updateFields)
           .eq("id", existingPost.id)
           .select("id")
           .single();

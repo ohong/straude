@@ -10,6 +10,7 @@
 
 - **Device usage overwrite on re-push.** When a CLI user pushes data twice from the same device with lower numbers (e.g., after ccusage log rotation), the `device_usage` row was blindly overwritten, dropping the cost. Now guards device_usage and legacy daily_usage upserts against decreasing `cost_usd` — skips the write if the new value is lower. Cross-device aggregation still runs so multi-device sums stay correct.
 - **Post titles not updated on re-sync.** Auto-generated post titles were only set on initial creation. Re-syncs (same date, updated data) now regenerate the title from the aggregated daily_usage values, so the title reflects combined totals across all devices.
+- **Re-sync overwrites user-edited post titles.** When a CLI re-sync updated usage data, the auto-title was unconditionally written over any user-customized title. Now detects auto-generated titles by pattern and only overwrites those; user-edited titles are preserved.
 - **Golden-path e2e profile tests failing in CI.** All 5 `public-profile.spec.ts` tests failed because CI has no Supabase database — `getServiceClient()` throws and every profile page returns 500. Added `test.skip` guards so profile-content tests skip gracefully when the page returns non-200, made the achievements test tolerant of profiles without earned badges, and rewrote the not-found test to avoid a double-navigation bug (original called `page.goto` twice).
 
 ### Changed
