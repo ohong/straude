@@ -171,7 +171,7 @@ export async function POST(request: Request) {
       // Check if a record already exists to determine create vs update
       const { data: existing } = await db
         .from("daily_usage")
-        .select("id")
+        .select("id, cost_usd, models")
         .eq("user_id", userId)
         .eq("date", entry.date)
         .maybeSingle();
@@ -180,36 +180,51 @@ export async function POST(request: Request) {
 
       let usage: { id: string } | null = null;
       let usageError: any = null;
+      let titleCostUSD: number;
+      let titleModels: string[] | undefined;
 
       if (deviceId) {
         // Multi-device path: upsert into device_usage, then aggregate into daily_usage
-        const { error: deviceError } = await db
-          .from("device_usage")
-          .upsert(
-            {
-              user_id: userId,
-              device_id: deviceId,
-              device_name: deviceName ?? null,
-              date: entry.date,
-              cost_usd: entry.data.costUSD,
-              input_tokens: entry.data.inputTokens,
-              output_tokens: entry.data.outputTokens,
-              cache_creation_tokens: entry.data.cacheCreationTokens,
-              cache_read_tokens: entry.data.cacheReadTokens,
-              total_tokens: entry.data.totalTokens,
-              models: entry.data.models,
-              model_breakdown: entry.data.modelBreakdown ?? null,
-              session_count: 1,
-              raw_hash: body.hash ?? null,
-              updated_at: new Date().toISOString(),
-            },
-            { onConflict: "user_id,date,device_id" },
-          )
-          .select("id")
-          .single();
 
-        if (deviceError) {
-          throw new Error(`Failed to upsert device_usage for ${entry.date}: ${deviceError.message}`);
+        // Guard against decreasing values (e.g., ccusage log rotation)
+        const { data: existingDevice } = await db
+          .from("device_usage")
+          .select("cost_usd")
+          .eq("user_id", userId)
+          .eq("date", entry.date)
+          .eq("device_id", deviceId)
+          .maybeSingle();
+
+        // Only upsert if new data is >= existing (prevent overwrite with lower values)
+        if (!existingDevice || entry.data.costUSD >= Number(existingDevice.cost_usd)) {
+          const { error: deviceError } = await db
+            .from("device_usage")
+            .upsert(
+              {
+                user_id: userId,
+                device_id: deviceId,
+                device_name: deviceName ?? null,
+                date: entry.date,
+                cost_usd: entry.data.costUSD,
+                input_tokens: entry.data.inputTokens,
+                output_tokens: entry.data.outputTokens,
+                cache_creation_tokens: entry.data.cacheCreationTokens,
+                cache_read_tokens: entry.data.cacheReadTokens,
+                total_tokens: entry.data.totalTokens,
+                models: entry.data.models,
+                model_breakdown: entry.data.modelBreakdown ?? null,
+                session_count: 1,
+                raw_hash: body.hash ?? null,
+                updated_at: new Date().toISOString(),
+              },
+              { onConflict: "user_id,date,device_id" },
+            )
+            .select("id")
+            .single();
+
+          if (deviceError) {
+            throw new Error(`Failed to upsert device_usage for ${entry.date}: ${deviceError.message}`);
+          }
         }
 
         // Fetch all device rows for this (user_id, date) and aggregate
@@ -251,41 +266,53 @@ export async function POST(request: Request) {
 
         usage = data;
         usageError = error;
+        titleCostUSD = agg.cost_usd;
+        titleModels = agg.models;
       } else {
         // Legacy path: direct upsert into daily_usage (no device tracking)
-        const { data, error } = await db
-          .from("daily_usage")
-          .upsert(
-            {
-              user_id: userId,
-              date: entry.date,
-              cost_usd: entry.data.costUSD,
-              input_tokens: entry.data.inputTokens,
-              output_tokens: entry.data.outputTokens,
-              cache_creation_tokens: entry.data.cacheCreationTokens,
-              cache_read_tokens: entry.data.cacheReadTokens,
-              total_tokens: entry.data.totalTokens,
-              models: entry.data.models,
-              model_breakdown: entry.data.modelBreakdown ?? null,
-              is_verified: isVerified,
-              raw_hash: body.hash ?? null,
-              updated_at: new Date().toISOString(),
-            },
-            { onConflict: "user_id,date" },
-          )
-          .select("id")
-          .single();
+        // Guard against decreasing values
+        if (!existing || entry.data.costUSD >= Number(existing.cost_usd)) {
+          const { data, error } = await db
+            .from("daily_usage")
+            .upsert(
+              {
+                user_id: userId,
+                date: entry.date,
+                cost_usd: entry.data.costUSD,
+                input_tokens: entry.data.inputTokens,
+                output_tokens: entry.data.outputTokens,
+                cache_creation_tokens: entry.data.cacheCreationTokens,
+                cache_read_tokens: entry.data.cacheReadTokens,
+                total_tokens: entry.data.totalTokens,
+                models: entry.data.models,
+                model_breakdown: entry.data.modelBreakdown ?? null,
+                is_verified: isVerified,
+                raw_hash: body.hash ?? null,
+                updated_at: new Date().toISOString(),
+              },
+              { onConflict: "user_id,date" },
+            )
+            .select("id")
+            .single();
 
-        usage = data;
-        usageError = error;
+          usage = data;
+          usageError = error;
+          titleCostUSD = entry.data.costUSD;
+          titleModels = entry.data.models;
+        } else {
+          // Cost decreased — keep existing data, skip upsert
+          usage = existing as { id: string };
+          titleCostUSD = Number(existing.cost_usd);
+          titleModels = (existing.models as string[]) ?? undefined;
+        }
       }
 
       if (usageError || !usage) {
         throw new Error(`Failed to upsert usage for ${entry.date}: ${usageError?.message}`);
       }
 
-      // Build auto-title from usage data (only used for new posts)
-      const models = entry.data.models;
+      // Build auto-title from aggregated usage data
+      const models = titleModels;
       const hasClaude = models?.some((m) => m.includes("claude") || m.includes("opus") || m.includes("sonnet") || m.includes("haiku"));
       const claudeLabel = models?.some((m) => m.includes("opus")) ? "Claude Opus"
         : models?.some((m) => m.includes("sonnet")) ? "Claude Sonnet"
@@ -301,14 +328,14 @@ export async function POST(request: Request) {
       const toolLabels = [claudeLabel, codexLabel].filter(Boolean);
       const modelLabel = toolLabels.length > 0 ? toolLabels.join(" + ") : (hasClaude ? "Claude" : null);
       const dateLabel = new Date(entry.date).toLocaleDateString("en-US", { month: "short", day: "numeric" });
-      const costLabel = entry.data.costUSD > 0 ? `, $${entry.data.costUSD.toFixed(2)}` : "";
+      const costLabel = titleCostUSD > 0 ? `, $${titleCostUSD.toFixed(2)}` : "";
       const autoTitle = modelLabel ? `${dateLabel} — ${modelLabel}${costLabel}` : `${dateLabel}${costLabel}`;
 
       // Create or update post linked to the daily_usage record
-      // Use separate insert/update to avoid overwriting user-edited titles
+      // Only overwrite the title on re-sync if it's still auto-generated
       const { data: existingPost } = await db
         .from("posts")
-        .select("id")
+        .select("id, title")
         .eq("daily_usage_id", usage.id)
         .maybeSingle();
 
@@ -316,9 +343,14 @@ export async function POST(request: Request) {
       let postError: any = null;
 
       if (existingPost) {
+        // Auto-generated titles match "Mon DD" or "Mon DD — Models, $X.XX"
+        const isAutoTitle = !existingPost.title || /^[A-Z][a-z]{2} \d{1,2}( — .+)?$/.test(existingPost.title);
+        const updateFields: Record<string, unknown> = { updated_at: new Date().toISOString() };
+        if (isAutoTitle) updateFields.title = autoTitle;
+
         const { data, error } = await db
           .from("posts")
-          .update({ updated_at: new Date().toISOString() })
+          .update(updateFields)
           .eq("id", existingPost.id)
           .select("id")
           .single();
