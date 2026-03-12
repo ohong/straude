@@ -101,7 +101,8 @@ test.describe("Cross-page navigation and theme", () => {
           text.includes("Failed to load resource") ||
           text.includes("net::ERR_") ||
           text.includes("favicon") ||
-          text.includes("downloadable font")
+          text.includes("downloadable font") ||
+          text.includes("_vercel/")
         ) {
           return;
         }
