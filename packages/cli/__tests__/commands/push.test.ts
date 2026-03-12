@@ -663,7 +663,12 @@ describe("pushCommand — smart sync", () => {
     await pushCommand({});
 
     const [sinceArg, untilArg] = mockRunCcusageRawAsync.mock.calls[0]!;
-    // sinceArg should be earlier than untilArg
+    const threeDaysAgoDate = new Date();
+    threeDaysAgoDate.setDate(threeDaysAgoDate.getDate() - 3);
+    const fmt = (d: Date) =>
+      `${d.getFullYear()}${String(d.getMonth() + 1).padStart(2, "0")}${String(d.getDate()).padStart(2, "0")}`;
+    // sinceDate should equal last_push_date (inclusive)
+    expect(sinceArg).toBe(fmt(threeDaysAgoDate));
     expect(sinceArg).not.toBe(untilArg);
   });
 
@@ -699,6 +704,26 @@ describe("pushCommand — smart sync", () => {
 
     // Should sync from yesterday (last_push_date) to today
     expect(sinceArg).toBe(fmt(yesterdayDate));
+    expect(untilArg).toBe(fmt(today));
+  });
+
+  it("includes last_push_date when gap equals MAX_BACKFILL_DAYS", async () => {
+    const sevenDaysAgo = daysAgoStr(7);
+    mockLoadConfig.mockReturnValue({ ...fakeConfig, last_push_date: sevenDaysAgo });
+    mockRunCcusageRawAsync.mockResolvedValue("[]");
+    mockParseCcusageOutput.mockReturnValue({ data: [] });
+
+    await pushCommand({});
+
+    const [sinceArg, untilArg] = mockRunCcusageRawAsync.mock.calls[0]!;
+    const sevenDaysAgoDate = new Date();
+    sevenDaysAgoDate.setDate(sevenDaysAgoDate.getDate() - 7);
+    const fmt = (d: Date) =>
+      `${d.getFullYear()}${String(d.getMonth() + 1).padStart(2, "0")}${String(d.getDate()).padStart(2, "0")}`;
+    const today = new Date();
+
+    // gap=7 equals MAX_BACKFILL_DAYS — should still include last_push_date
+    expect(sinceArg).toBe(fmt(sevenDaysAgoDate));
     expect(untilArg).toBe(fmt(today));
   });
 });

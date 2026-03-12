@@ -1,5 +1,14 @@
 # Architecture & Design Decisions
 
+## Smart Sync Re-fetches last_push_date (Inclusive) (2026-03-12)
+
+**Decision:** When the CLI computes the smart sync date range, it always includes `last_push_date` as the start of the window (not the day after). The boundary check uses `gap > MAX_BACKFILL_DAYS` (strict greater-than), so a gap of exactly 7 days still syncs from `last_push_date`. Only gaps exceeding 7 are capped.
+
+**Alternatives considered:**
+1. **Start from day after last_push_date** (previous behavior) — simpler, but loses any usage that accumulated after the last push on that day (e.g., evening sessions after a morning push).
+2. **`gap >= MAX_BACKFILL_DAYS`** (PR #41's initial approach) — correctly re-fetches last_push_date for gaps 1–6, but excludes it at exactly gap=7 even though the server accepts 7-day windows.
+3. **`gap > MAX_BACKFILL_DAYS`** (chosen) — includes last_push_date for any gap the server can handle (1–7 days). `--days 1` still means "today only" since it bypasses smart sync entirely.
+
 ## Preserve User-Edited Post Titles on Re-Sync (2026-03-11)
 
 **Decision:** When a CLI re-sync triggers a post update, only overwrite the title if it still matches the auto-generated pattern (`/^[A-Z][a-z]{2} \d{1,2}( — .+)?$/`). User-customized titles are left untouched.

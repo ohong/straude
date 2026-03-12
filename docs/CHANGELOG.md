@@ -8,6 +8,8 @@
 
 ### Fixed
 
+- **Latest Activities sorted by insertion time, not usage date.** Sidebar "Latest Activities" ordered posts by `created_at`, so backfilled days appeared above more recent ones. Now sorts by usage date descending.
+- **Smart sync loses same-day usage.** The CLI never re-fetched `last_push_date`, so usage accumulated after the last push that day was lost. Smart sync now always includes `last_push_date` in the fetch window (inclusive) to catch mid-day updates. Also fixed an off-by-one at the boundary: when the gap equals exactly `MAX_BACKFILL_DAYS` (7), the last push date is now included instead of being capped out.
 - **Device usage overwrite on re-push.** When a CLI user pushes data twice from the same device with lower numbers (e.g., after ccusage log rotation), the `device_usage` row was blindly overwritten, dropping the cost. Now guards device_usage and legacy daily_usage upserts against decreasing `cost_usd` — skips the write if the new value is lower. Cross-device aggregation still runs so multi-device sums stay correct.
 - **Post titles not updated on re-sync.** Auto-generated post titles were only set on initial creation. Re-syncs (same date, updated data) now regenerate the title from the aggregated daily_usage values, so the title reflects combined totals across all devices.
 - **Re-sync overwrites user-edited post titles.** When a CLI re-sync updated usage data, the auto-title was unconditionally written over any user-customized title. Now detects auto-generated titles by pattern and only overwrites those; user-edited titles are preserved.

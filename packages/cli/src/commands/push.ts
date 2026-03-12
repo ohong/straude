@@ -196,7 +196,7 @@ export async function pushCommand(options: PushOptions, apiUrlOverride?: string)
       untilDate = today;
     } else {
       const gap = daysBetweenStrings(config.last_push_date, todayStr);
-      if (gap >= MAX_BACKFILL_DAYS) {
+      if (gap > MAX_BACKFILL_DAYS) {
         // Can't include last pushed date, too far back
         const days = MAX_BACKFILL_DAYS;
         sinceDate = new Date(today);
