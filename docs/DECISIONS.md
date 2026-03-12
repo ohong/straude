@@ -1,5 +1,16 @@
 # Architecture & Design Decisions
 
+## Golden Path E2E Tests: Unauthenticated-First, Per-Journey Files (2026-03-11)
+
+**Decision:** Structured golden path tests as 5 separate spec files under `e2e/golden-path/`, each covering one unauthenticated user journey. Authenticated golden paths (feed interactions, settings, post editing) are deferred until an auth fixture is established.
+
+**Alternatives considered:**
+1. **Single large spec file** — simpler to create but harder to run selectively, debug failures, or parallelise. Individual journey files let Playwright distribute across workers.
+2. **Auth-inclusive golden paths from day one** — requires a test user fixture (seeded credentials or Supabase test account). Adds infrastructure complexity before the unauthenticated surface is covered.
+3. **Unauthenticated-first, per-journey files** (chosen) — covers the guest discovery experience (landing → signup, leaderboard, profiles, CLI verify, cross-page nav) without any auth fixtures. Each file is self-contained and independently runnable.
+
+**Port configuration:** Changed Playwright from port 3000 to 3099 for local dev to avoid conflicts with other projects that may occupy the default port. CI still uses 3000. This also fixed 4 pre-existing broken landing tests that were silently running against the wrong server.
+
 ## Smart Sync Re-fetches last_push_date (Inclusive) (2026-03-12)
 
 **Decision:** When the CLI computes the smart sync date range, it always includes `last_push_date` as the start of the window (not the day after). The boundary check uses `gap > MAX_BACKFILL_DAYS` (strict greater-than), so a gap of exactly 7 days still syncs from `last_push_date`. Only gaps exceeding 7 are capped.
