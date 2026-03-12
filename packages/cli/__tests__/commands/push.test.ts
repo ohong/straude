@@ -681,6 +681,26 @@ describe("pushCommand — smart sync", () => {
     const expectedSince = `${sixDaysAgo.getFullYear()}${String(sixDaysAgo.getMonth() + 1).padStart(2, "0")}${String(sixDaysAgo.getDate()).padStart(2, "0")}`;
     expect(sinceArg).toBe(expectedSince);
   });
+
+  it("includes last_push_date when gap is 1 day (to catch mid-day updates)", async () => {
+    const yesterday = daysAgoStr(1);
+    mockLoadConfig.mockReturnValue({ ...fakeConfig, last_push_date: yesterday });
+    mockRunCcusageRawAsync.mockResolvedValue("[]");
+    mockParseCcusageOutput.mockReturnValue({ data: [] });
+
+    await pushCommand({});
+
+    const [sinceArg, untilArg] = mockRunCcusageRawAsync.mock.calls[0]!;
+    const today = new Date();
+    const yesterdayDate = new Date(today);
+    yesterdayDate.setDate(yesterdayDate.getDate() - 1);
+    const fmt = (d: Date) =>
+      `${d.getFullYear()}${String(d.getMonth() + 1).padStart(2, "0")}${String(d.getDate()).padStart(2, "0")}`;
+
+    // Should sync from yesterday (last_push_date) to today
+    expect(sinceArg).toBe(fmt(yesterdayDate));
+    expect(untilArg).toBe(fmt(today));
+  });
 });
 
 // ---------------------------------------------------------------------------
