@@ -6,7 +6,7 @@ const nextConfig: NextConfig = {
     remotePatterns: [{ protocol: "https", hostname: "**" }],
   },
   experimental: {
-    optimizePackageImports: ["lucide-react", "motion/react"],
+    optimizePackageImports: ["lucide-react", "motion/react", "recharts"],
   },
   async headers() {
     return [
