@@ -72,6 +72,25 @@ The following skills are always active and must be followed for all UI work:
 - **fixing-accessibility** — ARIA labels, keyboard access, focus/dialogs, semantics, forms, contrast
 - **fixing-metadata** — titles, descriptions, canonical, OG/Twitter cards, icons, structured data
 
+## Commit Messages
+
+All commits must follow the [Conventional Commits](https://www.conventionalcommits.org/) format, enforced by commitlint via a `.githooks/commit-msg` hook.
+
+**Format:** `type: subject` or `type(scope): subject`
+
+**Allowed types:** `feat`, `fix`, `docs`, `chore`, `refactor`, `test`, `ci`, `perf`, `style`, `build`, `revert`
+
+**Examples:**
+- `feat: add HEIC upload support`
+- `fix: prettifyModel variable reference bug`
+- `docs: update API reference`
+- `chore: bump dependencies`
+
+**Rules:**
+- Header must be 100 characters or fewer
+- No subject-case enforcement (proper nouns, acronyms, and camelCase identifiers are fine)
+- Activate hooks after clone: `git config core.hooksPath .githooks` (runs automatically on `bun install`)
+
 ## Landing Page Voice
 
 The landing page copy follows an "endurance athlete meets Claude Code power user" theme. Language should evoke training, logging sessions, streaks, pace, and discipline — not generic startup/SaaS copy. Avoid words like "flex", "social proof", or internal jargon in user-facing text.

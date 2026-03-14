@@ -1,0 +1,5 @@
+#!/usr/bin/env bash
+# Validate commit messages against conventional commits format.
+# Activated via: git config core.hooksPath .githooks
+
+npx --no -- commitlint --edit "$1"
