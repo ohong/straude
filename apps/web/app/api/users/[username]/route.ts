@@ -49,8 +49,7 @@ export async function GET(_request: NextRequest, context: RouteContext) {
     supabase
       .from("daily_usage")
       .select("cost_usd.sum()")
-      .eq("user_id", profile.id)
-      .single(),
+      .eq("user_id", profile.id),
     profile.is_public && profile.username
       ? supabase
           .from("leaderboard_weekly")
@@ -69,7 +68,7 @@ export async function GET(_request: NextRequest, context: RouteContext) {
   ]);
 
   const streak = typeof streakRes.data === "number" ? streakRes.data : 0;
-  const total_cost = Number((totalCostRes.data as any)?.cost_usd ?? 0);
+  const total_cost = Number((totalCostRes.data as any)?.[0]?.cost_usd ?? 0);
   const is_following = !!followRes.data;
 
   // Rank queries (depend on weekly leaderboard entry)

@@ -125,7 +125,7 @@ describe("Flow: Profile and Contributions", () => {
     const costChain = chainBuilder();
     (costChain.select as ReturnType<typeof vi.fn>).mockReturnValue(costChain);
     (costChain.eq as ReturnType<typeof vi.fn>).mockResolvedValue({
-      data: [{ cost_usd: 5.0 }, { cost_usd: 3.0 }, { cost_usd: 2.0 }],
+      data: [{ cost_usd: 10.0 }],
     });
 
     // Leaderboard rank
