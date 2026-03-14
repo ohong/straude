@@ -23,17 +23,21 @@ jobs:
           restore-keys: |
             ${{ runner.os }}-bun-
 
+      - name: Cache Turborepo
+        uses: actions/cache@v4
+        with:
+          path: .turbo
+          key: ${{ runner.os }}-turbo-${{ hashFiles('apps/**', 'packages/**', 'turbo.json') }}
+          restore-keys: |
+            ${{ runner.os }}-turbo-
+
       - name: Install dependencies
         run: bun install
         env:
           BUN_INSTALL_CACHE_DIR: ~/.bun/install/cache
 
-      - name: Typecheck
-        run: bun run typecheck
-        working-directory: apps/web
-
-      - name: Build
-        run: bun run build
+      - name: Typecheck & Build
+        run: bunx turbo run typecheck build
         env:
           NEXT_PUBLIC_SUPABASE_URL: http://localhost:54321
           NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY: sb_publishable_placeholder
@@ -46,8 +50,23 @@ jobs:
         run: bun run test
         working-directory: packages/cli
 
+      - name: Cache Playwright browsers
+        id: playwright-cache
+        uses: actions/cache@v4
+        with:
+          path: ~/.cache/ms-playwright
+          key: ${{ runner.os }}-playwright-${{ hashFiles('apps/web/package.json') }}
+          restore-keys: |
+            ${{ runner.os }}-playwright-
+
       - name: Install Playwright Chromium
+        if: steps.playwright-cache.outputs.cache-hit != 'true'
         run: bunx playwright install --with-deps chromium
+        working-directory: apps/web
+
+      - name: Install Playwright deps (cached)
+        if: steps.playwright-cache.outputs.cache-hit == 'true'
+        run: bunx playwright install-deps chromium
         working-directory: apps/web
 
       - name: E2E tests

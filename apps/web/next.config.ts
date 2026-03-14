@@ -5,8 +5,14 @@ const nextConfig: NextConfig = {
   images: {
     remotePatterns: [{ protocol: "https", hostname: "**" }],
   },
+  serverExternalPackages: ["sharp"],
   experimental: {
-    optimizePackageImports: ["lucide-react", "motion/react"],
+    optimizePackageImports: [
+      "lucide-react",
+      "motion/react",
+      "recharts",
+      "@supabase/supabase-js",
+    ],
   },
   async headers() {
     return [
