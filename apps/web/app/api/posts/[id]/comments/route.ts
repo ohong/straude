@@ -7,6 +7,7 @@ import { sendNotificationEmail } from "@/lib/email/send-comment-email";
 import { checkAndAwardAchievements } from "@/lib/achievements";
 import { loadPostComments } from "@/lib/comments";
 import { rateLimit } from "@/lib/rate-limit";
+import { NOTIFICATION_TYPES, ACHIEVEMENT_TRIGGERS, EMAIL_NOTIFICATION_TYPES } from "@/lib/events";
 
 type RouteContext = { params: Promise<{ id: string }> };
 
@@ -17,13 +18,13 @@ type RouteContext = { params: Promise<{ id: string }> };
 async function fireNotificationEmail(opts: {
   recipientUserId: string;
   actorUsername: string;
-  type: "comment" | "mention";
+  type: typeof EMAIL_NOTIFICATION_TYPES.COMMENT | typeof EMAIL_NOTIFICATION_TYPES.MENTION;
   content: string;
   postId: string;
   idempotencyKey: string;
 }): Promise<void> {
   const prefField =
-    opts.type === "mention"
+    opts.type === EMAIL_NOTIFICATION_TYPES.MENTION
       ? "email_mention_notifications"
       : "email_notifications";
 
@@ -141,7 +142,7 @@ export async function POST(request: NextRequest, context: RouteContext) {
       await supabase.from("notifications").insert({
         user_id: post.user_id,
         actor_id: user.id,
-        type: "comment",
+        type: NOTIFICATION_TYPES.COMMENT,
         post_id: id,
         comment_id: comment.id,
       });
@@ -153,7 +154,7 @@ export async function POST(request: NextRequest, context: RouteContext) {
       await fireNotificationEmail({
         recipientUserId: post.user_id,
         actorUsername: commenterUsername,
-        type: "comment",
+        type: EMAIL_NOTIFICATION_TYPES.COMMENT,
         content,
         postId: id,
         idempotencyKey: `comment-notif/${comment.id}`,
@@ -174,7 +175,7 @@ export async function POST(request: NextRequest, context: RouteContext) {
       const mentionNotifs = toNotify.map((u) => ({
         user_id: u.id,
         actor_id: user.id,
-        type: "mention" as const,
+        type: NOTIFICATION_TYPES.MENTION,
         post_id: id,
         comment_id: comment.id,
       }));
@@ -193,7 +194,7 @@ export async function POST(request: NextRequest, context: RouteContext) {
           fireNotificationEmail({
             recipientUserId: u.id,
             actorUsername,
-            type: "mention",
+            type: EMAIL_NOTIFICATION_TYPES.MENTION,
             content,
             postId: id,
             idempotencyKey: `mention-notif/${comment.id}/${u.id}`,
@@ -203,9 +204,9 @@ export async function POST(request: NextRequest, context: RouteContext) {
     }
 
     // Award comment achievements
-    checkAndAwardAchievements(user.id, "comment").catch(() => {});
+    checkAndAwardAchievements(user.id, ACHIEVEMENT_TRIGGERS.COMMENT).catch(() => {});
     if (post && post.user_id !== user.id) {
-      checkAndAwardAchievements(post.user_id, "comment").catch(() => {});
+      checkAndAwardAchievements(post.user_id, ACHIEVEMENT_TRIGGERS.COMMENT).catch(() => {});
     }
   });
 

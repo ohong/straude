@@ -1,5 +1,16 @@
 # Architecture & Design Decisions
 
+## Event Taxonomy Normalizer: Central Const Module (2026-03-13)
+
+**Decision:** Created `lib/events.ts` as the single source of truth for all event names (notification types, email notification types, achievement triggers). Types are derived from the const objects using `typeof` mapped types. All consumer files import from this module instead of defining inline string literals or local type aliases.
+
+**Alternatives considered:**
+1. **Enum-based approach** — TypeScript enums provide namespace and reverse mapping, but add runtime overhead (emitted as objects), don't tree-shake well, and the community has moved toward `as const` objects.
+2. **Keep string literals, add a lint rule** — an ESLint rule could flag raw strings, but doesn't provide a single place to discover the full event vocabulary or derive types automatically.
+3. **`as const` objects with derived types** (chosen) — zero runtime overhead beyond the object literals themselves, full type inference, IDE autocomplete, and safe refactoring via find-all-references. Types (`NotificationType`, `EmailNotificationType`, `AchievementTrigger`) are computed from the const objects, so adding a new event is a single-line change.
+
+**Scope:** The module defines three const objects: `NOTIFICATION_TYPES` (6 values: follow, kudos, comment, mention, message, referral), `EMAIL_NOTIFICATION_TYPES` (3 values: comment, mention, post_mention), and `ACHIEVEMENT_TRIGGERS` (5 values: usage, kudos, comment, photo, referral). The existing `AchievementTrigger` export from `achievements.ts` is re-exported for backwards compatibility.
+
 ## Golden Path E2E Tests: Unauthenticated-First, Per-Journey Files (2026-03-11)
 
 **Decision:** Structured golden path tests as 5 separate spec files under `e2e/golden-path/`, each covering one unauthenticated user journey. Authenticated golden paths (feed interactions, settings, post editing) are deferred until an auth fixture is established.

@@ -5,16 +5,17 @@ import { useState, useEffect, useCallback, useRef } from "react";
 import { Avatar } from "@/components/ui/Avatar";
 import { cn } from "@/lib/utils/cn";
 import { timeAgo, notificationMessage, notificationHref } from "@/lib/utils/notifications";
+import { NOTIFICATION_TYPES } from "@/lib/events";
 import type { Notification } from "@/types";
 
-const NOTIFICATION_TYPES = [
+const NOTIFICATION_TYPE_FILTERS = [
   { value: null, label: "All" },
-  { value: "follow", label: "Follows" },
-  { value: "kudos", label: "Kudos" },
-  { value: "comment", label: "Comments" },
-  { value: "mention", label: "Mentions" },
-  { value: "message", label: "Messages" },
-  { value: "referral", label: "Referrals" },
+  { value: NOTIFICATION_TYPES.FOLLOW, label: "Follows" },
+  { value: NOTIFICATION_TYPES.KUDOS, label: "Kudos" },
+  { value: NOTIFICATION_TYPES.COMMENT, label: "Comments" },
+  { value: NOTIFICATION_TYPES.MENTION, label: "Mentions" },
+  { value: NOTIFICATION_TYPES.MESSAGE, label: "Messages" },
+  { value: NOTIFICATION_TYPES.REFERRAL, label: "Referrals" },
 ] as const;
 
 const PAGE_SIZE = 20;
@@ -119,7 +120,7 @@ export function NotificationsList() {
       {/* Type filter tabs — matches leaderboard period tabs */}
       <div className="flex items-center justify-between border-b border-border">
         <div className="flex flex-1 justify-center overflow-x-auto">
-          {NOTIFICATION_TYPES.map(({ value, label }) => (
+          {NOTIFICATION_TYPE_FILTERS.map(({ value, label }) => (
             <button
               key={label}
               type="button"
@@ -164,7 +165,7 @@ export function NotificationsList() {
       ) : notifications.length === 0 ? (
         <p className="px-6 py-12 text-center text-sm text-muted">
           {typeFilter
-            ? `No ${NOTIFICATION_TYPES.find((t) => t.value === typeFilter)?.label.toLowerCase()} notifications`
+            ? `No ${NOTIFICATION_TYPE_FILTERS.find((t) => t.value === typeFilter)?.label.toLowerCase()} notifications`
             : "No notifications yet"}
         </p>
       ) : (

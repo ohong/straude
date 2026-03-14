@@ -2,6 +2,8 @@
 // Straude — Shared TypeScript Types
 // ============================================
 
+import type { NotificationType } from "@/lib/events";
+
 export interface User {
   id: string;
   username: string | null;
@@ -173,7 +175,7 @@ export interface Notification {
   id: string;
   user_id: string;
   actor_id: string;
-  type: "follow" | "kudos" | "comment" | "mention" | "message" | "referral";
+  type: NotificationType;
   post_id: string | null;
   comment_id: string | null;
   read: boolean;

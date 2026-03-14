@@ -13,11 +13,11 @@ import {
   pixelBasedPreset,
 } from "@react-email/components";
 
-export type NotificationType = "comment" | "mention" | "post_mention";
+import { EMAIL_NOTIFICATION_TYPES, type EmailNotificationType } from "@/lib/events";
 
 interface NotificationEmailProps {
   actorUsername: string;
-  type: NotificationType;
+  type: EmailNotificationType;
   content: string;
   postTitle: string | null;
   postUrl: string;
@@ -28,49 +28,49 @@ function truncate(str: string, max: number): string {
   return str.length > max ? str.slice(0, max) + "..." : str;
 }
 
-function subjectLine(type: NotificationType, actor: string): string {
+function subjectLine(type: EmailNotificationType, actor: string): string {
   switch (type) {
-    case "comment":
+    case EMAIL_NOTIFICATION_TYPES.COMMENT:
       return `${actor} commented on your post`;
-    case "mention":
+    case EMAIL_NOTIFICATION_TYPES.MENTION:
       return `${actor} mentioned you in a comment`;
-    case "post_mention":
+    case EMAIL_NOTIFICATION_TYPES.POST_MENTION:
       return `${actor} tagged you in a post`;
   }
 }
 
 function previewText(
-  type: NotificationType,
+  type: EmailNotificationType,
   actor: string,
   content: string,
 ): string {
   const short = truncate(content, 80);
   switch (type) {
-    case "comment":
+    case EMAIL_NOTIFICATION_TYPES.COMMENT:
       return `${actor}: "${short}"`;
-    case "mention":
+    case EMAIL_NOTIFICATION_TYPES.MENTION:
       return `${actor} mentioned you: "${short}"`;
-    case "post_mention":
+    case EMAIL_NOTIFICATION_TYPES.POST_MENTION:
       return `${actor} tagged you: "${short}"`;
   }
 }
 
 function headline(
-  type: NotificationType,
+  type: EmailNotificationType,
   actor: string,
   postLabel: string,
 ): string {
   switch (type) {
-    case "comment":
+    case EMAIL_NOTIFICATION_TYPES.COMMENT:
       return `${actor} commented on ${postLabel}:`;
-    case "mention":
+    case EMAIL_NOTIFICATION_TYPES.MENTION:
       return `${actor} mentioned you in ${postLabel}:`;
-    case "post_mention":
+    case EMAIL_NOTIFICATION_TYPES.POST_MENTION:
       return `${actor} tagged you in ${postLabel}:`;
   }
 }
 
-export function buildSubject(type: NotificationType, actor: string): string {
+export function buildSubject(type: EmailNotificationType, actor: string): string {
   return subjectLine(type, actor);
 }
 
@@ -108,9 +108,9 @@ export default function NotificationEmail({
             <Section className="px-6 pt-8 pb-6">
               <Text className="text-base text-gray-900 leading-relaxed m-0 mb-4">
                 <strong>{actorUsername}</strong>{" "}
-                {type === "comment"
+                {type === EMAIL_NOTIFICATION_TYPES.COMMENT
                   ? `commented on ${postLabel}:`
-                  : type === "post_mention"
+                  : type === EMAIL_NOTIFICATION_TYPES.POST_MENTION
                     ? `tagged you in ${postLabel}:`
                     : `mentioned you in ${postLabel}:`}
               </Text>
@@ -151,7 +151,7 @@ export default function NotificationEmail({
 
 NotificationEmail.PreviewProps = {
   actorUsername: "alice",
-  type: "comment" as NotificationType,
+  type: EMAIL_NOTIFICATION_TYPES.COMMENT,
   content:
     "Great post! I really enjoyed reading about your training session today.",
   postTitle: "Morning 10K",
