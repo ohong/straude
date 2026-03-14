@@ -3,6 +3,7 @@ import { notFound } from "next/navigation";
 import { ActivityCard } from "@/components/app/feed/ActivityCard";
 import { CommentThread } from "@/components/app/post/CommentThread";
 import { PostEditor } from "@/components/app/post/PostEditor";
+import { PostSharePanel } from "@/components/app/post/PostSharePanel";
 import { loadPostComments } from "@/lib/comments";
 import type { Metadata } from "next";
 
@@ -119,6 +120,7 @@ export default async function PostDetailPage({
         <h3 className="text-lg font-medium">Post</h3>
       </header>
       <ActivityCard post={normalizedPost} />
+      <PostSharePanel postId={id} />
       {isOwner && <PostEditor post={normalizedPost} autoEdit={query.edit === "1"} />}
       <CommentThread
         postId={id}

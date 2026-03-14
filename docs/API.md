@@ -283,6 +283,15 @@ Last 52 weeks of daily usage data for a user's contribution graph.
 - **Auth**: Public for public profiles; private profiles require owner or follower
 - **Response**: `{ data: { date, cost_usd, has_post }[], streak: number }`
 
+### `GET /api/consistency/[username]/image`
+
+Generate a 1200x630 PNG consistency card for a profile.
+
+- **Auth**: Public for public profiles; private profiles require the owner session
+- **Query params**:
+  - `download=1` — optional; adds `Content-Disposition: attachment`
+- **Response**: PNG image suitable for preview, download, and sharing
+
 ### `GET /api/users/check-username`
 
 Check if a username is available.
