@@ -5,7 +5,8 @@
 - **Bun** >= 1.3.3 (pinned in `package.json` via `packageManager` field)
 - **Node.js** >= 18 (for CLI package)
 - **Git**
-- A **Supabase** project (for database, auth, and storage)
+- Docker Desktop (for local Supabase)
+- Optional hosted **Supabase** project (only if you explicitly want to connect to a remote backend)
 
 ## Repository Structure
 
@@ -32,7 +33,20 @@ git clone <repo-url> && cd straude
 bun install
 ```
 
-2. Copy the environment template:
+2. Choose your backend mode:
+
+### Option A: Local Supabase (recommended)
+
+```bash
+bun run local:setup
+```
+
+This starts Supabase locally, writes `apps/web/.env.local`, and seeds demo
+data. See [docs/LOCAL_DEV.md](./LOCAL_DEV.md) for the full workflow.
+
+### Option B: Hosted Supabase
+
+Copy the environment template:
 
 ```bash
 cp .env.example apps/web/.env.local
@@ -58,6 +72,22 @@ cp .env.example apps/web/.env.local
 **Important:** This project uses the **new Supabase key model** (publishable + secret), not the legacy `SUPABASE_ANON_KEY` / `SUPABASE_SERVICE_ROLE_KEY`. See the CLAUDE.md Supabase Keys section for details.
 
 ## Database Setup
+
+### Local Supabase
+
+```bash
+bun run local:up
+bun run local:env
+bun run local:seed
+```
+
+Reset everything from migrations:
+
+```bash
+bun run local:reset
+```
+
+### Hosted Supabase
 
 Apply Supabase migrations to set up the schema:
 
@@ -85,6 +115,12 @@ bun run dev
 ```
 
 This runs `turbo dev`, which starts the Next.js dev server with Turbopack at `http://localhost:3000`.
+
+For local Supabase development without Portless:
+
+```bash
+bun run dev:local
+```
 
 ### CLI (development)
 
