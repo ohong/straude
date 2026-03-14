@@ -3,18 +3,24 @@
   "tasks": {
     "build": {
       "dependsOn": ["^build"],
-      "outputs": [".next/**", "!.next/cache/**", "dist/**"]
+      "inputs": ["src/**", "app/**", "components/**", "lib/**", "types/**", "*.ts", "*.json", "*.css"],
+      "outputs": [".next/**", "!.next/cache/**", "dist/**"],
+      "env": ["NEXT_PUBLIC_SUPABASE_URL", "NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY"]
     },
     "dev": {
       "cache": false,
       "persistent": true
     },
     "lint": {
-      "dependsOn": ["^build"]
+      "inputs": ["src/**", "app/**", "components/**", "lib/**", "types/**", "*.ts", "*.json"]
     },
     "test": {
-      "cache": false,
-      "dependsOn": ["^build"]
+      "dependsOn": ["^build"],
+      "inputs": ["src/**", "app/**", "components/**", "lib/**", "__tests__/**", "*.ts", "*.json"]
+    },
+    "typecheck": {
+      "dependsOn": ["^build"],
+      "inputs": ["src/**", "app/**", "components/**", "lib/**", "types/**", "*.ts", "*.json"]
     }
   }
 }
