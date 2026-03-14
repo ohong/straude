@@ -163,6 +163,7 @@ function mockSuccessfulSubmit(dates: string[]) {
 // ---------------------------------------------------------------------------
 
 beforeEach(() => {
+  vi.useFakeTimers({ now: new Date('2026-03-13T12:00:00Z'), toFake: ['Date'] });
   vi.clearAllMocks();
   _resetCcusageResolver();
   configStore = {};
@@ -175,6 +176,7 @@ beforeEach(() => {
 });
 
 afterEach(() => {
+  vi.useRealTimers();
   vi.restoreAllMocks();
 });
 
