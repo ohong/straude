@@ -6,9 +6,13 @@
   "scripts": {
     "dev": "turbo dev",
     "build": "turbo build",
-    "lint": "turbo lint"
+    "lint": "turbo lint",
+    "commitlint": "commitlint --edit",
+    "prepare": "git config core.hooksPath .githooks"
   },
   "devDependencies": {
+    "@commitlint/cli": "^20.4.4",
+    "@commitlint/config-conventional": "^20.4.4",
     "turbo": "^2",
     "typescript": "^5"
   },

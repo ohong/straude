@@ -1,5 +1,16 @@
 # Architecture & Design Decisions
 
+## Commit Message Normalization: commitlint + Local Hook (2026-03-14)
+
+**Decision:** Enforce conventional commit format via `@commitlint/cli` + `@commitlint/config-conventional` and a `.githooks/commit-msg` hook. No husky, no CI lint step — local hook only, matching the existing `.githooks/pre-push` pattern.
+
+**Alternatives considered:**
+1. **Husky** — popular but adds a dependency and its own install mechanism. The project already has a `.githooks/` directory with a working `pre-push` hook and a `core.hooksPath` convention, so husky would be redundant.
+2. **CI-only lint (GitHub Action)** — catches bad messages but only after push, too late for a good workflow. Local hooks give instant feedback.
+3. **commitlint + `.githooks/commit-msg`** (chosen) — minimal tooling, reuses the existing hooks directory and activation pattern (`git config core.hooksPath .githooks`). A `prepare` script runs this automatically on `bun install`.
+
+**Subject-case rule intentionally omitted:** The default `subject-case: [2, 'always', 'lower-case']` rule rejects subjects containing proper nouns (e.g., "CLI broken on Windows"), acronyms ("add HEIC upload support"), and camelCase identifiers ("prettifyModel variable reference bug") — all of which appear regularly in this repo's commit history. Removing this rule avoids blocking legitimate commits.
+
 ## Golden Path E2E Tests: Unauthenticated-First, Per-Journey Files (2026-03-11)
 
 **Decision:** Structured golden path tests as 5 separate spec files under `e2e/golden-path/`, each covering one unauthenticated user journey. Authenticated golden paths (feed interactions, settings, post editing) are deferred until an auth fixture is established.
