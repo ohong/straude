@@ -1,4 +1,4 @@
-import { describe, it, expect, vi, beforeEach } from "vitest";
+import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
 
 // ---------------------------------------------------------------------------
 // Mocks
@@ -56,11 +56,16 @@ function makeRequest(url: string, init?: RequestInit) {
 // ---------------------------------------------------------------------------
 describe("Flow: CLI Push", () => {
   beforeEach(() => {
+    vi.useFakeTimers({ now: new Date('2026-03-13T12:00:00Z'), toFake: ['Date'] });
     vi.clearAllMocks();
     vi.stubEnv("NEXT_PUBLIC_APP_URL", "https://straude.com");
     vi.stubEnv("NEXT_PUBLIC_SUPABASE_URL", "https://test.supabase.co");
     vi.stubEnv("SUPABASE_SECRET_KEY", "test-secret");
     vi.stubEnv("CLI_JWT_SECRET", "test-jwt-secret");
+  });
+
+  afterEach(() => {
+    vi.useRealTimers();
   });
 
   it("CLI init creates an auth code and returns verify URL", async () => {
@@ -412,32 +417,30 @@ describe("Flow: CLI Push", () => {
       },
     ];
 
-    // Build a chain that handles both device_usage and daily_usage operations
-    const deviceUsageChain = chainBuilder({ data: { id: "device-2" }, error: null });
     const dailyUsageChain = chainBuilder({ data: { id: "usage-1" }, error: null });
     const postChain = chainBuilder({ data: { id: "post-1" }, error: null });
 
-    // Override device_usage select to return the aggregated rows
-    const deviceFetchChain: Record<string, any> = {};
-    deviceFetchChain.eq = vi.fn(() => ({
-      eq: vi.fn(() => Promise.resolve({ data: deviceRowsAfterSecondPush, error: null })),
+    // Stateless device_usage mock — routes by method called, not call order:
+    // Guard:  .select().eq().eq().eq().maybeSingle() → { data: null }
+    // Upsert: .upsert({}, {}).select().single()     → { data: { id: "device-2" } }
+    // Fetch:  .select().eq().eq() (awaited)          → { data: rows }
+    const deviceChain: Record<string, any> = {};
+    const makeSecondEq = () => Object.assign(
+      Promise.resolve({ data: deviceRowsAfterSecondPush, error: null }),
+      { eq: vi.fn(() => ({ maybeSingle: vi.fn(() => Promise.resolve({ data: null, error: null })) })) },
+    );
+    deviceChain.select = vi.fn(() => ({
+      eq: vi.fn(() => ({ eq: vi.fn(makeSecondEq) })),
     }));
-    deviceFetchChain.select = vi.fn(() => deviceFetchChain);
+    deviceChain.upsert = vi.fn(() => {
+      const sub: Record<string, any> = {};
+      sub.select = vi.fn(() => sub);
+      sub.single = vi.fn(() => Promise.resolve({ data: { id: "device-2" }, error: null }));
+      return sub;
+    });
 
-    // Guard chain: check existing device_usage before upsert
-    const deviceGuardChain: Record<string, any> = {};
-    deviceGuardChain.select = vi.fn(() => deviceGuardChain);
-    deviceGuardChain.eq = vi.fn(() => deviceGuardChain);
-    deviceGuardChain.maybeSingle = vi.fn(() => Promise.resolve({ data: null, error: null }));
-
-    let deviceCallCount = 0;
     mockServiceClient.from.mockImplementation((table: string) => {
-      if (table === "device_usage") {
-        deviceCallCount++;
-        if (deviceCallCount === 1) return deviceGuardChain;   // guard query
-        if (deviceCallCount === 2) return deviceUsageChain;    // upsert
-        return deviceFetchChain;                                // fetch all
-      }
+      if (table === "device_usage") return deviceChain;
       if (table === "daily_usage") return dailyUsageChain;
       if (table === "posts") return postChain;
       return chainBuilder();

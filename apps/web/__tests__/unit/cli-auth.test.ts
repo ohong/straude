@@ -5,10 +5,12 @@ const TEST_SECRET = "test-secret-key-for-jwt";
 
 describe("cli-auth", () => {
   beforeEach(() => {
+    vi.useFakeTimers({ now: new Date('2026-03-13T12:00:00Z'), toFake: ['Date'] });
     vi.stubEnv("CLI_JWT_SECRET", TEST_SECRET);
   });
 
   afterEach(() => {
+    vi.useRealTimers();
     vi.unstubAllEnvs();
   });
 
@@ -63,8 +65,6 @@ describe("cli-auth", () => {
 
     it("throws when CLI_JWT_SECRET is not configured", () => {
       vi.stubEnv("CLI_JWT_SECRET", "");
-      // Remove the env var entirely
-      delete process.env.CLI_JWT_SECRET;
       expect(() => createCliToken("user-123", "test")).toThrow(
         "CLI_JWT_SECRET not configured",
       );
@@ -136,7 +136,7 @@ describe("cli-auth", () => {
 
     it("returns null when CLI_JWT_SECRET is not set", () => {
       const token = createCliToken("user-123", "test");
-      delete process.env.CLI_JWT_SECRET;
+      vi.stubEnv("CLI_JWT_SECRET", "");
       expect(verifyCliToken(`Bearer ${token}`)).toBeNull();
     });
   });
