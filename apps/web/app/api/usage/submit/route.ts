@@ -4,6 +4,7 @@ import { verifyCliToken } from "@/lib/api/cli-auth";
 import { getServiceClient } from "@/lib/supabase/service";
 import { checkAndAwardAchievements } from "@/lib/achievements";
 import { rateLimit } from "@/lib/rate-limit";
+import { ACHIEVEMENT_TRIGGERS } from "@/lib/events";
 import type { UsageSubmitRequest, UsageSubmitResponse, CcusageDailyEntry, ModelBreakdownEntry } from "@/types";
 
 const MAX_BACKFILL_DAYS = 7;
@@ -401,7 +402,7 @@ export async function POST(request: Request) {
     return NextResponse.json({ error: errors.join("; ") }, { status: 500 });
   }
 
-  checkAndAwardAchievements(userId, "usage").catch(() => {});
+  checkAndAwardAchievements(userId, ACHIEVEMENT_TRIGGERS.USAGE).catch(() => {});
 
   // Recheck referrer's crew-spend achievements when a referred user logs usage
   Promise.resolve(
@@ -413,7 +414,7 @@ export async function POST(request: Request) {
   )
     .then(({ data }) => {
       if (data?.referred_by) {
-        checkAndAwardAchievements(data.referred_by, "referral").catch(() => {});
+        checkAndAwardAchievements(data.referred_by, ACHIEVEMENT_TRIGGERS.REFERRAL).catch(() => {});
       }
     })
     .catch(() => {});

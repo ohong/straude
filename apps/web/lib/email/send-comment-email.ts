@@ -1,15 +1,13 @@
 import { getResend } from "./resend";
 import { createUnsubscribeToken } from "./unsubscribe";
-import NotificationEmail, {
-  buildSubject,
-  type NotificationType,
-} from "./notification-email";
+import NotificationEmail, { buildSubject } from "./notification-email";
+import type { EmailNotificationType } from "@/lib/events";
 
 interface SendNotificationEmailParams {
   recipientUserId: string;
   recipientEmail: string;
   actorUsername: string;
-  type: NotificationType;
+  type: EmailNotificationType;
   content: string;
   postId: string;
   postTitle: string | null;

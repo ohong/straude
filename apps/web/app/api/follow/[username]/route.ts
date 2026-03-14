@@ -2,6 +2,7 @@ import { NextResponse, type NextRequest } from "next/server";
 import { after } from "@/lib/utils/after";
 import { createClient } from "@/lib/supabase/server";
 import { rateLimit } from "@/lib/rate-limit";
+import { NOTIFICATION_TYPES } from "@/lib/events";
 
 type RouteContext = { params: Promise<{ username: string }> };
 
@@ -54,7 +55,7 @@ export async function POST(_request: NextRequest, context: RouteContext) {
     await supabase.from("notifications").insert({
       user_id: target.id,
       actor_id: user.id,
-      type: "follow",
+      type: NOTIFICATION_TYPES.FOLLOW,
     });
   });
 

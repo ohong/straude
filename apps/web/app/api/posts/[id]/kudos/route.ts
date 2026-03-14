@@ -3,6 +3,7 @@ import { after } from "@/lib/utils/after";
 import { createClient } from "@/lib/supabase/server";
 import { checkAndAwardAchievements } from "@/lib/achievements";
 import { rateLimit } from "@/lib/rate-limit";
+import { NOTIFICATION_TYPES, ACHIEVEMENT_TRIGGERS } from "@/lib/events";
 
 type RouteContext = { params: Promise<{ id: string }> };
 
@@ -43,15 +44,15 @@ export async function POST(_request: NextRequest, context: RouteContext) {
         await supabase.from("notifications").insert({
           user_id: post.user_id,
           actor_id: user.id,
-          type: "kudos",
+          type: NOTIFICATION_TYPES.KUDOS,
           post_id: id,
         });
       }
 
       // Award social achievements (only on INSERT not DELETE)
-      checkAndAwardAchievements(user.id, "kudos").catch(() => {});
+      checkAndAwardAchievements(user.id, ACHIEVEMENT_TRIGGERS.KUDOS).catch(() => {});
       if (post && post.user_id !== user.id) {
-        checkAndAwardAchievements(post.user_id, "kudos").catch(() => {});
+        checkAndAwardAchievements(post.user_id, ACHIEVEMENT_TRIGGERS.KUDOS).catch(() => {});
       }
     });
   }

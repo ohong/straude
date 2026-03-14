@@ -5,6 +5,7 @@ import { getServiceClient } from "@/lib/supabase/service";
 import { parseMentions } from "@/lib/utils/mentions";
 import { sendNotificationEmail } from "@/lib/email/send-comment-email";
 import { checkAndAwardAchievements } from "@/lib/achievements";
+import { NOTIFICATION_TYPES, ACHIEVEMENT_TRIGGERS, EMAIL_NOTIFICATION_TYPES } from "@/lib/events";
 
 type RouteContext = { params: Promise<{ id: string }> };
 
@@ -136,7 +137,7 @@ export async function PATCH(request: NextRequest, context: RouteContext) {
   after(async () => {
     // Photo achievement — when images were added
     if (body.images !== undefined && Array.isArray(post.images) && post.images.length > 0) {
-      checkAndAwardAchievements(user.id, "photo").catch(() => {});
+      checkAndAwardAchievements(user.id, ACHIEVEMENT_TRIGGERS.PHOTO).catch(() => {});
     }
 
     // Award streak freeze when enriching a bare post (first time adding title or description)
@@ -168,7 +169,7 @@ export async function PATCH(request: NextRequest, context: RouteContext) {
           const { data: existingNotifs, error: dedupError } = await db
             .from("notifications")
             .select("user_id")
-            .eq("type", "mention")
+            .eq("type", NOTIFICATION_TYPES.MENTION)
             .eq("post_id", id)
             .in("user_id", candidates.map((u) => u.id));
 
@@ -185,7 +186,7 @@ export async function PATCH(request: NextRequest, context: RouteContext) {
           const mentionNotifs = toNotify.map((u) => ({
             user_id: u.id,
             actor_id: user.id,
-            type: "mention" as const,
+            type: NOTIFICATION_TYPES.MENTION,
             post_id: id,
           }));
 
@@ -229,7 +230,7 @@ export async function PATCH(request: NextRequest, context: RouteContext) {
                     recipientUserId: u.id,
                     recipientEmail: email,
                     actorUsername,
-                    type: "post_mention",
+                    type: EMAIL_NOTIFICATION_TYPES.POST_MENTION,
                     content: post.description!,
                     postId: id,
                     postTitle: (post.title as string) ?? null,

@@ -1,6 +1,7 @@
 import { getServiceClient } from "@/lib/supabase/service";
 import { checkAndAwardAchievements } from "@/lib/achievements";
 import { sendReferralJoinedEmail } from "@/lib/email/send-referral-joined-email";
+import { NOTIFICATION_TYPES, ACHIEVEMENT_TRIGGERS } from "@/lib/events";
 
 export async function attributeReferral(
   newUserId: string,
@@ -46,7 +47,7 @@ export async function attributeReferral(
   await db.from("notifications").insert({
     user_id: referrer.id,
     actor_id: newUserId,
-    type: "referral",
+    type: NOTIFICATION_TYPES.REFERRAL,
     post_id: null,
     comment_id: null,
   });
@@ -75,5 +76,5 @@ export async function attributeReferral(
   }
 
   // Check referral achievements
-  checkAndAwardAchievements(referrer.id, "referral").catch(() => {});
+  checkAndAwardAchievements(referrer.id, ACHIEVEMENT_TRIGGERS.REFERRAL).catch(() => {});
 }

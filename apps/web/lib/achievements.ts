@@ -1,6 +1,6 @@
 import { getServiceClient } from "@/lib/supabase/service";
-
-export type AchievementTrigger = "usage" | "kudos" | "comment" | "photo" | "referral";
+import { ACHIEVEMENT_TRIGGERS, type AchievementTrigger } from "@/lib/events";
+export type { AchievementTrigger } from "@/lib/events";
 
 export interface AchievementStats {
   totalCost: number;
@@ -37,7 +37,7 @@ export const ACHIEVEMENTS: AchievementDef[] = [
     title: "First Photo",
     description: "Add an image to a post",
     emoji: "\u{1F4F8}",
-    trigger: "photo",
+    trigger: ACHIEVEMENT_TRIGGERS.PHOTO,
     check: (s) => s.hasPhoto,
   },
   {
@@ -45,7 +45,7 @@ export const ACHIEVEMENTS: AchievementDef[] = [
     title: "First Sync",
     description: "Push your first session",
     emoji: "\u{1F331}",
-    trigger: "usage",
+    trigger: ACHIEVEMENT_TRIGGERS.USAGE,
     check: (s) => s.syncCount >= 1,
   },
   {
@@ -53,7 +53,7 @@ export const ACHIEVEMENTS: AchievementDef[] = [
     title: "Ship Week",
     description: "Sync 5 days in your first week",
     emoji: "\u{1F6A2}",
-    trigger: "usage",
+    trigger: ACHIEVEMENT_TRIGGERS.USAGE,
     check: (s) => s.syncsInFirstWeek >= 5,
   },
   {
@@ -61,7 +61,7 @@ export const ACHIEVEMENTS: AchievementDef[] = [
     title: "7-Day Streak",
     description: "Log 7 days in a row",
     emoji: "\u{1F525}",
-    trigger: "usage",
+    trigger: ACHIEVEMENT_TRIGGERS.USAGE,
     check: (s) => s.streak >= 7,
   },
   {
@@ -69,7 +69,7 @@ export const ACHIEVEMENTS: AchievementDef[] = [
     title: "30-Day Streak",
     description: "Log 30 days in a row",
     emoji: "\u{1F3C6}",
-    trigger: "usage",
+    trigger: ACHIEVEMENT_TRIGGERS.USAGE,
     check: (s) => s.streak >= 30,
   },
   {
@@ -77,7 +77,7 @@ export const ACHIEVEMENTS: AchievementDef[] = [
     title: "$100 Club",
     description: "Spend $100 lifetime",
     emoji: "\u{1F4B8}",
-    trigger: "usage",
+    trigger: ACHIEVEMENT_TRIGGERS.USAGE,
     check: (s) => s.totalCost >= 100,
   },
   {
@@ -85,7 +85,7 @@ export const ACHIEVEMENTS: AchievementDef[] = [
     title: "Big Spender",
     description: "Spend $500 lifetime",
     emoji: "\u{1F911}",
-    trigger: "usage",
+    trigger: ACHIEVEMENT_TRIGGERS.USAGE,
     check: (s) => s.totalCost >= 500,
   },
   {
@@ -93,7 +93,7 @@ export const ACHIEVEMENTS: AchievementDef[] = [
     title: "1M Output",
     description: "Generate 1 million output tokens",
     emoji: "\u{26A1}",
-    trigger: "usage",
+    trigger: ACHIEVEMENT_TRIGGERS.USAGE,
     check: (s) => s.totalOutputTokens >= 1_000_000,
   },
   {
@@ -101,7 +101,7 @@ export const ACHIEVEMENTS: AchievementDef[] = [
     title: "10M Output",
     description: "Generate 10 million output tokens",
     emoji: "\u{1F680}",
-    trigger: "usage",
+    trigger: ACHIEVEMENT_TRIGGERS.USAGE,
     check: (s) => s.totalOutputTokens >= 10_000_000,
   },
   {
@@ -109,7 +109,7 @@ export const ACHIEVEMENTS: AchievementDef[] = [
     title: "100M Output",
     description: "Generate 100 million output tokens",
     emoji: "\u{1F30B}",
-    trigger: "usage",
+    trigger: ACHIEVEMENT_TRIGGERS.USAGE,
     check: (s) => s.totalOutputTokens >= 100_000_000,
   },
   {
@@ -117,7 +117,7 @@ export const ACHIEVEMENTS: AchievementDef[] = [
     title: "1M Input",
     description: "Process 1 million input tokens",
     emoji: "\u{1F4E5}",
-    trigger: "usage",
+    trigger: ACHIEVEMENT_TRIGGERS.USAGE,
     check: (s) => s.totalInputTokens >= 1_000_000,
   },
   {
@@ -125,7 +125,7 @@ export const ACHIEVEMENTS: AchievementDef[] = [
     title: "10M Input",
     description: "Process 10 million input tokens",
     emoji: "\u{1F4DA}",
-    trigger: "usage",
+    trigger: ACHIEVEMENT_TRIGGERS.USAGE,
     check: (s) => s.totalInputTokens >= 10_000_000,
   },
   {
@@ -133,7 +133,7 @@ export const ACHIEVEMENTS: AchievementDef[] = [
     title: "100M Input",
     description: "Process 100 million input tokens",
     emoji: "\u{1F9E0}",
-    trigger: "usage",
+    trigger: ACHIEVEMENT_TRIGGERS.USAGE,
     check: (s) => s.totalInputTokens >= 100_000_000,
   },
   {
@@ -141,7 +141,7 @@ export const ACHIEVEMENTS: AchievementDef[] = [
     title: "1B Cache",
     description: "Use 1 billion cache tokens",
     emoji: "\u{1F4BE}",
-    trigger: "usage",
+    trigger: ACHIEVEMENT_TRIGGERS.USAGE,
     check: (s) => s.totalCacheTokens >= 1_000_000_000,
   },
   {
@@ -149,7 +149,7 @@ export const ACHIEVEMENTS: AchievementDef[] = [
     title: "5B Cache",
     description: "Use 5 billion cache tokens",
     emoji: "\u{1F5C4}\uFE0F",
-    trigger: "usage",
+    trigger: ACHIEVEMENT_TRIGGERS.USAGE,
     check: (s) => s.totalCacheTokens >= 5_000_000_000,
   },
   {
@@ -157,7 +157,7 @@ export const ACHIEVEMENTS: AchievementDef[] = [
     title: "20B Cache",
     description: "Use 20 billion cache tokens",
     emoji: "\u{1F3ED}",
-    trigger: "usage",
+    trigger: ACHIEVEMENT_TRIGGERS.USAGE,
     check: (s) => s.totalCacheTokens >= 20_000_000_000,
   },
   {
@@ -165,7 +165,7 @@ export const ACHIEVEMENTS: AchievementDef[] = [
     title: "Session Surge",
     description: "Log 1,000 sessions",
     emoji: "\u{1F300}",
-    trigger: "usage",
+    trigger: ACHIEVEMENT_TRIGGERS.USAGE,
     check: (s) => s.totalSessions >= 1_000,
   },
   {
@@ -173,7 +173,7 @@ export const ACHIEVEMENTS: AchievementDef[] = [
     title: "Power Session",
     description: "Spend $100 in a single day",
     emoji: "\u{1F4A5}",
-    trigger: "usage",
+    trigger: ACHIEVEMENT_TRIGGERS.USAGE,
     check: (s) => s.maxDailyCost >= 100,
   },
   {
@@ -181,7 +181,7 @@ export const ACHIEVEMENTS: AchievementDef[] = [
     title: "Verified Contributor",
     description: "Push 50 verified syncs",
     emoji: "\u{2705}",
-    trigger: "usage",
+    trigger: ACHIEVEMENT_TRIGGERS.USAGE,
     check: (s) => s.verifiedSyncCount >= 50,
   },
   {
@@ -189,7 +189,7 @@ export const ACHIEVEMENTS: AchievementDef[] = [
     title: "First Kudos",
     description: "Receive your first kudos",
     emoji: "\u{1F44D}",
-    trigger: "kudos",
+    trigger: ACHIEVEMENT_TRIGGERS.KUDOS,
     check: (s) => s.kudosReceived >= 1,
   },
   {
@@ -197,7 +197,7 @@ export const ACHIEVEMENTS: AchievementDef[] = [
     title: "Appreciated",
     description: "Receive 25 kudos on your posts",
     emoji: "\u{2B50}",
-    trigger: "kudos",
+    trigger: ACHIEVEMENT_TRIGGERS.KUDOS,
     check: (s) => s.kudosReceived >= 25,
   },
   {
@@ -205,7 +205,7 @@ export const ACHIEVEMENTS: AchievementDef[] = [
     title: "Community Favorite",
     description: "Receive 100 kudos on your posts",
     emoji: "\u{1F31F}",
-    trigger: "kudos",
+    trigger: ACHIEVEMENT_TRIGGERS.KUDOS,
     check: (s) => s.kudosReceived >= 100,
   },
   {
@@ -213,7 +213,7 @@ export const ACHIEVEMENTS: AchievementDef[] = [
     title: "Beloved",
     description: "Receive 500 kudos on your posts",
     emoji: "\u{1F49B}",
-    trigger: "kudos",
+    trigger: ACHIEVEMENT_TRIGGERS.KUDOS,
     check: (s) => s.kudosReceived >= 500,
   },
   {
@@ -221,7 +221,7 @@ export const ACHIEVEMENTS: AchievementDef[] = [
     title: "First High Five",
     description: "Give your first kudos",
     emoji: "\u{1F64C}",
-    trigger: "kudos",
+    trigger: ACHIEVEMENT_TRIGGERS.KUDOS,
     check: (s) => s.kudosSent >= 1,
   },
   {
@@ -229,7 +229,7 @@ export const ACHIEVEMENTS: AchievementDef[] = [
     title: "Supporter",
     description: "Give 25 kudos to others",
     emoji: "\u{1F91D}",
-    trigger: "kudos",
+    trigger: ACHIEVEMENT_TRIGGERS.KUDOS,
     check: (s) => s.kudosSent >= 25,
   },
   {
@@ -237,7 +237,7 @@ export const ACHIEVEMENTS: AchievementDef[] = [
     title: "Kudos Giver",
     description: "Give 100 kudos to others",
     emoji: "\u{1F4AA}",
-    trigger: "kudos",
+    trigger: ACHIEVEMENT_TRIGGERS.KUDOS,
     check: (s) => s.kudosSent >= 100,
   },
   {
@@ -245,7 +245,7 @@ export const ACHIEVEMENTS: AchievementDef[] = [
     title: "Hype Machine",
     description: "Give 500 kudos to others",
     emoji: "\u{1F514}",
-    trigger: "kudos",
+    trigger: ACHIEVEMENT_TRIGGERS.KUDOS,
     check: (s) => s.kudosSent >= 500,
   },
   {
@@ -253,7 +253,7 @@ export const ACHIEVEMENTS: AchievementDef[] = [
     title: "First Reply",
     description: "Receive your first comment",
     emoji: "\u{1F4AC}",
-    trigger: "comment",
+    trigger: ACHIEVEMENT_TRIGGERS.COMMENT,
     check: (s) => s.commentsReceived >= 1,
   },
   {
@@ -261,7 +261,7 @@ export const ACHIEVEMENTS: AchievementDef[] = [
     title: "Conversation Starter",
     description: "Receive 25 comments on your posts",
     emoji: "\u{1F5E3}\uFE0F",
-    trigger: "comment",
+    trigger: ACHIEVEMENT_TRIGGERS.COMMENT,
     check: (s) => s.commentsReceived >= 25,
   },
   {
@@ -269,7 +269,7 @@ export const ACHIEVEMENTS: AchievementDef[] = [
     title: "Discussion Magnet",
     description: "Receive 100 comments on your posts",
     emoji: "\u{1F9F2}",
-    trigger: "comment",
+    trigger: ACHIEVEMENT_TRIGGERS.COMMENT,
     check: (s) => s.commentsReceived >= 100,
   },
   {
@@ -277,7 +277,7 @@ export const ACHIEVEMENTS: AchievementDef[] = [
     title: "Town Square",
     description: "Receive 500 comments on your posts",
     emoji: "\u{1F4E2}",
-    trigger: "comment",
+    trigger: ACHIEVEMENT_TRIGGERS.COMMENT,
     check: (s) => s.commentsReceived >= 500,
   },
   {
@@ -285,7 +285,7 @@ export const ACHIEVEMENTS: AchievementDef[] = [
     title: "First Comment",
     description: "Leave your first comment",
     emoji: "\u{270D}\uFE0F",
-    trigger: "comment",
+    trigger: ACHIEVEMENT_TRIGGERS.COMMENT,
     check: (s) => s.commentsSent >= 1,
   },
   {
@@ -293,7 +293,7 @@ export const ACHIEVEMENTS: AchievementDef[] = [
     title: "Active Voice",
     description: "Leave 25 comments",
     emoji: "\u{1F4DD}",
-    trigger: "comment",
+    trigger: ACHIEVEMENT_TRIGGERS.COMMENT,
     check: (s) => s.commentsSent >= 25,
   },
   {
@@ -301,7 +301,7 @@ export const ACHIEVEMENTS: AchievementDef[] = [
     title: "Prolific Commenter",
     description: "Leave 100 comments",
     emoji: "\u{1F58A}\uFE0F",
-    trigger: "comment",
+    trigger: ACHIEVEMENT_TRIGGERS.COMMENT,
     check: (s) => s.commentsSent >= 100,
   },
   {
@@ -309,7 +309,7 @@ export const ACHIEVEMENTS: AchievementDef[] = [
     title: "Never Silent",
     description: "Leave 500 comments",
     emoji: "\u{1F3A4}",
-    trigger: "comment",
+    trigger: ACHIEVEMENT_TRIGGERS.COMMENT,
     check: (s) => s.commentsSent >= 500,
   },
   {
@@ -317,7 +317,7 @@ export const ACHIEVEMENTS: AchievementDef[] = [
     title: "First Recruit",
     description: "Bring a training partner to Straude",
     emoji: "\u{1F3CB}\uFE0F",
-    trigger: "referral",
+    trigger: ACHIEVEMENT_TRIGGERS.REFERRAL,
     check: (s) => s.crewSize >= 1,
   },
   {
@@ -325,7 +325,7 @@ export const ACHIEVEMENTS: AchievementDef[] = [
     title: "Crew of 5",
     description: "Recruit 5 members to your crew",
     emoji: "\u{1F6B4}",
-    trigger: "referral",
+    trigger: ACHIEVEMENT_TRIGGERS.REFERRAL,
     check: (s) => s.crewSize >= 5,
   },
   {
@@ -333,7 +333,7 @@ export const ACHIEVEMENTS: AchievementDef[] = [
     title: "Pace Group",
     description: "Recruit 25 members to your crew",
     emoji: "\u{1F3C3}",
-    trigger: "referral",
+    trigger: ACHIEVEMENT_TRIGGERS.REFERRAL,
     check: (s) => s.crewSize >= 25,
   },
   {
@@ -341,7 +341,7 @@ export const ACHIEVEMENTS: AchievementDef[] = [
     title: "Coach",
     description: "Your crew's combined spend passes $1,000",
     emoji: "\u{1F3C5}",
-    trigger: "referral",
+    trigger: ACHIEVEMENT_TRIGGERS.REFERRAL,
     check: (s) => s.crewTotalSpend >= 1000,
   },
 ];
@@ -381,11 +381,11 @@ export async function checkAndAwardAchievements(
     !trigger || triggers.includes(trigger);
 
   const [usageResult, streakResult, socialResult, photoResult, firstWeekResult, referralResult] = await Promise.all([
-    fetchIf(needs("usage"), () => db.rpc("get_achievement_stats", { p_user_id: userId }).single()),
-    fetchIf(needs("usage"), () => db.rpc("calculate_user_streak", { p_user_id: userId })),
-    fetchIf(needs("kudos", "comment"), () => db.rpc("get_social_achievement_stats", { p_user_id: userId }).single()),
-    fetchIf(needs("photo"), () => db.from("posts").select("id").eq("user_id", userId).not("images", "is", null).neq("images", "[]").limit(1)),
-    fetchIf(needs("usage"), async () => {
+    fetchIf(needs(ACHIEVEMENT_TRIGGERS.USAGE), () => db.rpc("get_achievement_stats", { p_user_id: userId }).single()),
+    fetchIf(needs(ACHIEVEMENT_TRIGGERS.USAGE), () => db.rpc("calculate_user_streak", { p_user_id: userId })),
+    fetchIf(needs(ACHIEVEMENT_TRIGGERS.KUDOS, ACHIEVEMENT_TRIGGERS.COMMENT), () => db.rpc("get_social_achievement_stats", { p_user_id: userId }).single()),
+    fetchIf(needs(ACHIEVEMENT_TRIGGERS.PHOTO), () => db.from("posts").select("id").eq("user_id", userId).not("images", "is", null).neq("images", "[]").limit(1)),
+    fetchIf(needs(ACHIEVEMENT_TRIGGERS.USAGE), async () => {
       const { data: userRow } = await db.from("users").select("created_at").eq("id", userId).single();
       if (!userRow?.created_at) return { count: 0 };
       const firstWeekEnd = new Date(new Date(userRow.created_at).getTime() + 7 * 86400000).toISOString().slice(0, 10);
@@ -395,7 +395,7 @@ export async function checkAndAwardAchievements(
         .lte("date", firstWeekEnd);
       return { count: count ?? 0 };
     }),
-    fetchIf(needs("referral"), async () => {
+    fetchIf(needs(ACHIEVEMENT_TRIGGERS.REFERRAL), async () => {
       const { count } = await db
         .from("users")
         .select("id", { count: "exact", head: true })
