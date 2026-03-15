@@ -2,6 +2,10 @@
 
 ## Unreleased
 
+### Fixed
+
+- **Test flakiness from unfrozen Date.now()/new Date().** Added `vi.useFakeTimers({ toFake: ['Date'] })` to 4 test files (`push.test.ts`, `cli-sync-flow.test.ts`, `cli-push-flow.test.ts`, `cli-auth.test.ts`) so 15+ date-dependent assertions cannot fail at midnight boundaries or across timezones. Replaced the fragile counter-based `deviceCallCount` mock in `cli-push-flow.test.ts` with a stateless chain that routes by Supabase method (select/upsert) instead of call order. Fixed inconsistent `delete process.env` mutations in `cli-auth.test.ts` to use `vi.stubEnv()` consistently.
+
 ### Added
 
 - **Golden path e2e test suite.** 35 Playwright specs across 5 files covering unauthenticated user journeys: landing-to-signup funnel (8 tests), public leaderboard browsing with period/region filters (6 tests), public profile viewing including 404 and private guards (6 tests), CLI verify page (5 tests), and cross-page navigation with dark/light theme persistence (10 tests). Fixed Playwright config to use a dedicated port (3099 locally) to avoid conflicts with other dev servers, which also fixed 4 pre-existing broken landing tests.

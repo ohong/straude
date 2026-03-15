@@ -59,6 +59,7 @@ function todayStr(): string {
 }
 
 beforeEach(() => {
+  vi.useFakeTimers({ now: new Date('2026-03-13T12:00:00Z'), toFake: ['Date'] });
   vi.clearAllMocks();
   mockLoadConfig.mockReturnValue(fakeConfig);
   // Default: no Codex data
@@ -72,6 +73,7 @@ beforeEach(() => {
 });
 
 afterEach(() => {
+  vi.useRealTimers();
   vi.restoreAllMocks();
 });
 
