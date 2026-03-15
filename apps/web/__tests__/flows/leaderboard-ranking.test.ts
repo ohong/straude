@@ -176,10 +176,6 @@ describe("Flow: Leaderboard Ranking", () => {
       callCount++;
       if (callCount === 1) return chainBuilder({ data: topEntries, error: null });
       if (callCount === 2) {
-        // head: true count query (not used directly for user lookup)
-        return chainBuilder({ count: 0, data: null, error: null });
-      }
-      if (callCount === 3) {
         // user's entry
         const c = chainBuilder();
         c.maybeSingle = vi.fn(() => Promise.resolve(userEntryResult));

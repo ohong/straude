@@ -12,7 +12,7 @@ export async function GET(_request: NextRequest, context: RouteContext) {
 
   const { data: profile, error } = await supabase
     .from("users")
-    .select("*")
+    .select("id, username, display_name, avatar_url, bio, country, region, link, github_username, is_public, streak_freezes, referred_by, created_at")
     .eq("username", username)
     .single();
 
@@ -20,89 +20,90 @@ export async function GET(_request: NextRequest, context: RouteContext) {
     return NextResponse.json({ error: "User not found" }, { status: 404 });
   }
 
-  // Follower / following counts
-  const [{ count: followers_count }, { count: following_count }, { count: posts_count }] =
-    await Promise.all([
-      supabase
-        .from("follows")
-        .select("*", { count: "exact", head: true })
-        .eq("following_id", profile.id),
-      supabase
-        .from("follows")
-        .select("*", { count: "exact", head: true })
-        .eq("follower_id", profile.id),
-      supabase
-        .from("posts")
-        .select("*", { count: "exact", head: true })
-        .eq("user_id", profile.id),
-    ]);
+  // All independent queries in parallel
+  const [
+    followersRes,
+    followingRes,
+    postsRes,
+    streakRes,
+    totalCostRes,
+    weeklyRes,
+    followRes,
+  ] = await Promise.all([
+    supabase
+      .from("follows")
+      .select("*", { count: "exact", head: true })
+      .eq("following_id", profile.id),
+    supabase
+      .from("follows")
+      .select("*", { count: "exact", head: true })
+      .eq("follower_id", profile.id),
+    supabase
+      .from("posts")
+      .select("*", { count: "exact", head: true })
+      .eq("user_id", profile.id),
+    supabase.rpc("calculate_user_streak", {
+      p_user_id: profile.id,
+      p_freeze_days: profile.streak_freezes ?? 0,
+    }),
+    supabase
+      .from("daily_usage")
+      .select("cost_usd.sum()")
+      .eq("user_id", profile.id),
+    profile.is_public && profile.username
+      ? supabase
+          .from("leaderboard_weekly")
+          .select("total_cost")
+          .eq("user_id", profile.id)
+          .maybeSingle()
+      : Promise.resolve({ data: null } as { data: null }),
+    authUser && authUser.id !== profile.id
+      ? supabase
+          .from("follows")
+          .select("id")
+          .eq("follower_id", authUser.id)
+          .eq("following_id", profile.id)
+          .maybeSingle()
+      : Promise.resolve({ data: null } as { data: null }),
+  ]);
 
-  // Streak: consecutive days with usage, ending today or yesterday
-  const { data: streakData } = await supabase.rpc("calculate_user_streak", {
-    p_user_id: profile.id,
-    p_freeze_days: profile.streak_freezes ?? 0,
-  });
-  const streak = typeof streakData === "number" ? streakData : 0;
+  const streak = typeof streakRes.data === "number" ? streakRes.data : 0;
+  const total_cost = Number((totalCostRes.data as any)?.[0]?.cost_usd ?? 0);
+  const is_following = !!followRes.data;
 
-  // Total spend
-  const { data: totalData } = await supabase
-    .from("daily_usage")
-    .select("cost_usd")
-    .eq("user_id", profile.id);
-
-  const total_cost = (totalData ?? []).reduce(
-    (sum, d) => sum + Number(d.cost_usd),
-    0
-  );
-
-  // Ranks from materialized views
+  // Rank queries (depend on weekly leaderboard entry)
   let global_rank: number | undefined;
   let regional_rank: number | undefined;
 
-  if (profile.is_public && profile.username) {
-    const { data: userWeekly } = await supabase
-      .from("leaderboard_weekly")
-      .select("total_cost")
-      .eq("user_id", profile.id)
-      .maybeSingle();
-
-    if (userWeekly) {
-      const { count } = await supabase
+  const userWeekly = weeklyRes.data as { total_cost: number } | null;
+  if (userWeekly) {
+    const rankPromises = [
+      supabase
         .from("leaderboard_weekly")
         .select("*", { count: "exact", head: true })
-        .gt("total_cost", userWeekly.total_cost);
-
-      global_rank = (count ?? 0) + 1;
-
-      if (profile.region) {
-        const { count: regCount } = await supabase
+        .gt("total_cost", userWeekly.total_cost),
+    ];
+    if (profile.region) {
+      rankPromises.push(
+        supabase
           .from("leaderboard_weekly")
           .select("*", { count: "exact", head: true })
           .eq("region", profile.region)
-          .gt("total_cost", userWeekly.total_cost);
-
-        regional_rank = (regCount ?? 0) + 1;
-      }
+          .gt("total_cost", userWeekly.total_cost)
+      );
     }
-  }
-
-  // Is current user following this profile?
-  let is_following = false;
-  if (authUser && authUser.id !== profile.id) {
-    const { data: follow } = await supabase
-      .from("follows")
-      .select("id")
-      .eq("follower_id", authUser.id)
-      .eq("following_id", profile.id)
-      .maybeSingle();
-    is_following = !!follow;
+    const rankResults = await Promise.all(rankPromises);
+    global_rank = (rankResults[0].count ?? 0) + 1;
+    if (profile.region && rankResults[1]) {
+      regional_rank = (rankResults[1].count ?? 0) + 1;
+    }
   }
 
   return NextResponse.json({
     ...profile,
-    followers_count: followers_count ?? 0,
-    following_count: following_count ?? 0,
-    posts_count: posts_count ?? 0,
+    followers_count: followersRes.count ?? 0,
+    following_count: followingRes.count ?? 0,
+    posts_count: postsRes.count ?? 0,
     streak,
     total_cost,
     global_rank,

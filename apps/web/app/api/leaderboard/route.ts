@@ -31,7 +31,7 @@ export async function GET(request: NextRequest) {
 
   let query = supabase
     .from(view)
-    .select("*")
+    .select("user_id, username, display_name, avatar_url, country, region, total_cost, total_output_tokens")
     .order("total_cost", { ascending: false })
     .limit(limit);
 
@@ -75,15 +75,6 @@ export async function GET(request: NextRequest) {
       user_rank = found.rank;
     } else {
       // User not in this page — query their rank separately
-      let rankQuery = supabase
-        .from(view)
-        .select("*", { count: "exact", head: true })
-        .gt("total_cost", 0);
-
-      if (region) {
-        rankQuery = rankQuery.eq("region", region);
-      }
-
       // Get user's cost from the view
       const { data: userEntry } = await supabase
         .from(view)

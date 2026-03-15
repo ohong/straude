@@ -61,14 +61,14 @@ export async function GET(request: NextRequest) {
             .select("post_id, user:users!kudos_user_id_fkey(avatar_url, username)")
             .in("post_id", postIds)
             .order("created_at", { ascending: false })
-            .limit(postIds.length * 3),
+            .limit(Math.min(postIds.length * 3, 60)),
           supabase
             .from("comments")
             .select("id, post_id, content, created_at, user:users!comments_user_id_fkey(username, avatar_url)")
             .is("parent_comment_id", null)
             .in("post_id", postIds)
             .order("created_at", { ascending: false })
-            .limit(postIds.length * 2),
+            .limit(Math.min(postIds.length * 2, 40)),
         ])
       : [{ data: [] as any[] }, { data: [] as any[], error: null }, { data: [] as any[] }];
 
