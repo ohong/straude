@@ -21,7 +21,7 @@ Push options:
   --date YYYY-MM-DD  Push a specific date (within last 7 days)
   --days N           Push last N days (max 7)
   --dry-run          Preview without posting
-  --timeout N        Subprocess timeout in seconds (default: 120)
+  --timeout N        Subprocess timeout in seconds (default: 240)
 
 Examples:
   npx straude@latest

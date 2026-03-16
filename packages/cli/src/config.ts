@@ -16,4 +16,4 @@ export const POLL_TIMEOUT_MS = 300_000; // 5 minutes
 
 export const MAX_BACKFILL_DAYS = 7;
 
-export const DEFAULT_SUBPROCESS_TIMEOUT_MS = 120_000; // 2 minutes
+export const DEFAULT_SUBPROCESS_TIMEOUT_MS = 240_000; // 4 minutes
