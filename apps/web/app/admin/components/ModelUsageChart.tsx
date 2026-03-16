@@ -163,7 +163,7 @@ export function ModelUsageChart() {
     <Tooltip
       formatter={(value, name) => [
         formatUsd(Number(value)),
-        name === "claude_spend" ? "Claude" : "OpenAI / Codex",
+        name === "claude_spend" ? "Claude" : "Codex",
       ]}
       labelFormatter={(label) => formatDate(String(label))}
       contentStyle={{
@@ -180,7 +180,7 @@ export function ModelUsageChart() {
   const sharedLegend = (
     <Legend
       formatter={(value: string) =>
-        value === "claude_spend" ? "Claude" : "OpenAI / Codex"
+        value === "claude_spend" ? "Claude" : "Codex"
       }
       wrapperStyle={{ fontSize: 12 }}
     />
@@ -284,7 +284,7 @@ export function ModelUsageChart() {
               <Line
                 type="monotone"
                 dataKey="codex_spend"
-                stroke="#2A9D8F"
+                stroke="#4451FF"
                 strokeWidth={2}
                 dot={false}
               />
@@ -298,7 +298,7 @@ export function ModelUsageChart() {
               {sharedLegend}
               <Bar
                 dataKey="codex_spend"
-                fill="#2A9D8F"
+                fill="#4451FF"
                 radius={[3, 3, 0, 0]}
                 stackId="spend"
               />

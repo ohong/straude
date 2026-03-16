@@ -9,6 +9,7 @@ import { ActivationFunnel } from "./components/ActivationFunnel";
 import { GrowthMetrics } from "./components/GrowthMetrics";
 import { CohortRetention } from "./components/CohortRetention";
 import { ModelUsageChart } from "./components/ModelUsageChart";
+import { CodexGrowthCharts } from "./components/CodexGrowthCharts";
 import { RevenueConcentration } from "./components/RevenueConcentration";
 import { TimeToFirstSync } from "./components/TimeToFirstSync";
 import { PromptInbox } from "./components/PromptInbox";
@@ -151,6 +152,9 @@ export default async function AdminPage() {
 
       {/* Model usage — loads client-side */}
       <ModelUsageChart />
+
+      {/* Codex growth — 4 chart options for comparison */}
+      <CodexGrowthCharts />
 
       {/* Funnel + Growth side by side */}
       <div className="grid gap-3 lg:grid-cols-2">
