@@ -99,14 +99,12 @@ function RangePills({
 function ChartCard({
   title,
   subtitle,
-  badge,
   range,
   setRange,
   children,
 }: {
   title: string;
   subtitle: string;
-  badge?: string;
   range: string;
   setRange: (r: string) => void;
   children: React.ReactNode;
@@ -115,25 +113,12 @@ function ChartCard({
     <div className="admin-card">
       <div className="flex items-center justify-between px-5 pt-4 pb-2">
         <div>
-          <div className="flex items-center gap-2">
-            <h2
-              className="text-sm font-semibold"
-              style={{ color: "var(--admin-fg)" }}
-            >
-              {title}
-            </h2>
-            {badge && (
-              <span
-                className="rounded-full px-2 py-0.5 text-[10px] font-medium"
-                style={{
-                  backgroundColor: "var(--admin-pill-bg)",
-                  color: "var(--admin-fg-secondary)",
-                }}
-              >
-                {badge}
-              </span>
-            )}
-          </div>
+          <h2
+            className="text-sm font-semibold"
+            style={{ color: "var(--admin-fg)" }}
+          >
+            {title}
+          </h2>
           <p
             className="mt-0.5 text-xs"
             style={{ color: "var(--admin-fg-muted)" }}
@@ -184,7 +169,6 @@ function CodexShareChart({ data }: { data: ModelUsageRow[] }) {
     <ChartCard
       title="Codex Share"
       subtitle={`${latest.toFixed(1)}% of daily spend (7-day avg)`}
-      badge="Option A"
       range={range}
       setRange={setRange}
     >
@@ -253,7 +237,6 @@ function DualBarsChart({ data }: { data: ModelUsageRow[] }) {
     <ChartCard
       title="Daily Spend"
       subtitle="Claude vs Codex side by side"
-      badge="Option B"
       range={range}
       setRange={setRange}
     >
@@ -314,95 +297,6 @@ function DualBarsChart({ data }: { data: ModelUsageRow[] }) {
 }
 
 // ---------------------------------------------------------------------------
-// Chart C: Ratio Line (Codex / Claude)
-// ---------------------------------------------------------------------------
-function RatioChart({ data }: { data: ModelUsageRow[] }) {
-  const t = useChartTheme();
-  const [range, setRange] = useState("30d");
-
-  // 7-day rolling ratio to avoid spikes on low-Claude days
-  const ratioData = useMemo(() => {
-    const window = 7;
-    return data.map((row, i) => {
-      const start = Math.max(0, i - window + 1);
-      const slice = data.slice(start, i + 1);
-      const codexSum = slice.reduce((s, r) => s + r.codex_spend, 0);
-      const claudeSum = slice.reduce((s, r) => s + r.claude_spend, 0);
-      const ratio = claudeSum > 0 ? codexSum / claudeSum : 0;
-      return { date: row.date, ratio: Math.round(ratio * 1000) / 1000 };
-    });
-  }, [data]);
-
-  const filtered = filterByRange(ratioData, range);
-  const latest = filtered.length > 0 ? filtered[filtered.length - 1].ratio : 0;
-
-  return (
-    <ChartCard
-      title="Codex / Claude Ratio"
-      subtitle={`${latest.toFixed(2)}x current (7-day rolling)`}
-      badge="Option C"
-      range={range}
-      setRange={setRange}
-    >
-      <ResponsiveContainer width="100%" height="100%">
-        <LineChart data={filtered}>
-          <CartesianGrid
-            strokeDasharray="3 3"
-            stroke={t.gridColor}
-            vertical={false}
-          />
-          <XAxis
-            dataKey="date"
-            tickFormatter={formatDate}
-            tick={{ fontSize: 11, fill: t.axisColor }}
-            tickLine={false}
-            axisLine={false}
-          />
-          <YAxis
-            tickFormatter={(v) => `${v}x`}
-            tick={{ fontSize: 11, fill: t.axisColor }}
-            tickLine={false}
-            axisLine={false}
-            width={45}
-            domain={[0, "auto"]}
-          />
-          <Tooltip
-            formatter={(value) => [`${Number(value).toFixed(3)}x`, "Codex / Claude"]}
-            labelFormatter={(label) => formatDate(String(label))}
-            contentStyle={{
-              fontSize: 12,
-              fontFamily: "var(--font-mono)",
-              background: t.tooltipBg,
-              border: `1px solid ${t.tooltipBorder}`,
-              borderRadius: 8,
-              boxShadow: "none",
-            }}
-          />
-          <ReferenceLine
-            y={1}
-            stroke={t.isDark ? "rgba(255,255,255,0.15)" : "rgba(0,0,0,0.15)"}
-            strokeDasharray="4 4"
-            label={{
-              value: "Parity",
-              position: "right",
-              fill: t.axisColor,
-              fontSize: 10,
-            }}
-          />
-          <Line
-            type="monotone"
-            dataKey="ratio"
-            stroke="#4451FF"
-            strokeWidth={2}
-            dot={false}
-          />
-        </LineChart>
-      </ResponsiveContainer>
-    </ChartCard>
-  );
-}
-
-// ---------------------------------------------------------------------------
 // Chart D: Indexed Growth (base 100)
 // ---------------------------------------------------------------------------
 function IndexedGrowthChart({ data }: { data: ModelUsageRow[] }) {
@@ -447,7 +341,6 @@ function IndexedGrowthChart({ data }: { data: ModelUsageRow[] }) {
           ? `Claude ${latest.claude}, Codex ${latest.codex} (base 100)`
           : "Both indexed to 100 at first overlap"
       }
-      badge="Option D"
       range={range}
       setRange={setRange}
     >
@@ -549,10 +442,11 @@ export function CodexGrowthCharts() {
   }
 
   return (
-    <div className="grid gap-3 lg:grid-cols-2">
-      <CodexShareChart data={data} />
-      <DualBarsChart data={data} />
-      <RatioChart data={data} />
+    <div className="space-y-3">
+      <div className="grid gap-3 lg:grid-cols-2">
+        <CodexShareChart data={data} />
+        <DualBarsChart data={data} />
+      </div>
       <IndexedGrowthChart data={data} />
     </div>
   );

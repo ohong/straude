@@ -150,11 +150,11 @@ export default async function AdminPage() {
       {/* North Star chart */}
       <NorthStarChart data={spendData} />
 
-      {/* Model usage — loads client-side */}
-      <ModelUsageChart />
-
-      {/* Codex growth — 4 chart options for comparison */}
-      <CodexGrowthCharts />
+      {/* Model usage section */}
+      <div className="space-y-3">
+        <ModelUsageChart />
+        <CodexGrowthCharts />
+      </div>
 
       {/* Funnel + Growth side by side */}
       <div className="grid gap-3 lg:grid-cols-2">
