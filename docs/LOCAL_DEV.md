@@ -5,9 +5,9 @@ Run Straude locally without production Supabase credentials.
 This repo now supports a local Supabase stack backed by Docker plus a generated
 `apps/web/.env.local`.
 
-The root [`.env.example`](/Users/mark/clawd/projects/straude/.env.example) is
+The root [`.env.example`](../.env.example) is
 still the canonical list of repo-wide secrets and hosted integrations. The
-app-level [`apps/web/.env.local.example`](/Users/mark/clawd/projects/straude/apps/web/.env.local.example)
+app-level [`apps/web/.env.local.example`](../apps/web/.env.local.example)
 exists only to document the web app's local Supabase workflow and the managed
 keys that `bun run local:env` writes.
 

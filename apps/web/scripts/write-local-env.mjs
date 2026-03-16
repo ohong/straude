@@ -69,6 +69,25 @@ const managedEntries = new Map([
   ["FAL_API_KEY", existingVars.get("FAL_API_KEY") ?? ""],
 ]);
 
+const requiredKeys = [
+  "NEXT_PUBLIC_SUPABASE_URL",
+  "NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY",
+  "SUPABASE_SECRET_KEY",
+];
+
+const missingRequired = requiredKeys.filter((key) => {
+  const value = managedEntries.get(key);
+  return typeof value !== "string" || value.trim() === "";
+});
+
+if (missingRequired.length > 0) {
+  console.error(
+    `Missing required local Supabase values: ${missingRequired.join(", ")}`
+  );
+  console.error("Run `bun run local:up` and retry `bun run local:env`.");
+  process.exit(1);
+}
+
 const managedKeys = new Set(managedEntries.keys());
 const extras = [...existingVars.entries()].filter(([key]) => !managedKeys.has(key));
 
