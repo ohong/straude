@@ -31,6 +31,15 @@ export interface AchievementDef {
   check: (stats: AchievementStats) => boolean;
 }
 
+interface FirstWeekStats {
+  count: number;
+}
+
+interface ReferralStats {
+  crewSize: number;
+  crewTotalSpend: number;
+}
+
 export const ACHIEVEMENTS: AchievementDef[] = [
   {
     slug: "first-photo",
@@ -430,15 +439,15 @@ export async function checkAndAwardAchievements(
     streak: (streakResult?.data as number) ?? 0,
     syncCount: Number(usageRow?.sync_count ?? 0),
     verifiedSyncCount: Number(usageRow?.verified_sync_count ?? 0),
-    syncsInFirstWeek: (firstWeekResult as any)?.count ?? 0,
+    syncsInFirstWeek: (firstWeekResult as FirstWeekStats | null)?.count ?? 0,
     // Self-interactions (kudos/comments on own posts) are counted intentionally.
     kudosReceived: Number(socialRow?.kudos_received ?? 0),
     kudosSent: Number(socialRow?.kudos_sent ?? 0),
     commentsReceived: Number(socialRow?.comments_received ?? 0),
     commentsSent: Number(socialRow?.comments_sent ?? 0),
-    hasPhoto: (photoResult?.data as any[] | null)?.length ? true : false,
-    crewSize: (referralResult as any)?.crewSize ?? 0,
-    crewTotalSpend: (referralResult as any)?.crewTotalSpend ?? 0,
+    hasPhoto: (photoResult?.data ?? []).length > 0,
+    crewSize: (referralResult as ReferralStats | null)?.crewSize ?? 0,
+    crewTotalSpend: (referralResult as ReferralStats | null)?.crewTotalSpend ?? 0,
   };
 
   const newAwards = candidates.filter(

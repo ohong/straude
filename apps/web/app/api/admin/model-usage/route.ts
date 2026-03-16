@@ -3,6 +3,12 @@ import { createClient } from "@/lib/supabase/server";
 import { getServiceClient } from "@/lib/supabase/service";
 import { isAdmin } from "@/lib/admin";
 
+type ModelUsageRow = {
+  date: string;
+  claude_spend: number | string;
+  codex_spend: number | string;
+};
+
 export async function GET() {
   const auth = await createClient();
   const {
@@ -20,10 +26,10 @@ export async function GET() {
     return NextResponse.json({ error: error.message }, { status: 500 });
   }
 
-  const rows = (data ?? []).map((r: any) => ({
-    date: r.date,
-    claude_spend: Number(r.claude_spend),
-    codex_spend: Number(r.codex_spend),
+  const rows = ((data ?? []) as ModelUsageRow[]).map((row) => ({
+    date: row.date,
+    claude_spend: Number(row.claude_spend),
+    codex_spend: Number(row.codex_spend),
   }));
 
   return NextResponse.json(rows);

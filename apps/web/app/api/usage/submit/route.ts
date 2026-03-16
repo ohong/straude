@@ -179,7 +179,7 @@ export async function POST(request: Request) {
       const action: "created" | "updated" = existing ? "updated" : "created";
 
       let usage: { id: string } | null = null;
-      let usageError: any = null;
+      let usageErrorMessage: string | null = null;
       let titleCostUSD: number;
       let titleModels: string[] | undefined;
 
@@ -265,7 +265,7 @@ export async function POST(request: Request) {
           .single();
 
         usage = data;
-        usageError = error;
+        usageErrorMessage = error?.message ?? null;
         titleCostUSD = agg.cost_usd;
         titleModels = agg.models;
       } else {
@@ -296,7 +296,7 @@ export async function POST(request: Request) {
             .single();
 
           usage = data;
-          usageError = error;
+          usageErrorMessage = error?.message ?? null;
           titleCostUSD = entry.data.costUSD;
           titleModels = entry.data.models;
         } else {
@@ -307,8 +307,8 @@ export async function POST(request: Request) {
         }
       }
 
-      if (usageError || !usage) {
-        throw new Error(`Failed to upsert usage for ${entry.date}: ${usageError?.message}`);
+      if (usageErrorMessage || !usage) {
+        throw new Error(`Failed to upsert usage for ${entry.date}: ${usageErrorMessage ?? "Unknown error"}`);
       }
 
       // Build auto-title from aggregated usage data
@@ -340,7 +340,7 @@ export async function POST(request: Request) {
         .maybeSingle();
 
       let post: { id: string } | null = null;
-      let postError: any = null;
+      let postErrorMessage: string | null = null;
 
       if (existingPost) {
         // Auto-generated titles match "Mon DD" or "Mon DD — Models, $X.XX"
@@ -355,7 +355,7 @@ export async function POST(request: Request) {
           .select("id")
           .single();
         post = data;
-        postError = error;
+        postErrorMessage = error?.message ?? null;
       } else {
         const { data, error } = await db
           .from("posts")
@@ -368,11 +368,11 @@ export async function POST(request: Request) {
           .select("id")
           .single();
         post = data;
-        postError = error;
+        postErrorMessage = error?.message ?? null;
       }
 
-      if (postError || !post) {
-        throw new Error(`Failed to create post for ${entry.date}: ${postError?.message}`);
+      if (postErrorMessage || !post) {
+        throw new Error(`Failed to create post for ${entry.date}: ${postErrorMessage ?? "Unknown error"}`);
       }
 
       return {

@@ -18,6 +18,9 @@ type PublicProfileRow = {
   referred_by: string | null;
   created_at: string;
 };
+type TotalCostAggregateRow = {
+  cost_usd: number | string | null;
+};
 
 export async function GET(_request: NextRequest, context: RouteContext) {
   const { username } = await context.params;
@@ -81,7 +84,8 @@ export async function GET(_request: NextRequest, context: RouteContext) {
   ]);
 
   const streak = typeof streakRes.data === "number" ? streakRes.data : 0;
-  const total_cost = Number((totalCostRes.data as any)?.[0]?.cost_usd ?? 0);
+  const totalCostRows = totalCostRes.data as TotalCostAggregateRow[] | null;
+  const total_cost = Number(totalCostRows?.[0]?.cost_usd ?? 0);
   const is_following = !isOwn && !!authUserId && isFollowing;
 
   // Rank queries (depend on weekly leaderboard entry)

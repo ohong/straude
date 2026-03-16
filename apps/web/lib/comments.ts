@@ -1,3 +1,4 @@
+import type { SupabaseClient } from "@supabase/supabase-js";
 import type { Comment } from "@/types";
 
 export interface CommentReactionRow {
@@ -6,7 +7,7 @@ export interface CommentReactionRow {
 }
 
 export async function loadPostComments(opts: {
-  supabase: any;
+  supabase: SupabaseClient;
   postId: string;
   viewerId?: string | null;
   limit?: number;

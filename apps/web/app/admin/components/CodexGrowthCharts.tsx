@@ -133,7 +133,7 @@ function ChartCard({
   );
 }
 
-function filterByRange(data: any[], range: string) {
+function filterByRange<T>(data: T[], range: string) {
   const r = RANGES.find((r) => r.key === range);
   if (!r || r.days === Infinity) return data;
   return data.slice(-r.days);

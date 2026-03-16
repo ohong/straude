@@ -2,7 +2,13 @@ import Link from "next/link";
 import { redirect } from "next/navigation";
 import type { Metadata } from "next";
 import { createClient } from "@/lib/supabase/server";
+import { firstRelation } from "@/lib/utils/first-relation";
 import { timeAgo } from "@/lib/utils/format";
+import type { PromptSubmission } from "@/types";
+
+type PromptListRow = Pick<PromptSubmission, "id" | "prompt" | "is_anonymous" | "created_at" | "status"> & {
+  user: Array<{ username: string | null }> | null;
+};
 
 export const metadata: Metadata = { title: "Prompts" };
 
@@ -30,7 +36,7 @@ export default async function PromptsPage() {
     throw new Error(error.message);
   }
 
-  const prompts = data ?? [];
+  const prompts = (data ?? []) as PromptListRow[];
 
   return (
     <>
@@ -47,8 +53,8 @@ export default async function PromptsPage() {
         </p>
       ) : (
         <div className="divide-y divide-border">
-          {prompts.map((row: any) => {
-            const username = row.user?.username as string | null | undefined;
+          {prompts.map((row) => {
+            const username = firstRelation(row.user)?.username;
             const isAnonymous = Boolean(row.is_anonymous);
             return (
               <article key={row.id} className="px-4 py-5 sm:px-6">

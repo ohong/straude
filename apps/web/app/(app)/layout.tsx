@@ -9,9 +9,17 @@ import { MobileNav } from "@/components/app/shared/MobileNav";
 import { GuestHeader, GuestMobileNav } from "@/components/app/shared/GuestHeader";
 import { CommandPalette } from "@/components/app/shared/CommandPalette";
 import { SubmitPromptWidget } from "@/components/app/prompts/SubmitPromptWidget";
+import { firstRelation } from "@/lib/utils/first-relation";
+import type { DailyUsage } from "@/types";
 
 // Pages that are publicly accessible without login
 const PUBLIC_PAGES = ["/feed", "/leaderboard"];
+type LatestPostRow = {
+  id: string;
+  title: string | null;
+  created_at: string;
+  daily_usage: Array<Pick<DailyUsage, "date">> | null;
+};
 
 export default async function AppLayout({
   children,
@@ -101,10 +109,10 @@ export default async function AppLayout({
   const totalCost =
     allTimeUsageRes.data?.reduce((s, r) => s + Number(r.cost_usd), 0) ?? 0;
 
-  const latestPosts = (latestPostRes.data ?? [])
+  const latestPosts = ((latestPostRes.data ?? []) as LatestPostRow[])
     .map((row) => {
       // Prefer the usage date (user's local date) over created_at (UTC timestamp)
-      const usageDate = (row.daily_usage as any)?.date as string | undefined;
+      const usageDate = firstRelation(row.daily_usage)?.date;
       const sortKey = usageDate ?? row.created_at;
       const displayDate = usageDate
         ? new Date(usageDate + "T12:00:00").toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" })

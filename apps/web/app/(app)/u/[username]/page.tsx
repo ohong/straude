@@ -12,7 +12,19 @@ import { FeedList } from "@/components/app/feed/FeedList";
 import { FollowButton } from "@/components/app/profile/FollowButton";
 import { InviteButton } from "@/components/app/profile/InviteButton";
 import { formatTokens } from "@/lib/utils/format";
+import { normalizeCommentPreview, type JoinedUserSummary, type RawCommentPreviewRow } from "@/lib/feed-normalization";
+import { firstRelation } from "@/lib/utils/first-relation";
+import type { CommentPreviewItem, FeedPostRow, Post, UserSummary } from "@/types";
 import type { Metadata } from "next";
+
+type PostDateRow = {
+  daily_usage: Array<{ date: string }> | null;
+};
+
+type KudosRow = {
+  post_id: string;
+  user: JoinedUserSummary;
+};
 
 type ProfileRow = {
   id: string;
@@ -158,7 +170,9 @@ export default async function ProfilePage({
     .eq("user_id", profile.id);
 
   const postDateSet = new Set(
-    postDates?.map((p: any) => p.daily_usage?.date).filter(Boolean)
+    ((postDates ?? []) as PostDateRow[])
+      .map((post) => firstRelation(post.daily_usage)?.date)
+      .filter((date): date is string => Boolean(date))
   );
 
   const contributionData = (contributions ?? []).map((c) => ({
@@ -174,9 +188,10 @@ export default async function ProfilePage({
     p_limit: 20,
   });
 
-  let normalizedPosts: any[] = [];
+  let normalizedPosts: Post[] = [];
   if (posts && posts.length > 0) {
-    const postIds = posts.map((p: any) => p.id);
+    const feedPosts = posts as FeedPostRow[];
+    const postIds = feedPosts.map((post) => post.id);
 
     const [{ data: userKudos }, { data: recentKudos }, { data: recentComments }] =
       await Promise.all([
@@ -186,7 +201,7 @@ export default async function ProfilePage({
               .select("post_id")
               .eq("user_id", authUserId)
               .in("post_id", postIds)
-          : Promise.resolve({ data: [] as any[] }),
+          : Promise.resolve({ data: [] as { post_id: string }[] }),
         db
           .from("kudos")
           .select("post_id, user:users!kudos_user_id_fkey(avatar_url, username)")
@@ -204,34 +219,35 @@ export default async function ProfilePage({
 
     const kudosedSet = new Set(userKudos?.map((k) => k.post_id));
 
-    const kudosUsersMap = new Map<string, any[]>();
-    for (const k of recentKudos ?? []) {
-      const list = kudosUsersMap.get(k.post_id) ?? [];
-      if (list.length < 3) {
-        list.push(k.user);
-        kudosUsersMap.set(k.post_id, list);
+    const kudosUsersMap = new Map<string, UserSummary[]>();
+    for (const kudos of (recentKudos ?? []) as KudosRow[]) {
+      const list = kudosUsersMap.get(kudos.post_id) ?? [];
+      const userSummary = firstRelation(kudos.user);
+      if (list.length < 3 && userSummary) {
+        list.push(userSummary);
+        kudosUsersMap.set(kudos.post_id, list);
       }
     }
 
-    const commentsMap = new Map<string, any[]>();
-    for (const c of recentComments ?? []) {
-      const list = commentsMap.get(c.post_id) ?? [];
+    const commentsMap = new Map<string, CommentPreviewItem[]>();
+    for (const comment of (recentComments ?? []) as RawCommentPreviewRow[]) {
+      const list = commentsMap.get(comment.post_id) ?? [];
       if (list.length < 2) {
-        list.push(c);
-        commentsMap.set(c.post_id, list);
+        list.push(normalizeCommentPreview(comment));
+        commentsMap.set(comment.post_id, list);
       }
     }
     for (const [, list] of commentsMap) {
       list.reverse();
     }
 
-    normalizedPosts = posts.map((p: any) => ({
-      ...p,
-      kudos_count: typeof p.kudos_count === "number" ? p.kudos_count : p.kudos_count?.[0]?.count ?? 0,
-      kudos_users: kudosUsersMap.get(p.id) ?? [],
-      comment_count: typeof p.comment_count === "number" ? p.comment_count : p.comment_count?.[0]?.count ?? 0,
-      recent_comments: commentsMap.get(p.id) ?? [],
-      has_kudosed: kudosedSet.has(p.id),
+    normalizedPosts = feedPosts.map((post) => ({
+      ...post,
+      kudos_count: typeof post.kudos_count === "number" ? post.kudos_count : post.kudos_count?.[0]?.count ?? 0,
+      kudos_users: kudosUsersMap.get(post.id) ?? [],
+      comment_count: typeof post.comment_count === "number" ? post.comment_count : post.comment_count?.[0]?.count ?? 0,
+      recent_comments: commentsMap.get(post.id) ?? [],
+      has_kudosed: kudosedSet.has(post.id),
     }));
   }
 

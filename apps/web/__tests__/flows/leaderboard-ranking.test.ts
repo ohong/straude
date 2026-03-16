@@ -9,8 +9,16 @@ const mockSupabase = {
   rpc: vi.fn().mockResolvedValue({ data: [] }),
 };
 
+const mockServiceClient = {
+  from: vi.fn(),
+};
+
 vi.mock("@/lib/supabase/server", () => ({
   createClient: vi.fn(() => mockSupabase),
+}));
+
+vi.mock("@/lib/supabase/service", () => ({
+  getServiceClient: vi.fn(() => mockServiceClient),
 }));
 
 // ---------------------------------------------------------------------------
@@ -23,7 +31,10 @@ vi.mock("@/lib/supabase/server", () => ({
  */
 function chainBuilder(resolvedData: Record<string, unknown> = { data: [], error: null }) {
   let _resolved = resolvedData;
-  const chain: Record<string, any> = {};
+  const chain: Record<string, ReturnType<typeof vi.fn>> & {
+    then?: (resolve: (value: Record<string, unknown>) => unknown, reject?: (error: unknown) => unknown) => Promise<unknown>;
+    _setResolved?: (value: Record<string, unknown>) => void;
+  } = {};
   const methods = [
     "select", "insert", "update", "upsert", "delete",
     "eq", "neq", "gt", "lt", "gte", "lte", "in", "is",
@@ -35,7 +46,7 @@ function chainBuilder(resolvedData: Record<string, unknown> = { data: [], error:
   chain.single = vi.fn(() => Promise.resolve(_resolved));
   chain.maybeSingle = vi.fn(() => Promise.resolve(_resolved));
   // Make chain thenable — `await chain` resolves to _resolved
-  chain.then = (resolve: any, reject: any) => Promise.resolve(_resolved).then(resolve, reject);
+  chain.then = (resolve, reject) => Promise.resolve(_resolved).then(resolve, reject);
   // Allow tests to change the resolution value
   chain._setResolved = (val: Record<string, unknown>) => { _resolved = val; };
   return chain;
@@ -56,6 +67,7 @@ describe("Flow: Leaderboard Ranking", () => {
     vi.clearAllMocks();
     vi.resetModules();
     mockSupabase.rpc.mockResolvedValue({ data: [] });
+    mockServiceClient.from.mockReset();
   });
 
   it("returns users sorted by cost DESC with correct rank badges", async () => {
@@ -74,10 +86,13 @@ describe("Flow: Leaderboard Ranking", () => {
     const lbChain = chainBuilder({ data: entries, error: null });
 
     mockSupabase.from.mockImplementation(() => lbChain);
+    mockServiceClient.from.mockImplementation(() =>
+      chainBuilder({ data: [], error: null })
+    );
 
     const { GET } = await import("@/app/api/leaderboard/route");
     const req = makeRequest("http://localhost:3000/api/leaderboard?period=week");
-    const res = await GET(req as any);
+    const res = await GET(req as Request & { nextUrl: URL });
     const data = await res.json();
 
     expect(res.status).toBe(200);
@@ -104,15 +119,18 @@ describe("Flow: Leaderboard Ranking", () => {
     const lbChain = chainBuilder({ data: naEntries, error: null });
 
     mockSupabase.from.mockImplementation(() => lbChain);
+    mockServiceClient.from.mockImplementation(() =>
+      chainBuilder({ data: [], error: null })
+    );
 
     const { GET } = await import("@/app/api/leaderboard/route");
     const req = makeRequest("http://localhost:3000/api/leaderboard?period=week&region=north_america");
-    const res = await GET(req as any);
+    const res = await GET(req as Request & { nextUrl: URL });
     const data = await res.json();
 
     expect(res.status).toBe(200);
     expect(data.entries).toHaveLength(2);
-    expect(data.entries.every((e: any) => e.region === "north_america")).toBe(true);
+    expect(data.entries.every((entry: { region: string }) => entry.region === "north_america")).toBe(true);
     expect(lbChain.eq).toHaveBeenCalledWith("region", "north_america");
   });
 
@@ -123,6 +141,9 @@ describe("Flow: Leaderboard Ranking", () => {
 
     const lbChain = chainBuilder({ data: [], error: null });
     mockSupabase.from.mockImplementation(() => lbChain);
+    mockServiceClient.from.mockImplementation(() =>
+      chainBuilder({ data: [], error: null })
+    );
 
     const { GET } = await import("@/app/api/leaderboard/route");
 
@@ -136,7 +157,7 @@ describe("Flow: Leaderboard Ranking", () => {
       mockSupabase.from.mockImplementation(() => lbChain);
 
       const req = makeRequest(`http://localhost:3000/api/leaderboard?period=${period}`);
-      await GET(req as any);
+      await GET(req as Request & { nextUrl: URL });
 
       expect(mockSupabase.from).toHaveBeenCalledWith(view);
     }
@@ -149,7 +170,7 @@ describe("Flow: Leaderboard Ranking", () => {
 
     const { GET } = await import("@/app/api/leaderboard/route");
     const req = makeRequest("http://localhost:3000/api/leaderboard?period=invalid");
-    const res = await GET(req as any);
+    const res = await GET(req as Request & { nextUrl: URL });
 
     expect(res.status).toBe(400);
   });
@@ -184,10 +205,13 @@ describe("Flow: Leaderboard Ranking", () => {
       // count above
       return chainBuilder(countResult);
     });
+    mockServiceClient.from.mockImplementation(() =>
+      chainBuilder({ data: [], error: null })
+    );
 
     const { GET } = await import("@/app/api/leaderboard/route");
     const req = makeRequest("http://localhost:3000/api/leaderboard?period=week");
-    const res = await GET(req as any);
+    const res = await GET(req as Request & { nextUrl: URL });
     const data = await res.json();
 
     expect(res.status).toBe(200);
