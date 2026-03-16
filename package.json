@@ -5,8 +5,15 @@
   "workspaces": ["apps/*", "packages/*"],
   "scripts": {
     "dev": "turbo dev",
+    "dev:local": "bun run local:env && bun --cwd apps/web dev:plain",
     "build": "turbo build",
-    "lint": "turbo lint"
+    "lint": "turbo lint",
+    "local:up": "bunx supabase start",
+    "local:down": "bunx supabase stop",
+    "local:reset": "bunx supabase db reset --yes",
+    "local:env": "bun --cwd apps/web ./scripts/write-local-env.mjs",
+    "local:seed": "bun --cwd apps/web ./scripts/seed-local-demo.mjs",
+    "local:setup": "bun run local:up && bun run local:env && bun run local:seed"
   },
   "devDependencies": {
     "turbo": "^2",

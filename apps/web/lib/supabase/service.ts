@@ -1,8 +1,10 @@
 import { createClient as createServiceClient } from "@supabase/supabase-js";
+import { getSupabaseServerEnv } from "./env";
 
 export function getServiceClient() {
+  const env = getSupabaseServerEnv();
   return createServiceClient(
-    process.env.NEXT_PUBLIC_SUPABASE_URL!,
-    process.env.SUPABASE_SECRET_KEY!,
+    env.url,
+    env.secretKey,
   );
 }
