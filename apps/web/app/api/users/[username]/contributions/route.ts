@@ -6,13 +6,14 @@ type RouteContext = { params: Promise<{ username: string }> };
 type ContributionProfileRow = {
   id: string;
   is_public: boolean;
+  streak_freezes: number | null;
 };
 
 export async function GET(_request: NextRequest, context: RouteContext) {
   const { username } = await context.params;
   const access = await getProfileAccessContext<ContributionProfileRow>(
     username,
-    "id, is_public",
+    "id, is_public, streak_freezes",
   );
   if (!access) {
     return NextResponse.json({ error: "User not found" }, { status: 404 });
@@ -58,6 +59,7 @@ export async function GET(_request: NextRequest, context: RouteContext) {
   // Compute streak
   const { data: streakData } = await db.rpc("calculate_user_streak", {
     p_user_id: profile.id,
+    p_freeze_days: profile.streak_freezes ?? 0,
   });
   const streak = typeof streakData === "number" ? streakData : 0;
 

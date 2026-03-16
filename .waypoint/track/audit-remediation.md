@@ -17,7 +17,7 @@ Bring the current `main` branch from “not ready” to a materially safer ship 
 - User request on 2026-03-16 to implement all fixes from:
   - `.waypoint/audit/16-03-2026-12-03-backend-audit.md`
   - `.waypoint/audit/16-03-2026-12-04-frontend-audit.md`
-- Durable plan: [`.waypoint/docs/audit-remediation-plan.md`](/Users/mark/clawd/projects/straude/.waypoint/docs/audit-remediation-plan.md)
+- Durable plan: [`.waypoint/docs/audit-remediation-plan.md`](.waypoint/docs/audit-remediation-plan.md)
 
 ## Current State
 

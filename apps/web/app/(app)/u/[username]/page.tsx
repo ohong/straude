@@ -43,7 +43,10 @@ export default async function ProfilePage({
   params: Promise<{ username: string }>;
 }) {
   const { username } = await params;
-  const access = await getProfileAccessContext<ProfileRow>(username, "*");
+  const access = await getProfileAccessContext<ProfileRow>(
+    username,
+    "id, username, display_name, avatar_url, bio, country, region, link, github_username, is_public, streak_freezes, referred_by",
+  );
   if (!access) notFound();
 
   const { authUserId, canView, isFollowing, isOwn, profile } = access;

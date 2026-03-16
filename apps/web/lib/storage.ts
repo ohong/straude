@@ -72,7 +72,9 @@ export function normalizeMessageAttachmentInput(
       ? candidate.type
       : null;
   const size =
-    typeof candidate.size === "number" && Number.isFinite(candidate.size)
+    typeof candidate.size === "number"
+      && Number.isSafeInteger(candidate.size)
+      && candidate.size >= 0
       ? candidate.size
       : null;
 

@@ -20,13 +20,18 @@ function mockClients({
   users = [] as any[],
   error = null as any,
 } = {}) {
+  const projectedUsers = users.map((user) => {
+    const { email: _email, ...rest } = user;
+    return rest;
+  });
+
   const supabaseChain: any = {
     from: vi.fn().mockReturnThis(),
     select: vi.fn().mockReturnThis(),
     not: vi.fn().mockReturnThis(),
     eq: vi.fn().mockReturnThis(),
     or: vi.fn().mockReturnThis(),
-    limit: vi.fn().mockResolvedValue({ data: users, error }),
+    limit: vi.fn().mockResolvedValue({ data: projectedUsers, error }),
   };
   (createClient as any).mockResolvedValue(supabaseChain);
 
@@ -95,7 +100,7 @@ describe("GET /api/search", () => {
 
     expect(res.status).toBe(200);
     expect(json.users).toHaveLength(1);
-    expect(supabaseChain.or).toHaveBeenCalled();
+    expect(supabaseChain.or.mock.calls[0]?.[0]).toContain("user@something");
   });
 
   it("respects limit parameter", async () => {
@@ -117,6 +122,7 @@ describe("GET /api/search", () => {
       display_name: null,
       bio: null,
       avatar_url: null,
+      email: "secret@example.com",
       is_public: true,
     }];
     mockClients({ users });

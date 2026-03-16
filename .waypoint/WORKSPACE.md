@@ -9,8 +9,8 @@ Timestamp discipline: Prefix new or materially revised bullets in `Active Tracke
 
 ## Active Trackers
 
-- [2026-03-16 12:13 PDT] [`.waypoint/track/audit-remediation.md`](/Users/mark/clawd/projects/straude/.waypoint/track/audit-remediation.md) — Active execution tracker for the privacy, auth-boundary, storage, unsubscribe, and docs fixes from the 2026-03-16 audits.
-- [2026-03-14 14:12 PDT] [`.waypoint/track/shareable-asset-system.md`](/Users/mark/clawd/projects/straude/.waypoint/track/shareable-asset-system.md) — Planning complete; next step is building the shared share-asset foundation and public consistency route.
+- [2026-03-16 12:13 PDT] [`.waypoint/track/audit-remediation.md`](.waypoint/track/audit-remediation.md) — Active execution tracker for the privacy, auth-boundary, storage, unsubscribe, and docs fixes from the 2026-03-16 audits.
+- [2026-03-14 14:12 PDT] [`.waypoint/track/shareable-asset-system.md`](.waypoint/track/shareable-asset-system.md) — Planning complete; next step is building the shared share-asset foundation and public consistency route.
 
 ## Current State
 
@@ -48,5 +48,5 @@ Timestamp discipline: Prefix new or materially revised bullets in `Active Tracke
 - [2026-03-14 14:12 PDT] Inspected the existing recap, profile, post, and CLI share surfaces and wrote a durable implementation plan at `.waypoint/docs/shareable-asset-system-plan.md`.
 - [2026-03-14 14:31 PDT] Implemented the new shareable asset system across profile, post, and CLI surfaces; added a public consistency route; updated post share cards; and manually verified the new UI/interaction flows through the preview harness.
 - [2026-03-16 11:45 PDT] Closed the review loop on PR #47 with follow-up fixes for local Supabase docs, env validation, CLI key parsing, CI placeholders, and production `/cli/verify` stability; propagated the same local-dev fixes into PR #50 so both branches could rerun cleanly.
-- [2026-03-16 11:57 PDT] Added root `AGENTS.md` project guidance capturing durable backend/frontend context: production app with real users, single-tenant backend, no hard backward-compatibility requirement, modern browser/device support, SEO limited to public pages, and no current localization scope.
+- [2026-03-16 11:57 PDT] Added durable project context at [`.waypoint/docs/project-context.md`](.waypoint/docs/project-context.md), covering Straude's production posture, single-tenant backend, modern browser/device support, authenticated-vs-public route expectations, and current compatibility assumptions.
 - [2026-03-16 12:03 PDT] Completed a full backend ship-readiness audit for the current `main` backend surface and wrote the report to `.waypoint/audit/16-03-2026-12-03-backend-audit.md`; current recommendation is not ready to ship due to privacy/security issues in public email search, stored media URL validation, and DM attachment storage policy.

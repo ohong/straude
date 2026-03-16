@@ -42,29 +42,33 @@ export function NotificationsList() {
       });
       if (type) params.set("type", type);
 
-      const res = await fetch(`/api/notifications?${params}`);
-      if (!res.ok) {
-        const payload = await res
-          .json()
-          .catch(() => ({ error: "Failed to load notifications." }));
-        loadingRef.current = false;
+      try {
+        const res = await fetch(`/api/notifications?${params}`);
+        if (!res.ok) {
+          const payload = await res
+            .json()
+            .catch(() => ({ error: "Failed to load notifications." }));
+          setError(
+            typeof payload.error === "string"
+              ? payload.error
+              : "Failed to load notifications.",
+          );
+          return;
+        }
+
+        const data = await res.json();
+        const fetched: Notification[] = data.notifications ?? [];
+
+        setNotifications((prev) => (replace ? fetched : [...prev, ...fetched]));
+        setUnreadCount(data.unread_count ?? 0);
+        setHasMore(fetched.length >= PAGE_SIZE);
+        setError(null);
+      } catch {
+        setError("Failed to load notifications.");
+      } finally {
         setLoading(false);
-        setError(
-          typeof payload.error === "string"
-            ? payload.error
-            : "Failed to load notifications.",
-        );
-        return;
+        loadingRef.current = false;
       }
-
-      const data = await res.json();
-      const fetched: Notification[] = data.notifications ?? [];
-
-      setNotifications((prev) => (replace ? fetched : [...prev, ...fetched]));
-      setUnreadCount(data.unread_count ?? 0);
-      setHasMore(fetched.length >= PAGE_SIZE);
-      setLoading(false);
-      loadingRef.current = false;
     },
     [],
   );
@@ -170,7 +174,7 @@ export function NotificationsList() {
             </div>
           ))}
         </div>
-      ) : error ? (
+      ) : error && notifications.length === 0 ? (
         <p className="px-6 py-12 text-center text-sm text-muted">
           {error}
         </p>

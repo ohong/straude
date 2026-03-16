@@ -516,6 +516,9 @@ One-click email unsubscribe. Disables the specified notification type without re
   - `token` — signed unsubscribe token (required)
   - `kind` — `comment` (default) or `dm`
 - **Response**: `{ success: true }`
+- **Errors**:
+  - `400` — `{ error: "Missing token" }` or `{ error: "Invalid token" }`
+  - `500` — `{ error: "Failed to update notification preferences" }`
 
 ---
 

@@ -39,6 +39,14 @@ export async function getProfileAccessContext<TProfile extends ProfileShape>(
     return null;
   }
 
+  const required = rawProfile as { id?: unknown; is_public?: unknown };
+  if (
+    typeof required.id !== "string"
+    || typeof required.is_public !== "boolean"
+  ) {
+    return null;
+  }
+
   const profile = rawProfile as unknown as TProfile;
 
   const authUserId = authUser?.id ?? null;
