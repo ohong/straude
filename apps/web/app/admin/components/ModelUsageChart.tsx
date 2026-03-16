@@ -4,6 +4,8 @@ import { useEffect, useMemo, useState } from "react";
 import {
   LineChart,
   Line,
+  BarChart,
+  Bar,
   XAxis,
   YAxis,
   CartesianGrid,
@@ -19,12 +21,19 @@ interface ModelUsageRow {
   codex_spend: number;
 }
 
+type ViewMode = "cumulative" | "daily";
+
 const RANGES = [
   { key: "7d", label: "7D", days: 7 },
   { key: "14d", label: "14D", days: 14 },
   { key: "30d", label: "30D", days: 30 },
   { key: "all", label: "All", days: Infinity },
 ] as const;
+
+const VIEW_MODES: { key: ViewMode; label: string }[] = [
+  { key: "cumulative", label: "Cumulative" },
+  { key: "daily", label: "Daily" },
+];
 
 function formatDate(dateStr: string) {
   const d = new Date(dateStr + "T00:00:00");
@@ -49,7 +58,7 @@ function Skeleton() {
           className="mt-0.5 text-xs"
           style={{ color: "var(--admin-fg-muted)" }}
         >
-          Cumulative spend by provider
+          Spend by provider
         </p>
       </div>
       <div className="space-y-2 px-5 pb-5">
@@ -74,6 +83,7 @@ export function ModelUsageChart() {
   const [data, setData] = useState<ModelUsageRow[] | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [range, setRange] = useState<string>("30d");
+  const [view, setView] = useState<ViewMode>("daily");
 
   useEffect(() => {
     fetch("/api/admin/model-usage")
@@ -97,10 +107,11 @@ export function ModelUsageChart() {
   }, [data]);
 
   const filtered = useMemo(() => {
+    const source = view === "cumulative" ? cumulative : data ?? [];
     const r = RANGES.find((r) => r.key === range);
-    if (!r || r.days === Infinity) return cumulative;
-    return cumulative.slice(-r.days);
-  }, [cumulative, range]);
+    if (!r || r.days === Infinity) return source;
+    return source.slice(-r.days);
+  }, [cumulative, data, range, view]);
 
   if (error) {
     return (
@@ -123,6 +134,66 @@ export function ModelUsageChart() {
     ? "rgba(255,255,255,0.08)"
     : "rgba(0,0,0,0.12)";
 
+  const subtitle =
+    view === "cumulative"
+      ? "Cumulative spend by provider"
+      : "Daily spend by provider";
+
+  const sharedXAxis = (
+    <XAxis
+      dataKey="date"
+      tickFormatter={formatDate}
+      tick={{ fontSize: 11, fill: axisColor }}
+      tickLine={false}
+      axisLine={false}
+    />
+  );
+
+  const sharedYAxis = (
+    <YAxis
+      tickFormatter={formatUsd}
+      tick={{ fontSize: 11, fill: axisColor }}
+      tickLine={false}
+      axisLine={false}
+      width={70}
+    />
+  );
+
+  const sharedTooltip = (
+    <Tooltip
+      formatter={(value, name) => [
+        formatUsd(Number(value)),
+        name === "claude_spend" ? "Claude" : "OpenAI / Codex",
+      ]}
+      labelFormatter={(label) => formatDate(String(label))}
+      contentStyle={{
+        fontSize: 12,
+        fontFamily: "var(--font-mono)",
+        background: tooltipBg,
+        border: `1px solid ${tooltipBorder}`,
+        borderRadius: 8,
+        boxShadow: "none",
+      }}
+    />
+  );
+
+  const sharedLegend = (
+    <Legend
+      formatter={(value: string) =>
+        value === "claude_spend" ? "Claude" : "OpenAI / Codex"
+      }
+      wrapperStyle={{ fontSize: 12 }}
+    />
+  );
+
+  const sharedGrid = (
+    <CartesianGrid
+      strokeDasharray="3 3"
+      stroke={gridColor}
+      vertical={false}
+    />
+  );
+
   return (
     <div className="admin-card">
       <div className="flex items-center justify-between px-5 pt-4 pb-2">
@@ -137,90 +208,108 @@ export function ModelUsageChart() {
             className="mt-0.5 text-xs"
             style={{ color: "var(--admin-fg-muted)" }}
           >
-            Cumulative spend by provider
+            {subtitle}
           </p>
         </div>
-        <div className="flex gap-0.5">
-          {RANGES.map((r) => (
-            <button
-              key={r.key}
-              type="button"
-              onClick={() => setRange(r.key)}
-              className="rounded-md px-2.5 py-1 text-xs font-medium transition-colors duration-100"
-              style={{
-                backgroundColor:
-                  range === r.key
-                    ? "var(--admin-pill-active-bg)"
-                    : "var(--admin-pill-bg)",
-                color:
-                  range === r.key
-                    ? "var(--admin-pill-active-fg)"
-                    : "var(--admin-fg-secondary)",
-              }}
-            >
-              {r.label}
-            </button>
-          ))}
+        <div className="flex items-center gap-3">
+          <div className="flex gap-0.5">
+            {VIEW_MODES.map((m) => (
+              <button
+                key={m.key}
+                type="button"
+                onClick={() => setView(m.key)}
+                className="rounded-md px-2.5 py-1 text-xs font-medium transition-colors duration-100"
+                style={{
+                  backgroundColor:
+                    view === m.key
+                      ? "var(--admin-pill-active-bg)"
+                      : "var(--admin-pill-bg)",
+                  color:
+                    view === m.key
+                      ? "var(--admin-pill-active-fg)"
+                      : "var(--admin-fg-secondary)",
+                }}
+              >
+                {m.label}
+              </button>
+            ))}
+          </div>
+          <div
+            style={{
+              width: 1,
+              height: 16,
+              backgroundColor: "var(--admin-border)",
+            }}
+          />
+          <div className="flex gap-0.5">
+            {RANGES.map((r) => (
+              <button
+                key={r.key}
+                type="button"
+                onClick={() => setRange(r.key)}
+                className="rounded-md px-2.5 py-1 text-xs font-medium transition-colors duration-100"
+                style={{
+                  backgroundColor:
+                    range === r.key
+                      ? "var(--admin-pill-active-bg)"
+                      : "var(--admin-pill-bg)",
+                  color:
+                    range === r.key
+                      ? "var(--admin-pill-active-fg)"
+                      : "var(--admin-fg-secondary)",
+                }}
+              >
+                {r.label}
+              </button>
+            ))}
+          </div>
         </div>
       </div>
       <div className="h-[300px] px-2 pb-4">
         <ResponsiveContainer width="100%" height="100%">
-          <LineChart data={filtered}>
-            <CartesianGrid
-              strokeDasharray="3 3"
-              stroke={gridColor}
-              vertical={false}
-            />
-            <XAxis
-              dataKey="date"
-              tickFormatter={formatDate}
-              tick={{ fontSize: 11, fill: axisColor }}
-              tickLine={false}
-              axisLine={false}
-            />
-            <YAxis
-              tickFormatter={formatUsd}
-              tick={{ fontSize: 11, fill: axisColor }}
-              tickLine={false}
-              axisLine={false}
-              width={70}
-            />
-            <Tooltip
-              formatter={(value, name) => [
-                formatUsd(Number(value)),
-                name === "claude_spend" ? "Claude" : "OpenAI",
-              ]}
-              labelFormatter={(label) => formatDate(String(label))}
-              contentStyle={{
-                fontSize: 12,
-                fontFamily: "var(--font-mono)",
-                background: tooltipBg,
-                border: `1px solid ${tooltipBorder}`,
-                borderRadius: 8,
-                boxShadow: "none",
-              }}
-            />
-            <Legend
-              formatter={(value: string) =>
-                value === "claude_spend" ? "Claude" : "OpenAI"
-              }
-              wrapperStyle={{ fontSize: 12 }}
-            />
-            <Line
-              type="monotone"
-              dataKey="claude_spend"
-              stroke="#DF561F"
-              strokeWidth={2}
-              dot={false}
-            />
-            <Line
-              type="monotone"
-              dataKey="codex_spend"
-              stroke="#2A9D8F"
-              strokeWidth={2}
-              dot={false}
-            />
-          </LineChart>
+          {view === "cumulative" ? (
+            <LineChart data={filtered}>
+              {sharedGrid}
+              {sharedXAxis}
+              {sharedYAxis}
+              {sharedTooltip}
+              {sharedLegend}
+              <Line
+                type="monotone"
+                dataKey="claude_spend"
+                stroke="#DF561F"
+                strokeWidth={2}
+                dot={false}
+              />
+              <Line
+                type="monotone"
+                dataKey="codex_spend"
+                stroke="#2A9D8F"
+                strokeWidth={2}
+                dot={false}
+              />
+            </LineChart>
+          ) : (
+            <BarChart data={filtered}>
+              {sharedGrid}
+              {sharedXAxis}
+              {sharedYAxis}
+              {sharedTooltip}
+              {sharedLegend}
+              <Bar
+                dataKey="codex_spend"
+                fill="#2A9D8F"
+                radius={[3, 3, 0, 0]}
+                stackId="spend"
+              />
+              <Bar
+                dataKey="claude_spend"
+                fill="#DF561F"
+                radius={[3, 3, 0, 0]}
+                stackId="spend"
+              />
+            </BarChart>
+          )}
         </ResponsiveContainer>
       </div>
     </div>
