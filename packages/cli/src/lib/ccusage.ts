@@ -9,6 +9,7 @@ import {
   type TokenNormalizationConfidence,
   type TokenNormalizationMode,
 } from "./token-normalization.js";
+import { DEFAULT_SUBPROCESS_TIMEOUT_MS } from "../config.js";
 
 /** Type-safe representation of the error thrown by execFileSync / execFile. */
 interface ExecError extends Error {
@@ -72,7 +73,7 @@ export function _resetCcusageResolver(): void {
 }
 
 /** Run ccusage via the resolved binary. */
-function execCcusage(args: string[]): string {
+function execCcusage(args: string[], timeoutMs?: number): string {
   const { cmd, args: prefix } = resolveCcusageCommand();
   // When running via bunx/npx, pin the version to avoid ccusage@18+ runtime: protocol issue
   const pkg = cmd === "ccusage" ? null : CCUSAGE_PKG;
@@ -81,7 +82,7 @@ function execCcusage(args: string[]): string {
   try {
     return execFileSync(cmd, cmdArgs, {
       encoding: "utf-8",
-      timeout: 120_000,
+      timeout: timeoutMs ?? DEFAULT_SUBPROCESS_TIMEOUT_MS,
       maxBuffer: 10 * 1024 * 1024,
       shell: process.platform === "win32",
     });
@@ -103,7 +104,7 @@ function execCcusage(args: string[]): string {
 }
 
 /** Async version of execCcusage — runs ccusage in a child process without blocking. */
-function execCcusageAsync(args: string[]): Promise<string> {
+function execCcusageAsync(args: string[], timeoutMs?: number): Promise<string> {
   const { cmd, args: prefix } = resolveCcusageCommand();
   const pkg = cmd === "ccusage" ? null : CCUSAGE_PKG;
   const cmdArgs = pkg ? [...prefix, pkg, ...args] : args;
@@ -111,7 +112,7 @@ function execCcusageAsync(args: string[]): Promise<string> {
   return new Promise((resolve, reject) => {
     execFileCb(cmd, cmdArgs, {
       encoding: "utf-8",
-      timeout: 120_000,
+      timeout: timeoutMs ?? DEFAULT_SUBPROCESS_TIMEOUT_MS,
       maxBuffer: 10 * 1024 * 1024,
       shell: process.platform === "win32",
     }, (err, stdout) => {
@@ -199,21 +200,21 @@ export interface NormalizationAnomaly {
  * Runs `ccusage daily --json` for the given date range and returns parsed output.
  * Dates should be in YYYYMMDD format (no dashes) as ccusage expects.
  */
-export function runCcusage(sinceDate: string, untilDate: string): CcusageOutput {
+export function runCcusage(sinceDate: string, untilDate: string, timeoutMs?: number): CcusageOutput {
   const args = ["daily", "--json", "--breakdown", "--since", sinceDate, "--until", untilDate];
-  return parseCcusageOutput(execCcusage(args));
+  return parseCcusageOutput(execCcusage(args, timeoutMs));
 }
 
 /** Returns the raw JSON string from ccusage (for hashing). */
-export function runCcusageRaw(sinceDate: string, untilDate: string): string {
+export function runCcusageRaw(sinceDate: string, untilDate: string, timeoutMs?: number): string {
   const args = ["daily", "--json", "--breakdown", "--since", sinceDate, "--until", untilDate];
-  return execCcusage(args);
+  return execCcusage(args, timeoutMs);
 }
 
 /** Async version — returns raw JSON string without blocking the event loop. */
-export function runCcusageRawAsync(sinceDate: string, untilDate: string): Promise<string> {
+export function runCcusageRawAsync(sinceDate: string, untilDate: string, timeoutMs?: number): Promise<string> {
   const args = ["daily", "--json", "--breakdown", "--since", sinceDate, "--until", untilDate];
-  return execCcusageAsync(args);
+  return execCcusageAsync(args, timeoutMs);
 }
 
 /** Normalize a v18 entry into our canonical format. */

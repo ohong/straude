@@ -34,6 +34,7 @@ interface PushOptions {
   date?: string;
   days?: number;
   dryRun?: boolean;
+  timeoutMs?: number;
 }
 
 function isMissingClaudeDataError(error: Error): boolean {
@@ -226,8 +227,8 @@ export async function pushCommand(options: PushOptions, apiUrlOverride?: string)
 
   // Run ccusage + codex in parallel — the single biggest perf win
   const [claudeResult, codexRaw] = await Promise.all([
-    runCcusageRawAsync(sinceStr, untilStr).catch((err: Error) => err),
-    runCodexRawAsync(sinceStr, untilStr),
+    runCcusageRawAsync(sinceStr, untilStr, options.timeoutMs).catch((err: Error) => err),
+    runCodexRawAsync(sinceStr, untilStr, options.timeoutMs),
   ]);
 
   let claudeRaw = "";

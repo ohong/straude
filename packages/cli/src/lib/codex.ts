@@ -6,6 +6,7 @@ import {
   type NormalizationMeta,
   type NormalizationSummary,
 } from "./token-normalization.js";
+import { DEFAULT_SUBPROCESS_TIMEOUT_MS } from "../config.js";
 
 export interface CodexOutput {
   data: CcusageDailyEntry[];
@@ -19,43 +20,43 @@ export interface CodexOutput {
 const CODEX_PKG = "@ccusage/codex@18";
 
 /** Returns the raw JSON string from @ccusage/codex (for hashing). Empty string on failure. */
-export function runCodexRaw(sinceDate: string, untilDate: string): string {
+export function runCodexRaw(sinceDate: string, untilDate: string, timeoutMs?: number): string {
   try {
-    return execCodex(["daily", "--json", "--since", sinceDate, "--until", untilDate]);
+    return execCodex(["daily", "--json", "--since", sinceDate, "--until", untilDate], timeoutMs);
   } catch {
     return "";
   }
 }
 
 /** Async version — returns raw JSON string without blocking. Empty string on failure. */
-export async function runCodexRawAsync(sinceDate: string, untilDate: string): Promise<string> {
+export async function runCodexRawAsync(sinceDate: string, untilDate: string, timeoutMs?: number): Promise<string> {
   try {
-    return await execCodexAsync(["daily", "--json", "--since", sinceDate, "--until", untilDate]);
+    return await execCodexAsync(["daily", "--json", "--since", sinceDate, "--until", untilDate], timeoutMs);
   } catch {
     return "";
   }
 }
 
-function execCodex(args: string[]): string {
+function execCodex(args: string[], timeoutMs?: number): string {
   const cmd = process.versions.bun !== undefined ? "bunx" : "npx";
   const prefix = process.versions.bun !== undefined ? ["--bun"] : ["--yes"];
 
   return execFileSync(cmd, [...prefix, CODEX_PKG, ...args], {
     encoding: "utf-8",
-    timeout: 120_000,
+    timeout: timeoutMs ?? DEFAULT_SUBPROCESS_TIMEOUT_MS,
     maxBuffer: 10 * 1024 * 1024,
     shell: process.platform === "win32",
   });
 }
 
-function execCodexAsync(args: string[]): Promise<string> {
+function execCodexAsync(args: string[], timeoutMs?: number): Promise<string> {
   const cmd = process.versions.bun !== undefined ? "bunx" : "npx";
   const prefix = process.versions.bun !== undefined ? ["--bun"] : ["--yes"];
 
   return new Promise((resolve, reject) => {
     execFileCb(cmd, [...prefix, CODEX_PKG, ...args], {
       encoding: "utf-8",
-      timeout: 120_000,
+      timeout: timeoutMs ?? DEFAULT_SUBPROCESS_TIMEOUT_MS,
       maxBuffer: 10 * 1024 * 1024,
       shell: process.platform === "win32",
     }, (err, stdout) => {

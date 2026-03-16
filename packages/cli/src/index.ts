@@ -21,6 +21,7 @@ Push options:
   --date YYYY-MM-DD  Push a specific date (within last 7 days)
   --days N           Push last N days (max 7)
   --dry-run          Preview without posting
+  --timeout N        ccusage timeout in seconds (default: 120)
 
 Examples:
   npx straude@latest
@@ -41,6 +42,8 @@ function parseArgs(args: string[]): { command: string | null; options: Record<st
       options.date = args[++i]!;
     } else if (arg === "--days" && i + 1 < args.length) {
       options.days = args[++i]!;
+    } else if (arg === "--timeout" && i + 1 < args.length) {
+      options.timeout = args[++i]!;
     } else if (arg === "--api-url" && i + 1 < args.length) {
       options.apiUrl = args[++i]!;
     } else if (arg === "--help" || arg === "-h") {
@@ -77,6 +80,7 @@ async function main(): Promise<void> {
         date: options.date as string | undefined,
         days: options.days ? parseInt(options.days as string, 10) : undefined,
         dryRun: options.dryRun === true,
+        timeoutMs: options.timeout ? parseInt(options.timeout as string, 10) * 1000 : undefined,
       },
       apiUrl,
     );

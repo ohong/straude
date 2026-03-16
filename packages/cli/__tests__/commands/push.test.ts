@@ -199,7 +199,7 @@ describe("pushCommand", () => {
 
     await pushCommand({ date: dateStr });
 
-    expect(mockRunCcusageRawAsync).toHaveBeenCalledWith(compactStr, compactStr);
+    expect(mockRunCcusageRawAsync).toHaveBeenCalledWith(compactStr, compactStr, undefined);
   });
 
   it("passes --days option correctly", async () => {
