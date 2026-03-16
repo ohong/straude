@@ -8,6 +8,7 @@ import { Avatar } from "@/components/ui/Avatar";
 import { Badge } from "@/components/ui/Badge";
 import { AchievementBadges } from "@/components/app/profile/AchievementBadges";
 import { ContributionGraph } from "@/components/app/profile/ContributionGraph";
+import { ProfileSharePanel } from "@/components/app/profile/ProfileSharePanel";
 import { FeedList } from "@/components/app/feed/FeedList";
 import { FollowButton } from "@/components/app/profile/FollowButton";
 import { InviteButton } from "@/components/app/profile/InviteButton";
@@ -410,6 +411,11 @@ export default async function ProfilePage({
           Contributions
         </p>
         <ContributionGraph data={contributionData} />
+        <ProfileSharePanel
+          username={profile.username ?? username}
+          isPublic={profile.is_public}
+          isOwner={isOwn}
+        />
       </div>
 
       {/* Posts */}

@@ -125,9 +125,9 @@ function buildUsageRows(userId, multiplier = 1) {
     const date = new Date();
     date.setDate(date.getDate() - (20 - index));
     const iso = `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, "0")}-${String(date.getDate()).padStart(2, "0")}`;
-    const cost = index % 5 === 0 ? 0 : Number(((index + 1) * 1.37 * multiplier).toFixed(2));
-    const output = cost === 0 ? 0 : Math.round((index + 3) * 420_000 * multiplier);
-    const input = cost === 0 ? 0 : Math.round(output * 0.35);
+    const cost = Number(((index + 1) * 1.37 * multiplier).toFixed(2));
+    const output = Math.round((index + 3) * 420_000 * multiplier);
+    const input = Math.round(output * 0.35);
 
     return {
       user_id: userId,
@@ -138,15 +138,12 @@ function buildUsageRows(userId, multiplier = 1) {
       cache_creation_tokens: 0,
       cache_read_tokens: 0,
       total_tokens: input + output,
-      models: cost === 0 ? [] : ["gpt-5.3-codex", "claude-opus-4-20250514"],
-      model_breakdown:
-        cost === 0
-          ? []
-          : [
-              { model: "gpt-5.3-codex", cost_usd: Number((cost * 0.62).toFixed(2)) },
-              { model: "claude-opus-4-20250514", cost_usd: Number((cost * 0.38).toFixed(2)) },
-            ],
-      session_count: 1,
+      models: ["gpt-5.3-codex", "claude-opus-4-20250514"],
+      model_breakdown: [
+        { model: "gpt-5.3-codex", cost_usd: Number((cost * 0.62).toFixed(2)) },
+        { model: "claude-opus-4-20250514", cost_usd: Number((cost * 0.38).toFixed(2)) },
+      ],
+      session_count: 2,
       is_verified: true,
       raw_hash: `local-demo-${userId}-${iso}`,
     };

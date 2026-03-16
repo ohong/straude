@@ -138,6 +138,9 @@ describe("pushCommand", () => {
     expect(console.log).toHaveBeenCalledWith(
       expect.stringContaining("https://straude.com/post/p-1"),
     );
+    expect(console.log).toHaveBeenCalledWith(
+      "Share your consistency card: https://straude.com/consistency/alice"
+    );
   });
 
   it("handles empty ccusage output", async () => {
