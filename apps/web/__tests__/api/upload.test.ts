@@ -200,6 +200,55 @@ describe("POST /api/upload", () => {
     expect(json.url).toBeDefined();
   });
 
+  it("resolves MIME from uppercase .HEIC extension when browser sends octet-stream", async () => {
+    mockSupabase({ publicUrl: "https://cdn.example.com/user-1/abc.jpg" });
+
+    const res = await POST(
+      makeUploadRequest({
+        name: "IMG_5678.HEIC",
+        type: "application/octet-stream",
+        size: 100,
+        // No magic bytes — relies on extension-based MIME resolution
+      })
+    );
+    const json = await res.json();
+
+    expect(res.status).toBe(200);
+    expect(json.url).toBeDefined();
+  });
+
+  it("resolves MIME from uppercase .JPG extension when browser sends empty type", async () => {
+    mockSupabase({ publicUrl: "https://cdn.example.com/user-1/abc.jpg" });
+
+    const res = await POST(
+      makeUploadRequest({
+        name: "photo.JPG",
+        type: "",
+        size: 100,
+      })
+    );
+    const json = await res.json();
+
+    expect(res.status).toBe(200);
+    expect(json.url).toBeDefined();
+  });
+
+  it("resolves MIME from uppercase .PNG extension when browser sends octet-stream", async () => {
+    mockSupabase({ publicUrl: "https://cdn.example.com/user-1/abc.png" });
+
+    const res = await POST(
+      makeUploadRequest({
+        name: "screenshot.PNG",
+        type: "application/octet-stream",
+        size: 100,
+      })
+    );
+    const json = await res.json();
+
+    expect(res.status).toBe(200);
+    expect(json.url).toBeDefined();
+  });
+
   it("rejects octet-stream that is not HEIC", async () => {
     mockSupabase({});
 

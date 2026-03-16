@@ -37,8 +37,13 @@ function formatFileSize(bytes: number): string {
   return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
 }
 
-function isImageMime(type: string): boolean {
-  return type.startsWith("image/");
+const IMAGE_EXTENSIONS = ["jpg", "jpeg", "png", "webp", "gif", "heic", "heif"];
+
+function isImageMime(type: string, fileName?: string): boolean {
+  if (type.startsWith("image/")) return true;
+  if (!fileName) return false;
+  const ext = fileName.split(".").pop()?.toLowerCase();
+  return !!ext && IMAGE_EXTENSIONS.includes(ext);
 }
 
 function threadPreview(thread: DirectMessageThread): string {
@@ -185,7 +190,7 @@ export function MessagesInbox({
     const toAdd = files.slice(0, remaining);
 
     const newAttachments: PendingAttachment[] = toAdd.map((file) => {
-      const preview = file.type.startsWith("image/")
+      const preview = isImageMime(file.type, file.name)
         ? URL.createObjectURL(file)
         : undefined;
       return { file, preview, uploading: false };
@@ -215,7 +220,7 @@ export function MessagesInbox({
   async function uploadAttachment(pending: PendingAttachment): Promise<MessageAttachmentInput | null> {
     try {
       let fileToUpload = pending.file;
-      if (isImageMime(pending.file.type)) {
+      if (isImageMime(pending.file.type, pending.file.name)) {
         fileToUpload = await compressImage(pending.file);
       }
       const form = new FormData();
@@ -517,8 +522,8 @@ export function MessagesInbox({
                   messages.map((message) => {
                     const mine = message.sender_id === currentUserId;
                     const attachments = message.attachments ?? [];
-                    const imageAttachments = attachments.filter((a) => isImageMime(a.type));
-                    const fileAttachments = attachments.filter((a) => !isImageMime(a.type));
+                    const imageAttachments = attachments.filter((a) => isImageMime(a.type, a.name));
+                    const fileAttachments = attachments.filter((a) => !isImageMime(a.type, a.name));
 
                     return (
                       <div

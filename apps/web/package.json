@@ -16,9 +16,9 @@
     "test:e2e": "playwright test"
   },
   "dependencies": {
-    "@fal-ai/client": "^1.4.0",
     "@anthropic-ai/sdk": "^0.39",
     "@base-ui-components/react": "1.0.0-rc.0",
+    "@fal-ai/client": "^1.4.0",
     "@react-email/components": "^1.0.8",
     "@supabase/ssr": "^0.6",
     "@supabase/supabase-js": "^2",
@@ -26,6 +26,7 @@
     "agentation": "^2.2.1",
     "clsx": "^2",
     "heic-convert": "^2.1.0",
+    "heic2any": "^0.0.4",
     "kbar": "^0.1.0-beta.48",
     "lucide-react": "^0.474",
     "motion": "^12",
