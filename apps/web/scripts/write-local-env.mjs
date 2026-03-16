@@ -13,8 +13,8 @@ function parseEnv(raw) {
     if (!line || line.trim().startsWith("#")) continue;
     const idx = line.indexOf("=");
     if (idx === -1) continue;
-    const key = line.slice(0, idx);
-    const value = line.slice(idx + 1).replace(/^"(.*)"$/, "$1");
+    const key = line.slice(0, idx).trim();
+    const value = line.slice(idx + 1).replace(/^"(.*)"$/, "$1").trim();
     entries.set(key, value);
   }
   return entries;
@@ -68,6 +68,25 @@ const managedEntries = new Map([
   ["ANTHROPIC_API_KEY", existingVars.get("ANTHROPIC_API_KEY") ?? ""],
   ["FAL_API_KEY", existingVars.get("FAL_API_KEY") ?? ""],
 ]);
+
+const requiredKeys = [
+  "NEXT_PUBLIC_SUPABASE_URL",
+  "NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY",
+  "SUPABASE_SECRET_KEY",
+];
+
+const missingRequired = requiredKeys.filter((key) => {
+  const value = managedEntries.get(key);
+  return typeof value !== "string" || value.trim() === "";
+});
+
+if (missingRequired.length > 0) {
+  console.error(
+    `Missing required local Supabase values: ${missingRequired.join(", ")}`
+  );
+  console.error("Run `bun run local:up` and retry `bun run local:env`.");
+  process.exit(1);
+}
 
 const managedKeys = new Set(managedEntries.keys());
 const extras = [...existingVars.entries()].filter(([key]) => !managedKeys.has(key));
