@@ -344,4 +344,12 @@ export async function pushCommand(options: PushOptions, apiUrlOverride?: string)
     const verb = result.action === "updated" ? "Updated" : "Posted";
     console.log(`${verb} ${result.date}: ${result.post_url}?edit=1`);
   }
+
+  if (config.username) {
+    const profileShareUrl = new URL(
+      `/consistency/${config.username}`,
+      config.api_url,
+    ).toString();
+    console.log(`Share your consistency card: ${profileShareUrl}`);
+  }
 }

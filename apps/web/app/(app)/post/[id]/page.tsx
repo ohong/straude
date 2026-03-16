@@ -3,6 +3,7 @@ import { notFound } from "next/navigation";
 import { ActivityCard } from "@/components/app/feed/ActivityCard";
 import { CommentThread } from "@/components/app/post/CommentThread";
 import { PostEditor } from "@/components/app/post/PostEditor";
+import { PostSharePanel } from "@/components/app/post/PostSharePanel";
 import { loadPostComments } from "@/lib/comments";
 import type { Metadata } from "next";
 
@@ -15,12 +16,54 @@ export async function generateMetadata({
   const supabase = await createClient();
   const { data: post } = await supabase
     .from("posts")
-    .select("title, user:users!posts_user_id_fkey(username)")
+    .select(
+      "title, description, user:users!posts_user_id_fkey(username), daily_usage:daily_usage!posts_daily_usage_id_fkey(cost_usd, output_tokens, models)"
+    )
     .eq("id", id)
     .single();
 
+  const userRow = Array.isArray(post?.user) ? post?.user[0] : post?.user;
+  const usageRow = Array.isArray(post?.daily_usage)
+    ? post?.daily_usage[0]
+    : post?.daily_usage;
+  const username =
+    (userRow as { username?: string | null } | null)?.username ?? "user";
+  const description =
+    post?.description?.trim() ||
+    [
+      typeof (usageRow as { cost_usd?: number } | null)?.cost_usd === "number"
+        ? `$${(usageRow as { cost_usd: number }).cost_usd.toFixed(2)} spend`
+        : null,
+      typeof (usageRow as { output_tokens?: number } | null)?.output_tokens ===
+      "number"
+        ? `${(usageRow as { output_tokens: number }).output_tokens.toLocaleString()} output tokens`
+        : null,
+      Array.isArray((usageRow as { models?: string[] } | null)?.models) &&
+      (usageRow as { models: string[] }).models.length > 0
+        ? `using ${(usageRow as { models: string[] }).models[0]}`
+        : null,
+    ]
+      .filter(Boolean)
+      .join(" · ");
+  const pageUrl = `/post/${id}`;
+
   return {
-    title: post?.title ?? `Post by ${(post?.user as any)?.username ?? "user"}`,
+    title: post?.title ?? `Post by @${username}`,
+    description,
+    alternates: {
+      canonical: pageUrl,
+    },
+    openGraph: {
+      title: post?.title ?? `Post by @${username}`,
+      description,
+      url: pageUrl,
+      type: "article",
+    },
+    twitter: {
+      title: post?.title ?? `Post by @${username}`,
+      description,
+      card: "summary_large_image",
+    },
   };
 }
 
@@ -119,6 +162,25 @@ export default async function PostDetailPage({
         <h3 className="text-lg font-medium">Post</h3>
       </header>
       <ActivityCard post={normalizedPost} />
+      <PostSharePanel
+        postId={id}
+        sharePost={{
+          id: normalizedPost.id,
+          title: normalizedPost.title,
+          images: normalizedPost.images ?? [],
+          user: normalizedPost.user
+            ? { username: normalizedPost.user.username }
+            : null,
+          daily_usage: normalizedPost.daily_usage
+            ? {
+                cost_usd: normalizedPost.daily_usage.cost_usd,
+                output_tokens: normalizedPost.daily_usage.output_tokens,
+                models: normalizedPost.daily_usage.models,
+                is_verified: normalizedPost.daily_usage.is_verified,
+              }
+            : null,
+        }}
+      />
       {isOwner && <PostEditor post={normalizedPost} autoEdit={query.edit === "1"} />}
       <CommentThread
         postId={id}

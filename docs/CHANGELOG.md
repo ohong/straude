@@ -4,6 +4,7 @@
 
 ### Added
 
+- **Consistency cards and inline share panels.** Added a new public `/consistency/[username]` share page backed by `/api/consistency/[username]/image`, using a 52-week Claude-orange heatmap card with streak, recent output, active days, and most-used model. Profile pages now expose a visible share URL plus PNG preview/download panel directly under Contributions. Post detail pages now expose the canonical permalink plus generated session-card preview/download UI above the comments. The CLI now prints a profile consistency-card URL after successful syncs.
 - **Golden path e2e test suite.** 35 Playwright specs across 5 files covering unauthenticated user journeys: landing-to-signup funnel (8 tests), public leaderboard browsing with period/region filters (6 tests), public profile viewing including 404 and private guards (6 tests), CLI verify page (5 tests), and cross-page navigation with dark/light theme persistence (10 tests). Fixed Playwright config to use a dedicated port (3099 locally) to avoid conflicts with other dev servers, which also fixed 4 pre-existing broken landing tests.
 - **Model Usage chart on admin dashboard.** New line chart showing daily Claude vs Codex spend over time, placed after the Cumulative Spend chart. Includes 7D/14D/30D/All time range selector. Backed by a new `admin_model_usage_by_day()` Postgres RPC that splits `model_breakdown` JSONB by model family.
 - **Developer documentation: API, CLI, and Setup guides.** Added `docs/API.md` (complete API endpoint reference for all 36 route files and 49 HTTP method handlers, organized by category with auth requirements, rate limits, request/response shapes, and side effects), `docs/CLI.md` (CLI command reference with installation, authentication flow, data sources, merge logic, config format, multi-device support, and troubleshooting), and `docs/SETUP.md` (developer setup guide with prerequisites, env configuration, database setup, local dev instructions, testing, CI pipeline, and project conventions).
@@ -19,6 +20,7 @@
 
 ### Changed
 
+- **Post share cards now use a session-first layout.** The square share image at `/api/posts/[id]/share-image` now prioritizes the post story first and the spend/output/model stats second, matching the new inline share flow instead of the older generic promo-card composition.
 - **Dev script uses Portless.** Updated `apps/web` dev script to `portless run next dev --turbopack` for stable named `.localhost` URLs during development.
 
 ### Added
