@@ -16,8 +16,8 @@ vi.mock("@/lib/api/cli-auth", () => ({
   verifyCliToken: vi.fn(() => null), // web flow — no CLI token
 }));
 
-vi.mock("@supabase/supabase-js", () => ({
-  createClient: vi.fn(() => mockServiceClient),
+vi.mock("@/lib/supabase/service", () => ({
+  getServiceClient: vi.fn(() => mockServiceClient),
 }));
 
 const mockAnthropicCreate = vi.fn().mockResolvedValue({
@@ -39,6 +39,7 @@ vi.mock("@anthropic-ai/sdk", () => {
 
 const mockServiceClient = {
   from: vi.fn(),
+  rpc: vi.fn(),
 };
 
 // ---------------------------------------------------------------------------
@@ -76,6 +77,7 @@ describe("Flow: Web JSON Import", () => {
 
   beforeEach(() => {
     vi.clearAllMocks();
+    mockServiceClient.rpc.mockResolvedValue({ data: null, error: null });
     vi.stubEnv("NEXT_PUBLIC_APP_URL", "https://straude.com");
     vi.stubEnv("NEXT_PUBLIC_SUPABASE_URL", "https://test.supabase.co");
     vi.stubEnv("SUPABASE_SECRET_KEY", "test-secret");
