@@ -130,7 +130,11 @@ export function LeaderboardTable({
                     <div className="flex min-w-0 items-center gap-2">
                       <span className="truncate font-medium">{entry.username}</span>
                       {entry.level ? (
-                        <Badge variant="default" className="font-mono tabular-nums text-accent">
+                        <Badge
+                          variant="default"
+                          className="font-mono tabular-nums text-accent"
+                          title={`L${entry.level} · 30-day heat check`}
+                        >
                           L{entry.level}
                         </Badge>
                       ) : null}
@@ -185,7 +189,11 @@ export function LeaderboardTable({
               <div className="flex items-center gap-2">
                 <p className="truncate font-medium">{entry.username}</p>
                 {entry.level ? (
-                  <Badge variant="default" className="font-mono tabular-nums text-accent">
+                  <Badge
+                    variant="default"
+                    className="font-mono tabular-nums text-accent"
+                    title={`L${entry.level} · 30-day heat check`}
+                  >
                     L{entry.level}
                   </Badge>
                 ) : null}

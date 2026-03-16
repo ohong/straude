@@ -268,7 +268,11 @@ export default async function ProfilePage({
                 {profile.display_name ?? profile.username}
               </h1>
               {levelRow?.level ? (
-                <Badge variant="default" className="font-mono tabular-nums text-accent">
+                <Badge
+                  variant="default"
+                  className="font-mono tabular-nums text-accent"
+                  title={`L${Number(levelRow.level)} · 30-day heat check`}
+                >
                   L{Number(levelRow.level)}
                 </Badge>
               ) : null}
@@ -361,9 +365,11 @@ export default async function ProfilePage({
           <div>
             <p className="text-[0.7rem] uppercase tracking-widest text-muted">Level</p>
             <p className="font-[family-name:var(--font-mono)] text-lg font-medium tabular-nums text-accent">
-              {levelRow?.level ? `L${Number(levelRow.level)}` : "—"}
+              {levelRow?.level ? `L${Number(levelRow.level)}` : "L0"}
             </p>
-            <p className="text-xs text-muted">Best 30-day stretch</p>
+            <p className="text-xs text-muted">
+              {levelRow?.level ? "Your 30-day heat check" : "Just getting started"}
+            </p>
           </div>
           <div>
             <p className="text-[0.7rem] uppercase tracking-widest text-muted">Streak</p>
@@ -403,6 +409,15 @@ export default async function ProfilePage({
             <AchievementBadges earned={achievements ?? []} showLocked={isOwn} />
           </div>
         )}
+
+        <div className="mt-6 rounded-[10px] border border-border bg-subtle/40 px-4 py-3 text-sm">
+          <p className="font-medium text-foreground">
+            Levels are your 30-day heat check.
+          </p>
+          <p className="mt-1 text-muted">
+            Show up, stack spend, climb up. Go quiet for a bit and it cools off.
+          </p>
+        </div>
       </div>
 
       {/* Contribution graph */}
