@@ -91,6 +91,18 @@ describe("GET /api/users/[username]", () => {
             }),
           };
         }
+        if (table === "user_levels") {
+          return {
+            select: vi.fn().mockReturnValue({
+              eq: vi.fn().mockReturnValue({
+                maybeSingle: vi.fn().mockResolvedValue({
+                  data: { level: 4 },
+                  error: null,
+                }),
+              }),
+            }),
+          };
+        }
         if (table === "posts") {
           return {
             select: vi.fn().mockReturnValue({
@@ -156,6 +168,7 @@ describe("GET /api/users/[username]", () => {
     expect(json.username).toBe("alice");
     expect(json.streak).toBe(7);
     expect(json.total_cost).toBe(15);
+    expect(json.level).toBe(4);
   });
 
   it("returns 404 for non-existent username", async () => {

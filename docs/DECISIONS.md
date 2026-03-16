@@ -1,5 +1,21 @@
 # Architecture & Design Decisions
 
+## Usage Levels: Sticky Best-Window Status, Not Rolling Downgrade (2026-03-16)
+
+**Decision:** Added a `user_levels` table with `L1`-`L8` levels derived from each user's best 30-day usage window, using both spend and active-day thresholds. Levels appear on public profiles and leaderboard rows, and once earned they do not go down.
+
+**Problem:** Straude already had rank, streak, and achievements, but no single compact identity marker users could point to or compare socially. A pure rolling level would punish quiet periods, while a lifetime level would duplicate achievements and flatten recent momentum.
+
+**Alternatives considered:**
+1. **Pure rolling current-month level** — reflects recent behavior, but users can fall backward after a quiet week. Conflicts with the product goal that levels should feel shareable and earned.
+2. **Lifetime level** — simple and sticky, but overlaps too heavily with achievements and lifetime spend stats already shown on profiles.
+3. **Best 30-day window, sticky** (chosen) — preserves the meaning of "recent form" while preventing status loss. Also avoids tying the feature entirely to leaderboard position.
+4. **Multi-metric formula with output tokens, verification, or social stats** — richer on paper, but harder to explain and too close to achievements/reputation systems.
+
+**Why spend + consistency:** Straude's core product and leaderboard already center spend, but requiring active days at every tier keeps the feature from feeling like a one-day whale badge.
+
+**Why store levels:** Profiles and leaderboard rows need a cheap read path, and the no-downgrade rule is easier to preserve with explicit persisted state than with repeated ad hoc recomputation in application code.
+
 ## Golden Path E2E Tests: Unauthenticated-First, Per-Journey Files (2026-03-11)
 
 **Decision:** Structured golden path tests as 5 separate spec files under `e2e/golden-path/`, each covering one unauthenticated user journey. Authenticated golden paths (feed interactions, settings, post editing) are deferred until an auth fixture is established.

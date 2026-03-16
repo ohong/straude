@@ -8,6 +8,10 @@ vi.mock("@/lib/api/cli-auth", () => ({
   verifyCliToken: vi.fn(),
 }));
 
+vi.mock("@/lib/supabase/service", () => ({
+  getServiceClient: vi.fn(),
+}));
+
 vi.mock("@supabase/supabase-js", () => ({
   createClient: vi.fn(),
 }));
@@ -15,7 +19,7 @@ vi.mock("@supabase/supabase-js", () => ({
 import { POST, aggregateDeviceRows } from "@/app/api/usage/submit/route";
 import { createClient } from "@/lib/supabase/server";
 import { verifyCliToken } from "@/lib/api/cli-auth";
-import { createClient as createServiceClient } from "@supabase/supabase-js";
+import { getServiceClient } from "@/lib/supabase/service";
 
 function makeEntry(dateStr: string, overrides: Record<string, any> = {}) {
   return {
@@ -47,6 +51,10 @@ function daysAgo(n: number) {
 function mockServiceClient(overrides: Record<string, any> = {}) {
   const chain: Record<string, any> = {
     from: vi.fn().mockReturnThis(),
+    rpc: vi.fn().mockResolvedValue({
+      data: null,
+      error: null,
+    }),
     upsert: vi.fn().mockReturnThis(),
     insert: vi.fn().mockReturnThis(),
     update: vi.fn().mockReturnThis(),
@@ -62,7 +70,7 @@ function mockServiceClient(overrides: Record<string, any> = {}) {
     }),
     ...overrides,
   };
-  (createServiceClient as any).mockReturnValue(chain);
+  (getServiceClient as any).mockReturnValue(chain);
   return chain;
 }
 
@@ -165,6 +173,7 @@ describe("POST /api/usage/submit", () => {
     expect(json.results[0].usage_id).toBe("usage-1");
     expect(json.results[0].post_id).toBe("post-1");
     expect(json.results[0].post_url).toBe("https://straude.com/post/post-1");
+    expect(svc.rpc).toHaveBeenCalledWith("recalculate_user_level", { p_user_id: "user-1" });
   });
 
   it("submits multiple days (batch)", async () => {
@@ -492,7 +501,7 @@ describe("POST /api/usage/submit", () => {
       return dailyChain;
     });
 
-    (createServiceClient as any).mockReturnValue({ from: fromFn });
+    (getServiceClient as any).mockReturnValue({ from: fromFn, rpc: vi.fn().mockResolvedValue({ data: null, error: null }) });
 
     const res = await POST(
       mockRequest({

@@ -4,6 +4,7 @@
 
 ### Added
 
+- **Sticky L1-L8 usage levels on profiles and leaderboard rows.** Straude now assigns users a persistent level based on their best 30-day usage stretch, combining spend and active-day consistency. Levels are recalculated after usage syncs, backfilled for existing users via a new `user_levels` table and `recalculate_user_level()` database function, and rendered on public profiles plus leaderboard rows without changing spend-based ranking.
 - **`--timeout` CLI flag for subprocess timeout.** Users with large usage histories can now raise the ccusage/codex subprocess timeout: `straude --timeout 300`. Extracts the hardcoded timeout into a shared `DEFAULT_SUBPROCESS_TIMEOUT_MS` constant and threads it through all 4 exec paths (ccusage sync/async, codex sync/async). Default bumped from 120s to 240s to give more headroom out of the box. (PR #49, @jsnider3)
 - **Local Supabase development workflow.** Docker-backed local Supabase setup with `supabase/config.toml`, auto-generated `.env.local`, demo seed data, a dev-only `/dev/local-env` setup route, and friendlier missing-env handling. Full local dev flow documented in `docs/LOCAL_DEV.md`. (PR #47, @markmdev)
 
