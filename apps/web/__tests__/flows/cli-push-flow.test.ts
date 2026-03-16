@@ -19,6 +19,7 @@ vi.mock("@/lib/api/cli-auth", () => ({
 
 const mockServiceClient = {
   from: vi.fn(),
+  rpc: vi.fn(),
 };
 
 vi.mock("@/lib/supabase/service", () => ({
@@ -58,6 +59,7 @@ describe("Flow: CLI Push", () => {
   beforeEach(() => {
     vi.useFakeTimers({ now: new Date('2026-03-13T12:00:00Z'), toFake: ['Date'] });
     vi.clearAllMocks();
+    mockServiceClient.rpc.mockResolvedValue({ data: null, error: null });
     vi.stubEnv("NEXT_PUBLIC_APP_URL", "https://straude.com");
     vi.stubEnv("NEXT_PUBLIC_SUPABASE_URL", "https://test.supabase.co");
     vi.stubEnv("SUPABASE_SECRET_KEY", "test-secret");

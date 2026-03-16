@@ -43,6 +43,7 @@ export async function GET(_request: NextRequest, context: RouteContext) {
     postsRes,
     streakRes,
     totalCostRes,
+    levelRes,
     weeklyRes,
   ] = await Promise.all([
     db
@@ -65,6 +66,11 @@ export async function GET(_request: NextRequest, context: RouteContext) {
       .from("daily_usage")
       .select("cost_usd.sum()")
       .eq("user_id", profile.id),
+    db
+      .from("user_levels")
+      .select("level")
+      .eq("user_id", profile.id)
+      .maybeSingle(),
     profile.is_public && profile.username
       ? db
           .from("leaderboard_weekly")
@@ -113,6 +119,7 @@ export async function GET(_request: NextRequest, context: RouteContext) {
     posts_count: postsRes.count ?? 0,
     streak,
     total_cost,
+    level: levelRes.data?.level ? Number(levelRes.data.level) : null,
     global_rank,
     regional_rank,
     is_following,

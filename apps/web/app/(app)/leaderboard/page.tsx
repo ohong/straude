@@ -1,5 +1,6 @@
 import { createClient } from "@/lib/supabase/server";
 import { getAuthUser } from "@/lib/supabase/auth";
+import { getServiceClient } from "@/lib/supabase/service";
 import { LeaderboardTable } from "@/components/app/leaderboard/LeaderboardTable";
 import type { Metadata } from "next";
 
@@ -42,6 +43,7 @@ export default async function LeaderboardPage({
   const { period = "week", region } = await searchParams;
   const user = await getAuthUser();
   const supabase = await createClient();
+  const db = getServiceClient();
 
   // We'll use the materialized view directly for SSR
   const viewName = `leaderboard_${period === "all_time" ? "all_time" : period === "month" ? "monthly" : period === "day" ? "daily" : "weekly"}`;
@@ -68,6 +70,18 @@ export default async function LeaderboardPage({
     streakMap.set(row.user_id, row.streak);
   }
 
+  const { data: levelRows } = userIds.length > 0
+    ? await db
+        .from("user_levels")
+        .select("user_id, level")
+        .in("user_id", userIds)
+    : { data: [] };
+
+  const levelMap = new Map<string, number>();
+  for (const row of levelRows ?? []) {
+    levelMap.set(row.user_id, Number(row.level));
+  }
+
   // Add rank numbers and streaks
   const ranked =
     entries?.map((e: any, i: number) => ({
@@ -76,6 +90,7 @@ export default async function LeaderboardPage({
       total_cost: Number(e.total_cost),
       total_output_tokens: Number(e.total_output_tokens),
       streak: streakMap.get(e.user_id) ?? 0,
+      level: levelMap.get(e.user_id),
     })) ?? [];
 
   return (

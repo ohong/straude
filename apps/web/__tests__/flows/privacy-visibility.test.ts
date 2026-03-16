@@ -100,6 +100,15 @@ describe("Flow: Privacy and Visibility", () => {
     });
 
     mockSupabase.from.mockImplementation(() => lbChain);
+    mockServiceClient.from.mockImplementation((table: string) => {
+      if (table === "user_levels") {
+        const levelChain = chainBuilder();
+        (levelChain.select as ReturnType<typeof vi.fn>).mockReturnValue(levelChain);
+        (levelChain.in as ReturnType<typeof vi.fn>).mockResolvedValue({ data: [], error: null });
+        return levelChain;
+      }
+      return chainBuilder();
+    });
 
     const { GET } = await import("@/app/api/leaderboard/route");
     const req = makeRequest("http://localhost:3000/api/leaderboard?period=week");
@@ -146,16 +155,25 @@ describe("Flow: Privacy and Visibility", () => {
 
     mockSupabase.from.mockImplementation(() => chainBuilder());
 
-    let serviceCallCount = 0;
+    let leaderboardWeeklyCallCount = 0;
     mockServiceClient.from.mockImplementation((table: string) => {
-      serviceCallCount++;
       if (table === "users") return profileChain;
       if (table === "follows") return countChain;
       if (table === "posts") return countChain;
       if (table === "daily_usage") return costChain;
+      if (table === "user_levels") {
+        const levelChain = chainBuilder();
+        (levelChain.select as ReturnType<typeof vi.fn>).mockReturnValue(levelChain);
+        (levelChain.eq as ReturnType<typeof vi.fn>).mockReturnValue(levelChain);
+        (levelChain.maybeSingle as ReturnType<typeof vi.fn>).mockResolvedValue({
+          data: { level: 4 },
+        });
+        return levelChain;
+      }
       if (table === "leaderboard_weekly") {
-        if (serviceCallCount <= 6) return weeklyChain;
-        if (serviceCallCount <= 7) return rankChain;
+        leaderboardWeeklyCallCount++;
+        if (leaderboardWeeklyCallCount === 1) return weeklyChain;
+        if (leaderboardWeeklyCallCount === 2) return rankChain;
         return regionRankChain;
       }
       return chainBuilder();

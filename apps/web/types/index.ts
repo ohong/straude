@@ -87,6 +87,18 @@ export interface LeaderboardEntry {
   total_output_tokens: number;
   streak: number;
   rank: number;
+  level?: number;
+}
+
+export interface UserLevel {
+  user_id: string;
+  level: number;
+  best_window_start: string;
+  best_window_end: string;
+  best_window_cost_usd: number;
+  best_window_active_days: number;
+  promoted_at: string;
+  updated_at: string;
 }
 
 export interface ContributionDay {

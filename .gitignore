@@ -55,6 +55,9 @@ next-env.d.ts
 
 # OG image variants (local experiments)
 og-variants/
+.firecrawl/
+
+AGENTS.md
 
 # Waypoint state
 .codex/config.toml

@@ -402,6 +402,9 @@ export async function POST(request: Request) {
   }
 
   checkAndAwardAchievements(userId, "usage").catch(() => {});
+  Promise.resolve(
+    db.rpc("recalculate_user_level", { p_user_id: userId }),
+  ).catch(() => {});
 
   // Recheck referrer's crew-spend achievements when a referred user logs usage
   Promise.resolve(

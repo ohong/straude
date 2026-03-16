@@ -5,6 +5,7 @@ import { notFound } from "next/navigation";
 import Link from "next/link";
 import { MapPin, LinkIcon, Github, Flame, Zap, Users, Lock } from "lucide-react";
 import { Avatar } from "@/components/ui/Avatar";
+import { Badge } from "@/components/ui/Badge";
 import { AchievementBadges } from "@/components/app/profile/AchievementBadges";
 import { ContributionGraph } from "@/components/app/profile/ContributionGraph";
 import { FeedList } from "@/components/app/feed/FeedList";
@@ -94,6 +95,7 @@ export default async function ProfilePage({
     { data: streak },
     { data: totalSpendRows },
     { data: achievements },
+    { data: levelRow },
     { data: referrerData },
     { count: crewCount },
   ] = await Promise.all([
@@ -118,6 +120,11 @@ export default async function ProfilePage({
       .from("user_achievements")
       .select("*")
       .eq("user_id", profile.id),
+    db
+      .from("user_levels")
+      .select("level")
+      .eq("user_id", profile.id)
+      .maybeSingle(),
     profile.referred_by
       ? db
           .from("users")
@@ -243,6 +250,11 @@ export default async function ProfilePage({
               <h1 className="text-xl font-medium sm:text-2xl" style={{ letterSpacing: "-0.03em" }}>
                 {profile.display_name ?? profile.username}
               </h1>
+              {levelRow?.level ? (
+                <Badge variant="default" className="font-mono tabular-nums text-accent">
+                  L{Number(levelRow.level)}
+                </Badge>
+              ) : null}
               {!isOwn && authUserId && (
                 <>
                   <FollowButton
@@ -329,6 +341,13 @@ export default async function ProfilePage({
 
         {/* Stats row */}
         <div className="mt-6 grid grid-cols-3 gap-4 sm:grid-cols-4">
+          <div>
+            <p className="text-[0.7rem] uppercase tracking-widest text-muted">Level</p>
+            <p className="font-[family-name:var(--font-mono)] text-lg font-medium tabular-nums text-accent">
+              {levelRow?.level ? `L${Number(levelRow.level)}` : "—"}
+            </p>
+            <p className="text-xs text-muted">Best 30-day stretch</p>
+          </div>
           <div>
             <p className="text-[0.7rem] uppercase tracking-widest text-muted">Streak</p>
             <p className="inline-flex items-center gap-1 font-[family-name:var(--font-mono)] text-lg font-medium tabular-nums">
