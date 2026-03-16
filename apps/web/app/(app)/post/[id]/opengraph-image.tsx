@@ -5,7 +5,7 @@ import { ShareCardImage } from "@/lib/utils/share-image";
 import { DEFAULT_SHARE_THEME } from "@/lib/share-themes";
 
 export const alt = "Straude Session Card";
-export const size = { width: 1080, height: 1080 };
+export const size = { width: 1200, height: 630 };
 export const contentType = "image/png";
 
 export default async function Image({

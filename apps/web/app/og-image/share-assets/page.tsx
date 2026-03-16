@@ -25,6 +25,7 @@ const SAMPLE_PROFILE: ProfileShareCardData = {
 };
 
 const SAMPLE_POST = {
+  id: "post-demo",
   title: "Tightened the share flow and stopped hiding the best card in a dropdown.",
   description:
     "Shipped a new session card, wired visible share URLs into the post page, and made the profile consistency asset feel more like a training log than a screenshot.",
@@ -99,11 +100,11 @@ export default function ShareAssetsPreviewPage() {
           <div className="overflow-hidden rounded-[28px] border border-[#d9c3af] bg-white shadow-[0_20px_80px_rgba(92,48,21,0.10)]">
             <div
               style={{
-                width: 1080,
-                height: 1080,
-                transform: "scale(0.62)",
+                width: 1200,
+                height: 630,
+                transform: "scale(0.82)",
                 transformOrigin: "top left",
-                marginBottom: "-410px",
+                marginBottom: "-112px",
               }}
             >
               <ShareCardImage post={SAMPLE_POST} themeId="accent" />
@@ -132,6 +133,18 @@ export default function ShareAssetsPreviewPage() {
             </h2>
             <PostSharePanel
               postId="post-demo"
+              sharePost={{
+                id: SAMPLE_POST.id,
+                title: SAMPLE_POST.title,
+                images: SAMPLE_POST.images,
+                user: { username: SAMPLE_POST.username },
+                daily_usage: {
+                  cost_usd: SAMPLE_POST.cost_usd,
+                  output_tokens: SAMPLE_POST.output_tokens,
+                  models: SAMPLE_POST.models,
+                  is_verified: SAMPLE_POST.is_verified,
+                },
+              }}
               shareUrlOverride="https://straude.com/post/post-demo"
               imageUrlOverride={PANEL_IMAGE_URL}
             />

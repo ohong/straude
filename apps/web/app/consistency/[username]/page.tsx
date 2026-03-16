@@ -10,10 +10,27 @@ export async function generateMetadata({
   params: Promise<{ username: string }>;
 }): Promise<Metadata> {
   const { username } = await params;
+  const title = `@${username}'s Consistency Card — Straude`;
+  const description = `See @${username}'s Claude Code consistency card on Straude.`;
+  const pageUrl = `/consistency/${username}`;
 
   return {
-    title: `@${username}'s Consistency Card — Straude`,
-    description: `See @${username}'s Claude Code consistency card on Straude.`,
+    title,
+    description,
+    alternates: {
+      canonical: pageUrl,
+    },
+    openGraph: {
+      title,
+      description,
+      url: pageUrl,
+      type: "profile",
+    },
+    twitter: {
+      title,
+      description,
+      card: "summary_large_image",
+    },
   };
 }
 

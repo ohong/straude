@@ -2,7 +2,11 @@
 
 import Image from "next/image";
 import { useEffect, useMemo, useState } from "react";
-import { Check, Download, ImageIcon, Link2 } from "lucide-react";
+import { Check, Download, ExternalLink, ImageIcon } from "lucide-react";
+import {
+  buildProfileIntentUrl,
+  buildProfileShareUrl,
+} from "@/lib/utils/profile-share";
 
 export function ProfileSharePanel({
   username,
@@ -19,8 +23,8 @@ export function ProfileSharePanel({
   imageUrlOverride?: string;
   downloadUrlOverride?: string;
 }) {
-  const [busy, setBusy] = useState<"copy-image" | "download" | null>(null);
-  const [copied, setCopied] = useState<"link" | "image" | null>(null);
+  const [busy, setBusy] = useState<"share-x" | "copy-image" | "download" | null>(null);
+  const [copied, setCopied] = useState<"image" | null>(null);
   const [feedback, setFeedback] = useState<string | null>(null);
   const [publicUrl, setPublicUrl] = useState("");
   const [supportsClipboardImage, setSupportsClipboardImage] = useState(false);
@@ -35,8 +39,7 @@ export function ProfileSharePanel({
 
   useEffect(() => {
     setPublicUrl(
-      shareUrlOverride ??
-        new URL(`/consistency/${username}`, window.location.origin).toString()
+      shareUrlOverride ?? buildProfileShareUrl(window.location.origin, username)
     );
     setSupportsClipboardImage(
       typeof ClipboardItem !== "undefined" &&
@@ -44,17 +47,45 @@ export function ProfileSharePanel({
     );
   }, [shareUrlOverride, username]);
 
-  async function copyLink() {
+  async function shareOnX() {
     if (!isPublic) return;
 
+    setBusy("share-x");
+    setFeedback(null);
+
+    let imageCopied = false;
+
     try {
-      await navigator.clipboard.writeText(publicUrl);
-      setCopied("link");
-      setFeedback("Consistency link copied.");
-      window.setTimeout(() => setCopied(null), 2000);
+      if (supportsClipboardImage) {
+        const response = await fetch(imageUrl, { cache: "no-store" });
+        if (!response.ok) {
+          throw new Error(`HTTP ${response.status}`);
+        }
+        const blob = await response.blob();
+        await navigator.clipboard.write([
+          new ClipboardItem({ "image/png": blob }),
+        ]);
+        imageCopied = true;
+      }
     } catch {
-      setFeedback("Could not copy the consistency link on this browser.");
+      imageCopied = false;
     }
+
+    window.open(
+      buildProfileIntentUrl(window.location.origin, username),
+      "_blank",
+      "noopener,noreferrer"
+    );
+
+    if (imageCopied) {
+      setCopied("image");
+      setFeedback("Opened X and copied the card. Paste it into the composer.");
+      window.setTimeout(() => setCopied(null), 2000);
+    } else {
+      setFeedback("Opened X with the text and link. Add the image manually if needed.");
+    }
+
+    setBusy(null);
   }
 
   async function copyImage() {
@@ -107,15 +138,11 @@ export function ProfileSharePanel({
   }
 
   return (
-    <div className="mt-5 rounded-[24px] border border-border bg-subtle/30 p-4 sm:p-5">
+    <div className="mt-5">
       <div className="flex flex-col gap-2 sm:flex-row sm:items-end sm:justify-between">
         <div>
           <p className="text-[0.7rem] font-semibold uppercase tracking-widest text-muted">
             Share Your Consistency Card
-          </p>
-          <p className="mt-1 max-w-2xl text-sm text-muted">
-            A public, tweetable heatmap card for the last 52 weeks of grind.
-            The heatmap stays the hero; the stats stay sharp.
           </p>
         </div>
         {!isPublic && isOwner && (
@@ -125,29 +152,7 @@ export function ProfileSharePanel({
         )}
       </div>
 
-      <div className="mt-4 rounded-[18px] border border-border bg-background px-4 py-3">
-        <p className="text-[0.65rem] font-semibold uppercase tracking-widest text-muted">
-          Share URL
-        </p>
-        <div className="mt-2 flex flex-col gap-3 sm:flex-row sm:items-center">
-          <code className="min-w-0 flex-1 overflow-x-auto whitespace-nowrap rounded-xl bg-subtle px-3 py-2 text-sm text-foreground">
-            {isPublic && publicUrl
-              ? publicUrl
-              : "Make your profile public to unlock a shareable URL."}
-          </code>
-          <button
-            type="button"
-            onClick={copyLink}
-            disabled={!isPublic}
-            className="inline-flex items-center justify-center gap-2 rounded-full border border-border px-4 py-2 text-sm font-semibold hover:bg-subtle disabled:cursor-not-allowed disabled:opacity-50"
-          >
-            {copied === "link" ? <Check size={16} aria-hidden /> : <Link2 size={16} aria-hidden />}
-            {copied === "link" ? "Copied" : "Copy URL"}
-          </button>
-        </div>
-      </div>
-
-      <div className="mt-4 overflow-hidden rounded-[24px] border border-border bg-background shadow-sm">
+      <div className="mt-4 max-w-[620px] overflow-hidden rounded-[24px] border border-border bg-background shadow-sm">
         <Image
           src={imageUrl}
           alt={`@${username}'s consistency card`}
@@ -156,6 +161,28 @@ export function ProfileSharePanel({
           unoptimized
           className="block h-auto w-full"
         />
+      </div>
+
+      <div className="mt-4 inline-flex max-w-full flex-col gap-2 px-1 py-1">
+        <p className="text-[0.65rem] font-semibold uppercase tracking-widest text-muted">
+          Share URL
+        </p>
+        <div className="flex flex-col gap-3 sm:flex-row sm:items-center">
+          <code className="max-w-full overflow-x-auto whitespace-nowrap rounded-xl bg-subtle px-3 py-2 text-sm text-foreground">
+            {isPublic && publicUrl
+              ? publicUrl
+              : "Make your profile public to unlock a shareable URL."}
+          </code>
+          <button
+            type="button"
+            onClick={shareOnX}
+            disabled={!isPublic || busy !== null}
+            className="inline-flex items-center justify-center gap-2 rounded-full border border-border px-4 py-2 text-sm font-semibold hover:bg-subtle disabled:cursor-not-allowed disabled:opacity-50"
+          >
+            <ExternalLink size={16} aria-hidden />
+            {busy === "share-x" ? "Preparing..." : "Share on X"}
+          </button>
+        </div>
       </div>
 
       <div className="mt-4 flex flex-wrap gap-3">
