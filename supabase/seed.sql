@@ -20,11 +20,11 @@ VALUES
   (
     'dm-attachments',
     'dm-attachments',
-    true,
+    false,
     10485760,
     ARRAY[
       'image/jpeg', 'image/png', 'image/gif', 'image/webp',
-      'image/heic', 'image/heif', 'application/octet-stream',
+      'image/heic', 'image/heif',
       'application/pdf',
       'text/plain', 'text/markdown', 'text/csv',
       'application/json',

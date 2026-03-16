@@ -7,11 +7,7 @@ const commands = [
   "bun run dev:local",
 ];
 
-export default function LocalEnvSetupPage({
-  searchParams,
-}: {
-  searchParams: Promise<{ from?: string }>;
-}) {
+export default function LocalEnvSetupPage() {
   return (
     <main className="min-h-screen bg-background px-6 py-12">
       <div className="mx-auto max-w-3xl rounded-[28px] border border-border bg-subtle/30 p-6 sm:p-8">
@@ -81,7 +77,9 @@ export default function LocalEnvSetupPage({
             Supabase local docs
           </a>
           <a
-            href="/docs/LOCAL_DEV.md"
+            href="https://github.com/ohong/straude/blob/main/docs/LOCAL_DEV.md"
+            target="_blank"
+            rel="noopener noreferrer"
             className="inline-flex items-center justify-center rounded-full border border-border px-5 py-2.5 text-sm font-semibold hover:bg-subtle"
           >
             Repo local-dev doc

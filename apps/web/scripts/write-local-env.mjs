@@ -27,7 +27,7 @@ function randomSecret(label) {
 let statusOutput = "";
 try {
   statusOutput = execFileSync(
-    "npx",
+    "bunx",
     [
       "supabase",
       "status",
@@ -55,8 +55,8 @@ const existingVars = existsSync(envPath)
 
 const managedEntries = new Map([
   ["NEXT_PUBLIC_SUPABASE_URL", localVars.get("NEXT_PUBLIC_SUPABASE_URL") ?? localVars.get("API_URL") ?? "http://127.0.0.1:54321"],
-  ["NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY", localVars.get("NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY") ?? localVars.get("PUBLISHABLE_KEY") ?? localVars.get("ANON_KEY") ?? ""],
-  ["SUPABASE_SECRET_KEY", localVars.get("SUPABASE_SECRET_KEY") ?? localVars.get("SECRET_KEY") ?? localVars.get("SERVICE_ROLE_KEY") ?? ""],
+  ["NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY", localVars.get("NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY") ?? localVars.get("PUBLISHABLE_KEY") ?? ""],
+  ["SUPABASE_SECRET_KEY", localVars.get("SUPABASE_SECRET_KEY") ?? localVars.get("SECRET_KEY") ?? ""],
   ["NEXT_PUBLIC_APP_URL", existingVars.get("NEXT_PUBLIC_APP_URL") ?? "http://localhost:3000"],
   ["PORTLESS_URL", existingVars.get("PORTLESS_URL") ?? "http://localhost:3000"],
   ["CLI_JWT_SECRET", existingVars.get("CLI_JWT_SECRET") ?? randomSecret("straude-local-cli")],

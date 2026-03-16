@@ -3,7 +3,10 @@ const BROWSER_ENV_KEYS = [
   "NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY",
 ] as const;
 
-const SERVER_ENV_KEYS = ["SUPABASE_SECRET_KEY"] as const;
+const SERVER_ENV_KEYS = [
+  "NEXT_PUBLIC_SUPABASE_URL",
+  "SUPABASE_SECRET_KEY",
+] as const;
 
 type BrowserEnvKey = (typeof BROWSER_ENV_KEYS)[number];
 type ServerEnvKey = (typeof SERVER_ENV_KEYS)[number];
@@ -59,10 +62,7 @@ export function getSupabaseBrowserEnv() {
 }
 
 export function getSupabaseServerEnv() {
-  const missing = [
-    ...getMissingSupabaseBrowserEnv(),
-    ...getMissingSupabaseServerEnv(),
-  ];
+  const missing = getMissingSupabaseServerEnv();
 
   if (missing.length > 0) {
     throw new Error(formatSupabaseEnvHelp(missing));
@@ -70,7 +70,6 @@ export function getSupabaseServerEnv() {
 
   return {
     url: process.env.NEXT_PUBLIC_SUPABASE_URL!,
-    publishableKey: process.env.NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY!,
     secretKey: process.env.SUPABASE_SECRET_KEY!,
   };
 }
