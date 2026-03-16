@@ -48,6 +48,9 @@ export function NotificationsList() {
           const payload = await res
             .json()
             .catch(() => ({ error: "Failed to load notifications." }));
+          if (!replace) {
+            setHasMore(false);
+          }
           setError(
             typeof payload.error === "string"
               ? payload.error
@@ -64,6 +67,9 @@ export function NotificationsList() {
         setHasMore(fetched.length >= PAGE_SIZE);
         setError(null);
       } catch {
+        if (!replace) {
+          setHasMore(false);
+        }
         setError("Failed to load notifications.");
       } finally {
         setLoading(false);
