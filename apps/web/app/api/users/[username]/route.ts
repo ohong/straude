@@ -1,24 +1,40 @@
 import { NextResponse, type NextRequest } from "next/server";
-import { createClient } from "@/lib/supabase/server";
+import { getServiceClient } from "@/lib/supabase/service";
+import { getProfileAccessContext } from "@/lib/profile-access";
 
 type RouteContext = { params: Promise<{ username: string }> };
+type PublicProfileRow = {
+  id: string;
+  username: string | null;
+  display_name: string | null;
+  avatar_url: string | null;
+  bio: string | null;
+  country: string | null;
+  region: string | null;
+  link: string | null;
+  github_username: string | null;
+  is_public: boolean;
+  streak_freezes: number | null;
+  referred_by: string | null;
+  created_at: string;
+};
 
 export async function GET(_request: NextRequest, context: RouteContext) {
   const { username } = await context.params;
-  const supabase = await createClient();
-  const {
-    data: { user: authUser },
-  } = await supabase.auth.getUser();
+  const access = await getProfileAccessContext<PublicProfileRow>(
+    username,
+    "id, username, display_name, avatar_url, bio, country, region, link, github_username, is_public, streak_freezes, referred_by, created_at",
+  );
 
-  const { data: profile, error } = await supabase
-    .from("users")
-    .select("id, username, display_name, avatar_url, bio, country, region, link, github_username, is_public, streak_freezes, referred_by, created_at")
-    .eq("username", username)
-    .single();
-
-  if (error || !profile) {
+  if (!access) {
     return NextResponse.json({ error: "User not found" }, { status: 404 });
   }
+  if (!access.canView) {
+    return NextResponse.json({ error: "Forbidden" }, { status: 403 });
+  }
+
+  const { authUserId, isOwn, isFollowing, profile } = access;
+  const db = getServiceClient();
 
   // All independent queries in parallel
   const [
@@ -28,48 +44,39 @@ export async function GET(_request: NextRequest, context: RouteContext) {
     streakRes,
     totalCostRes,
     weeklyRes,
-    followRes,
   ] = await Promise.all([
-    supabase
+    db
       .from("follows")
       .select("*", { count: "exact", head: true })
       .eq("following_id", profile.id),
-    supabase
+    db
       .from("follows")
       .select("*", { count: "exact", head: true })
       .eq("follower_id", profile.id),
-    supabase
+    db
       .from("posts")
       .select("*", { count: "exact", head: true })
       .eq("user_id", profile.id),
-    supabase.rpc("calculate_user_streak", {
+    db.rpc("calculate_user_streak", {
       p_user_id: profile.id,
       p_freeze_days: profile.streak_freezes ?? 0,
     }),
-    supabase
+    db
       .from("daily_usage")
       .select("cost_usd.sum()")
       .eq("user_id", profile.id),
     profile.is_public && profile.username
-      ? supabase
+      ? db
           .from("leaderboard_weekly")
           .select("total_cost")
           .eq("user_id", profile.id)
-          .maybeSingle()
-      : Promise.resolve({ data: null } as { data: null }),
-    authUser && authUser.id !== profile.id
-      ? supabase
-          .from("follows")
-          .select("id")
-          .eq("follower_id", authUser.id)
-          .eq("following_id", profile.id)
           .maybeSingle()
       : Promise.resolve({ data: null } as { data: null }),
   ]);
 
   const streak = typeof streakRes.data === "number" ? streakRes.data : 0;
   const total_cost = Number((totalCostRes.data as any)?.[0]?.cost_usd ?? 0);
-  const is_following = !!followRes.data;
+  const is_following = !isOwn && !!authUserId && isFollowing;
 
   // Rank queries (depend on weekly leaderboard entry)
   let global_rank: number | undefined;
@@ -78,14 +85,14 @@ export async function GET(_request: NextRequest, context: RouteContext) {
   const userWeekly = weeklyRes.data as { total_cost: number } | null;
   if (userWeekly) {
     const rankPromises = [
-      supabase
+      db
         .from("leaderboard_weekly")
         .select("*", { count: "exact", head: true })
         .gt("total_cost", userWeekly.total_cost),
     ];
     if (profile.region) {
       rankPromises.push(
-        supabase
+        db
           .from("leaderboard_weekly")
           .select("*", { count: "exact", head: true })
           .eq("region", profile.region)

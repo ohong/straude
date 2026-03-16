@@ -9,6 +9,7 @@
 
 ### Fixed
 
+- **Audit remediation for privacy/auth/storage boundaries.** Removed the exact-email search fallback so `/api/search` only returns public-profile matches. Private-profile access is now consistently owner-or-follower across the profile API, contribution API, main profile page, and follows page. `/notifications` and `/recap` now redirect guests cleanly instead of rendering misleading unauthorized states, and the notifications UI no longer advertises a Messages filter the API does not serve. Post image updates now reject non-Straude storage URLs, DM attachments now use private bucket storage plus signed read URLs instead of public links, and `/api/unsubscribe` now supports one-click POST requests while surfacing write failures truthfully.
 - **Test flakiness from unfrozen Date.now()/new Date().** Added `vi.useFakeTimers({ toFake: ['Date'] })` to 4 test files (`push.test.ts`, `cli-sync-flow.test.ts`, `cli-push-flow.test.ts`, `cli-auth.test.ts`) so 15+ date-dependent assertions cannot fail at midnight boundaries or across timezones. Replaced the fragile counter-based `deviceCallCount` mock in `cli-push-flow.test.ts` with a stateless chain that routes by Supabase method (select/upsert) instead of call order. Fixed inconsistent `delete process.env` mutations in `cli-auth.test.ts` to use `vi.stubEnv()` consistently.
 
 ### Added

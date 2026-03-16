@@ -11,7 +11,12 @@ import { Textarea } from "@/components/ui/Textarea";
 import { cn } from "@/lib/utils/cn";
 import { compressImage } from "@/lib/utils/compress-image";
 import { timeAgo } from "@/lib/utils/format";
-import type { DirectMessage, DirectMessageThread, MessageAttachment } from "@/types";
+import type {
+  DirectMessage,
+  DirectMessageThread,
+  MessageAttachment,
+  MessageAttachmentInput,
+} from "@/types";
 
 interface ConversationUser {
   id: string;
@@ -207,7 +212,7 @@ export function MessagesInbox({
     addFiles(imageFiles);
   }
 
-  async function uploadAttachment(pending: PendingAttachment): Promise<MessageAttachment | null> {
+  async function uploadAttachment(pending: PendingAttachment): Promise<MessageAttachmentInput | null> {
     try {
       let fileToUpload = pending.file;
       if (isImageMime(pending.file.type)) {
@@ -225,7 +230,8 @@ export function MessagesInbox({
       }
       const data = await res.json();
       return {
-        url: data.url,
+        bucket: data.bucket,
+        path: data.path,
         name: data.name ?? pending.file.name,
         type: data.type ?? pending.file.type,
         size: data.size ?? pending.file.size,
@@ -253,7 +259,7 @@ export function MessagesInbox({
     setError(null);
 
     // Upload all pending attachments
-    let attachments: MessageAttachment[] = [];
+    let attachments: MessageAttachmentInput[] = [];
     if (pendingAttachments.length > 0) {
       setPendingAttachments((prev) =>
         prev.map((a) => ({ ...a, uploading: true }))
@@ -262,7 +268,7 @@ export function MessagesInbox({
         pendingAttachments.map(uploadAttachment)
       );
       attachments = results.filter(
-        (r): r is MessageAttachment => r !== null
+        (r): r is MessageAttachmentInput => r !== null
       );
       if (attachments.length !== pendingAttachments.length) {
         setSending(false);

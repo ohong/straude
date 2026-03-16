@@ -1,4 +1,4 @@
-import { describe, it, expect, vi, beforeEach } from "vitest";
+import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
 
 // ---------------------------------------------------------------------------
 // Mock Supabase
@@ -47,6 +47,11 @@ const OTHER_ID = "user-other";
 describe("Flow: Post Lifecycle", () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    vi.stubEnv("NEXT_PUBLIC_SUPABASE_URL", "https://test.supabase.co");
+  });
+
+  afterEach(() => {
+    vi.unstubAllEnvs();
   });
 
   it("GET returns post with default empty title after auto-creation", async () => {
@@ -103,7 +108,7 @@ describe("Flow: Post Lifecycle", () => {
       user_id: OWNER_ID,
       title: "Productive morning",
       description: "Shipped the new dashboard",
-      images: ["https://example.com/ss1.png"],
+      images: ["https://test.supabase.co/storage/v1/object/public/post-images/user-owner/ss1.png"],
     };
 
     const updateChain = chainBuilder({ data: updatedPost, error: null });
@@ -119,7 +124,7 @@ describe("Flow: Post Lifecycle", () => {
       body: JSON.stringify({
         title: "Productive morning",
         description: "Shipped the new dashboard",
-        images: ["https://example.com/ss1.png"],
+        images: ["https://test.supabase.co/storage/v1/object/public/post-images/user-owner/ss1.png"],
       }),
     });
     const res = await PATCH(req as any, CONTEXT("post-1"));
@@ -128,14 +133,16 @@ describe("Flow: Post Lifecycle", () => {
     expect(res.status).toBe(200);
     expect(data.title).toBe("Productive morning");
     expect(data.description).toBe("Shipped the new dashboard");
-    expect(data.images).toEqual(["https://example.com/ss1.png"]);
+    expect(data.images).toEqual([
+      "https://test.supabase.co/storage/v1/object/public/post-images/user-owner/ss1.png",
+    ]);
 
     // Verify correct fields passed to update
     const updateCall = (updateChain.update as ReturnType<typeof vi.fn>).mock.calls[0][0];
     expect(updateCall).toEqual({
       title: "Productive morning",
       description: "Shipped the new dashboard",
-      images: ["https://example.com/ss1.png"],
+      images: ["https://test.supabase.co/storage/v1/object/public/post-images/user-owner/ss1.png"],
     });
   });
 

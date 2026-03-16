@@ -4,6 +4,10 @@ vi.mock("@/lib/supabase/server", () => ({
   createClient: vi.fn(),
 }));
 
+vi.mock("@/lib/supabase/service", () => ({
+  getServiceClient: vi.fn(),
+}));
+
 vi.mock("@/lib/constants/regions", () => ({
   COUNTRY_TO_REGION: {
     US: "north_america",
@@ -15,6 +19,7 @@ vi.mock("@/lib/constants/regions", () => ({
 import { GET } from "@/app/api/users/[username]/route";
 import { PATCH } from "@/app/api/users/me/route";
 import { createClient } from "@/lib/supabase/server";
+import { getServiceClient } from "@/lib/supabase/service";
 import { NextRequest } from "next/server";
 
 function makeContext(username: string) {
@@ -123,7 +128,23 @@ describe("GET /api/users/[username]", () => {
       }),
       rpc: vi.fn().mockResolvedValue({ data: 7, error: null }),
     };
-    (createClient as any).mockResolvedValue(client);
+    (createClient as any).mockResolvedValue({
+      auth: client.auth,
+      from: vi.fn().mockReturnValue({
+        select: vi.fn().mockReturnValue({
+          eq: vi.fn().mockReturnValue({
+            eq: vi.fn().mockReturnValue({
+              maybeSingle: vi.fn().mockResolvedValue({
+                data: null,
+                error: null,
+              }),
+            }),
+            maybeSingle: vi.fn().mockResolvedValue({ data: null, error: null }),
+          }),
+        }),
+      }),
+    });
+    (getServiceClient as any).mockReturnValue(client);
 
     const res = await GET(
       makeRequest("GET", "/api/users/alice"),
@@ -156,7 +177,28 @@ describe("GET /api/users/[username]", () => {
         }),
       }),
     };
-    (createClient as any).mockResolvedValue(client);
+    (createClient as any).mockResolvedValue({
+      auth: client.auth,
+      from: vi.fn().mockReturnValue({
+        select: vi.fn().mockReturnValue({
+          eq: vi.fn().mockReturnValue({
+            maybeSingle: vi.fn().mockResolvedValue({ data: null, error: null }),
+          }),
+        }),
+      }),
+    });
+    (getServiceClient as any).mockReturnValue({
+      from: vi.fn().mockReturnValue({
+        select: vi.fn().mockReturnValue({
+          eq: vi.fn().mockReturnValue({
+            single: vi.fn().mockResolvedValue({
+              data: null,
+              error: { code: "PGRST116" },
+            }),
+          }),
+        }),
+      }),
+    });
 
     const res = await GET(
       makeRequest("GET", "/api/users/nobody"),

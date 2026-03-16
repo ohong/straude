@@ -182,7 +182,17 @@ export interface Notification {
 }
 
 export interface MessageAttachment {
+  bucket?: "dm-attachments";
+  path?: string;
   url: string;
+  name: string;
+  type: string;
+  size: number;
+}
+
+export interface MessageAttachmentInput {
+  bucket: "dm-attachments";
+  path: string;
   name: string;
   type: string;
   size: number;

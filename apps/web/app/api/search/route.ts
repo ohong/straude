@@ -1,6 +1,5 @@
 import { NextResponse, type NextRequest } from "next/server";
 import { createClient } from "@/lib/supabase/server";
-import { getServiceClient } from "@/lib/supabase/service";
 
 // Safe public fields only — never expose email, private settings, etc.
 const PUBLIC_USER_FIELDS = "id, username, display_name, bio, avatar_url, is_public";
@@ -40,28 +39,5 @@ export async function GET(request: NextRequest) {
     return NextResponse.json({ error: error.message }, { status: 500 });
   }
 
-  let results = users ?? [];
-
-  // If query looks like an email, also search by exact email match.
-  // Uses service client because lookup_user_id_by_email is service_role only
-  // (it queries auth.users which is not accessible to authenticated role).
-  if (q.includes("@") && results.length === 0) {
-    const service = getServiceClient();
-    const { data: userId } = await service.rpc("lookup_user_id_by_email", {
-      p_email: q,
-    });
-    if (userId) {
-      // Use service client to find user even if they're private
-      const { data: emailUser } = await service
-        .from("users")
-        .select(PUBLIC_USER_FIELDS)
-        .eq("id", userId)
-        .maybeSingle();
-      if (emailUser) {
-        results = [emailUser];
-      }
-    }
-  }
-
-  return NextResponse.json({ users: results });
+  return NextResponse.json({ users: users ?? [] });
 }

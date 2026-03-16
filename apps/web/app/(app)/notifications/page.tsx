@@ -1,9 +1,20 @@
 import { NotificationsList } from "@/components/app/notifications/NotificationsList";
+import { createClient } from "@/lib/supabase/server";
+import { redirect } from "next/navigation";
 import type { Metadata } from "next";
 
 export const metadata: Metadata = { title: "Notifications" };
 
-export default function NotificationsPage() {
+export default async function NotificationsPage() {
+  const supabase = await createClient();
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
+
+  if (!user) {
+    redirect("/login");
+  }
+
   return (
     <>
       <header className="sticky top-0 z-10 flex h-16 items-center border-b border-border bg-background px-6">

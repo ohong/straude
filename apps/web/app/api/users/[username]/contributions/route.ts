@@ -1,44 +1,29 @@
 import { NextResponse, type NextRequest } from "next/server";
-import { createClient } from "@/lib/supabase/server";
+import { getServiceClient } from "@/lib/supabase/service";
+import { getProfileAccessContext } from "@/lib/profile-access";
 
 type RouteContext = { params: Promise<{ username: string }> };
+type ContributionProfileRow = {
+  id: string;
+  is_public: boolean;
+  streak_freezes: number | null;
+};
 
 export async function GET(_request: NextRequest, context: RouteContext) {
   const { username } = await context.params;
-  const supabase = await createClient();
-
-  const {
-    data: { user: authUser },
-  } = await supabase.auth.getUser();
-
-  // Look up user
-  const { data: profile } = await supabase
-    .from("users")
-    .select("id, is_public")
-    .eq("username", username)
-    .single();
-
-  if (!profile) {
+  const access = await getProfileAccessContext<ContributionProfileRow>(
+    username,
+    "id, is_public, streak_freezes",
+  );
+  if (!access) {
     return NextResponse.json({ error: "User not found" }, { status: 404 });
   }
-
-  // For private profiles, only the owner or followers can view contribution data
-  if (!profile.is_public) {
-    if (!authUser) {
-      return NextResponse.json({ error: "Forbidden" }, { status: 403 });
-    }
-    if (authUser.id !== profile.id) {
-      const { data: follow } = await supabase
-        .from("follows")
-        .select("id")
-        .eq("follower_id", authUser.id)
-        .eq("following_id", profile.id)
-        .maybeSingle();
-      if (!follow) {
-        return NextResponse.json({ error: "Forbidden" }, { status: 403 });
-      }
-    }
+  if (!access.canView) {
+    return NextResponse.json({ error: "Forbidden" }, { status: 403 });
   }
+
+  const { profile } = access;
+  const db = getServiceClient();
 
   // Last 52 weeks of data
   const today = new Date();
@@ -46,14 +31,14 @@ export async function GET(_request: NextRequest, context: RouteContext) {
   startDate.setDate(startDate.getDate() - 364); // 52 weeks
   const startStr = startDate.toISOString().split("T")[0];
 
-  const { data: usage } = await supabase
+  const { data: usage } = await db
     .from("daily_usage")
     .select("date, cost_usd")
     .eq("user_id", profile.id)
     .gte("date", startStr)
     .order("date", { ascending: true });
 
-  const { data: posts } = await supabase
+  const { data: posts } = await db
     .from("posts")
     .select("daily_usage_id, daily_usage:daily_usage!posts_daily_usage_id_fkey(date)")
     .eq("user_id", profile.id);
@@ -72,8 +57,9 @@ export async function GET(_request: NextRequest, context: RouteContext) {
   }));
 
   // Compute streak
-  const { data: streakData } = await supabase.rpc("calculate_user_streak", {
+  const { data: streakData } = await db.rpc("calculate_user_streak", {
     p_user_id: profile.id,
+    p_freeze_days: profile.streak_freezes ?? 0,
   });
   const streak = typeof streakData === "number" ? streakData : 0;
 
