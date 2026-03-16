@@ -66,7 +66,7 @@ bun run dev:local
   - local app URL
   - local fallback secrets for CLI auth, cron, and unsubscribe
 - `local:seed`
-  Creates demo users and content using the local service key.
+  Creates demo users and content using `SUPABASE_SECRET_KEY` (`sb_secret_xxx`).
 - `dev:local`
   Starts the web app against the generated local env.
 

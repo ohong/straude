@@ -13,8 +13,8 @@ function parseEnv(raw) {
     if (!line || line.trim().startsWith("#")) continue;
     const idx = line.indexOf("=");
     if (idx === -1) continue;
-    const key = line.slice(0, idx);
-    const value = line.slice(idx + 1).replace(/^"(.*)"$/, "$1");
+    const key = line.slice(0, idx).trim();
+    const value = line.slice(idx + 1).replace(/^"(.*)"$/, "$1").trim();
     entries.set(key, value);
   }
   return entries;
