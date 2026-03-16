@@ -2,6 +2,11 @@
 
 ## Unreleased
 
+### Added
+
+- **`--timeout` CLI flag for subprocess timeout.** Users with large usage histories can now raise the ccusage/codex subprocess timeout: `straude --timeout 300`. Extracts the hardcoded timeout into a shared `DEFAULT_SUBPROCESS_TIMEOUT_MS` constant and threads it through all 4 exec paths (ccusage sync/async, codex sync/async). Default bumped from 120s to 240s to give more headroom out of the box. (PR #49, @jsnider3)
+- **Local Supabase development workflow.** Docker-backed local Supabase setup with `supabase/config.toml`, auto-generated `.env.local`, demo seed data, a dev-only `/dev/local-env` setup route, and friendlier missing-env handling. Full local dev flow documented in `docs/LOCAL_DEV.md`. (PR #47, @markmdev)
+
 ### Fixed
 
 - **Test flakiness from unfrozen Date.now()/new Date().** Added `vi.useFakeTimers({ toFake: ['Date'] })` to 4 test files (`push.test.ts`, `cli-sync-flow.test.ts`, `cli-push-flow.test.ts`, `cli-auth.test.ts`) so 15+ date-dependent assertions cannot fail at midnight boundaries or across timezones. Replaced the fragile counter-based `deviceCallCount` mock in `cli-push-flow.test.ts` with a stateless chain that routes by Supabase method (select/upsert) instead of call order. Fixed inconsistent `delete process.env` mutations in `cli-auth.test.ts` to use `vi.stubEnv()` consistently.
