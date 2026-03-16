@@ -199,7 +199,21 @@ describe("pushCommand", () => {
 
     await pushCommand({ date: dateStr });
 
-    expect(mockRunCcusageRawAsync).toHaveBeenCalledWith(compactStr, compactStr);
+    expect(mockRunCcusageRawAsync).toHaveBeenCalledWith(compactStr, compactStr, undefined);
+  });
+
+  it("forwards --timeout to subprocess calls", async () => {
+    mockRunCcusageRawAsync.mockResolvedValue("[]");
+    mockParseCcusageOutput.mockReturnValue({ data: [] });
+
+    await pushCommand({ timeoutMs: 300_000 });
+
+    expect(mockRunCcusageRawAsync).toHaveBeenCalledWith(
+      expect.any(String), expect.any(String), 300_000,
+    );
+    expect(mockRunCodexRawAsync).toHaveBeenCalledWith(
+      expect.any(String), expect.any(String), 300_000,
+    );
   });
 
   it("passes --days option correctly", async () => {

@@ -21,6 +21,7 @@ Push options:
   --date YYYY-MM-DD  Push a specific date (within last 7 days)
   --days N           Push last N days (max 7)
   --dry-run          Preview without posting
+  --timeout N        Subprocess timeout in seconds (default: 120)
 
 Examples:
   npx straude@latest
@@ -41,6 +42,8 @@ function parseArgs(args: string[]): { command: string | null; options: Record<st
       options.date = args[++i]!;
     } else if (arg === "--days" && i + 1 < args.length) {
       options.days = args[++i]!;
+    } else if (arg === "--timeout" && i + 1 < args.length) {
+      options.timeout = args[++i]!;
     } else if (arg === "--api-url" && i + 1 < args.length) {
       options.apiUrl = args[++i]!;
     } else if (arg === "--help" || arg === "-h") {
@@ -53,6 +56,15 @@ function parseArgs(args: string[]): { command: string | null; options: Record<st
   }
 
   return { command, options };
+}
+
+function parseTimeout(value: string): number {
+  const seconds = parseInt(value, 10);
+  if (isNaN(seconds) || seconds <= 0) {
+    console.error(`Invalid --timeout value: ${value} (must be a positive integer)`);
+    process.exit(1);
+  }
+  return seconds * 1000;
 }
 
 async function main(): Promise<void> {
@@ -77,6 +89,7 @@ async function main(): Promise<void> {
         date: options.date as string | undefined,
         days: options.days ? parseInt(options.days as string, 10) : undefined,
         dryRun: options.dryRun === true,
+        timeoutMs: options.timeout ? parseTimeout(options.timeout as string) : undefined,
       },
       apiUrl,
     );
