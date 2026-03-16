@@ -58,7 +58,7 @@ export interface Post {
   kudos_count?: number;
   kudos_users?: Array<Pick<User, "avatar_url" | "username">>;
   comment_count?: number;
-  recent_comments?: Array<Comment>;
+  recent_comments?: Array<CommentPreviewItem>;
   has_kudosed?: boolean;
 }
 
@@ -75,6 +75,34 @@ export interface Comment {
   has_reacted?: boolean;
   reply_count?: number;
   replies?: Comment[];
+}
+
+export interface AggregateCount {
+  count: number;
+}
+
+export interface UserSummary {
+  username: string | null;
+  avatar_url: string | null;
+}
+
+export interface CommentPreview extends Pick<Comment, "id" | "post_id" | "content" | "created_at"> {
+  user: UserSummary | null;
+}
+
+export interface CommentPreviewItem {
+  id: string;
+  post_id: string;
+  content: string;
+  created_at: string;
+  user?: UserSummary;
+}
+
+export interface FeedPostRow extends Omit<Post, "user" | "daily_usage" | "kudos_count" | "comment_count" | "kudos_users" | "recent_comments"> {
+  user: User;
+  daily_usage: DailyUsage;
+  kudos_count: number | AggregateCount[];
+  comment_count: number | AggregateCount[];
 }
 
 export interface LeaderboardEntry {

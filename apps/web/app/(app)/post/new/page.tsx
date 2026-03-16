@@ -1,7 +1,15 @@
 import { createClient } from "@/lib/supabase/server";
 import Link from "next/link";
 import type { Metadata } from "next";
+import { firstRelation } from "@/lib/utils/first-relation";
+import type { DailyUsage } from "@/types";
 import { CopyCommand } from "./CopyCommand";
+
+type UneditedPostRow = {
+  id: string;
+  created_at: string;
+  daily_usage: Array<Pick<DailyUsage, "date" | "cost_usd" | "models">> | null;
+};
 
 export const metadata: Metadata = { title: "Upload Activity" };
 
@@ -28,7 +36,7 @@ export default async function NewPostPage() {
     .order("created_at", { ascending: false })
     .limit(10);
 
-  const unedited = posts ?? [];
+  const unedited = (posts ?? []) as UneditedPostRow[];
 
   return (
     <>
@@ -44,8 +52,8 @@ export default async function NewPostPage() {
               Your recent posts
             </h4>
             <ul className="mt-3 divide-y divide-border rounded border border-border">
-              {unedited.map((post: any) => {
-                const usage = post.daily_usage;
+              {unedited.map((post) => {
+                const usage = firstRelation(post.daily_usage);
                 return (
                   <li key={post.id}>
                     <Link

@@ -4,7 +4,18 @@ import { ActivityCard } from "@/components/app/feed/ActivityCard";
 import { CommentThread } from "@/components/app/post/CommentThread";
 import { PostEditor } from "@/components/app/post/PostEditor";
 import { loadPostComments } from "@/lib/comments";
+import { firstRelation } from "@/lib/utils/first-relation";
+import type { AggregateCount, FeedPostRow, UserSummary } from "@/types";
 import type { Metadata } from "next";
+
+type MetadataPostRow = {
+  title: string | null;
+  user: Array<{ username: string | null }> | null;
+};
+
+type RecentKudosRow = {
+  user: Array<UserSummary> | null;
+};
 
 export async function generateMetadata({
   params,
@@ -13,14 +24,15 @@ export async function generateMetadata({
 }): Promise<Metadata> {
   const { id } = await params;
   const supabase = await createClient();
-  const { data: post } = await supabase
+  const { data: rawPost } = await supabase
     .from("posts")
     .select("title, user:users!posts_user_id_fkey(username)")
     .eq("id", id)
     .single();
+  const post = rawPost as MetadataPostRow | null;
 
   return {
-    title: post?.title ?? `Post by ${(post?.user as any)?.username ?? "user"}`,
+    title: post?.title ?? `Post by ${firstRelation(post?.user)?.username ?? "user"}`,
   };
 }
 
@@ -100,11 +112,12 @@ export default async function PostDetailPage({
 
   const hasKudosed = !!kudosCheck;
 
+  const postRow = post as FeedPostRow;
   const normalizedPost = {
-    ...post,
-    kudos_count: (post.kudos_count as any)?.[0]?.count ?? 0,
-    kudos_users: (recentKudos ?? []).map((k) => k.user as any),
-    comment_count: (post.comment_count as any)?.[0]?.count ?? 0,
+    ...postRow,
+    kudos_count: ((postRow.kudos_count as AggregateCount[] | undefined)?.[0]?.count ?? 0),
+    kudos_users: (recentKudos ?? []).map((k) => firstRelation((k as RecentKudosRow).user)).filter((user): user is UserSummary => Boolean(user)),
+    comment_count: ((postRow.comment_count as AggregateCount[] | undefined)?.[0]?.count ?? 0),
     has_kudosed: hasKudosed,
   };
 

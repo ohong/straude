@@ -1,7 +1,15 @@
 import { createClient } from "@/lib/supabase/server";
 import { getAuthUser } from "@/lib/supabase/auth";
 import { FeedList } from "@/components/app/feed/FeedList";
+import { normalizeCommentPreview, normalizeFeedPost, type JoinedUserSummary, type RawCommentPreviewRow } from "@/lib/feed-normalization";
+import { firstRelation } from "@/lib/utils/first-relation";
+import type { CommentPreviewItem, FeedPostRow, Post, UserSummary } from "@/types";
 import type { Metadata } from "next";
+
+type KudosRow = {
+  post_id: string;
+  user: JoinedUserSummary;
+};
 
 const FEED_DESCRIPTION =
   "See the latest Claude Code sessions from the Straude community.";
@@ -57,11 +65,11 @@ export default async function FeedPage({
     p_user_id: user?.id ?? null,
     p_limit: 20,
   });
-  let posts: any[] = data ?? [];
+  let posts: Post[] = ((data ?? []) as FeedPostRow[]).map(normalizeFeedPost);
 
   // Fetch incomplete posts for the logged-in user (bare synced sessions).
   // Show nudge on all tabs so the user is reminded regardless of which feed they view.
-  let pendingPosts: any[] = [];
+  let pendingPosts: Post[] = [];
   if (user) {
     const { data } = await supabase
       .from("posts")
@@ -71,12 +79,12 @@ export default async function FeedPage({
       .eq("images", "[]")
       .order("created_at", { ascending: false })
       .limit(5);
-    pendingPosts = data ?? [];
+    pendingPosts = ((data ?? []) as FeedPostRow[]).map(normalizeFeedPost);
   }
 
   // Enrich with kudos status + kudos users + recent comments
   if (posts.length > 0) {
-    const postIds = posts.map((p: any) => p.id);
+    const postIds = posts.map((post) => post.id);
 
     // User-specific kudos check only when logged in
     const userKudosPromise = user
@@ -107,34 +115,33 @@ export default async function FeedPage({
 
     const kudosedSet = new Set((userKudos ?? []).map((k) => k.post_id));
 
-    const kudosUsersMap = new Map<string, any[]>();
-    for (const k of recentKudos ?? []) {
-      const list = kudosUsersMap.get(k.post_id) ?? [];
-      if (list.length < 3) {
-        list.push(k.user);
-        kudosUsersMap.set(k.post_id, list);
+    const kudosUsersMap = new Map<string, UserSummary[]>();
+    for (const kudos of (recentKudos ?? []) as KudosRow[]) {
+      const list = kudosUsersMap.get(kudos.post_id) ?? [];
+      const userSummary = firstRelation(kudos.user);
+      if (list.length < 3 && userSummary) {
+        list.push(userSummary);
+        kudosUsersMap.set(kudos.post_id, list);
       }
     }
 
-    const commentsMap = new Map<string, any[]>();
-    for (const c of recentComments ?? []) {
-      const list = commentsMap.get(c.post_id) ?? [];
+    const commentsMap = new Map<string, CommentPreviewItem[]>();
+    for (const comment of (recentComments ?? []) as RawCommentPreviewRow[]) {
+      const list = commentsMap.get(comment.post_id) ?? [];
       if (list.length < 2) {
-        list.push(c);
-        commentsMap.set(c.post_id, list);
+        list.push(normalizeCommentPreview(comment));
+        commentsMap.set(comment.post_id, list);
       }
     }
     for (const [, list] of commentsMap) {
       list.reverse();
     }
 
-    posts = posts.map((p: any) => ({
-      ...p,
-      kudos_count: typeof p.kudos_count === "number" ? p.kudos_count : p.kudos_count?.[0]?.count ?? 0,
-      kudos_users: kudosUsersMap.get(p.id) ?? [],
-      comment_count: typeof p.comment_count === "number" ? p.comment_count : p.comment_count?.[0]?.count ?? 0,
-      recent_comments: commentsMap.get(p.id) ?? [],
-      has_kudosed: kudosedSet.has(p.id),
+    posts = posts.map((post) => ({
+      ...post,
+      kudos_users: kudosUsersMap.get(post.id) ?? [],
+      recent_comments: commentsMap.get(post.id) ?? [],
+      has_kudosed: kudosedSet.has(post.id),
     }));
   }
 
