@@ -6,7 +6,9 @@
   "scripts": {
     "dev": "turbo dev",
     "build": "turbo build",
-    "lint": "turbo lint"
+    "lint": "turbo lint",
+    "silo": "bun scripts/knowledge-silo.ts",
+    "doc-drift": "bun scripts/doc-drift.ts"
   },
   "devDependencies": {
     "turbo": "^2",
