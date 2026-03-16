@@ -2,8 +2,10 @@ import { NextResponse, type NextRequest } from "next/server";
 import { after } from "@/lib/utils/after";
 import { createClient } from "@/lib/supabase/server";
 import { getServiceClient } from "@/lib/supabase/service";
+import { normalizeMessageAttachmentInput } from "@/lib/storage";
 import { sendDirectMessageEmail } from "@/lib/email/send-direct-message-email";
 import { rateLimit } from "@/lib/rate-limit";
+import type { MessageAttachment, MessageAttachmentInput } from "@/types";
 
 const USERNAME_RE = /^[a-zA-Z0-9_]{3,20}$/;
 const MAX_MESSAGE_LENGTH = 1000;
@@ -100,6 +102,46 @@ async function fireDirectMessageNotificationEmail(opts: {
   }
 }
 
+async function buildSignedAttachments(
+  rawAttachments: unknown,
+): Promise<MessageAttachment[]> {
+  const db = getServiceClient();
+  const attachments = Array.isArray(rawAttachments)
+    ? rawAttachments
+        .map(normalizeMessageAttachmentInput)
+        .filter((attachment): attachment is MessageAttachmentInput => attachment !== null)
+    : [];
+
+  if (attachments.length === 0) {
+    return [];
+  }
+
+  const signedAttachments: Array<MessageAttachment | null> = await Promise.all(
+    attachments.map(async (attachment): Promise<MessageAttachment | null> => {
+      const { data, error } = await db.storage
+        .from(attachment.bucket)
+        .createSignedUrl(attachment.path, 60 * 60);
+
+      if (error || !data?.signedUrl) {
+        console.error(
+          "[messages] failed to sign DM attachment:",
+          error?.message ?? "missing signed URL",
+        );
+        return null;
+      }
+
+      return {
+        ...attachment,
+        url: data.signedUrl,
+      };
+    }),
+  );
+
+  return signedAttachments.filter(
+    (attachment): attachment is MessageAttachment => attachment !== null,
+  );
+}
+
 export async function GET(request: NextRequest) {
   const supabase = await createClient();
   const {
@@ -151,11 +193,14 @@ export async function GET(request: NextRequest) {
   }
 
   const selfProfile = selfRes.data as ConversationUser;
-  const messages = [...(messagesRes.data ?? [])].reverse().map((message) => ({
-    ...message,
-    sender: message.sender_id === user.id ? selfProfile : counterpart,
-    recipient: message.sender_id === user.id ? counterpart : selfProfile,
-  }));
+  const messages = await Promise.all(
+    [...(messagesRes.data ?? [])].reverse().map(async (message) => ({
+      ...message,
+      attachments: await buildSignedAttachments(message.attachments),
+      sender: message.sender_id === user.id ? selfProfile : counterpart,
+      recipient: message.sender_id === user.id ? counterpart : selfProfile,
+    })),
+  );
 
   return NextResponse.json({
     counterpart,
@@ -182,17 +227,28 @@ export async function POST(request: NextRequest) {
     typeof recipientUsername === "string" ? recipientUsername.trim() : "";
   const normalizedContent =
     typeof content === "string" ? content.trim() : "";
+  if (
+    rawAttachments !== undefined
+    && (!Array.isArray(rawAttachments) || rawAttachments.length > 10)
+  ) {
+    return NextResponse.json(
+      { error: "Attachments must be an array of at most 10 files" },
+      { status: 400 },
+    );
+  }
+
   const attachments = Array.isArray(rawAttachments)
-    ? rawAttachments.filter(
-        (a: unknown): a is { url: string; name: string; type: string; size: number } =>
-          typeof a === "object" &&
-          a !== null &&
-          typeof (a as Record<string, unknown>).url === "string" &&
-          typeof (a as Record<string, unknown>).name === "string" &&
-          typeof (a as Record<string, unknown>).type === "string" &&
-          typeof (a as Record<string, unknown>).size === "number"
-      ).slice(0, 10)
+    ? rawAttachments
+        .map(normalizeMessageAttachmentInput)
+        .filter((attachment): attachment is MessageAttachmentInput => attachment !== null)
     : [];
+
+  if (Array.isArray(rawAttachments) && attachments.length !== rawAttachments.length) {
+    return NextResponse.json(
+      { error: "Attachments must use Straude-managed DM storage uploads" },
+      { status: 400 },
+    );
+  }
 
   if (!USERNAME_RE.test(normalizedUsername)) {
     return NextResponse.json({ error: "Invalid recipient" }, { status: 400 });
@@ -244,8 +300,10 @@ export async function POST(request: NextRequest) {
   }
 
   const sender = senderRes.data as ConversationUser;
+  const signedAttachments = await buildSignedAttachments(messageRes.data.attachments);
   const message = {
     ...messageRes.data,
+    attachments: signedAttachments,
     sender,
     recipient: counterpart,
   };

@@ -2,6 +2,7 @@ import { NextResponse, type NextRequest } from "next/server";
 import { after } from "@/lib/utils/after";
 import { createClient } from "@/lib/supabase/server";
 import { getServiceClient } from "@/lib/supabase/service";
+import { isFirstPartyPublicStorageUrl } from "@/lib/storage";
 import { parseMentions } from "@/lib/utils/mentions";
 import { sendNotificationEmail } from "@/lib/email/send-comment-email";
 import { checkAndAwardAchievements } from "@/lib/achievements";
@@ -108,6 +109,18 @@ export async function PATCH(request: NextRequest, context: RouteContext) {
       return NextResponse.json(
         { error: "Images must be an array of at most 10 URLs" },
         { status: 400 }
+      );
+    }
+    if (
+      body.images.some(
+        (image: unknown) =>
+          typeof image !== "string"
+          || !isFirstPartyPublicStorageUrl(image, "post-images"),
+      )
+    ) {
+      return NextResponse.json(
+        { error: "Images must use Straude-managed post storage URLs" },
+        { status: 400 },
       );
     }
     updates.images = body.images;

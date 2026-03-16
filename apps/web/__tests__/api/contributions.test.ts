@@ -4,8 +4,13 @@ vi.mock("@/lib/supabase/server", () => ({
   createClient: vi.fn(),
 }));
 
+vi.mock("@/lib/supabase/service", () => ({
+  getServiceClient: vi.fn(),
+}));
+
 import { GET } from "@/app/api/users/[username]/contributions/route";
 import { createClient } from "@/lib/supabase/server";
+import { getServiceClient } from "@/lib/supabase/service";
 import { NextRequest } from "next/server";
 
 function makeContext(username: string) {
@@ -81,7 +86,17 @@ describe("GET /api/users/[username]/contributions", () => {
       }),
       rpc: vi.fn().mockResolvedValue({ data: 5, error: null }),
     };
-    (createClient as any).mockResolvedValue(client);
+    (createClient as any).mockResolvedValue({
+      auth: client.auth,
+      from: vi.fn().mockReturnValue({
+        select: vi.fn().mockReturnValue({
+          eq: vi.fn().mockReturnValue({
+            maybeSingle: vi.fn().mockResolvedValue({ data: null, error: null }),
+          }),
+        }),
+      }),
+    });
+    (getServiceClient as any).mockReturnValue(client);
 
     const res = await GET(makeRequest(), makeContext("alice"));
     const json = await res.json();
@@ -114,7 +129,17 @@ describe("GET /api/users/[username]/contributions", () => {
         }),
       }),
     };
-    (createClient as any).mockResolvedValue(client);
+    (createClient as any).mockResolvedValue({
+      auth: client.auth,
+      from: vi.fn().mockReturnValue({
+        select: vi.fn().mockReturnValue({
+          eq: vi.fn().mockReturnValue({
+            maybeSingle: vi.fn().mockResolvedValue({ data: null, error: null }),
+          }),
+        }),
+      }),
+    });
+    (getServiceClient as any).mockReturnValue(client);
 
     const res = await GET(makeRequest(), makeContext("nobody"));
     const json = await res.json();
@@ -172,7 +197,17 @@ describe("GET /api/users/[username]/contributions", () => {
       }),
       rpc: vi.fn().mockResolvedValue({ data: 0, error: null }),
     };
-    (createClient as any).mockResolvedValue(client);
+    (createClient as any).mockResolvedValue({
+      auth: client.auth,
+      from: vi.fn().mockReturnValue({
+        select: vi.fn().mockReturnValue({
+          eq: vi.fn().mockReturnValue({
+            maybeSingle: vi.fn().mockResolvedValue({ data: null, error: null }),
+          }),
+        }),
+      }),
+    });
+    (getServiceClient as any).mockReturnValue(client);
 
     const res = await GET(makeRequest(), makeContext("alice"));
     const json = await res.json();

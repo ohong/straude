@@ -13,7 +13,6 @@ const NOTIFICATION_TYPES = [
   { value: "kudos", label: "Kudos" },
   { value: "comment", label: "Comments" },
   { value: "mention", label: "Mentions" },
-  { value: "message", label: "Messages" },
   { value: "referral", label: "Referrals" },
 ] as const;
 
@@ -24,6 +23,7 @@ export function NotificationsList() {
   const [unreadCount, setUnreadCount] = useState(0);
   const [typeFilter, setTypeFilter] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
   const [hasMore, setHasMore] = useState(true);
   const loadingRef = useRef(false);
   const sentinelRef = useRef<HTMLDivElement>(null);
@@ -34,6 +34,7 @@ export function NotificationsList() {
       if (loadingRef.current) return;
       loadingRef.current = true;
       if (replace) setLoading(true);
+      if (replace) setError(null);
 
       const params = new URLSearchParams({
         limit: String(PAGE_SIZE),
@@ -43,8 +44,16 @@ export function NotificationsList() {
 
       const res = await fetch(`/api/notifications?${params}`);
       if (!res.ok) {
+        const payload = await res
+          .json()
+          .catch(() => ({ error: "Failed to load notifications." }));
         loadingRef.current = false;
         setLoading(false);
+        setError(
+          typeof payload.error === "string"
+            ? payload.error
+            : "Failed to load notifications.",
+        );
         return;
       }
 
@@ -161,6 +170,10 @@ export function NotificationsList() {
             </div>
           ))}
         </div>
+      ) : error ? (
+        <p className="px-6 py-12 text-center text-sm text-muted">
+          {error}
+        </p>
       ) : notifications.length === 0 ? (
         <p className="px-6 py-12 text-center text-sm text-muted">
           {typeFilter

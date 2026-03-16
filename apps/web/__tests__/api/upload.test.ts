@@ -286,6 +286,23 @@ describe("POST /api/upload", () => {
     expect(json.url).toBe("https://cdn.example.com/user-1/uuid.jpg");
   });
 
+  it("returns storage metadata instead of a public URL for DM attachments", async () => {
+    mockSupabase({ publicUrl: "https://cdn.example.com/user-1/private.pdf" });
+
+    const res = await POST(
+      makeUploadRequest(
+        { name: "notes.pdf", type: "application/pdf", size: 100 },
+        "dm-attachments",
+      )
+    );
+    const json = await res.json();
+
+    expect(res.status).toBe(200);
+    expect(json.bucket).toBe("dm-attachments");
+    expect(typeof json.path).toBe("string");
+    expect(json.url).toBeUndefined();
+  });
+
   it("returns 500 on upload error", async () => {
     mockSupabase({ uploadError: { message: "Storage full" } });
 

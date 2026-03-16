@@ -14,7 +14,7 @@ Straude exposes 36 API route files with 49 HTTP method handlers, organized by ca
 
 ## Rate Limiting
 
-In-memory sliding window limiter, keyed by user ID or IP. Returns `429` with `Retry-After` header when exceeded.
+Best-effort in-process sliding window limiter, keyed by user ID or IP. Returns `429` with `Retry-After` header when exceeded, but it is not a shared/distributed abuse-control layer across multiple runtime instances.
 
 | Bucket | Limit | Applied To |
 |--------|-------|------------|
@@ -81,7 +81,7 @@ Search public user profiles by username, display name, or GitHub username.
   - `q` — search term, min 2 characters (sanitized for PostgREST safety)
   - `limit` — 1–50, default 20
 - **Response**: `{ users: User[] }`
-- **Notes**: Supports exact email lookup via service client RPC when `q` contains `@`.
+- **Notes**: Email-shaped queries are treated like normal search strings; there is no privileged exact-email fallback.
 
 ### `GET /api/mentions`
 
@@ -499,13 +499,23 @@ Generate a 1200x630 PNG recap card image.
 
 ### `GET /api/unsubscribe`
 
-One-click email unsubscribe. Disables the specified notification type and renders an HTML confirmation page.
+Render the unsubscribe confirmation page.
 
 - **Auth**: Token-based (signed unsubscribe token in query param)
 - **Query params**:
   - `token` — signed unsubscribe token (required)
   - `kind` — `comment` (default) or `dm`
 - **Response**: HTML page confirming the unsubscribe
+
+### `POST /api/unsubscribe`
+
+One-click email unsubscribe. Disables the specified notification type without rendering the HTML confirmation page.
+
+- **Auth**: Token-based (signed unsubscribe token in query param)
+- **Query params**:
+  - `token` — signed unsubscribe token (required)
+  - `kind` — `comment` (default) or `dm`
+- **Response**: `{ success: true }`
 
 ---
 

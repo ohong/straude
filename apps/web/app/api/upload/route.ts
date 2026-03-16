@@ -176,6 +176,16 @@ export async function POST(request: NextRequest) {
     data: { publicUrl },
   } = supabase.storage.from(bucket).getPublicUrl(fileName);
 
+  if (bucket === "dm-attachments") {
+    return NextResponse.json({
+      bucket,
+      path: fileName,
+      name: file.name,
+      type: contentType,
+      size: buffer.length,
+    });
+  }
+
   return NextResponse.json({
     url: publicUrl,
     name: file.name,

@@ -55,3 +55,27 @@ next-env.d.ts
 
 # OG image variants (local experiments)
 og-variants/
+
+# Waypoint state
+.codex/config.toml
+.codex/agents/code-reviewer.toml
+.codex/agents/code-health-reviewer.toml
+.codex/agents/plan-reviewer.toml
+.agents/skills/planning/
+.agents/skills/work-tracker/
+.agents/skills/docs-sync/
+.agents/skills/code-guide-audit/
+.agents/skills/break-it-qa/
+.agents/skills/frontend-context-interview/
+.agents/skills/backend-context-interview/
+.agents/skills/frontend-ship-audit/
+.agents/skills/backend-ship-audit/
+.agents/skills/conversation-retrospective/
+.agents/skills/workspace-compress/
+.agents/skills/pre-pr-hygiene/
+.agents/skills/pr-review/
+.waypoint/*
+!.waypoint/docs/
+!.waypoint/docs/**
+.waypoint/docs/README.md
+.waypoint/docs/code-guide.md
