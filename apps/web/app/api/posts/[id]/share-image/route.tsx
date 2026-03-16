@@ -70,7 +70,7 @@ export async function GET(request: NextRequest, context: RouteContext) {
         }}
         themeId={themeId}
       />,
-      { width: 1080, height: 1080, fonts }
+      { width: 1200, height: 630, fonts }
     );
 
     response.headers.set(

@@ -39,6 +39,31 @@ function truncate(text: string, max: number): string {
   return `${text.slice(0, max - 3)}...`;
 }
 
+function prettifyModel(model: string): string {
+  const normalized = model.trim();
+  if (/claude-opus-4/i.test(normalized)) return "Claude Opus";
+  if (/claude-sonnet-4/i.test(normalized)) return "Claude Sonnet";
+  if (/claude-haiku-4/i.test(normalized)) return "Claude Haiku";
+  if (/^gpt-/i.test(normalized)) {
+    return normalized
+      .replace(/^gpt/i, "GPT")
+      .replace(/-codex$/i, "-Codex");
+  }
+  if (/^o4/i.test(normalized)) return "o4";
+  if (/^o3/i.test(normalized)) return "o3";
+  return normalized;
+}
+
+function summarizeModels(models: string[]) {
+  const unique = Array.from(
+    new Set(models.map((model) => prettifyModel(model)).filter(Boolean))
+  );
+
+  if (unique.length === 0) return null;
+  if (unique.length <= 2) return unique.join(" + ");
+  return `${unique.slice(0, 2).join(" + ")} +${unique.length - 2}`;
+}
+
 function Metric({
   label,
   value,
@@ -100,28 +125,37 @@ export function PostCardImage({
   themeId: ShareThemeId;
 }) {
   const theme = getShareTheme(themeId);
-  const size = 1080;
+  const width = 1200;
+  const height = 630;
   const padding = 52;
   const cost =
     typeof post.cost_usd === "number" && Number.isFinite(post.cost_usd)
       ? `$${post.cost_usd.toFixed(2)}`
       : null;
-  const output = post.output_tokens > 0 ? formatTokens(post.output_tokens) : null;
-  const model = getShareModelLabel(post.models);
+  const input = post.input_tokens > 0 ? `${formatTokens(post.input_tokens)} tokens` : null;
+  const output = post.output_tokens > 0 ? `${formatTokens(post.output_tokens)} tokens` : null;
+  const primaryModel = getShareModelLabel(post.models);
+  const modelSummary = summarizeModels(post.models) ?? primaryModel;
   const title = post.title?.trim()
-    ? truncate(post.title.trim(), 72)
+    ? truncate(post.title.trim(), 48)
     : `A session from @${post.username}`;
   const body = post.description?.trim()
     ? truncate(stripMarkdown(post.description), 180)
     : "Tracked on Straude. Share the session, the pace, and the proof without posting a screenshot of your dashboard.";
   const heroImage = post.images?.[0] ?? null;
   const statusLabel = post.is_verified ? "verified session" : "session";
+  const metrics = [
+    cost ? { label: "Spend", value: cost, accent: post.is_verified } : null,
+    input ? { label: "Input", value: input } : null,
+    output ? { label: "Output", value: output } : null,
+    modelSummary ? { label: "Models", value: modelSummary } : null,
+  ].filter(Boolean) as Array<{ label: string; value: string; accent?: boolean }>;
 
   return (
     <div
       style={{
-        width: size,
-        height: size,
+        width,
+        height,
         display: "flex",
         position: "relative",
         overflow: "hidden",
@@ -133,8 +167,8 @@ export function PostCardImage({
           position: "absolute",
           top: 0,
           left: 0,
-          width: size,
-          height: size,
+          width,
+          height,
           background: theme.background,
         }}
       />
@@ -144,8 +178,8 @@ export function PostCardImage({
             position: "absolute",
             top: 0,
             left: 0,
-            width: size,
-            height: size,
+            width,
+            height,
             backgroundColor: theme.overlay,
           }}
         />
@@ -155,8 +189,8 @@ export function PostCardImage({
           position: "absolute",
           top: -110,
           right: -90,
-          width: 320,
-          height: 320,
+          width: 280,
+          height: 280,
           borderRadius: 999,
           backgroundColor: theme.spotlightPrimary,
         }}
@@ -166,8 +200,8 @@ export function PostCardImage({
           position: "absolute",
           left: -70,
           bottom: -100,
-          width: 260,
-          height: 260,
+          width: 220,
+          height: 220,
           borderRadius: 999,
           backgroundColor: theme.spotlightSecondary,
         }}
@@ -241,6 +275,7 @@ export function PostCardImage({
             gap: 26,
             marginTop: 28,
             flex: 1,
+            alignItems: "stretch",
           }}
         >
           <div
@@ -265,11 +300,12 @@ export function PostCardImage({
             <div
               style={{
                 marginTop: 16,
-                fontSize: title.length > 44 ? 52 : 62,
+                fontSize: title.length > 34 ? 40 : 46,
                 fontWeight: 700,
                 color: theme.textPrimary,
                 lineHeight: 1.02,
                 letterSpacing: "-0.04em",
+                whiteSpace: "nowrap" as const,
               }}
             >
               {title}
@@ -277,7 +313,7 @@ export function PostCardImage({
             <div
               style={{
                 marginTop: 20,
-                fontSize: 23,
+                fontSize: 19,
                 fontWeight: 500,
                 color: theme.textSecondary,
                 lineHeight: 1.45,
@@ -289,18 +325,104 @@ export function PostCardImage({
             <div
               style={{
                 display: "flex",
+                flexWrap: "wrap" as const,
                 gap: 14,
-                marginTop: "auto",
+                marginTop: 24,
               }}
             >
-              {cost && (
-                <Metric label="Spend" value={cost} themeId={themeId} accent={post.is_verified} />
-              )}
-              {output && <Metric label="Output" value={output} themeId={themeId} />}
-              {model && <Metric label="Model" value={model} themeId={themeId} />}
-              {!cost && !output && !model && (
+              {metrics.length > 0 ? (
+                metrics.map((metric) => (
+                  <div
+                    key={metric.label}
+                    style={{
+                      display: "flex",
+                      width: "49%",
+                    }}
+                  >
+                    <Metric
+                      label={metric.label}
+                      value={metric.value}
+                      themeId={themeId}
+                      accent={metric.accent}
+                    />
+                  </div>
+                ))
+              ) : (
                 <Metric label="Source" value="Claude Code" themeId={themeId} />
               )}
+            </div>
+
+            <div
+              style={{
+                display: "flex",
+                alignItems: "center",
+                gap: 14,
+                marginTop: 20,
+                padding: "16px 18px",
+                borderRadius: 24,
+                backgroundColor: theme.surfaceSecondary,
+                border: `1px solid ${theme.surfaceBorder}`,
+              }}
+            >
+              {post.avatar_url ? (
+                <img
+                  src={post.avatar_url}
+                  width={46}
+                  height={46}
+                  style={{
+                    width: 46,
+                    height: 46,
+                    borderRadius: 999,
+                    objectFit: "cover",
+                  }}
+                />
+              ) : (
+                <div
+                  style={{
+                    display: "flex",
+                    width: 46,
+                    height: 46,
+                    borderRadius: 999,
+                    alignItems: "center",
+                    justifyContent: "center",
+                    backgroundColor: theme.surface,
+                    color: theme.textPrimary,
+                    fontSize: 20,
+                    fontWeight: 700,
+                  }}
+                >
+                  {post.username.charAt(0).toUpperCase()}
+                </div>
+              )}
+
+              <div
+                style={{
+                  display: "flex",
+                  flexDirection: "column",
+                }}
+              >
+                <div
+                  style={{
+                    fontSize: 12,
+                    fontWeight: 700,
+                    color: theme.textTertiary,
+                    letterSpacing: "0.12em",
+                    textTransform: "uppercase" as const,
+                  }}
+                >
+                  Tracked on Straude
+                </div>
+                <div
+                  style={{
+                    marginTop: 6,
+                    fontSize: 20,
+                    fontWeight: 700,
+                    color: theme.textPrimary,
+                  }}
+                >
+                  {`@${post.username}`}
+                </div>
+              </div>
             </div>
           </div>
 
@@ -309,6 +431,7 @@ export function PostCardImage({
               display: "flex",
               width: 320,
               flexDirection: "column",
+              justifyContent: "center",
               gap: 16,
             }}
           >
@@ -316,8 +439,7 @@ export function PostCardImage({
               style={{
                 display: "flex",
                 overflow: "hidden",
-                flex: 1,
-                minHeight: 0,
+                minHeight: heroImage ? 300 : 0,
                 borderRadius: 34,
                 border: `1px solid ${theme.surfaceBorder}`,
                 backgroundColor: theme.surface,
@@ -327,7 +449,7 @@ export function PostCardImage({
                 <img
                   src={heroImage}
                   width={320}
-                  height={380}
+                  height={300}
                   style={{
                     width: "100%",
                     height: "100%",
@@ -338,9 +460,8 @@ export function PostCardImage({
                 <div
                   style={{
                     display: "flex",
-                    flex: 1,
                     flexDirection: "column",
-                    justifyContent: "space-between",
+                    gap: 24,
                     padding: 26,
                   }}
                 >
@@ -377,17 +498,18 @@ export function PostCardImage({
                     style={{
                       display: "flex",
                       flexDirection: "column",
+                      gap: 12,
                     }}
                   >
-                  <div
-                    style={{
-                      display: "flex",
-                      flexDirection: "column",
-                      fontSize: 32,
-                      fontWeight: 700,
-                      color: theme.textPrimary,
-                      lineHeight: 1.08,
-                    }}
+                    <div
+                      style={{
+                        display: "flex",
+                        flexDirection: "column",
+                        fontSize: 30,
+                        fontWeight: 700,
+                        color: theme.textPrimary,
+                        lineHeight: 1.08,
+                      }}
                     >
                       Post the work.
                       <br />
@@ -396,7 +518,7 @@ export function PostCardImage({
                     <div
                       style={{
                         marginTop: 12,
-                        fontSize: 17,
+                        fontSize: 16,
                         fontWeight: 500,
                         color: theme.textSecondary,
                         lineHeight: 1.4,
@@ -407,85 +529,6 @@ export function PostCardImage({
                   </div>
                 </div>
               )}
-            </div>
-
-            <div
-              style={{
-                display: "flex",
-                alignItems: "center",
-                justifyContent: "space-between",
-                borderRadius: 24,
-                backgroundColor: theme.surfaceSecondary,
-                border: `1px solid ${theme.surfaceBorder}`,
-                padding: "16px 18px",
-              }}
-            >
-              <div
-                style={{
-                  display: "flex",
-                  flexDirection: "column",
-                }}
-              >
-                <div
-                  style={{
-                    fontSize: 12,
-                    fontWeight: 700,
-                    color: theme.textTertiary,
-                    letterSpacing: "0.12em",
-                    textTransform: "uppercase" as const,
-                  }}
-                >
-                  Share target
-                </div>
-                <div
-                  style={{
-                    marginTop: 6,
-                    fontSize: 18,
-                    fontWeight: 700,
-                    color: theme.textPrimary,
-                  }}
-                >
-                  straude.com/post
-                </div>
-              </div>
-              <div
-                style={{
-                  display: "flex",
-                  alignItems: "center",
-                  gap: 8,
-                }}
-              >
-                {post.avatar_url ? (
-                  <img
-                    src={post.avatar_url}
-                    width={40}
-                    height={40}
-                    style={{
-                      width: 40,
-                      height: 40,
-                      borderRadius: 999,
-                      objectFit: "cover",
-                    }}
-                  />
-                ) : (
-                  <div
-                    style={{
-                      display: "flex",
-                      width: 40,
-                      height: 40,
-                      borderRadius: 999,
-                      alignItems: "center",
-                      justifyContent: "center",
-                      backgroundColor: theme.surface,
-                      color: theme.textPrimary,
-                      fontSize: 18,
-                      fontWeight: 700,
-                    }}
-                  >
-                    {post.username.charAt(0).toUpperCase()}
-                  </div>
-                )}
-              </div>
             </div>
           </div>
         </div>

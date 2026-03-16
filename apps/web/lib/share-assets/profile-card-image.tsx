@@ -417,8 +417,15 @@ export function ProfileShareCardImage({
             marginTop: "auto",
           }}
         >
-          <StatBlock label="Output Total" value={formatTokens(data.total_output_tokens)} accent />
-          <StatBlock label="Recent 30d" value={formatTokens(data.recent_output_tokens)} />
+          <StatBlock
+            label="Output Total"
+            value={`${formatTokens(data.total_output_tokens)} tokens`}
+            accent
+          />
+          <StatBlock
+            label="Recent 30d"
+            value={`${formatTokens(data.recent_output_tokens)} tokens`}
+          />
           <StatBlock label="Active 30d" value={`${data.active_days_last_30} days`} />
           <StatBlock label="Most Used" value={data.primary_model} />
         </div>
