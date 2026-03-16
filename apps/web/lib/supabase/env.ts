@@ -11,16 +11,33 @@ const SERVER_ENV_KEYS = [
 type BrowserEnvKey = (typeof BROWSER_ENV_KEYS)[number];
 type ServerEnvKey = (typeof SERVER_ENV_KEYS)[number];
 
-function getMissing(keys: readonly string[]) {
-  return keys.filter((key) => !process.env[key] || process.env[key]?.trim() === "");
+const browserEnv = {
+  NEXT_PUBLIC_SUPABASE_URL: process.env.NEXT_PUBLIC_SUPABASE_URL ?? "",
+  NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY:
+    process.env.NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY ?? "",
+} as const;
+
+const serverEnv = {
+  NEXT_PUBLIC_SUPABASE_URL: process.env.NEXT_PUBLIC_SUPABASE_URL ?? "",
+  SUPABASE_SECRET_KEY: process.env.SUPABASE_SECRET_KEY ?? "",
+} as const;
+
+function getMissing(
+  keys: readonly string[],
+  values: Record<string, string>
+) {
+  return keys.filter((key) => {
+    const value = values[key];
+    return !value || value.trim() === "";
+  });
 }
 
 export function getMissingSupabaseBrowserEnv(): BrowserEnvKey[] {
-  return getMissing(BROWSER_ENV_KEYS) as BrowserEnvKey[];
+  return getMissing(BROWSER_ENV_KEYS, browserEnv) as BrowserEnvKey[];
 }
 
 export function getMissingSupabaseServerEnv(): ServerEnvKey[] {
-  return getMissing(SERVER_ENV_KEYS) as ServerEnvKey[];
+  return getMissing(SERVER_ENV_KEYS, serverEnv) as ServerEnvKey[];
 }
 
 export function hasSupabaseBrowserEnv() {
@@ -56,8 +73,8 @@ export function getSupabaseBrowserEnv() {
   }
 
   return {
-    url: process.env.NEXT_PUBLIC_SUPABASE_URL!,
-    publishableKey: process.env.NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY!,
+    url: browserEnv.NEXT_PUBLIC_SUPABASE_URL,
+    publishableKey: browserEnv.NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY,
   };
 }
 
@@ -69,7 +86,7 @@ export function getSupabaseServerEnv() {
   }
 
   return {
-    url: process.env.NEXT_PUBLIC_SUPABASE_URL!,
-    secretKey: process.env.SUPABASE_SECRET_KEY!,
+    url: serverEnv.NEXT_PUBLIC_SUPABASE_URL,
+    secretKey: serverEnv.SUPABASE_SECRET_KEY,
   };
 }
