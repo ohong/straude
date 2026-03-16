@@ -1,5 +1,5 @@
 import { createClient } from "@supabase/supabase-js";
-import { existsSync, readFileSync, writeFileSync } from "node:fs";
+import { existsSync, readFileSync } from "node:fs";
 import path from "node:path";
 
 const appDir = process.cwd();
@@ -244,28 +244,13 @@ async function main() {
 
   if (postsError) throw postsError;
 
-  // Auto-set ADMIN_USER_IDS so seeded mark user can access /admin
-  const envRaw = readFileSync(envPath, "utf8");
-  const adminKey = "ADMIN_USER_IDS";
-  if (envRaw.includes(`${adminKey}=`)) {
-    const updated = envRaw.replace(
-      new RegExp(`^${adminKey}=.*$`, "m"),
-      `${adminKey}=${markId}`
-    );
-    writeFileSync(envPath, updated);
-  } else {
-    writeFileSync(envPath, envRaw.trimEnd() + `\n${adminKey}=${markId}\n`);
-  }
-
   console.log("Seeded local Straude demo data.");
-  console.log(`Admin: mark (${markId})`);
   console.log("Demo users:");
   console.log("  mark@local.straude / password123");
   console.log("  alice@local.straude / password123");
   console.log("Suggested URLs:");
   console.log("  http://localhost:3000/u/mark");
   console.log("  http://localhost:3000/u/alice");
-  console.log("  http://localhost:3000/admin");
 }
 
 main().catch((error) => {
