@@ -2,7 +2,6 @@ import { getServiceClient } from "@/lib/supabase/service";
 import { getProfileAccessContext } from "@/lib/profile-access";
 import { notFound } from "next/navigation";
 import Link from "next/link";
-import { firstRelation } from "@/lib/utils/first-relation";
 import { Avatar } from "@/components/ui/Avatar";
 import type { Metadata } from "next";
 
@@ -18,8 +17,8 @@ type FollowUserRow = {
   avatar_url: string | null;
   bio: string | null;
 };
-type FollowingRelationRow = { following: FollowUserRow[] | null };
-type FollowerRelationRow = { follower: FollowUserRow[] | null };
+type FollowingRelationRow = { following: FollowUserRow | null };
+type FollowerRelationRow = { follower: FollowUserRow | null };
 
 export async function generateMetadata({
   params,
@@ -63,8 +62,8 @@ export default async function FollowsPage({
       .eq("follower_id", profile.id)
       .order("created_at", { ascending: false });
 
-    users = ((data ?? []) as FollowingRelationRow[])
-      .map((row) => firstRelation(row.following))
+    users = ((data ?? []) as unknown as FollowingRelationRow[])
+      .map((row) => row.following)
       .filter((user): user is FollowUserRow => Boolean(user));
   } else {
     const { data } = await db
@@ -73,8 +72,8 @@ export default async function FollowsPage({
       .eq("following_id", profile.id)
       .order("created_at", { ascending: false });
 
-    users = ((data ?? []) as FollowerRelationRow[])
-      .map((row) => firstRelation(row.follower))
+    users = ((data ?? []) as unknown as FollowerRelationRow[])
+      .map((row) => row.follower)
       .filter((user): user is FollowUserRow => Boolean(user));
   }
 
