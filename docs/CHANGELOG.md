@@ -2,6 +2,10 @@
 
 ## Unreleased
 
+### Fixed
+
+- **Security advisor remediation.** Applied migration to fix all SQL-level security issues flagged by Supabase Security Advisor: recreated `leaderboard_daily` view with `security_invoker = true` (was `SECURITY DEFINER`), pinned `SET search_path = 'public'` on 4 functions (`search_companies_fuzzy`, `increment_streak_freezes`, `calculate_user_streak`, `calculate_streaks_batch`), added explicit deny-all RLS policy on `email_suppressions`, and added authenticated SELECT policy on `user_levels`.
+
 ### Added
 
 - **Sticky L1-L8 usage levels on profiles and leaderboard rows.** Straude now assigns users a persistent level based on their best 30-day usage stretch, combining spend and active-day consistency. Levels are recalculated after usage syncs, backfilled for existing users via a new `user_levels` table and `recalculate_user_level()` database function, and rendered on public profiles plus leaderboard rows without changing spend-based ranking.

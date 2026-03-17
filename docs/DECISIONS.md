@@ -1,5 +1,21 @@
 # Architecture & Design Decisions
 
+## Security Advisor Remediation: Pinned Search Paths and SECURITY INVOKER View (2026-03-17)
+
+**Decision:** Fixed all SQL-level findings from Supabase Security Advisor in a single migration.
+
+**Changes:**
+1. `leaderboard_daily` view recreated with `security_invoker = true` so it runs under the querying user's permissions and respects RLS on underlying tables (`users`, `daily_usage`).
+2. All 4 public functions pinned with `SET search_path = 'public'` to prevent search-path hijacking.
+3. `email_suppressions` given an explicit `USING (false)` policy — service_role (which bypasses RLS) is the only intended accessor.
+4. `user_levels` given a `SELECT` policy for `authenticated` — writes are service_role-only.
+
+**Alternatives considered:**
+- `SET search_path = ''` (empty) — most restrictive, but `search_companies_fuzzy` references `companies` without schema prefix and would need a full rewrite. `'public'` achieves the same pinning benefit.
+- Per-role RLS policies on `email_suppressions` — unnecessary since the only accessor is service_role which bypasses RLS entirely. A blanket deny makes the intent explicit.
+
+**Remaining:** Leaked Password Protection is a dashboard-only Auth setting, not fixable via SQL.
+
 ## Usage Levels: Sticky Best-Window Status, Not Rolling Downgrade (2026-03-16)
 
 **Decision:** Added a `user_levels` table with `L1`-`L8` levels derived from each user's best 30-day usage window, using both spend and active-day thresholds. Levels appear on public profiles and leaderboard rows, and once earned they do not go down.
