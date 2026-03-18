@@ -17,6 +17,7 @@ export function RecapPage() {
   const [loading, setLoading] = useState(true);
   const [copied, setCopied] = useState(false);
   const [downloading, setDownloading] = useState(false);
+  const [downloadError, setDownloadError] = useState<string | null>(null);
   const [backgroundId, setBackgroundId] =
     useState<RecapBackgroundId>(DEFAULT_BACKGROUND_ID);
 
@@ -75,6 +76,7 @@ export function RecapPage() {
 
   const handleDownload = useCallback(async () => {
     setDownloading(true);
+    setDownloadError(null);
     try {
       const res = await fetch(
         `/api/recap/image?period=${period}&format=square&bg=${backgroundId}`
@@ -92,7 +94,7 @@ export function RecapPage() {
       document.body.removeChild(a);
       URL.revokeObjectURL(url);
     } catch {
-      alert("Failed to generate image. Please try again.");
+      setDownloadError("Failed to generate image. Please try again.");
     } finally {
       setDownloading(false);
     }
@@ -204,6 +206,18 @@ export function RecapPage() {
                 {downloading ? "Generating..." : "Download Card"}
               </button>
             </div>
+
+            {downloadError && (
+              <div role="alert" className="mt-3 flex items-center gap-2 text-sm text-error">
+                <span>{downloadError}</span>
+                <button
+                  onClick={handleDownload}
+                  className="font-semibold underline hover:no-underline"
+                >
+                  Try again
+                </button>
+              </div>
+            )}
 
             {!data.is_public && (
               <p className="mt-3 text-xs text-muted">
