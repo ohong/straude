@@ -8,9 +8,7 @@ import { InviteButton } from "@/components/app/profile/InviteButton";
 
 export async function RightSidebar({ userId }: { userId: string }) {
   const supabase = await createClient();
-  // Service client bypasses RLS so suggestions can include private users.
-  // The users RLS policy restricts SELECT to is_public=true, which means
-  // power users who follow everyone public see zero suggestions.
+  // Service client so suggestions can include all users.
   const service = getServiceClient();
 
   // Start independent queries in parallel (avoid waterfall)
@@ -42,7 +40,7 @@ export async function RightSidebar({ userId }: { userId: string }) {
   const PINNED_USERNAME = "ohong";
 
   // Service client bypasses RLS so we can query users the current user
-  // hasn't followed yet. Filter to is_public=true to exclude dummy/private users.
+  // Filter to is_public=true to only suggest public profiles.
   const [{ data: pinnedUser }, { data: recentlyActive }, { data: newSignups }] =
     await Promise.all([
       service
