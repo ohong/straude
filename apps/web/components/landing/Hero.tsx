@@ -16,7 +16,7 @@ function CopySnippet({ command }: { command: string }) {
   return (
     <button
       onClick={copy}
-      className="inline-flex cursor-pointer items-center gap-4 border border-landing-border bg-landing-panel px-4 py-3 font-[family-name:var(--font-mono)] text-sm text-landing-muted transition-colors hover:border-landing-dim"
+      className="inline-flex cursor-pointer items-center gap-4 border border-landing-border bg-landing-panel px-4 py-3 font-[family-name:var(--font-mono)] text-sm text-landing-muted transition-[border-color,transform] hover:border-landing-dim active:scale-[0.97]"
     >
       ${" "}
       <span className="text-landing-text">{command}</span>
@@ -61,7 +61,7 @@ export function Hero() {
         <div className="flex flex-wrap gap-4 mt-10">
           <Link
             href="/signup"
-            className="inline-flex items-center justify-center bg-accent text-landing-bg font-[family-name:var(--font-mono)] text-sm font-bold uppercase px-8 py-4 border border-accent hover:bg-transparent hover:text-accent transition-all duration-200"
+            className="inline-flex items-center justify-center bg-accent text-landing-bg font-[family-name:var(--font-mono)] text-sm font-bold uppercase px-8 py-4 border border-accent hover:bg-transparent hover:text-accent active:scale-[0.97] transition-all duration-200"
           >
             Start Your Streak
           </Link>

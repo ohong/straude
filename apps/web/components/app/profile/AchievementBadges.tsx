@@ -2,6 +2,7 @@
 
 import { useState } from "react";
 import { ChevronDown, ChevronUp } from "lucide-react";
+import { AnimatePresence, motion } from "motion/react";
 import { ACHIEVEMENTS } from "@/lib/achievements";
 import type { UserAchievement } from "@/types";
 
@@ -50,31 +51,41 @@ export function AchievementBadges({
       </button>
 
       {/* Expanded: detail grid */}
-      {expanded && (
-        <div className="mt-2 grid grid-cols-2 gap-2 sm:grid-cols-3 lg:grid-cols-4">
-          {badges.map((a) => {
-            const isEarned = earnedSlugs.has(a.slug);
-            return (
-              <div
-                key={a.slug}
-                className={`flex items-start gap-2 rounded border px-3 py-2 ${
-                  isEarned
-                    ? "border-border bg-subtle"
-                    : "border-border/50 bg-background text-muted opacity-40"
-                }`}
-              >
-                <span className="text-lg leading-none mt-0.5">{a.emoji}</span>
-                <div className="min-w-0">
-                  <p className="text-xs font-medium truncate">{a.title}</p>
-                  <p className="text-[0.65rem] leading-tight text-muted">
-                    {a.description}
-                  </p>
-                </div>
-              </div>
-            );
-          })}
-        </div>
-      )}
+      <AnimatePresence>
+        {expanded && (
+          <motion.div
+            initial={{ height: 0, opacity: 0 }}
+            animate={{ height: "auto", opacity: 1 }}
+            exit={{ height: 0, opacity: 0 }}
+            transition={{ duration: 0.2, ease: [0.25, 0.46, 0.45, 0.94] }}
+            className="overflow-hidden"
+          >
+            <div className="mt-2 grid grid-cols-2 gap-2 sm:grid-cols-3 lg:grid-cols-4">
+              {badges.map((a) => {
+                const isEarned = earnedSlugs.has(a.slug);
+                return (
+                  <div
+                    key={a.slug}
+                    className={`flex items-start gap-2 rounded border px-3 py-2 ${
+                      isEarned
+                        ? "border-border bg-subtle"
+                        : "border-border/50 bg-background text-muted opacity-40"
+                    }`}
+                  >
+                    <span className="text-lg leading-none mt-0.5">{a.emoji}</span>
+                    <div className="min-w-0">
+                      <p className="text-xs font-medium truncate">{a.title}</p>
+                      <p className="text-[0.65rem] leading-tight text-muted">
+                        {a.description}
+                      </p>
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          </motion.div>
+        )}
+      </AnimatePresence>
     </div>
   );
 }

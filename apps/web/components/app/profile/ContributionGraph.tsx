@@ -150,7 +150,7 @@ export function ContributionGraph({ data, onCellClick, className }: Contribution
               width={CELL_SIZE}
               height={CELL_SIZE}
               rx={2}
-              fill={isFuture ? "#F5F5F5" : getCellColor(cost)}
+              fill={isFuture ? "var(--app-subtle)" : getCellColor(cost)}
               stroke={hasPost ? "#999" : "none"}
               strokeWidth={hasPost ? 1 : 0}
               className={cn(onCellClick && hasPost && "cursor-pointer")}
@@ -166,11 +166,10 @@ export function ContributionGraph({ data, onCellClick, className }: Contribution
 
       {tooltip && (
         <div
-          className="pointer-events-none fixed z-50 -translate-x-1/2 -translate-y-full rounded-[4px] px-3 py-2 text-sm text-white shadow-lg"
+          className="pointer-events-none fixed z-50 -translate-x-1/2 -translate-y-full rounded-[4px] bg-foreground px-3 py-2 text-sm text-background shadow-lg"
           style={{
             left: tooltip.x,
             top: tooltip.y - 8,
-            background: "#000",
           }}
         >
           <p className="font-normal leading-snug">{tooltip.date}</p>
