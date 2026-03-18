@@ -1,6 +1,7 @@
 @import "tailwindcss";
 
 :root {
+  --mobile-nav-height: 60px;
   --app-background: #ffffff;
   --app-foreground: #111111;
   --app-accent: #df561f;
@@ -80,6 +81,7 @@ body {
   color: var(--color-foreground);
   -webkit-tap-highlight-color: transparent;
   overscroll-behavior: none;
+  text-wrap: pretty;
 }
 
 /* PWA safe area insets for notched devices */

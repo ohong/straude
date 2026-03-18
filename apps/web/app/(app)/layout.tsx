@@ -37,8 +37,8 @@ export default async function AppLayout({
       <div className="fixed inset-0 flex flex-col overflow-hidden">
         <GuestHeader />
         <div className="mx-auto flex min-h-0 w-full max-w-[1600px] flex-1 border-x border-border">
-          <main className="min-w-0 flex-1 overflow-y-auto" style={{ scrollbarWidth: "none", overscrollBehavior: "contain" }}>
-            <div className="pb-[60px] sm:pb-0">
+          <main id="main-content" className="min-w-0 flex-1 overflow-y-auto" style={{ scrollbarWidth: "none", overscrollBehavior: "contain" }}>
+            <div className="pb-[var(--mobile-nav-height)] sm:pb-0">
               {children}
             </div>
           </main>
@@ -164,8 +164,8 @@ export default async function AppLayout({
           </aside>
 
           {/* Main content */}
-          <main className="min-w-0 flex-1 overflow-y-auto" style={{ scrollbarWidth: "none", overscrollBehavior: "contain" }}>
-            <div className="pb-[60px] lg:pb-0">
+          <main id="main-content" className="min-w-0 flex-1 overflow-y-auto" style={{ scrollbarWidth: "none", overscrollBehavior: "contain" }}>
+            <div className="pb-[var(--mobile-nav-height)] lg:pb-0">
               {children}
             </div>
           </main>
