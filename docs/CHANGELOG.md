@@ -2,7 +2,36 @@
 
 ## Unreleased
 
+### Added
+
+- **Skip-to-content link.** First focusable element in root layout for keyboard users to bypass navigation (WCAG 2.4.1).
+- **Command palette shortcuts.** Added keyboard shortcuts to all command palette actions (e.g., `g f` for Feed, `c` for New Post, `/` for Search) with shortcut keys rendered inline. Added `⌘K` hint to the top header.
+- **Login/signup OTP resend.** Magic link confirmation screen now offers "Resend link" and "Use a different email" options to prevent dead-end states.
+- **Message pagination.** DM conversations load 50 messages initially with a "Load earlier messages" button for cursor-based pagination.
+- **Comment thread pagination.** Root comments limited to 20 initially with a "Load more comments" button to prevent large DOM renders.
+- **ContributionGraph keyboard access.** Interactive heatmap cells (those with posts) now have `tabIndex`, `role="button"`, `aria-label`, Enter/Space key handlers, and focus-triggered tooltips.
+
+### Changed
+
+- **Button :active scale.** All `Button` components and landing page CTAs (Hero, CopySnippet) now apply `active:scale-[0.97]` for press feedback.
+- **WallOfLove stagger timing.** Reduced card stagger delay from 80ms to 40ms per item for a snappier cascade.
+- **WallOfLove avatar alt text.** Changed from empty `alt=""` to `alt={post.author_name}` for meaningful images.
+- **Footer UTC clock.** Shows HH:MM only and updates every 60s instead of every second to reduce re-renders.
+- **ContributionGraph theme colors.** Future cells use `var(--app-subtle)` and tooltip uses `bg-foreground`/`text-background` instead of hardcoded `#F5F5F5`/`#000`.
+- **Post editor error position.** Error message moved above Save/Cancel buttons with `role="alert"`. Cancel prompts confirmation when there's an active error + dirty changes.
+- **Post deletion dialog.** Replaced `window.confirm()` with the same `AlertDialog` pattern used for comment deletion.
+- **Post editor touch targets.** Image remove/reorder buttons expanded with `::after` pseudo-element hit area (invisible 6px padding).
+- **Settings page sections.** Grouped fields into Profile, Notifications, and Privacy & Account fieldsets with section headers.
+- **Mobile nav CSS variable.** Extracted `--mobile-nav-height: 60px` to `globals.css` and referenced in layout padding and MobileNav height.
+- **Mobile menu animation.** Added slide-down entrance/exit via `AnimatePresence` + `motion.div` (200ms, ease-out).
+- **Mobile menu focus trap.** Focus trapped within panel, closes on Escape, locks body scroll when open.
+- **Achievement badges animation.** Expand/collapse grid now animates height via `motion.div`.
+- **`text-wrap: pretty`** applied to body for reduced orphans in body text.
+- **Recap download error.** Replaced `alert()` with inline error state and "Try again" button.
+
 ### Fixed
+
+- **Feed loading error handling.** `loadMore()` and `switchTab()` now wrapped in try/catch with error state, inline error display, and retry button.
 
 - **Security advisor remediation.** Applied migration to fix all SQL-level security issues flagged by Supabase Security Advisor: recreated `leaderboard_daily` view with `security_invoker = true` (was `SECURITY DEFINER`), pinned `SET search_path = 'public'` on 4 functions (`search_companies_fuzzy`, `increment_streak_freezes`, `calculate_user_streak`, `calculate_streaks_batch`), added explicit deny-all RLS policy on `email_suppressions`, and added authenticated SELECT policy on `user_levels`.
 
