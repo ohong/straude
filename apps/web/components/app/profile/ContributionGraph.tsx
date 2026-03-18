@@ -136,6 +136,8 @@ export function ContributionGraph({ data, onCellClick, className }: Contribution
         viewBox={`0 0 ${svgWidth} ${svgHeight}`}
         className="block w-full"
         style={{ height: "auto" }}
+        role="img"
+        aria-label={`Contribution graph for ${new Date().getFullYear()}`}
       >
         {/* Month labels */}
         {monthLabels.map((m, i) => (
@@ -157,6 +159,9 @@ export function ContributionGraph({ data, onCellClick, className }: Contribution
           const hasPost = entry?.has_post ?? false;
           const isFuture = cell.date > today;
 
+          const isInteractive = onCellClick && hasPost;
+          const dateLabel = formatDateLabel(cell.date);
+
           return (
             <rect
               key={cell.key}
@@ -168,11 +173,22 @@ export function ContributionGraph({ data, onCellClick, className }: Contribution
               fill={isFuture ? "var(--app-subtle)" : getCellColor(cost)}
               stroke={hasPost ? "#999" : "none"}
               strokeWidth={hasPost ? 1 : 0}
-              className={cn(onCellClick && hasPost && "cursor-pointer")}
-              onMouseEnter={(e) => handleMouseEnter(e, formatDateLabel(cell.date), cost)}
+              className={cn(isInteractive && "cursor-pointer", isInteractive && "outline-none focus:ring-2 focus:ring-accent")}
+              tabIndex={isInteractive ? 0 : undefined}
+              role={isInteractive ? "button" : undefined}
+              aria-label={isInteractive ? `${dateLabel} — $${cost.toFixed(2)}` : undefined}
+              onMouseEnter={(e) => handleMouseEnter(e, dateLabel, cost)}
               onMouseLeave={handleMouseLeave}
+              onFocus={(e) => handleMouseEnter(e as unknown as React.MouseEvent<SVGRectElement>, dateLabel, cost)}
+              onBlur={handleMouseLeave}
               onClick={() => {
-                if (onCellClick && hasPost) onCellClick(cell.key);
+                if (isInteractive) onCellClick(cell.key);
+              }}
+              onKeyDown={(e) => {
+                if (isInteractive && (e.key === "Enter" || e.key === " ")) {
+                  e.preventDefault();
+                  onCellClick(cell.key);
+                }
               }}
             />
           );

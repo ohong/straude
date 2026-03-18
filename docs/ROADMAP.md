@@ -105,6 +105,26 @@ Extension of Team/Org Workspaces with premium features: private team leaderboard
 
 ---
 
+## UX Polish (from audit, Tier 4 / deferred)
+
+### Client-side email validation before OTP send
+Login form uses `type="email"` + `required` but no check for common mistakes (missing TLD, etc.) before the network request. Low effort, low impact.
+
+### Model colors outside design system
+`ActivityCard.tsx:147-158` uses hardcoded hex colors for model chips. Should be extracted to `lib/constants/model-colors.ts` for consistency.
+
+### Typing indicators in DMs
+No typing indicators in direct messages. Would require Supabase Realtime presence channels.
+
+### Message search / filtering
+No ability to search message history or filter conversations. Could use Postgres full-text search on `direct_messages.content`.
+
+### Post/comment reporting and moderation tools
+No user-facing report buttons or admin moderation queue. Requires new components, API routes, and an admin review UI.
+
+### OG image optimization
+`public/og-image.png` is 369KB PNG. Could be optimized to AVIF with PNG fallback for faster social preview loading.
+
 ## Infrastructure / Housekeeping
 
 ### Migration Drift Guardrails

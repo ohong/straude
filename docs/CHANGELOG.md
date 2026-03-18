@@ -4,6 +4,9 @@
 
 ### Added
 
+- **Comment thread pagination.** Root comments limited to 20 initially with a "Load more comments" button to prevent large DOM renders.
+- **ContributionGraph keyboard access.** Interactive heatmap cells (those with posts) now have `tabIndex`, `role="button"`, `aria-label`, Enter/Space key handlers, and focus-triggered tooltips.
+- **DM `before` cursor for `/api/messages`.** GET accepts an optional `before` ISO timestamp and returns `has_more` so future UI work can paginate older messages without breaking the existing react-query inbox.
 - **#6 Product of the Day badge in landing hero.** Small clickable badge at the top of the hero linking to the Straude Product Hunt page (`https://www.producthunt.com/products/straude`). Styled to match the Fastlane reference — bronze medallion, "PRODUCT HUNT" eyebrow, accent-colored headline.
 - **Privacy assurance on onboarding Step 3.** Added a one-liner below the CLI command confirming only aggregate stats leave the machine — prompts, code, and conversations never do. Links to the privacy policy. Targets the sign-up-to-push conversion drop-off for privacy-minded users.
 - **"What Straude cannot access" section on privacy page.** New highlighted callout at the top of `/privacy` explicitly stating zero access to prompts, conversations, code, or file contents. Explains the data pipeline (local ccusage aggregation → daily totals only), links to open-source CLI and `--dry-run` flag for self-verification.
