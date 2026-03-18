@@ -75,6 +75,8 @@ export function MessagesInbox({
   const [error, setError] = useState<string | null>(null);
   const [pendingAttachments, setPendingAttachments] = useState<PendingAttachment[]>([]);
   const [lightboxImage, setLightboxImage] = useState<string | null>(null);
+  const [hasMore, setHasMore] = useState(false);
+  const [loadingEarlier, setLoadingEarlier] = useState(false);
   const fileRef = useRef<HTMLInputElement>(null);
 
   const fetchThreads = useCallback(async () => {
@@ -113,6 +115,7 @@ export function MessagesInbox({
       setCounterpart(data.counterpart ?? null);
       setMessages(data.messages ?? []);
       setCurrentUserId(data.current_user_id ?? null);
+      setHasMore(data.has_more ?? false);
       setConversationLoading(false);
 
       const hasUnread = (data.messages ?? []).some(
@@ -162,6 +165,23 @@ export function MessagesInbox({
 
     fetchConversation(activeUsername);
   }, [activeUsername, fetchConversation]);
+
+  async function loadEarlierMessages() {
+    if (!activeUsername || loadingEarlier || messages.length === 0) return;
+    setLoadingEarlier(true);
+    const oldest = messages[0];
+    const res = await fetch(
+      `/api/messages?with=${encodeURIComponent(activeUsername)}&before=${encodeURIComponent(oldest.created_at)}`,
+      { cache: "no-store" }
+    );
+    if (res.ok) {
+      const data = await res.json();
+      const older = data.messages ?? [];
+      setMessages((prev) => [...older, ...prev]);
+      setHasMore(data.has_more ?? false);
+    }
+    setLoadingEarlier(false);
+  }
 
   function selectConversation(username: string) {
     setActiveUsername(username);
@@ -514,6 +534,18 @@ export function MessagesInbox({
           ) : (
             <>
               <div className="flex flex-1 flex-col justify-end space-y-3 overflow-y-auto pb-4">
+                {hasMore && (
+                  <div className="flex justify-center py-2">
+                    <button
+                      type="button"
+                      onClick={loadEarlierMessages}
+                      disabled={loadingEarlier}
+                      className="text-sm font-medium text-accent hover:underline disabled:opacity-50"
+                    >
+                      {loadingEarlier ? "Loading..." : "Load earlier messages"}
+                    </button>
+                  </div>
+                )}
                 {messages.length === 0 ? (
                   <div className="rounded-2xl border border-dashed border-border px-4 py-5 text-sm text-muted text-pretty">
                     No messages yet. Send the first note to @{counterpart.username}.

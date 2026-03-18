@@ -102,6 +102,7 @@ export function CommentThread({
   const [deleteError, setDeleteError] = useState<string | null>(null);
   const [actionErrors, setActionErrors] = useState<Record<string, string>>({});
   const [collapsedThreads, setCollapsedThreads] = useState<Set<string>>(new Set());
+  const [visibleRootCount, setVisibleRootCount] = useState(20);
 
   const threadedComments = buildCommentTree(comments);
 
@@ -687,7 +688,22 @@ export function CommentThread({
       )}
 
       {threadedComments.length > 0 && (
-        <ol className="flex flex-col">{threadedComments.map((comment) => renderComment(comment))}</ol>
+        <>
+          <ol className="flex flex-col">
+            {threadedComments.slice(0, visibleRootCount).map((comment) => renderComment(comment))}
+          </ol>
+          {threadedComments.length > visibleRootCount && (
+            <div className="border-b border-dashed border-muted/30 px-4 py-4 text-center sm:px-6">
+              <button
+                type="button"
+                onClick={() => setVisibleRootCount((prev) => prev + 20)}
+                className="text-sm font-medium text-accent hover:underline"
+              >
+                Load more comments ({threadedComments.length - visibleRootCount} remaining)
+              </button>
+            </div>
+          )}
+        </>
       )}
 
       {userId && !replyingTo && (

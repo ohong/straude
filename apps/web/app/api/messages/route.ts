@@ -154,9 +154,10 @@ export async function GET(request: NextRequest) {
 
   const username = request.nextUrl.searchParams.get("with")?.trim() ?? "";
   const limit = Math.min(
-    Math.max(Number(request.nextUrl.searchParams.get("limit")) || 100, 1),
+    Math.max(Number(request.nextUrl.searchParams.get("limit")) || 50, 1),
     200
   );
+  const before = request.nextUrl.searchParams.get("before")?.trim() ?? "";
 
   if (!USERNAME_RE.test(username)) {
     return NextResponse.json({ error: "Invalid recipient" }, { status: 400 });
@@ -177,12 +178,14 @@ export async function GET(request: NextRequest) {
       .select("id, username, avatar_url, display_name")
       .eq("id", user.id)
       .single(),
-    db
-      .from("direct_messages")
-      .select("id, sender_id, recipient_id, content, attachments, read_at, created_at")
-      .or(buildPairFilter(user.id, counterpart.id))
-      .order("created_at", { ascending: false })
-      .limit(limit),
+    (() => {
+      let q = db
+        .from("direct_messages")
+        .select("id, sender_id, recipient_id, content, attachments, read_at, created_at")
+        .or(buildPairFilter(user.id, counterpart.id));
+      if (before) q = q.lt("created_at", before);
+      return q.order("created_at", { ascending: false }).limit(limit);
+    })(),
   ]);
 
   if (selfRes.error || messagesRes.error) {
@@ -202,10 +205,13 @@ export async function GET(request: NextRequest) {
     })),
   );
 
+  const hasMore = (messagesRes.data?.length ?? 0) >= limit;
+
   return NextResponse.json({
     counterpart,
     current_user_id: user.id,
     messages,
+    has_more: hasMore,
   });
 }
 

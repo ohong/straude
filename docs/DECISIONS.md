@@ -1,5 +1,19 @@
 # Architecture & Design Decisions
 
+## Comprehensive UX Audit Implementation (2026-03-18)
+
+**Decision:** Implemented all items from a systematic UX audit (Phase 1-3) covering accessibility, error handling, animation consistency, and performance across the entire user-facing surface.
+
+**Key trade-offs:**
+1. **Client-side comment pagination over server-side** — all comments are still loaded from the server (up to 100), but only 20 root threads render initially. True server-side pagination would require cursor-based API changes and complicates optimistic comment insertion. Client-side limiting solves the DOM performance issue with minimal complexity.
+2. **Pseudo-element hit area expansion over larger visual buttons** — PostEditor image buttons stay at 20px visually but use `::after` with negative insets for a 32px+ touch target. Preserves compact visual density while meeting Fitts's law minimums.
+3. **Message pagination at API level** — added `before` cursor to `/api/messages` GET since conversations could grow large and signed attachment URLs add server cost per message. Default limit reduced from 100 to 50.
+4. **`window.confirm()` retained for cancel-with-dirty-changes** — PostEditor Cancel uses `window.confirm()` only in the error + dirty edge case, since building a second AlertDialog for this rare case would be over-engineering. The main delete action uses the proper AlertDialog.
+
+**Alternatives considered:**
+- Virtualized message list (react-window) — more complex, scroll-to-bottom logic is tricky with variable-height messages. Cursor pagination is simpler and consistent with feed patterns.
+- Full settings page tab navigation — would require routing changes for anchor-based tabs. Fieldset grouping with section headers achieves the cognitive chunking benefit without URL complexity.
+
 ## Security Advisor Remediation: Pinned Search Paths and SECURITY INVOKER View (2026-03-17)
 
 **Decision:** Fixed all SQL-level findings from Supabase Security Advisor in a single migration.
