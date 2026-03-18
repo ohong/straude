@@ -1,7 +1,7 @@
-import { firstRelation } from "@/lib/utils/first-relation";
+import { firstRelation, type JoinedRelation } from "@/lib/utils/first-relation";
 import type { CommentPreviewItem, FeedPostRow, Post, UserSummary } from "@/types";
 
-export type JoinedUserSummary = UserSummary[] | null;
+export type JoinedUserSummary = JoinedRelation<UserSummary>;
 
 export type RawCommentPreviewRow = Omit<CommentPreviewItem, "user"> & {
   user: JoinedUserSummary;

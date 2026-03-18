@@ -153,6 +153,15 @@ describe("GET /api/feed", () => {
       posts: mockPosts,
       userKudos: [{ post_id: "post-1" }],
       kudos: [{ post_id: "post-1", user: { avatar_url: null, username: "bob" } }],
+      comments: [
+        {
+          id: "comment-1",
+          post_id: "post-1",
+          content: "Love this",
+          created_at: "2026-01-01T13:00:00Z",
+          user: { avatar_url: null, username: "carol" },
+        },
+      ],
     });
 
     const res = await GET(makeRequest());
@@ -165,6 +174,16 @@ describe("GET /api/feed", () => {
     expect(json.posts[0].has_kudosed).toBe(true);
     expect(json.posts[0].user.username).toBe("alice");
     expect(json.posts[0].daily_usage.cost_usd).toBe(1.5);
+    expect(json.posts[0].kudos_users).toEqual([{ avatar_url: null, username: "bob" }]);
+    expect(json.posts[0].recent_comments).toEqual([
+      {
+        id: "comment-1",
+        post_id: "post-1",
+        content: "Love this",
+        created_at: "2026-01-01T13:00:00Z",
+        user: { avatar_url: null, username: "carol" },
+      },
+    ]);
   });
 
   it("sets has_kudosed false when user has not kudosed", async () => {
