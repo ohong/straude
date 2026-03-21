@@ -3,6 +3,13 @@ import { createClient } from "@/lib/supabase/server";
 import { getServiceClient } from "@/lib/supabase/service";
 import { isAdmin } from "@/lib/admin";
 
+type RevenueConcentrationRow = {
+  segment: string;
+  user_count: number | string;
+  total_spend: number | string;
+  pct_of_total: number | string;
+};
+
 export async function GET() {
   const auth = await createClient();
   const {
@@ -20,11 +27,11 @@ export async function GET() {
     return NextResponse.json({ error: error.message }, { status: 500 });
   }
 
-  const rows = (data ?? []).map((r: any) => ({
-    segment: r.segment,
-    user_count: Number(r.user_count),
-    total_spend: Number(r.total_spend),
-    pct_of_total: Number(r.pct_of_total),
+  const rows = ((data ?? []) as RevenueConcentrationRow[]).map((row) => ({
+    segment: row.segment,
+    user_count: Number(row.user_count),
+    total_spend: Number(row.total_spend),
+    pct_of_total: Number(row.pct_of_total),
   }));
 
   return NextResponse.json(rows);

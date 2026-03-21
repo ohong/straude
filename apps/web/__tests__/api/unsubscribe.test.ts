@@ -8,7 +8,7 @@ vi.mock("@/lib/supabase/service", () => ({
   getServiceClient: vi.fn(),
 }));
 
-import { GET } from "@/app/api/unsubscribe/route";
+import { GET, POST } from "@/app/api/unsubscribe/route";
 import { verifyUnsubscribeToken } from "@/lib/email/unsubscribe";
 import { getServiceClient } from "@/lib/supabase/service";
 import { NextRequest } from "next/server";
@@ -83,5 +83,46 @@ describe("GET /api/unsubscribe", () => {
     const html = await res.text();
     expect(html).toContain("direct messages");
     expect(mockUpdate).toHaveBeenCalledWith({ email_dm_notifications: false });
+  });
+
+  it("returns 500 when the preference update fails", async () => {
+    (verifyUnsubscribeToken as any).mockReturnValue("user-123");
+
+    const mockUpdate = vi.fn().mockReturnValue({
+      eq: vi.fn().mockResolvedValue({ error: { message: "write failed" } }),
+    });
+    (getServiceClient as any).mockReturnValue({
+      from: vi.fn().mockReturnValue({ update: mockUpdate }),
+    });
+
+    const res = await GET(makeRequest("/api/unsubscribe?token=valid-token"));
+    const json = await res.json();
+
+    expect(res.status).toBe(500);
+    expect(json.error).toContain("Failed to update");
+  });
+});
+
+describe("POST /api/unsubscribe", () => {
+  it("supports one-click unsubscribe POST requests", async () => {
+    (verifyUnsubscribeToken as any).mockReturnValue("user-123");
+
+    const mockUpdate = vi.fn().mockReturnValue({
+      eq: vi.fn().mockResolvedValue({ error: null }),
+    });
+    (getServiceClient as any).mockReturnValue({
+      from: vi.fn().mockReturnValue({ update: mockUpdate }),
+    });
+
+    const res = await POST(
+      new NextRequest(new URL("/api/unsubscribe?token=valid-token", "http://localhost"), {
+        method: "POST",
+      })
+    );
+    const json = await res.json();
+
+    expect(res.status).toBe(200);
+    expect(json.success).toBe(true);
+    expect(mockUpdate).toHaveBeenCalledWith({ email_notifications: false });
   });
 });

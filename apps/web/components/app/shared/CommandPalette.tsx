@@ -24,11 +24,23 @@ function RenderResults() {
           <div className="px-4 py-2 text-xs uppercase text-muted">{item}</div>
         ) : (
           <div
-            className={`flex cursor-pointer items-center px-4 py-3 text-sm ${
+            className={`flex cursor-pointer items-center justify-between px-4 py-3 text-sm ${
               active ? "bg-hover text-accent" : "text-foreground"
             }`}
           >
-            {item.name}
+            <span>{item.name}</span>
+            {item.shortcut && item.shortcut.length > 0 && (
+              <span className="flex gap-1">
+                {item.shortcut.map((key) => (
+                  <kbd
+                    key={key}
+                    className="rounded border border-border bg-subtle px-1.5 py-0.5 font-mono text-xs text-muted"
+                  >
+                    {key}
+                  </kbd>
+                ))}
+              </span>
+            )}
           </div>
         )
       }
@@ -50,49 +62,49 @@ export function CommandPalette({
     {
       id: "feed",
       name: "Feed",
-      shortcut: [],
+      shortcut: ["g", "f"],
       perform: () => router.push("/feed"),
     },
     {
       id: "leaderboard",
       name: "Leaderboard",
-      shortcut: [],
+      shortcut: ["g", "l"],
       perform: () => router.push("/leaderboard"),
     },
     {
       id: "search",
       name: "Search",
-      shortcut: [],
+      shortcut: ["/"],
       perform: () => router.push("/search"),
     },
     {
       id: "settings",
       name: "Settings",
-      shortcut: [],
+      shortcut: ["g", "s"],
       perform: () => router.push("/settings"),
     },
     {
       id: "new-post",
       name: "New Post",
-      shortcut: [],
+      shortcut: ["c"],
       perform: () => router.push("/post/new"),
     },
     {
       id: "recap",
       name: "Recap",
-      shortcut: [],
+      shortcut: ["g", "r"],
       perform: () => router.push("/recap"),
     },
     {
       id: "prompts",
       name: "Prompts",
-      shortcut: [],
+      shortcut: ["g", "p"],
       perform: () => router.push("/prompts"),
     },
     {
       id: "profile",
       name: "Profile",
-      shortcut: [],
+      shortcut: ["g", "m"],
       perform: () => router.push(username ? `/u/${username}` : "/feed"),
     },
     {

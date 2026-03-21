@@ -2,6 +2,7 @@ import { redirect } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
 import { isAdmin } from "@/lib/admin";
 import { getServiceClient } from "@/lib/supabase/service";
+import { firstRelation } from "@/lib/utils/first-relation";
 import { StatCard } from "./components/StatCard";
 import { NorthStarChart } from "./components/NorthStarChart";
 import { TopUsersTable } from "./components/TopUsersTable";
@@ -14,6 +15,51 @@ import { RevenueConcentration } from "./components/RevenueConcentration";
 import { TimeToFirstSync } from "./components/TimeToFirstSync";
 import { PromptInbox } from "./components/PromptInbox";
 import { UsersByCountry } from "./components/UsersByCountry";
+import { CompanySuggestionsInbox } from "./components/CompanySuggestionsInbox";
+
+type SpendRow = {
+  date: string;
+  daily_total: number | string;
+  cumulative_total: number | string;
+};
+type TopUserRow = {
+  total_spend: number | string;
+  total_tokens: number | string;
+  usage_days: number | string;
+} & Record<string, unknown>;
+type FunnelRow = { stage: string; count: number | string };
+type GrowthRow = { date: string; signups: number | string; cumulative_users: number | string };
+type DailyUsageUserRow = { user_id: string };
+type PromptInboxRow = {
+  id: string;
+  prompt: string;
+  is_anonymous: boolean;
+  status: "new" | "accepted" | "in_progress" | "rejected" | "shipped";
+  is_hidden: boolean;
+  created_at: string;
+  user: Array<{ username: string | null; display_name: string | null }> | null;
+};
+type TopUsersTableRow = {
+  user_id: string;
+  username: string;
+  avatar_url: string | null;
+  total_spend: number;
+  total_tokens: number;
+  usage_days: number;
+  last_active: string;
+  signed_up: string;
+};
+type CompanySuggestionInboxRow = {
+  id: string;
+  company_name: string;
+  company_url: string;
+  policy_description: string;
+  source_url: string;
+  status: "new" | "accepted" | "rejected" | "published";
+  is_hidden: boolean;
+  created_at: string;
+  user: Array<{ username: string | null; display_name: string | null }> | null;
+};
 
 export default async function AdminPage() {
   const authClient = await createClient();
@@ -35,6 +81,7 @@ export default async function AdminPage() {
     dauRes,
     wauRes,
     promptsRes,
+    companySuggestionsRes,
   ] = await Promise.all([
     supabase.rpc("admin_cumulative_spend"),
     supabase.rpc("admin_top_users", { p_limit: 20 }),
@@ -49,30 +96,37 @@ export default async function AdminPage() {
       )
       .order("created_at", { ascending: false })
       .limit(200),
+    supabase
+      .from("company_suggestions")
+      .select(
+        "id,company_name,company_url,policy_description,source_url,status,is_hidden,created_at,user:users!company_suggestions_user_id_fkey(username,display_name)"
+      )
+      .order("created_at", { ascending: false })
+      .limit(200),
   ]);
 
-  const spendData = (spendRes.data ?? []).map((r: any) => ({
-    date: r.date,
-    daily_total: Number(r.daily_total),
-    cumulative_total: Number(r.cumulative_total),
+  const spendData = ((spendRes.data ?? []) as SpendRow[]).map((row) => ({
+    date: row.date,
+    daily_total: Number(row.daily_total),
+    cumulative_total: Number(row.cumulative_total),
   }));
 
-  const topUsers = (usersRes.data ?? []).map((r: any) => ({
-    ...r,
-    total_spend: Number(r.total_spend),
-    total_tokens: Number(r.total_tokens),
-    usage_days: Number(r.usage_days),
+  const topUsers: TopUsersTableRow[] = ((usersRes.data ?? []) as TopUserRow[]).map((row) => ({
+    ...row,
+    total_spend: Number(row.total_spend),
+    total_tokens: Number(row.total_tokens),
+    usage_days: Number(row.usage_days),
+  })) as TopUsersTableRow[];
+
+  const funnelData = ((funnelRes.data ?? []) as FunnelRow[]).map((row) => ({
+    stage: row.stage,
+    count: Number(row.count),
   }));
 
-  const funnelData = (funnelRes.data ?? []).map((r: any) => ({
-    stage: r.stage,
-    count: Number(r.count),
-  }));
-
-  const growthData = (growthRes.data ?? []).map((r: any) => ({
-    date: r.date,
-    signups: Number(r.signups),
-    cumulative_users: Number(r.cumulative_users),
+  const growthData = ((growthRes.data ?? []) as GrowthRow[]).map((row) => ({
+    date: row.date,
+    signups: Number(row.signups),
+    cumulative_users: Number(row.cumulative_users),
   }));
 
   const totalSpend =
@@ -80,14 +134,14 @@ export default async function AdminPage() {
       ? spendData[spendData.length - 1].cumulative_total
       : 0;
   const totalUsers =
-    funnelData.find((s: any) => s.stage === "signed_up")?.count ?? 0;
+    funnelData.find((stage) => stage.stage === "signed_up")?.count ?? 0;
 
   const isDummy = (id: string) => id.startsWith("a0000000-0000-4000-8000-");
-  const uniqueReal = (rows: any[]) =>
-    new Set(rows.filter((r) => !isDummy(r.user_id)).map((r) => r.user_id)).size;
+  const uniqueReal = (rows: DailyUsageUserRow[]) =>
+    new Set(rows.filter((row) => !isDummy(row.user_id)).map((row) => row.user_id)).size;
 
-  const dau = uniqueReal(dauRes.data ?? []);
-  const wau = uniqueReal(wauRes.data ?? []);
+  const dau = uniqueReal((dauRes.data ?? []) as DailyUsageUserRow[]);
+  const wau = uniqueReal((wauRes.data ?? []) as DailyUsageUserRow[]);
 
   // WoW spend growth: compare last 7 days vs prior 7 days
   const now = Date.now();
@@ -108,14 +162,26 @@ export default async function AdminPage() {
       ? ((thisWeekSpend - lastWeekSpend) / lastWeekSpend) * 100
       : null;
 
-  const promptRows = (promptsRes.data ?? []).map((r: any) => ({
-    id: r.id,
-    prompt: r.prompt,
-    is_anonymous: r.is_anonymous,
-    status: r.status,
-    is_hidden: r.is_hidden,
-    created_at: r.created_at,
-    user: r.user,
+  const companySuggestionRows = ((companySuggestionsRes.data ?? []) as CompanySuggestionInboxRow[]).map((row) => ({
+    id: row.id,
+    company_name: row.company_name,
+    company_url: row.company_url,
+    policy_description: row.policy_description,
+    source_url: row.source_url,
+    status: row.status,
+    is_hidden: row.is_hidden,
+    created_at: row.created_at,
+    user: firstRelation(row.user),
+  }));
+
+  const promptRows = ((promptsRes.data ?? []) as PromptInboxRow[]).map((row) => ({
+    id: row.id,
+    prompt: row.prompt,
+    is_anonymous: row.is_anonymous,
+    status: row.status,
+    is_hidden: row.is_hidden,
+    created_at: row.created_at,
+    user: firstRelation(row.user),
   }));
 
   const spendFormatted = totalSpend.toLocaleString("en-US", {
@@ -176,6 +242,8 @@ export default async function AdminPage() {
       <UsersByCountry />
 
       <PromptInbox initialPrompts={promptRows} />
+
+      <CompanySuggestionsInbox initialSuggestions={companySuggestionRows} />
 
       {/* Top users table */}
       <TopUsersTable users={topUsers} />

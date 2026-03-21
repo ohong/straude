@@ -6,6 +6,7 @@ interface BadgeProps {
   variant?: BadgeVariant;
   className?: string;
   children: React.ReactNode;
+  title?: string;
 }
 
 const variantStyles: Record<BadgeVariant, string> = {
@@ -18,11 +19,12 @@ const variantStyles: Record<BadgeVariant, string> = {
   "rank-top10": "bg-accent text-white",
 };
 
-export function Badge({ variant = "default", className, children }: BadgeProps) {
+export function Badge({ variant = "default", className, children, title }: BadgeProps) {
   const isRank = variant.startsWith("rank-");
 
   return (
     <span
+      title={title}
       className={cn(
         "inline-flex items-center gap-1 rounded-[4px] px-2 py-0.5 text-xs font-semibold leading-tight",
         variantStyles[variant],

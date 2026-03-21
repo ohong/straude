@@ -1,5 +1,50 @@
 # Architecture & Design Decisions
 
+## The Prometheus List: Static Data with Supabase Migration Path (2026-03-20)
+
+**Decision:** Company data for The Prometheus List starts as a static TypeScript array (`apps/web/data/token-rich.ts`) rather than a Supabase table. User submissions land in a separate `company_suggestions` table for admin triage.
+
+**Alternatives considered:**
+1. **All data in Supabase from day one** — requires seeding, admin CRUD for the core list, and more complex SSR queries. Overkill for a curated list that changes infrequently.
+2. **Static-only, no submission pipeline** — simpler but no path for community contributions.
+3. **Static core list + Supabase suggestions table** (chosen) — the core list renders instantly with no DB dependency, while the suggestions table captures community input for manual curation. When the list grows large enough to warrant dynamic management, the static array can be replaced with a Supabase table without changing the component interface.
+
+**Stage categorization:** Companies are classified as "Big Tech" (Nvidia, Shopify, Meta, OpenAI, Anthropic, Vercel, Polygon, GitHub) or "Startup" (all others). This is a rough heuristic based on scale and public market presence, not a strict definition.
+
+**Route placement:** `/token-rich` sits under the `(app)` layout group alongside `/feed` and `/leaderboard`, added to `PUBLIC_PAGES` for unauthenticated access with guest header.
+
+## Security Advisor Remediation: Pinned Search Paths and SECURITY INVOKER View (2026-03-17)
+
+**Decision:** Fixed all SQL-level findings from Supabase Security Advisor in a single migration.
+
+**Changes:**
+1. `leaderboard_daily` view recreated with `security_invoker = true` so it runs under the querying user's permissions and respects RLS on underlying tables (`users`, `daily_usage`).
+2. All 4 public functions pinned with `SET search_path = 'public'` to prevent search-path hijacking.
+3. `email_suppressions` given an explicit `USING (false)` policy — service_role (which bypasses RLS) is the only intended accessor.
+4. `user_levels` given a `SELECT` policy for `authenticated` — writes are service_role-only.
+
+**Alternatives considered:**
+- `SET search_path = ''` (empty) — most restrictive, but `search_companies_fuzzy` references `companies` without schema prefix and would need a full rewrite. `'public'` achieves the same pinning benefit.
+- Per-role RLS policies on `email_suppressions` — unnecessary since the only accessor is service_role which bypasses RLS entirely. A blanket deny makes the intent explicit.
+
+**Remaining:** Leaked Password Protection is a dashboard-only Auth setting, not fixable via SQL.
+
+## Usage Levels: Sticky Best-Window Status, Not Rolling Downgrade (2026-03-16)
+
+**Decision:** Added a `user_levels` table with `L1`-`L8` levels derived from each user's best 30-day usage window, using both spend and active-day thresholds. Levels appear on public profiles and leaderboard rows, and once earned they do not go down.
+
+**Problem:** Straude already had rank, streak, and achievements, but no single compact identity marker users could point to or compare socially. A pure rolling level would punish quiet periods, while a lifetime level would duplicate achievements and flatten recent momentum.
+
+**Alternatives considered:**
+1. **Pure rolling current-month level** — reflects recent behavior, but users can fall backward after a quiet week. Conflicts with the product goal that levels should feel shareable and earned.
+2. **Lifetime level** — simple and sticky, but overlaps too heavily with achievements and lifetime spend stats already shown on profiles.
+3. **Best 30-day window, sticky** (chosen) — preserves the meaning of "recent form" while preventing status loss. Also avoids tying the feature entirely to leaderboard position.
+4. **Multi-metric formula with output tokens, verification, or social stats** — richer on paper, but harder to explain and too close to achievements/reputation systems.
+
+**Why spend + consistency:** Straude's core product and leaderboard already center spend, but requiring active days at every tier keeps the feature from feeling like a one-day whale badge.
+
+**Why store levels:** Profiles and leaderboard rows need a cheap read path, and the no-downgrade rule is easier to preserve with explicit persisted state than with repeated ad hoc recomputation in application code.
+
 ## Golden Path E2E Tests: Unauthenticated-First, Per-Journey Files (2026-03-11)
 
 **Decision:** Structured golden path tests as 5 separate spec files under `e2e/golden-path/`, each covering one unauthenticated user journey. Authenticated golden paths (feed interactions, settings, post editing) are deferred until an auth fixture is established.

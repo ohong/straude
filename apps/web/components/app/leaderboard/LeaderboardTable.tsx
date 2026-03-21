@@ -127,7 +127,18 @@ export function LeaderboardTable({
                       fallback={entry.username}
                       size="sm"
                     />
-                    <span className="font-medium">{entry.username}</span>
+                    <div className="flex min-w-0 items-center gap-2">
+                      <span className="truncate font-medium">{entry.username}</span>
+                      {entry.level ? (
+                        <Badge
+                          variant="default"
+                          className="font-mono tabular-nums text-accent"
+                          title={`L${entry.level} · 30-day heat check`}
+                        >
+                          L{entry.level}
+                        </Badge>
+                      ) : null}
+                    </div>
                     {entry.country && (
                       <span className="text-xs text-muted">{entry.country}</span>
                     )}
@@ -175,7 +186,18 @@ export function LeaderboardTable({
               size="sm"
             />
             <div className="flex-1 overflow-hidden">
-              <p className="truncate font-medium">{entry.username}</p>
+              <div className="flex items-center gap-2">
+                <p className="truncate font-medium">{entry.username}</p>
+                {entry.level ? (
+                  <Badge
+                    variant="default"
+                    className="font-mono tabular-nums text-accent"
+                    title={`L${entry.level} · 30-day heat check`}
+                  >
+                    L{entry.level}
+                  </Badge>
+                ) : null}
+              </div>
               {entry.country && (
                 <p className="text-xs text-muted">{entry.country}</p>
               )}

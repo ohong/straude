@@ -24,7 +24,7 @@ const wallCardVariants: Variants = {
     y: 0,
     scale: 1,
     transition: {
-      delay: i * 0.08,
+      delay: i * 0.04,
       duration: 0.55,
       ease: [0.25, 0.46, 0.45, 0.94],
     },
@@ -60,7 +60,7 @@ function WallOfLoveCard({
         {post.author_avatar ? (
           <Image
             src={post.author_avatar}
-            alt=""
+            alt={post.author_name}
             width={44}
             height={44}
             className="h-11 w-11 shrink-0 rounded-full object-cover"

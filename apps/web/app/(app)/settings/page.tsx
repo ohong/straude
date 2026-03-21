@@ -124,8 +124,8 @@ export default function SettingsPage() {
         </Link>
       </header>
 
-      <form onSubmit={handleSave} className="mx-auto max-w-lg space-y-6 px-6 py-8">
-        <div className="flex items-center gap-4 border-b border-border pb-6">
+      <form onSubmit={handleSave} className="mx-auto max-w-lg px-6 py-8">
+        <div className="flex items-center gap-4 pb-6">
           <Avatar
             src={profile.avatar_url}
             alt={profile.username ?? ""}
@@ -138,254 +138,271 @@ export default function SettingsPage() {
           </div>
         </div>
 
-        <div className="border-b border-border pb-6">
-          <label htmlFor="settings-username" className="mb-1 block text-xs font-semibold uppercase tracking-widest text-muted">
-            Username
-          </label>
-          <Input
-            id="settings-username"
-            name="username"
-            autoComplete="username"
-            value={username}
-            onChange={(e) => setUsername(e.target.value)}
-            placeholder="your_username"
-            maxLength={20}
-            pattern="^[a-zA-Z0-9_]{3,20}$"
-          />
-          <p className="mt-1 text-xs text-muted">3-20 chars, alphanumeric + underscore</p>
-        </div>
+        {/* ── Profile ── */}
+        <fieldset className="space-y-6 border-t border-border pt-6">
+          <legend className="text-sm font-semibold uppercase tracking-widest text-muted">Profile</legend>
 
-        <div className="border-b border-border pb-6">
-          <label htmlFor="settings-display-name" className="mb-1 block text-xs font-semibold uppercase tracking-widest text-muted">
-            Display Name
-          </label>
-          <Input
-            id="settings-display-name"
-            name="display_name"
-            autoComplete="name"
-            value={displayName}
-            onChange={(e) => setDisplayName(e.target.value)}
-          />
-        </div>
-
-        <div className="border-b border-border pb-6">
-          <label htmlFor="settings-bio" className="mb-1 block text-xs font-semibold uppercase tracking-widest text-muted">
-            Bio
-          </label>
-          <Textarea
-            id="settings-bio"
-            name="bio"
-            value={bio}
-            onChange={(e) => setBio(e.target.value)}
-            maxLength={160}
-            rows={2}
-            className="min-h-0"
-          />
-          <p className="mt-1 text-xs text-muted">{bio.length}/160</p>
-        </div>
-
-        <div className="border-b border-border pb-6">
-          <label htmlFor="settings-heard-about" className="mb-1 block text-xs font-semibold uppercase tracking-widest text-muted">
-            How did you hear about us?
-          </label>
-          <Textarea
-            id="settings-heard-about"
-            name="heard_about"
-            value={heardAbout}
-            onChange={(e) => setHeardAbout(e.target.value)}
-            placeholder="Friend, GitHub, X, newsletter, podcast..."
-            maxLength={500}
-            rows={3}
-            className="min-h-0"
-            aria-describedby="settings-heard-about-hint"
-          />
-          <div className="mt-1 flex items-center justify-between gap-3 text-xs text-muted">
-            <p id="settings-heard-about-hint" className="text-pretty">
-              Optional. This helps us understand where people are finding Straude.
-            </p>
-            <span>{heardAbout.length}/500</span>
+          <div>
+            <label htmlFor="settings-username" className="mb-1 block text-xs font-semibold uppercase tracking-widest text-muted">
+              Username
+            </label>
+            <Input
+              id="settings-username"
+              name="username"
+              autoComplete="username"
+              value={username}
+              onChange={(e) => setUsername(e.target.value)}
+              placeholder="your_username"
+              maxLength={20}
+              pattern="^[a-zA-Z0-9_]{3,20}$"
+            />
+            <p className="mt-1 text-xs text-muted">3-20 chars, alphanumeric + underscore</p>
           </div>
-        </div>
 
-        <div className="border-b border-border pb-6">
-          <label htmlFor="settings-country" className="mb-1 block text-xs font-semibold uppercase tracking-widest text-muted">
-            Country
-          </label>
-          <CountryPicker
-            id="settings-country"
-            name="country"
-            value={country}
-            onChange={setCountry}
-          />
-        </div>
+          <div>
+            <label htmlFor="settings-display-name" className="mb-1 block text-xs font-semibold uppercase tracking-widest text-muted">
+              Display Name
+            </label>
+            <Input
+              id="settings-display-name"
+              name="display_name"
+              autoComplete="name"
+              value={displayName}
+              onChange={(e) => setDisplayName(e.target.value)}
+            />
+          </div>
 
-        <div className="border-b border-border pb-6">
-          <label htmlFor="settings-website" className="mb-1 block text-xs font-semibold uppercase tracking-widest text-muted">
-            Website
-          </label>
-          <Input
-            id="settings-website"
-            name="url"
-            type="url"
-            autoComplete="url"
-            value={link}
-            onChange={(e) => setLink(e.target.value)}
-            placeholder="https://example.com"
-            maxLength={200}
-          />
-        </div>
+          <div>
+            <label htmlFor="settings-bio" className="mb-1 block text-xs font-semibold uppercase tracking-widest text-muted">
+              Bio
+            </label>
+            <Textarea
+              id="settings-bio"
+              name="bio"
+              value={bio}
+              onChange={(e) => setBio(e.target.value)}
+              maxLength={160}
+              rows={2}
+              className="min-h-0"
+            />
+            <p className="mt-1 text-xs text-muted">{bio.length}/160</p>
+          </div>
 
-        <div className="border-b border-border pb-6">
-          <label htmlFor="settings-github" className="mb-1 block text-xs font-semibold uppercase tracking-widest text-muted">
-            GitHub Username
-          </label>
-          <Input
-            id="settings-github"
-            name="github_username"
-            value={githubUsername}
-            onChange={(e) => setGithubUsername(e.target.value)}
-          />
-        </div>
-
-        <div className="border-b border-border pb-6">
-          <label htmlFor="settings-timezone" className="mb-1 block text-xs font-semibold uppercase tracking-widest text-muted">
-            Timezone
-          </label>
-          <Input
-            id="settings-timezone"
-            name="timezone"
-            value={timezone}
-            onChange={(e) => setTimezone(e.target.value)}
-          />
-        </div>
-
-        {username && (
-          <div className="border-b border-border pb-6">
-            <p className="mb-1 text-xs font-semibold uppercase tracking-widest text-muted">Referral Link</p>
-            <div className="flex items-center gap-2">
-              <code className="flex-1 overflow-x-auto rounded border border-border bg-subtle px-3 py-2 font-[family-name:var(--font-mono)] text-sm">
-                straude.com/join/{username}
-              </code>
-              <button
-                type="button"
-                onClick={() => {
-                  navigator.clipboard.writeText(`https://straude.com/join/${username}`);
-                  setRefCopied(true);
-                  setTimeout(() => setRefCopied(false), 2000);
-                }}
-                className="inline-flex items-center gap-1.5 border border-border px-3 py-2 text-sm font-semibold hover:bg-subtle"
-                style={{ borderRadius: 4 }}
-              >
-                {refCopied ? <Check size={14} className="text-accent" /> : <Copy size={14} />}
-                {refCopied ? "Copied" : "Copy"}
-              </button>
+          <div>
+            <label htmlFor="settings-heard-about" className="mb-1 block text-xs font-semibold uppercase tracking-widest text-muted">
+              How did you hear about us?
+            </label>
+            <Textarea
+              id="settings-heard-about"
+              name="heard_about"
+              value={heardAbout}
+              onChange={(e) => setHeardAbout(e.target.value)}
+              placeholder="Friend, GitHub, X, newsletter, podcast..."
+              maxLength={500}
+              rows={3}
+              className="min-h-0"
+              aria-describedby="settings-heard-about-hint"
+            />
+            <div className="mt-1 flex items-center justify-between gap-3 text-xs text-muted">
+              <p id="settings-heard-about-hint" className="text-pretty">
+                Optional. This helps us understand where people are finding Straude.
+              </p>
+              <span>{heardAbout.length}/500</span>
             </div>
-            <p className="mt-1 text-xs text-muted">
-              Share this link to invite others.{crewCount > 0 ? ` ${crewCount} recruited so far.` : ""}
+          </div>
+
+          <div>
+            <label htmlFor="settings-country" className="mb-1 block text-xs font-semibold uppercase tracking-widest text-muted">
+              Country
+            </label>
+            <CountryPicker
+              id="settings-country"
+              name="country"
+              value={country}
+              onChange={setCountry}
+            />
+          </div>
+
+          <div>
+            <label htmlFor="settings-website" className="mb-1 block text-xs font-semibold uppercase tracking-widest text-muted">
+              Website
+            </label>
+            <Input
+              id="settings-website"
+              name="url"
+              type="url"
+              autoComplete="url"
+              value={link}
+              onChange={(e) => setLink(e.target.value)}
+              placeholder="https://example.com"
+              maxLength={200}
+            />
+          </div>
+
+          <div>
+            <label htmlFor="settings-github" className="mb-1 block text-xs font-semibold uppercase tracking-widest text-muted">
+              GitHub Username
+            </label>
+            <Input
+              id="settings-github"
+              name="github_username"
+              value={githubUsername}
+              onChange={(e) => setGithubUsername(e.target.value)}
+            />
+          </div>
+
+          <div>
+            <label htmlFor="settings-timezone" className="mb-1 block text-xs font-semibold uppercase tracking-widest text-muted">
+              Timezone
+            </label>
+            <Input
+              id="settings-timezone"
+              name="timezone"
+              value={timezone}
+              onChange={(e) => setTimezone(e.target.value)}
+            />
+          </div>
+
+          {username && (
+            <div>
+              <p className="mb-1 text-xs font-semibold uppercase tracking-widest text-muted">Referral Link</p>
+              <div className="flex items-center gap-2">
+                <code className="flex-1 overflow-x-auto rounded border border-border bg-subtle px-3 py-2 font-[family-name:var(--font-mono)] text-sm">
+                  straude.com/join/{username}
+                </code>
+                <button
+                  type="button"
+                  onClick={() => {
+                    navigator.clipboard.writeText(`https://straude.com/join/${username}`);
+                    setRefCopied(true);
+                    setTimeout(() => setRefCopied(false), 2000);
+                  }}
+                  className="inline-flex items-center gap-1.5 border border-border px-3 py-2 text-sm font-semibold hover:bg-subtle"
+                  style={{ borderRadius: 4 }}
+                >
+                  {refCopied ? <Check size={14} className="text-accent" /> : <Copy size={14} />}
+                  {refCopied ? "Copied" : "Copy"}
+                </button>
+              </div>
+              <p className="mt-1 text-xs text-muted">
+                Share this link to invite others.{crewCount > 0 ? ` ${crewCount} recruited so far.` : ""}
+              </p>
+            </div>
+          )}
+        </fieldset>
+
+        {/* ── Notifications ── */}
+        <fieldset className="mt-8 space-y-4 border-t border-border pt-6">
+          <legend className="text-sm font-semibold uppercase tracking-widest text-muted">Notifications</legend>
+
+          <div className="space-y-1.5">
+            <div className="flex items-center gap-3">
+              <input
+                type="checkbox"
+                checked={emailNotifications}
+                onChange={(e) => setEmailNotifications(e.target.checked)}
+                id="email_notifications"
+                className="accent-accent"
+              />
+              <label htmlFor="email_notifications" className="text-sm font-medium">
+                Comment emails
+              </label>
+            </div>
+            <p className="pl-7 text-xs text-muted">
+              {emailNotifications
+                ? "You\u2019ll receive an email when someone comments on your posts."
+                : "Email notifications for comments are turned off."}
             </p>
           </div>
-        )}
 
-        <div className="space-y-1.5">
-          <div className="flex items-center gap-3">
-            <input
-              type="checkbox"
-              checked={isPublic}
-              onChange={(e) => setIsPublic(e.target.checked)}
-              id="is_public"
-              className="accent-accent"
-            />
-            <label htmlFor="is_public" className="text-sm font-medium">
-              Public profile
-            </label>
+          <div className="space-y-1.5">
+            <div className="flex items-center gap-3">
+              <input
+                type="checkbox"
+                checked={emailMentionNotifications}
+                onChange={(e) => setEmailMentionNotifications(e.target.checked)}
+                id="email_mention_notifications"
+                className="accent-accent"
+              />
+              <label htmlFor="email_mention_notifications" className="text-sm font-medium">
+                Mention emails
+              </label>
+            </div>
+            <p className="pl-7 text-xs text-muted">
+              {emailMentionNotifications
+                ? "You\u2019ll receive an email when someone @mentions you in a post or comment."
+                : "Email notifications for mentions are turned off."}
+            </p>
           </div>
-          <p className="pl-7 text-xs text-muted">
-            {isPublic
-              ? "Your profile, posts, and stats are visible to everyone. You appear on the leaderboard."
-              : "Your profile and activity are only visible to your followers. You will not appear on the leaderboard."}
-          </p>
-        </div>
 
-        <div className="space-y-1.5">
-          <div className="flex items-center gap-3">
-            <input
-              type="checkbox"
-              checked={emailNotifications}
-              onChange={(e) => setEmailNotifications(e.target.checked)}
-              id="email_notifications"
-              className="accent-accent"
-            />
-            <label htmlFor="email_notifications" className="text-sm font-medium">
-              Comment emails
-            </label>
+          <div className="space-y-1.5">
+            <div className="flex items-center gap-3">
+              <input
+                type="checkbox"
+                checked={emailDmNotifications}
+                onChange={(e) => setEmailDmNotifications(e.target.checked)}
+                id="email_dm_notifications"
+                className="accent-accent"
+              />
+              <label htmlFor="email_dm_notifications" className="text-sm font-medium">
+                Direct message emails
+              </label>
+            </div>
+            <p className="pl-7 text-xs text-muted">
+              {emailDmNotifications
+                ? "You\u2019ll receive an email when someone sends you a direct message."
+                : "Email notifications for direct messages are turned off."}
+            </p>
           </div>
-          <p className="pl-7 text-xs text-muted">
-            {emailNotifications
-              ? "You\u2019ll receive an email when someone comments on your posts."
-              : "Email notifications for comments are turned off."}
-          </p>
-        </div>
+        </fieldset>
 
-        <div className="space-y-1.5">
-          <div className="flex items-center gap-3">
-            <input
-              type="checkbox"
-              checked={emailMentionNotifications}
-              onChange={(e) => setEmailMentionNotifications(e.target.checked)}
-              id="email_mention_notifications"
-              className="accent-accent"
-            />
-            <label htmlFor="email_mention_notifications" className="text-sm font-medium">
-              Mention emails
-            </label>
+        {/* ── Privacy & Account ── */}
+        <fieldset className="mt-8 space-y-4 border-t border-border pt-6">
+          <legend className="text-sm font-semibold uppercase tracking-widest text-muted">Privacy &amp; Account</legend>
+
+          <div className="space-y-1.5">
+            <div className="flex items-center gap-3">
+              <input
+                type="checkbox"
+                checked={isPublic}
+                onChange={(e) => setIsPublic(e.target.checked)}
+                id="is_public"
+                className="accent-accent"
+              />
+              <label htmlFor="is_public" className="text-sm font-medium">
+                Public profile
+              </label>
+            </div>
+            <p className="pl-7 text-xs text-muted">
+              {isPublic
+                ? "Your profile, posts, and stats are visible to everyone. You appear on the leaderboard."
+                : "Your profile and activity are only visible to your followers. You will not appear on the leaderboard."}
+            </p>
           </div>
-          <p className="pl-7 text-xs text-muted">
-            {emailMentionNotifications
-              ? "You\u2019ll receive an email when someone @mentions you in a post or comment."
-              : "Email notifications for mentions are turned off."}
-          </p>
-        </div>
+        </fieldset>
 
-        <div className="space-y-1.5">
-          <div className="flex items-center gap-3">
-            <input
-              type="checkbox"
-              checked={emailDmNotifications}
-              onChange={(e) => setEmailDmNotifications(e.target.checked)}
-              id="email_dm_notifications"
-              className="accent-accent"
-            />
-            <label htmlFor="email_dm_notifications" className="text-sm font-medium">
-              Direct message emails
-            </label>
+        <div className="mt-8 space-y-4">
+          {error && <p className="text-sm text-error">{error}</p>}
+          {saved && <p className="text-sm text-accent">Saved successfully.</p>}
+
+          <Button type="submit" disabled={saving} className="w-full py-3">
+            {saving ? "Saving\u2026" : "Save Changes"}
+          </Button>
+
+          <div className="border-t border-border pt-6">
+            <button
+              type="button"
+              onClick={async () => {
+                const supabase = createClient();
+                await supabase.auth.signOut();
+                router.push("/");
+              }}
+              className="flex items-center gap-2 text-sm text-muted hover:text-foreground"
+            >
+              <LogOut size={16} />
+              Log out
+            </button>
           </div>
-          <p className="pl-7 text-xs text-muted">
-            {emailDmNotifications
-              ? "You\u2019ll receive an email when someone sends you a direct message."
-              : "Email notifications for direct messages are turned off."}
-          </p>
-        </div>
-
-        {error && <p className="text-sm text-error">{error}</p>}
-        {saved && <p className="text-sm text-accent">Saved successfully.</p>}
-
-        <Button type="submit" disabled={saving} className="w-full py-3">
-          {saving ? "Saving\u2026" : "Save Changes"}
-        </Button>
-
-        <div className="border-t border-border pt-6">
-          <button
-            type="button"
-            onClick={async () => {
-              const supabase = createClient();
-              await supabase.auth.signOut();
-              router.push("/");
-            }}
-            className="flex items-center gap-2 text-sm text-muted hover:text-foreground"
-          >
-            <LogOut size={16} />
-            Log out
-          </button>
         </div>
       </form>
     </>

@@ -68,18 +68,8 @@ function SearchContent() {
           </p>
         )}
         {results.map((user) => {
-          const hasProfile = !!user.username;
-          const Wrapper = hasProfile ? Link : "div";
-          const wrapperProps = hasProfile
-            ? { href: `/u/${user.username}` }
-            : {};
-
-          return (
-            <Wrapper
-              key={user.id}
-              {...(wrapperProps as any)}
-              className="flex items-center gap-4 border-b border-border px-6 py-4 hover:bg-subtle"
-            >
+          const content = (
+            <>
               <Avatar
                 src={user.avatar_url}
                 alt={user.username ?? user.display_name ?? ""}
@@ -102,7 +92,24 @@ function SearchContent() {
                   </p>
                 )}
               </div>
-            </Wrapper>
+            </>
+          );
+
+          return user.username ? (
+            <Link
+              key={user.id}
+              href={`/u/${user.username}`}
+              className="flex items-center gap-4 border-b border-border px-6 py-4 hover:bg-subtle"
+            >
+              {content}
+            </Link>
+          ) : (
+            <div
+              key={user.id}
+              className="flex items-center gap-4 border-b border-border px-6 py-4"
+            >
+              {content}
+            </div>
           );
         })}
       </div>

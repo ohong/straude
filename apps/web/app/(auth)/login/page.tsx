@@ -67,6 +67,26 @@ export default function LoginPage() {
           <p className="mt-1 text-sm text-muted">
             We sent a magic link to <strong>{email}</strong>
           </p>
+          <div className="mt-3 flex gap-3 text-sm">
+            <button
+              type="button"
+              onClick={() => {
+                setLoading(true);
+                handleMagicLink({ preventDefault: () => {} } as React.FormEvent).finally(() => setLoading(false));
+              }}
+              disabled={loading}
+              className="font-medium text-accent hover:underline disabled:opacity-50"
+            >
+              {loading ? "Resending..." : "Resend link"}
+            </button>
+            <button
+              type="button"
+              onClick={() => setSent(false)}
+              className="text-muted hover:text-foreground"
+            >
+              Use a different email
+            </button>
+          </div>
         </div>
       ) : (
         <>

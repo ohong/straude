@@ -2,13 +2,24 @@
  * Client-side image compression utility.
  *
  * Resizes to MAX_DIMENSION on the longest side, then JPEG-compresses
- * via binary search to stay under MAX_BYTES. HEIC files on browsers
- * that can't decode them (non-Safari) are passed through as-is for
- * server-side conversion.
+ * via binary search to stay under MAX_BYTES. HEIC files are converted
+ * to JPEG client-side via heic2any (WASM) so they can be compressed
+ * before uploading, avoiding Vercel's 4.5MB body limit.
  */
+
+import heic2any from "heic2any";
 
 const MAX_DIMENSION = 2400;
 const MAX_BYTES = 4 * 1024 * 1024; // 4MB — stay under Vercel's 4.5MB body limit
+
+const HEIC_MIME_TYPES = ["image/heic", "image/heif"];
+const HEIC_EXTENSIONS = ["heic", "heif"];
+
+function isHeicFile(file: File): boolean {
+  if (HEIC_MIME_TYPES.includes(file.type.toLowerCase())) return true;
+  const ext = file.name.split(".").pop()?.toLowerCase();
+  return !!ext && HEIC_EXTENSIONS.includes(ext);
+}
 
 function createCompressionCanvas(
   width: number,
@@ -45,16 +56,13 @@ async function canvasToJpegBlob(
   });
 }
 
-export async function compressImage(file: File): Promise<File> {
-  // Skip compression for small files and GIFs (preserve animation)
-  if (file.size <= MAX_BYTES || file.type === "image/gif") return file;
+/** Convert a HEIC/HEIF file to a JPEG Blob using heic2any (WASM). */
+async function convertHeicToJpeg(file: File): Promise<Blob> {
+  const result = await heic2any({ blob: file, toType: "image/jpeg", quality: 0.92 });
+  return Array.isArray(result) ? result[0] : result;
+}
 
-  const bitmap = await createImageBitmap(file).catch(() => null);
-  if (!bitmap) {
-    // Browser can't decode (likely HEIC on Chrome) — send to server as-is
-    return file;
-  }
-
+async function compressBitmap(bitmap: ImageBitmap, fileName: string): Promise<File> {
   let { width, height } = bitmap;
   if (width > MAX_DIMENSION || height > MAX_DIMENSION) {
     const scale = MAX_DIMENSION / Math.max(width, height);
@@ -79,9 +87,7 @@ export async function compressImage(file: File): Promise<File> {
   let blob = await canvasToJpegBlob(canvas, hi);
 
   if (blob.size <= MAX_BYTES) {
-    return new File([blob], file.name.replace(/\.[^.]+$/, ".jpg"), {
-      type: "image/jpeg",
-    });
+    return new File([blob], fileName, { type: "image/jpeg" });
   }
 
   for (let i = 0; i < 4 && hi - lo > 0.05; i++) {
@@ -95,7 +101,28 @@ export async function compressImage(file: File): Promise<File> {
   }
 
   blob = await canvasToJpegBlob(canvas, lo);
-  return new File([blob], file.name.replace(/\.[^.]+$/, ".jpg"), {
-    type: "image/jpeg",
-  });
+  return new File([blob], fileName, { type: "image/jpeg" });
+}
+
+export async function compressImage(file: File): Promise<File> {
+  // Skip compression for small files and GIFs (preserve animation)
+  if (file.size <= MAX_BYTES || file.type === "image/gif") return file;
+
+  const jpgName = file.name.replace(/\.[^.]+$/, ".jpg");
+
+  // Try native decoding first (works for most formats, including HEIC on Safari)
+  const bitmap = await createImageBitmap(file).catch(() => null);
+  if (bitmap) {
+    return compressBitmap(bitmap, jpgName);
+  }
+
+  // Native decode failed — for HEIC files, use heic2any WASM fallback
+  if (isHeicFile(file)) {
+    const jpegBlob = await convertHeicToJpeg(file);
+    const fallbackBitmap = await createImageBitmap(jpegBlob);
+    return compressBitmap(fallbackBitmap, jpgName);
+  }
+
+  // Unknown format the browser can't decode — send as-is
+  return file;
 }

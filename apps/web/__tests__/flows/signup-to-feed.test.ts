@@ -13,6 +13,14 @@ vi.mock("@/lib/supabase/server", () => ({
   createClient: vi.fn(() => mockSupabase),
 }));
 
+const mockServiceSupabase = {
+  from: vi.fn(),
+};
+
+vi.mock("@/lib/supabase/service", () => ({
+  getServiceClient: vi.fn(() => mockServiceSupabase),
+}));
+
 // ---------------------------------------------------------------------------
 // Helpers
 // ---------------------------------------------------------------------------
@@ -176,6 +184,15 @@ describe("Flow: Signup to Feed", () => {
       if (table === "leaderboard_weekly") return lbChain;
       return chainBuilder();
     });
+
+    // Mock service client for user_levels query
+    const levelsChain = chainBuilder();
+    (levelsChain.select as ReturnType<typeof vi.fn>).mockReturnValue(levelsChain);
+    (levelsChain.in as ReturnType<typeof vi.fn>).mockResolvedValue({
+      data: [],
+      error: null,
+    });
+    mockServiceSupabase.from.mockImplementation(() => levelsChain);
 
     const { GET } = await import("@/app/api/leaderboard/route");
     const req = makeRequest("http://localhost:3000/api/leaderboard?period=week");

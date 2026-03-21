@@ -1,4 +1,4 @@
-import { describe, it, expect, vi, beforeEach } from "vitest";
+import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
 
 vi.mock("@/lib/supabase/server", () => ({
   createClient: vi.fn(),
@@ -88,6 +88,12 @@ beforeEach(() => {
   vi.clearAllMocks();
   // Reset service client to default mock between tests
   mockServiceClient.from = mockServiceFrom;
+  vi.stubEnv("NEXT_PUBLIC_SUPABASE_URL", "https://test.supabase.co");
+  vi.stubEnv("SUPABASE_SECRET_KEY", "secret");
+});
+
+afterEach(() => {
+  vi.unstubAllEnvs();
 });
 
 describe("GET /api/posts/[id]", () => {
@@ -274,12 +280,39 @@ describe("PATCH /api/posts/[id]", () => {
 
     // Only images in the body — no description
     const res = await PATCH(
-      makeRequest("PATCH", { images: ["img1.jpg"] }),
+      makeRequest("PATCH", {
+        images: [
+          "https://test.supabase.co/storage/v1/object/public/post-images/user-1/img1.jpg",
+        ],
+      }),
       makeContext("post-1")
     );
 
     expect(res.status).toBe(200);
     expect(insertFn).not.toHaveBeenCalled();
+  });
+
+  it("rejects external image URLs", async () => {
+    mockSupabase({
+      user: { id: "user-1" },
+      tableHandlers: {
+        posts: (c) => {
+          c.single.mockResolvedValue({
+            data: { id: "post-1", description: null, title: "T" },
+            error: null,
+          });
+        },
+      },
+    });
+
+    const res = await PATCH(
+      makeRequest("PATCH", { images: ["https://evil.example.com/track.png"] }),
+      makeContext("post-1")
+    );
+    const json = await res.json();
+
+    expect(res.status).toBe(400);
+    expect(json.error).toContain("Straude-managed post storage URLs");
   });
 
   it("skips notification query when mentioned users do not exist", async () => {

@@ -9,9 +9,17 @@ import { MobileNav } from "@/components/app/shared/MobileNav";
 import { GuestHeader, GuestMobileNav } from "@/components/app/shared/GuestHeader";
 import { CommandPalette } from "@/components/app/shared/CommandPalette";
 import { SubmitPromptWidget } from "@/components/app/prompts/SubmitPromptWidget";
+import { firstRelation } from "@/lib/utils/first-relation";
+import type { DailyUsage } from "@/types";
 
 // Pages that are publicly accessible without login
-const PUBLIC_PAGES = ["/feed", "/leaderboard"];
+const PUBLIC_PAGES = ["/feed", "/leaderboard", "/token-rich"];
+type LatestPostRow = {
+  id: string;
+  title: string | null;
+  created_at: string;
+  daily_usage: Array<Pick<DailyUsage, "date">> | null;
+};
 
 export default async function AppLayout({
   children,
@@ -29,8 +37,8 @@ export default async function AppLayout({
       <div className="fixed inset-0 flex flex-col overflow-hidden">
         <GuestHeader />
         <div className="mx-auto flex min-h-0 w-full max-w-[1600px] flex-1 border-x border-border">
-          <main className="min-w-0 flex-1 overflow-y-auto" style={{ scrollbarWidth: "none", overscrollBehavior: "contain" }}>
-            <div className="pb-[60px] sm:pb-0">
+          <main id="main-content" className="min-w-0 flex-1 overflow-y-auto" style={{ scrollbarWidth: "none", overscrollBehavior: "contain" }}>
+            <div className="pb-[var(--mobile-nav-height)] sm:pb-0">
               {children}
             </div>
           </main>
@@ -101,10 +109,10 @@ export default async function AppLayout({
   const totalCost =
     allTimeUsageRes.data?.reduce((s, r) => s + Number(r.cost_usd), 0) ?? 0;
 
-  const latestPosts = (latestPostRes.data ?? [])
+  const latestPosts = ((latestPostRes.data ?? []) as LatestPostRow[])
     .map((row) => {
       // Prefer the usage date (user's local date) over created_at (UTC timestamp)
-      const usageDate = (row.daily_usage as any)?.date as string | undefined;
+      const usageDate = firstRelation(row.daily_usage)?.date;
       const sortKey = usageDate ?? row.created_at;
       const displayDate = usageDate
         ? new Date(usageDate + "T12:00:00").toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" })
@@ -156,8 +164,8 @@ export default async function AppLayout({
           </aside>
 
           {/* Main content */}
-          <main className="min-w-0 flex-1 overflow-y-auto" style={{ scrollbarWidth: "none", overscrollBehavior: "contain" }}>
-            <div className="pb-[60px] lg:pb-0">
+          <main id="main-content" className="min-w-0 flex-1 overflow-y-auto" style={{ scrollbarWidth: "none", overscrollBehavior: "contain" }}>
+            <div className="pb-[var(--mobile-nav-height)] lg:pb-0">
               {children}
             </div>
           </main>

@@ -58,7 +58,7 @@ export interface Post {
   kudos_count?: number;
   kudos_users?: Array<Pick<User, "avatar_url" | "username">>;
   comment_count?: number;
-  recent_comments?: Array<Comment>;
+  recent_comments?: Array<CommentPreviewItem>;
   has_kudosed?: boolean;
 }
 
@@ -77,6 +77,34 @@ export interface Comment {
   replies?: Comment[];
 }
 
+export interface AggregateCount {
+  count: number;
+}
+
+export interface UserSummary {
+  username: string | null;
+  avatar_url: string | null;
+}
+
+export interface CommentPreview extends Pick<Comment, "id" | "post_id" | "content" | "created_at"> {
+  user: UserSummary | null;
+}
+
+export interface CommentPreviewItem {
+  id: string;
+  post_id: string;
+  content: string;
+  created_at: string;
+  user?: UserSummary;
+}
+
+export interface FeedPostRow extends Omit<Post, "user" | "daily_usage" | "kudos_count" | "comment_count" | "kudos_users" | "recent_comments"> {
+  user: User;
+  daily_usage: DailyUsage;
+  kudos_count: number | AggregateCount[];
+  comment_count: number | AggregateCount[];
+}
+
 export interface LeaderboardEntry {
   user_id: string;
   username: string;
@@ -87,6 +115,18 @@ export interface LeaderboardEntry {
   total_output_tokens: number;
   streak: number;
   rank: number;
+  level?: number;
+}
+
+export interface UserLevel {
+  user_id: string;
+  level: number;
+  best_window_start: string;
+  best_window_end: string;
+  best_window_cost_usd: number;
+  best_window_active_days: number;
+  promoted_at: string;
+  updated_at: string;
 }
 
 export interface ContributionDay {
@@ -182,7 +222,17 @@ export interface Notification {
 }
 
 export interface MessageAttachment {
+  bucket?: "dm-attachments";
+  path?: string;
   url: string;
+  name: string;
+  type: string;
+  size: number;
+}
+
+export interface MessageAttachmentInput {
+  bucket: "dm-attachments";
+  path: string;
   name: string;
   type: string;
   size: number;
@@ -244,6 +294,24 @@ export interface UserAchievement {
   user_id: string;
   achievement_slug: string;
   earned_at: string;
+}
+
+export type CompanySuggestionStatus = "new" | "accepted" | "rejected" | "published";
+
+export interface CompanySuggestion {
+  id: string;
+  user_id: string;
+  company_name: string;
+  company_url: string;
+  policy_description: string;
+  source_url: string;
+  status: CompanySuggestionStatus;
+  is_hidden: boolean;
+  admin_notes: string | null;
+  reviewed_by: string | null;
+  reviewed_at: string | null;
+  created_at: string;
+  updated_at: string;
 }
 
 export interface WallOfLovePost {

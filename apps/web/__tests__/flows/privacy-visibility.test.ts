@@ -9,8 +9,17 @@ const mockSupabase = {
   rpc: vi.fn(),
 };
 
+const mockServiceClient = {
+  from: vi.fn(),
+  rpc: vi.fn(),
+};
+
 vi.mock("@/lib/supabase/server", () => ({
   createClient: vi.fn(() => mockSupabase),
+}));
+
+vi.mock("@/lib/supabase/service", () => ({
+  getServiceClient: vi.fn(() => mockServiceClient),
 }));
 
 // ---------------------------------------------------------------------------
@@ -61,11 +70,16 @@ const PRIVATE_USER = {
 describe("Flow: Privacy and Visibility", () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    mockServiceClient.from.mockReset();
+    mockServiceClient.rpc.mockReset();
+    mockSupabase.rpc.mockReset();
+    mockSupabase.from.mockReset();
     // Default: return array for calculate_streaks_batch (leaderboard), number for calculate_user_streak (profile)
     mockSupabase.rpc.mockImplementation((_fn: string) => {
       if (_fn === "calculate_streaks_batch") return Promise.resolve({ data: [] });
       return Promise.resolve({ data: 0 });
     });
+    mockServiceClient.rpc.mockResolvedValue({ data: 0 });
   });
 
   it("public user appears in leaderboard", async () => {
@@ -86,6 +100,15 @@ describe("Flow: Privacy and Visibility", () => {
     });
 
     mockSupabase.from.mockImplementation(() => lbChain);
+    mockServiceClient.from.mockImplementation((table: string) => {
+      if (table === "user_levels") {
+        const levelChain = chainBuilder();
+        (levelChain.select as ReturnType<typeof vi.fn>).mockReturnValue(levelChain);
+        (levelChain.in as ReturnType<typeof vi.fn>).mockResolvedValue({ data: [], error: null });
+        return levelChain;
+      }
+      return chainBuilder();
+    });
 
     const { GET } = await import("@/app/api/leaderboard/route");
     const req = makeRequest("http://localhost:3000/api/leaderboard?period=week");
@@ -130,16 +153,27 @@ describe("Flow: Privacy and Visibility", () => {
     (regionRankChain.eq as ReturnType<typeof vi.fn>).mockReturnValue(regionRankChain);
     (regionRankChain.gt as ReturnType<typeof vi.fn>).mockResolvedValue({ count: 0 });
 
-    let callCount = 0;
-    mockSupabase.from.mockImplementation((table: string) => {
-      callCount++;
+    mockSupabase.from.mockImplementation(() => chainBuilder());
+
+    let leaderboardWeeklyCallCount = 0;
+    mockServiceClient.from.mockImplementation((table: string) => {
       if (table === "users") return profileChain;
       if (table === "follows") return countChain;
       if (table === "posts") return countChain;
       if (table === "daily_usage") return costChain;
+      if (table === "user_levels") {
+        const levelChain = chainBuilder();
+        (levelChain.select as ReturnType<typeof vi.fn>).mockReturnValue(levelChain);
+        (levelChain.eq as ReturnType<typeof vi.fn>).mockReturnValue(levelChain);
+        (levelChain.maybeSingle as ReturnType<typeof vi.fn>).mockResolvedValue({
+          data: { level: 4 },
+        });
+        return levelChain;
+      }
       if (table === "leaderboard_weekly") {
-        if (callCount <= 7) return weeklyChain;
-        if (callCount <= 8) return rankChain;
+        leaderboardWeeklyCallCount++;
+        if (leaderboardWeeklyCallCount === 1) return weeklyChain;
+        if (leaderboardWeeklyCallCount === 2) return rankChain;
         return regionRankChain;
       }
       return chainBuilder();
@@ -171,7 +205,8 @@ describe("Flow: Privacy and Visibility", () => {
     (costChain.select as ReturnType<typeof vi.fn>).mockReturnValue(costChain);
     (costChain.eq as ReturnType<typeof vi.fn>).mockResolvedValue({ data: [] });
 
-    mockSupabase.from.mockImplementation((table: string) => {
+    mockSupabase.from.mockImplementation(() => chainBuilder());
+    mockServiceClient.from.mockImplementation((table: string) => {
       if (table === "users") return profileChain;
       if (table === "follows") return countChain;
       if (table === "posts") return countChain;
@@ -184,11 +219,8 @@ describe("Flow: Privacy and Visibility", () => {
     const res = await GET(req as any, USERNAME_CTX("privatedev"));
     const data = await res.json();
 
-    expect(res.status).toBe(200);
-    expect(data.is_public).toBe(false);
-    // Private user — the code skips rank lookup when !is_public
-    expect(data.global_rank).toBeUndefined();
-    expect(data.regional_rank).toBeUndefined();
+    expect(res.status).toBe(403);
+    expect(data.error).toBe("Forbidden");
   });
 
   it("user can toggle privacy by setting is_public to false", async () => {
@@ -243,15 +275,14 @@ describe("Flow: Privacy and Visibility", () => {
       data: { id: "follow-1" },
     });
 
-    let callCount = 0;
     mockSupabase.from.mockImplementation((table: string) => {
-      callCount++;
+      if (table === "follows") return followCheckChain;
+      return chainBuilder();
+    });
+
+    mockServiceClient.from.mockImplementation((table: string) => {
       if (table === "users") return profileChain;
-      if (table === "follows") {
-        // followers count, following count, is_following check
-        if (callCount >= 6) return followCheckChain;
-        return countChain;
-      }
+      if (table === "follows") return countChain;
       if (table === "posts") return countChain;
       if (table === "daily_usage") return costChain;
       return chainBuilder();

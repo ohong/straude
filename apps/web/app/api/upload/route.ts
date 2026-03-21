@@ -41,7 +41,7 @@ const BUCKET_CONFIG: Record<BucketId, { maxSize: number; allowedTypes: string[] 
 
 // HEIC/HEIF files contain an "ftyp" box at offset 4 with one of these brands
 const HEIC_BRANDS = ["heic", "heix", "hevc", "hevx", "heim", "heis", "mif1", "msf1"];
-const convertHeic = convert as unknown as (opts: {
+type HeicConverter = (opts: {
   buffer: Uint8Array;
   format: "JPEG";
   quality: number;
@@ -65,6 +65,29 @@ const EXT_MAP: Record<string, string> = {
   "x-zip-compressed": "zip",
   "vnd.ms-excel": "csv",
 };
+
+/** Map file extensions to MIME types for when the browser reports a generic type. */
+const EXT_TO_MIME: Record<string, string> = {
+  jpg: "image/jpeg",
+  jpeg: "image/jpeg",
+  png: "image/png",
+  webp: "image/webp",
+  gif: "image/gif",
+  heic: "image/heic",
+  heif: "image/heif",
+  pdf: "application/pdf",
+  txt: "text/plain",
+  md: "text/markdown",
+  csv: "text/csv",
+  json: "application/json",
+  zip: "application/zip",
+};
+
+/** Infer MIME type from file extension (case-insensitive). */
+function mimeFromExtension(fileName: string): string | null {
+  const ext = fileName.split(".").pop()?.toLowerCase();
+  return ext ? (EXT_TO_MIME[ext] ?? null) : null;
+}
 
 function getExtension(mimeType: string, fileName: string): string {
   // Try to get extension from the original filename
@@ -112,7 +135,13 @@ export async function POST(request: NextRequest) {
     );
   }
 
-  const mimeType = (file.type ?? "").toLowerCase();
+  const browserMime = (file.type ?? "").toLowerCase();
+  // When the browser reports a generic or empty MIME (common with uppercase
+  // extensions like .HEIC, .PNG, etc.), infer the real type from the extension.
+  const mimeType =
+    !browserMime || browserMime === "application/octet-stream"
+      ? (mimeFromExtension(file.name) ?? browserMime)
+      : browserMime;
   let buffer: Buffer = Buffer.from(await file.arrayBuffer());
   let contentType = mimeType;
   let ext: string;
@@ -129,7 +158,7 @@ export async function POST(request: NextRequest) {
 
   if (isHeic) {
     try {
-      const jpegBuf = await convertHeic({ buffer, format: "JPEG", quality: 0.9 });
+      const jpegBuf = await (convert as unknown as HeicConverter)({ buffer, format: "JPEG", quality: 0.9 });
       buffer = ArrayBuffer.isView(jpegBuf)
         ? Buffer.from(jpegBuf.buffer, jpegBuf.byteOffset, jpegBuf.byteLength)
         : Buffer.from(jpegBuf);
@@ -175,6 +204,16 @@ export async function POST(request: NextRequest) {
   const {
     data: { publicUrl },
   } = supabase.storage.from(bucket).getPublicUrl(fileName);
+
+  if (bucket === "dm-attachments") {
+    return NextResponse.json({
+      bucket,
+      path: fileName,
+      name: file.name,
+      type: contentType,
+      size: buffer.length,
+    });
+  }
 
   return NextResponse.json({
     url: publicUrl,

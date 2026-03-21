@@ -162,6 +162,9 @@ export function TopHeader({ username, avatarUrl }: TopHeaderProps) {
 
         {/* Right — Actions */}
         <div className="flex items-center gap-3">
+          <kbd className="hidden items-center gap-1 rounded border border-border bg-subtle px-2 py-1 font-mono text-[10px] text-muted lg:inline-flex">
+            <span className="text-xs">⌘</span>K
+          </kbd>
           <Link
             href="/messages"
             className="relative rounded p-1.5 text-muted hover:bg-subtle hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent focus-visible:ring-offset-2 focus-visible:ring-offset-background"

@@ -5,14 +5,14 @@ import Link from "next/link";
 import { BoltIcon } from "@/components/landing/icons";
 
 export function Footer({ hideLogo = false }: { hideLogo?: boolean }) {
-  const [utc, setUtc] = useState("UTC 00:00:00");
+  const [utc, setUtc] = useState("UTC 00:00");
 
   useEffect(() => {
     function tick() {
-      setUtc(`UTC ${new Date().toISOString().substring(11, 19)}`);
+      setUtc(`UTC ${new Date().toISOString().substring(11, 16)}`);
     }
     tick();
-    const id = setInterval(tick, 1000);
+    const id = setInterval(tick, 60_000);
     return () => clearInterval(id);
   }, []);
 

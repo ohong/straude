@@ -1,16 +1,46 @@
 import { createClient } from "@/lib/supabase/server";
 import { getServiceClient } from "@/lib/supabase/service";
+import { getProfileAccessContext } from "@/lib/profile-access";
 import { notFound } from "next/navigation";
 import Link from "next/link";
 import { MapPin, LinkIcon, Github, Flame, Zap, Users, Lock } from "lucide-react";
 import { Avatar } from "@/components/ui/Avatar";
+import { Badge } from "@/components/ui/Badge";
 import { AchievementBadges } from "@/components/app/profile/AchievementBadges";
 import { ContributionGraph } from "@/components/app/profile/ContributionGraph";
+import { ProfileSharePanel } from "@/components/app/profile/ProfileSharePanel";
 import { FeedList } from "@/components/app/feed/FeedList";
 import { FollowButton } from "@/components/app/profile/FollowButton";
 import { InviteButton } from "@/components/app/profile/InviteButton";
 import { formatTokens } from "@/lib/utils/format";
+import { normalizeCommentPreview, type JoinedUserSummary, type RawCommentPreviewRow } from "@/lib/feed-normalization";
+import { firstRelation } from "@/lib/utils/first-relation";
+import type { CommentPreviewItem, FeedPostRow, Post, UserSummary } from "@/types";
 import type { Metadata } from "next";
+
+type PostDateRow = {
+  daily_usage: Array<{ date: string }> | null;
+};
+
+type KudosRow = {
+  post_id: string;
+  user: JoinedUserSummary;
+};
+
+type ProfileRow = {
+  id: string;
+  username: string | null;
+  display_name: string | null;
+  avatar_url: string | null;
+  bio: string | null;
+  country: string | null;
+  region: string | null;
+  link: string | null;
+  github_username: string | null;
+  is_public: boolean;
+  streak_freezes: number | null;
+  referred_by: string | null;
+};
 
 export async function generateMetadata({
   params,
@@ -27,25 +57,17 @@ export default async function ProfilePage({
   params: Promise<{ username: string }>;
 }) {
   const { username } = await params;
+  const access = await getProfileAccessContext<ProfileRow>(
+    username,
+    "id, username, display_name, avatar_url, bio, country, region, link, github_username, is_public, streak_freezes, referred_by",
+  );
+  if (!access) notFound();
+
+  const { authUserId, canView, isFollowing, isOwn, profile } = access;
   const supabase = await createClient();
-  const {
-    data: { user: authUser },
-  } = await supabase.auth.getUser();
-
-  // Use service client to bypass RLS so we can distinguish "not found" from "private"
   const db = getServiceClient();
-  const { data: profile } = await db
-    .from("users")
-    .select("*")
-    .eq("username", username)
-    .single();
 
-  if (!profile) notFound();
-
-  const isOwn = authUser?.id === profile.id;
-  const isPrivate = !profile.is_public && !isOwn;
-
-  if (isPrivate) {
+  if (!canView) {
     return (
       <>
         <header className="sticky top-0 z-10 flex h-14 items-center border-b border-border bg-background px-4 sm:px-6">
@@ -59,8 +81,8 @@ export default async function ProfilePage({
                 <h1 className="text-xl font-medium sm:text-2xl" style={{ letterSpacing: "-0.03em" }}>
                   {profile.display_name ?? profile.username}
                 </h1>
-                {authUser && (
-                  <FollowButton username={username} initialFollowing={false} />
+                {authUserId && (
+                  <FollowButton username={username} initialFollowing={isFollowing} />
                 )}
               </div>
               {profile.display_name && (
@@ -86,52 +108,48 @@ export default async function ProfilePage({
     { data: streak },
     { data: totalSpendRows },
     { data: achievements },
-    { data: followRow },
+    { data: levelRow },
     { data: referrerData },
     { count: crewCount },
   ] = await Promise.all([
-    supabase
+    db
       .from("follows")
       .select("*", { count: "exact", head: true })
       .eq("following_id", profile.id),
-    supabase
+    db
       .from("follows")
       .select("*", { count: "exact", head: true })
       .eq("follower_id", profile.id),
-    supabase
+    db
       .from("posts")
       .select("*", { count: "exact", head: true })
       .eq("user_id", profile.id),
-    supabase.rpc("calculate_user_streak", { p_user_id: profile.id, p_freeze_days: profile.streak_freezes ?? 0 }),
-    supabase
+    db.rpc("calculate_user_streak", { p_user_id: profile.id, p_freeze_days: profile.streak_freezes ?? 0 }),
+    db
       .from("daily_usage")
       .select("cost_usd, output_tokens")
       .eq("user_id", profile.id),
-    supabase
+    db
       .from("user_achievements")
       .select("*")
       .eq("user_id", profile.id),
-    authUser && !isOwn
-      ? supabase
-          .from("follows")
-          .select("id")
-          .eq("follower_id", authUser.id)
-          .eq("following_id", profile.id)
-          .maybeSingle()
-      : Promise.resolve({ data: null }),
+    db
+      .from("user_levels")
+      .select("level")
+      .eq("user_id", profile.id)
+      .maybeSingle(),
     profile.referred_by
-      ? supabase
+      ? db
           .from("users")
           .select("username, avatar_url")
           .eq("id", profile.referred_by)
           .single()
       : Promise.resolve({ data: null }),
-    supabase
+    db
       .from("users")
       .select("id", { count: "exact", head: true })
       .eq("referred_by", profile.id),
   ]);
-  const isFollowing = !!followRow;
   const totalSpend = totalSpendRows?.reduce((s, r) => s + Number(r.cost_usd), 0) ?? 0;
   const lifetimeOutputTokens = totalSpendRows?.reduce((s, r) => s + Number(r.output_tokens), 0) ?? 0;
 
@@ -140,20 +158,22 @@ export default async function ProfilePage({
   const yearStart = `${currentYear}-01-01`;
   const yearEnd = `${currentYear}-12-31`;
 
-  const { data: contributions } = await supabase
+  const { data: contributions } = await db
     .from("daily_usage")
     .select("date, cost_usd")
     .eq("user_id", profile.id)
     .gte("date", yearStart)
     .lte("date", yearEnd);
 
-  const { data: postDates } = await supabase
+  const { data: postDates } = await db
     .from("posts")
     .select("daily_usage:daily_usage!posts_daily_usage_id_fkey(date)")
     .eq("user_id", profile.id);
 
   const postDateSet = new Set(
-    postDates?.map((p: any) => p.daily_usage?.date).filter(Boolean)
+    ((postDates ?? []) as PostDateRow[])
+      .map((post) => firstRelation(post.daily_usage)?.date)
+      .filter((date): date is string => Boolean(date))
   );
 
   const contributionData = (contributions ?? []).map((c) => ({
@@ -163,32 +183,33 @@ export default async function ProfilePage({
   }));
 
   // Recent posts — sorted by session date via unified RPC
-  const { data: posts } = await supabase.rpc("get_feed", {
+  const { data: posts } = await db.rpc("get_feed", {
     p_type: "mine",
     p_user_id: profile.id,
     p_limit: 20,
   });
 
-  let normalizedPosts: any[] = [];
+  let normalizedPosts: Post[] = [];
   if (posts && posts.length > 0) {
-    const postIds = posts.map((p: any) => p.id);
+    const feedPosts = posts as FeedPostRow[];
+    const postIds = feedPosts.map((post) => post.id);
 
     const [{ data: userKudos }, { data: recentKudos }, { data: recentComments }] =
       await Promise.all([
-        authUser
+        authUserId
           ? supabase
               .from("kudos")
               .select("post_id")
-              .eq("user_id", authUser.id)
+              .eq("user_id", authUserId)
               .in("post_id", postIds)
-          : Promise.resolve({ data: [] as any[] }),
-        supabase
+          : Promise.resolve({ data: [] as { post_id: string }[] }),
+        db
           .from("kudos")
           .select("post_id, user:users!kudos_user_id_fkey(avatar_url, username)")
           .in("post_id", postIds)
           .order("created_at", { ascending: false })
           .limit(postIds.length * 3),
-        supabase
+        db
           .from("comments")
           .select("id, post_id, content, created_at, user:users!comments_user_id_fkey(username, avatar_url)")
           .is("parent_comment_id", null)
@@ -199,34 +220,35 @@ export default async function ProfilePage({
 
     const kudosedSet = new Set(userKudos?.map((k) => k.post_id));
 
-    const kudosUsersMap = new Map<string, any[]>();
-    for (const k of recentKudos ?? []) {
-      const list = kudosUsersMap.get(k.post_id) ?? [];
-      if (list.length < 3) {
-        list.push(k.user);
-        kudosUsersMap.set(k.post_id, list);
+    const kudosUsersMap = new Map<string, UserSummary[]>();
+    for (const kudos of (recentKudos ?? []) as KudosRow[]) {
+      const list = kudosUsersMap.get(kudos.post_id) ?? [];
+      const userSummary = firstRelation(kudos.user);
+      if (list.length < 3 && userSummary) {
+        list.push(userSummary);
+        kudosUsersMap.set(kudos.post_id, list);
       }
     }
 
-    const commentsMap = new Map<string, any[]>();
-    for (const c of recentComments ?? []) {
-      const list = commentsMap.get(c.post_id) ?? [];
+    const commentsMap = new Map<string, CommentPreviewItem[]>();
+    for (const comment of (recentComments ?? []) as RawCommentPreviewRow[]) {
+      const list = commentsMap.get(comment.post_id) ?? [];
       if (list.length < 2) {
-        list.push(c);
-        commentsMap.set(c.post_id, list);
+        list.push(normalizeCommentPreview(comment));
+        commentsMap.set(comment.post_id, list);
       }
     }
     for (const [, list] of commentsMap) {
       list.reverse();
     }
 
-    normalizedPosts = posts.map((p: any) => ({
-      ...p,
-      kudos_count: typeof p.kudos_count === "number" ? p.kudos_count : p.kudos_count?.[0]?.count ?? 0,
-      kudos_users: kudosUsersMap.get(p.id) ?? [],
-      comment_count: typeof p.comment_count === "number" ? p.comment_count : p.comment_count?.[0]?.count ?? 0,
-      recent_comments: commentsMap.get(p.id) ?? [],
-      has_kudosed: kudosedSet.has(p.id),
+    normalizedPosts = feedPosts.map((post) => ({
+      ...post,
+      kudos_count: typeof post.kudos_count === "number" ? post.kudos_count : post.kudos_count?.[0]?.count ?? 0,
+      kudos_users: kudosUsersMap.get(post.id) ?? [],
+      comment_count: typeof post.comment_count === "number" ? post.comment_count : post.comment_count?.[0]?.count ?? 0,
+      recent_comments: commentsMap.get(post.id) ?? [],
+      has_kudosed: kudosedSet.has(post.id),
     }));
   }
 
@@ -245,7 +267,16 @@ export default async function ProfilePage({
               <h1 className="text-xl font-medium sm:text-2xl" style={{ letterSpacing: "-0.03em" }}>
                 {profile.display_name ?? profile.username}
               </h1>
-              {!isOwn && authUser && (
+              {levelRow?.level ? (
+                <Badge
+                  variant="default"
+                  className="font-mono tabular-nums text-accent"
+                  title={`L${Number(levelRow.level)} · 30-day heat check`}
+                >
+                  L{Number(levelRow.level)}
+                </Badge>
+              ) : null}
+              {!isOwn && authUserId && (
                 <>
                   <FollowButton
                     username={username}
@@ -332,6 +363,15 @@ export default async function ProfilePage({
         {/* Stats row */}
         <div className="mt-6 grid grid-cols-3 gap-4 sm:grid-cols-4">
           <div>
+            <p className="text-[0.7rem] uppercase tracking-widest text-muted">Level</p>
+            <p className="font-[family-name:var(--font-mono)] text-lg font-medium tabular-nums text-accent">
+              {levelRow?.level ? `L${Number(levelRow.level)}` : "L0"}
+            </p>
+            <p className="text-xs text-muted">
+              {levelRow?.level ? "Your 30-day heat check" : "Just getting started"}
+            </p>
+          </div>
+          <div>
             <p className="text-[0.7rem] uppercase tracking-widest text-muted">Streak</p>
             <p className="inline-flex items-center gap-1 font-[family-name:var(--font-mono)] text-lg font-medium tabular-nums">
               <Flame size={16} className="text-accent" />
@@ -369,6 +409,15 @@ export default async function ProfilePage({
             <AchievementBadges earned={achievements ?? []} showLocked={isOwn} />
           </div>
         )}
+
+        <div className="mt-6 rounded-[10px] border border-border bg-subtle/40 px-4 py-3 text-sm">
+          <p className="font-medium text-foreground">
+            Levels are your 30-day heat check.
+          </p>
+          <p className="mt-1 text-muted">
+            Show up, stack spend, climb up. Go quiet for a bit and it cools off.
+          </p>
+        </div>
       </div>
 
       {/* Contribution graph */}
@@ -377,6 +426,11 @@ export default async function ProfilePage({
           Contributions
         </p>
         <ContributionGraph data={contributionData} />
+        <ProfileSharePanel
+          username={profile.username ?? username}
+          isPublic={profile.is_public}
+          isOwner={isOwn}
+        />
       </div>
 
       {/* Posts */}
@@ -387,7 +441,7 @@ export default async function ProfilePage({
           </p>
         </div>
         {normalizedPosts.length > 0 ? (
-          <FeedList initialPosts={normalizedPosts} userId={authUser?.id ?? null} showTabs={false} />
+          <FeedList initialPosts={normalizedPosts} userId={authUserId} showTabs={false} />
         ) : (
           <div className="px-4 py-12 text-center text-sm text-muted sm:px-6">
             No activities yet.

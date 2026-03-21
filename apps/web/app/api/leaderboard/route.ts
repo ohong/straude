@@ -1,5 +1,6 @@
 import { NextResponse, type NextRequest } from "next/server";
 import { createClient } from "@/lib/supabase/server";
+import { getServiceClient } from "@/lib/supabase/service";
 
 const VALID_PERIODS = ["day", "week", "month", "all_time"] as const;
 type Period = (typeof VALID_PERIODS)[number];
@@ -13,6 +14,7 @@ const VIEW_MAP: Record<Period, string> = {
 
 export async function GET(request: NextRequest) {
   const supabase = await createClient();
+  const db = getServiceClient();
   const {
     data: { user },
   } = await supabase.auth.getUser();
@@ -60,11 +62,24 @@ export async function GET(request: NextRequest) {
     streakMap.set(row.user_id, row.streak);
   }
 
+  const { data: levelRows } = userIds.length > 0
+    ? await db
+        .from("user_levels")
+        .select("user_id, level")
+        .in("user_id", userIds)
+    : { data: [] };
+
+  const levelMap = new Map<string, number>();
+  for (const row of levelRows ?? []) {
+    levelMap.set(row.user_id, Number(row.level));
+  }
+
   // Assign ranks and streaks
   const ranked = (entries ?? []).map((entry, i) => ({
     ...entry,
     rank: i + 1,
     streak: streakMap.get(entry.user_id) ?? 0,
+    level: levelMap.get(entry.user_id),
   }));
 
   // Find current user's rank

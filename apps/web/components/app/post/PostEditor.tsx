@@ -4,6 +4,7 @@ import { useState, useRef, useEffect } from "react";
 import { useRouter } from "next/navigation";
 import Image from "next/image";
 import { Pencil, X, Sparkles, Upload, Loader2, Trash2, ChevronLeft, ChevronRight } from "lucide-react";
+import { AlertDialog } from "@base-ui-components/react/alert-dialog";
 import { Button } from "@/components/ui/Button";
 import { Input } from "@/components/ui/Input";
 import { MentionInput } from "@/components/app/shared/MentionInput";
@@ -21,6 +22,7 @@ export function PostEditor({ post, autoEdit = false }: { post: Post; autoEdit?: 
   const [deleting, setDeleting] = useState(false);
   const [uploadingCount, setUploadingCount] = useState(0);
   const [error, setError] = useState<string | null>(null);
+  const [deleteOpen, setDeleteOpen] = useState(false);
   const fileRef = useRef<HTMLInputElement>(null);
   const dragIndexRef = useRef<number | null>(null);
 
@@ -60,7 +62,6 @@ export function PostEditor({ post, autoEdit = false }: { post: Post; autoEdit?: 
   }, [editing, title, description, images, post.title, post.description, post.images]);
 
   async function handleDelete() {
-    if (!confirm("Delete this post? This cannot be undone.")) return;
     setDeleting(true);
     setError(null);
     const res = await fetch(`/api/posts/${post.id}`, { method: "DELETE" });
@@ -69,6 +70,7 @@ export function PostEditor({ post, autoEdit = false }: { post: Post; autoEdit?: 
       router.push("/feed");
     } else {
       setError("Failed to delete. Please try again.");
+      setDeleteOpen(false);
     }
     setDeleting(false);
   }
@@ -197,10 +199,39 @@ export function PostEditor({ post, autoEdit = false }: { post: Post; autoEdit?: 
           <Pencil size={14} className="mr-1.5" />
           Edit post
         </Button>
-        <Button variant="ghost" size="sm" onClick={handleDelete} disabled={deleting}>
-          <Trash2 size={14} className="mr-1.5" />
-          {deleting ? "Deleting..." : "Delete"}
-        </Button>
+        <AlertDialog.Root open={deleteOpen} onOpenChange={setDeleteOpen}>
+          <AlertDialog.Trigger
+            className="inline-flex items-center justify-center rounded-[4px] bg-transparent text-foreground border-none hover:text-accent font-semibold px-3 py-2 text-xs transition-[filter,background-color,color,transform] duration-150 active:scale-[0.97] disabled:opacity-50"
+            disabled={deleting}
+          >
+            <Trash2 size={14} className="mr-1.5" />
+            {deleting ? "Deleting..." : "Delete"}
+          </AlertDialog.Trigger>
+          <AlertDialog.Portal>
+            <AlertDialog.Backdrop className="fixed inset-0 z-40 bg-black/40" />
+            <AlertDialog.Popup className="fixed left-1/2 top-1/2 z-50 w-[min(92vw,420px)] -translate-x-1/2 -translate-y-1/2 rounded-md border border-border bg-background p-4 shadow-xl">
+              <AlertDialog.Title className="text-base font-semibold text-balance">
+                Delete this post?
+              </AlertDialog.Title>
+              <AlertDialog.Description className="mt-2 text-sm text-pretty text-muted">
+                This action cannot be undone.
+              </AlertDialog.Description>
+              <div className="mt-4 flex justify-end gap-2">
+                <AlertDialog.Close className="rounded-sm border border-border px-3 py-2 text-sm font-medium text-foreground hover:bg-subtle">
+                  Cancel
+                </AlertDialog.Close>
+                <button
+                  type="button"
+                  onClick={handleDelete}
+                  disabled={deleting}
+                  className="rounded-sm bg-error px-3 py-2 text-sm font-semibold text-white disabled:cursor-not-allowed disabled:opacity-60"
+                >
+                  {deleting ? "Deleting..." : "Delete"}
+                </button>
+              </div>
+            </AlertDialog.Popup>
+          </AlertDialog.Portal>
+        </AlertDialog.Root>
       </div>
     );
   }
@@ -280,7 +311,7 @@ export function PostEditor({ post, autoEdit = false }: { post: Post; autoEdit?: 
                 <button
                   type="button"
                   onClick={() => removeImage(i)}
-                  className="absolute -top-1.5 -right-1.5 flex h-5 w-5 items-center justify-center rounded-full bg-foreground text-background text-xs"
+                  className="absolute -top-1.5 -right-1.5 flex h-5 w-5 items-center justify-center rounded-full bg-foreground text-background text-xs after:absolute after:inset-[-6px] after:content-['']"
                 >
                   <X size={12} />
                 </button>
@@ -288,7 +319,7 @@ export function PostEditor({ post, autoEdit = false }: { post: Post; autoEdit?: 
                   <button
                     type="button"
                     onClick={() => moveImage(i, i - 1)}
-                    className="absolute bottom-1 left-1 flex h-5 w-5 items-center justify-center rounded-full bg-background/80 text-foreground opacity-100 sm:opacity-0 sm:group-hover:opacity-100 transition-opacity"
+                    className="absolute bottom-1 left-1 flex h-5 w-5 items-center justify-center rounded-full bg-background/80 text-foreground opacity-100 sm:opacity-0 sm:group-hover:opacity-100 transition-opacity after:absolute after:inset-[-6px] after:content-['']"
                   >
                     <ChevronLeft size={12} />
                   </button>
@@ -297,7 +328,7 @@ export function PostEditor({ post, autoEdit = false }: { post: Post; autoEdit?: 
                   <button
                     type="button"
                     onClick={() => moveImage(i, i + 1)}
-                    className="absolute bottom-1 right-1 flex h-5 w-5 items-center justify-center rounded-full bg-background/80 text-foreground opacity-100 sm:opacity-0 sm:group-hover:opacity-100 transition-opacity"
+                    className="absolute bottom-1 right-1 flex h-5 w-5 items-center justify-center rounded-full bg-background/80 text-foreground opacity-100 sm:opacity-0 sm:group-hover:opacity-100 transition-opacity after:absolute after:inset-[-6px] after:content-['']"
                   >
                     <ChevronRight size={12} />
                   </button>
@@ -357,9 +388,13 @@ export function PostEditor({ post, autoEdit = false }: { post: Post; autoEdit?: 
           )}
         </div>
 
-        {error && <p className="text-sm text-error">{error}</p>}
+        {error && <p role="alert" className="text-sm text-error">{error}</p>}
         <div className="flex justify-end gap-2 mt-1">
-          <Button variant="secondary" size="sm" onClick={() => setEditing(false)}>
+          <Button variant="secondary" size="sm" onClick={() => {
+            const isDirty = title !== (post.title ?? "") || description !== (post.description ?? "") || JSON.stringify(images) !== JSON.stringify(post.images ?? []);
+            if (error && isDirty && !window.confirm("You have unsaved changes. Discard them?")) return;
+            setEditing(false);
+          }}>
             Cancel
           </Button>
           <Button size="sm" onClick={handleSave} disabled={saving || description.length > 5000}>

@@ -76,6 +76,7 @@ export function FeedList({
     return date ? `${date}|${last.created_at}` : null;
   });
   const [loading, setLoading] = useState(false);
+  const [error, setError] = useState<string | null>(null);
   const [switching, setSwitching] = useState(false);
   const cursorRef = useRef(cursor);
   const loadingRef = useRef(false);
@@ -133,20 +134,27 @@ export function FeedList({
     if (!cursorRef.current || loadingRef.current) return;
     loadingRef.current = true;
     setLoading(true);
+    setError(null);
 
-    const res = await fetch(
-      `/api/feed?type=${feedTypeRef.current}&cursor=${encodeURIComponent(cursorRef.current)}&limit=20`
-    );
-    const data = await res.json();
+    try {
+      const res = await fetch(
+        `/api/feed?type=${feedTypeRef.current}&cursor=${encodeURIComponent(cursorRef.current)}&limit=20`
+      );
+      if (!res.ok) throw new Error("Failed to load posts");
+      const data = await res.json();
 
-    if (data.posts?.length) {
-      setPosts((prev) => [...prev, ...data.posts]);
-      setCursor(data.next_cursor ?? null);
-    } else {
-      setCursor(null);
+      if (data.posts?.length) {
+        setPosts((prev) => [...prev, ...data.posts]);
+        setCursor(data.next_cursor ?? null);
+      } else {
+        setCursor(null);
+      }
+    } catch {
+      setError("Couldn\u2019t load more posts.");
+    } finally {
+      loadingRef.current = false;
+      setLoading(false);
     }
-    loadingRef.current = false;
-    setLoading(false);
   }, []);
 
   useEffect(() => {
@@ -168,18 +176,25 @@ export function FeedList({
       setSwitching(true);
       setPosts([]);
       setCursor(null);
+      setError(null);
 
       // Update URL without full page reload
       const url = newType === "global" ? "/feed" : `/feed?tab=${newType}`;
       router.replace(url);
 
-      const res = await fetch(`/api/feed?type=${newType}&limit=20`);
-      const data = await res.json();
+      try {
+        const res = await fetch(`/api/feed?type=${newType}&limit=20`);
+        if (!res.ok) throw new Error("Failed to load feed");
+        const data = await res.json();
 
-      setPosts(data.posts ?? []);
-      setCursor(data.next_cursor ?? null);
-      setPending(data.pending_posts ?? []);
-      setSwitching(false);
+        setPosts(data.posts ?? []);
+        setCursor(data.next_cursor ?? null);
+        setPending(data.pending_posts ?? []);
+      } catch {
+        setError("Couldn\u2019t load feed. Please try again.");
+      } finally {
+        setSwitching(false);
+      }
     },
     [feedType, router]
   );
@@ -234,6 +249,17 @@ export function FeedList({
         <div className="flex justify-center py-12" role="status">
           <span className="text-sm text-muted">Loading&hellip;</span>
         </div>
+      ) : error && posts.length === 0 ? (
+        <div role="alert" className="flex flex-col items-center gap-2 px-6 py-20 text-center">
+          <p className="text-sm text-error">{error}</p>
+          <button
+            type="button"
+            onClick={() => { setError(null); switchTab(feedType); }}
+            className="text-sm font-medium text-accent hover:underline"
+          >
+            Retry
+          </button>
+        </div>
       ) : posts.length === 0 ? (
         <div className="flex flex-col items-center justify-center px-6 py-20 text-center">
           <p className="text-lg font-medium">
@@ -256,7 +282,19 @@ export function FeedList({
           {posts.map((post) => (
             <ActivityCard key={post.id} post={post} userId={userId} />
           ))}
-          {cursor && (
+          {error && (
+            <div role="alert" className="flex flex-col items-center gap-2 py-8">
+              <p className="text-sm text-error">{error}</p>
+              <button
+                type="button"
+                onClick={() => { setError(null); loadMore(); }}
+                className="text-sm font-medium text-accent hover:underline"
+              >
+                Retry
+              </button>
+            </div>
+          )}
+          {cursor && !error && (
             <div ref={sentinel} className="flex justify-center py-8" role="status" aria-live="polite">
               {loading && (
                 <span className="text-sm text-muted">Loading&hellip;</span>

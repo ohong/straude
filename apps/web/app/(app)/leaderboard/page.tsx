@@ -1,7 +1,15 @@
 import { createClient } from "@/lib/supabase/server";
 import { getAuthUser } from "@/lib/supabase/auth";
+import { getServiceClient } from "@/lib/supabase/service";
 import { LeaderboardTable } from "@/components/app/leaderboard/LeaderboardTable";
+import type { LeaderboardEntry } from "@/types";
 import type { Metadata } from "next";
+
+type LeaderboardViewRow = Omit<LeaderboardEntry, "rank" | "streak"> & {
+  display_name: string | null;
+  total_cost: number | string;
+  total_output_tokens: number | string;
+};
 
 const LEADERBOARD_DESCRIPTION =
   "See who's leading the pack. Weekly, monthly, and all-time Claude Code spend rankings.";
@@ -42,6 +50,7 @@ export default async function LeaderboardPage({
   const { period = "week", region } = await searchParams;
   const user = await getAuthUser();
   const supabase = await createClient();
+  const db = getServiceClient();
 
   // We'll use the materialized view directly for SSR
   const viewName = `leaderboard_${period === "all_time" ? "all_time" : period === "month" ? "monthly" : period === "day" ? "daily" : "weekly"}`;
@@ -55,10 +64,11 @@ export default async function LeaderboardPage({
   if (region) {
     query = query.eq("region", region);
   }
-  const { data: entries } = await query;
+  const { data: rawEntries } = await query;
+  const entries = (rawEntries ?? []) as LeaderboardViewRow[];
 
   // Fetch streaks for all leaderboard users in a single RPC call
-  const userIds = (entries ?? []).map((e: any) => e.user_id);
+  const userIds = entries.map((entry) => entry.user_id);
   const { data: streakRows } = userIds.length > 0
     ? await supabase.rpc("calculate_streaks_batch", { p_user_ids: userIds })
     : { data: [] };
@@ -68,15 +78,27 @@ export default async function LeaderboardPage({
     streakMap.set(row.user_id, row.streak);
   }
 
+  const { data: levelRows } = userIds.length > 0
+    ? await db
+        .from("user_levels")
+        .select("user_id, level")
+        .in("user_id", userIds)
+    : { data: [] };
+
+  const levelMap = new Map<string, number>();
+  for (const row of levelRows ?? []) {
+    levelMap.set(row.user_id, Number(row.level));
+  }
+
   // Add rank numbers and streaks
-  const ranked =
-    entries?.map((e: any, i: number) => ({
-      ...e,
+  const ranked: LeaderboardEntry[] = entries.map((entry, i) => ({
+      ...entry,
       rank: i + 1,
-      total_cost: Number(e.total_cost),
-      total_output_tokens: Number(e.total_output_tokens),
-      streak: streakMap.get(e.user_id) ?? 0,
-    })) ?? [];
+      total_cost: Number(entry.total_cost),
+      total_output_tokens: Number(entry.total_output_tokens),
+      streak: streakMap.get(entry.user_id) ?? 0,
+      level: levelMap.get(entry.user_id),
+    }));
 
   return (
     <>

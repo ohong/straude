@@ -4,15 +4,33 @@
 
 ### Added
 
-- **`--timeout` CLI flag for subprocess timeout.** Users with large usage histories can now raise the ccusage/codex subprocess timeout: `straude --timeout 300`. Extracts the hardcoded timeout into a shared `DEFAULT_SUBPROCESS_TIMEOUT_MS` constant and threads it through all 4 exec paths (ccusage sync/async, codex sync/async). Default bumped from 120s to 240s to give more headroom out of the box. (PR #49, @jsnider3)
-- **Local Supabase development workflow.** Docker-backed local Supabase setup with `supabase/config.toml`, auto-generated `.env.local`, demo seed data, a dev-only `/dev/local-env` setup route, and friendlier missing-env handling. Full local dev flow documented in `docs/LOCAL_DEV.md`. (PR #47, @markmdev)
+- **The Prometheus List (`/token-rich`).** New public page showcasing 43 verified companies with unlimited or very high AI token budgets. Dramatic Prometheus-themed hero with classical oil painting, sortable/filterable table (location, stage, policy), full source quotes with links, country flags, and mobile card layout. Data lives in a `token_rich_companies` Supabase table so the list can be updated without deploying code. First 20 companies visible to all visitors; sign-in required to see the full list (gradient fadeout gate). Page revalidates every 5 minutes via ISR with static fallback.
+- **"Add a Company" form.** Authenticated users can submit company suggestions via a modal form. Submissions include company name, URL, policy description, and source link. Rate-limited to 5/day per user. Backed by a `company_suggestions` Supabase table with RLS.
+- **Company suggestions admin inbox.** Admin dashboard includes CompanySuggestionsInbox with status filtering (New/Accepted/Rejected/Published), status changes, and hide/unhide actions.
+- **Homepage Prometheus preview section.** `PrometheusPreview` landing section between FeaturesGrid and GlobalFeed, showing top 5 companies with a link to the full list.
+- **Prometheus List in navigation.** Added to landing page navbar, guest header, and guest mobile nav for visitor discoverability.
+
+### Changed
+
+- **Prometheus List polish.** Company names link to their websites. Filters use responsive `flex-wrap` layout (no overflow on mobile). Sort indicators use lucide chevron icons instead of plain text arrows. Blockquote has more breathing room. Mobile cards show company URL links. OG image updated to use hero painting.
 
 ### Fixed
 
-- **Test flakiness from unfrozen Date.now()/new Date().** Added `vi.useFakeTimers({ toFake: ['Date'] })` to 4 test files (`push.test.ts`, `cli-sync-flow.test.ts`, `cli-push-flow.test.ts`, `cli-auth.test.ts`) so 15+ date-dependent assertions cannot fail at midnight boundaries or across timezones. Replaced the fragile counter-based `deviceCallCount` mock in `cli-push-flow.test.ts` with a stateless chain that routes by Supabase method (select/upsert) instead of call order. Fixed inconsistent `delete process.env` mutations in `cli-auth.test.ts` to use `vi.stubEnv()` consistently.
+- **Security advisor remediation.** Applied migration to fix all SQL-level security issues flagged by Supabase Security Advisor: recreated `leaderboard_daily` view with `security_invoker = true` (was `SECURITY DEFINER`), pinned `SET search_path = 'public'` on 4 functions (`search_companies_fuzzy`, `increment_streak_freezes`, `calculate_user_streak`, `calculate_streaks_batch`), added explicit deny-all RLS policy on `email_suppressions`, and added authenticated SELECT policy on `user_levels`.
 
 ### Added
 
+- **Sticky L1-L8 usage levels on profiles and leaderboard rows.** Straude now assigns users a persistent level based on their best 30-day usage stretch, combining spend and active-day consistency. Levels are recalculated after usage syncs, backfilled for existing users via a new `user_levels` table and `recalculate_user_level()` database function, and rendered on public profiles plus leaderboard rows without changing spend-based ranking.
+- **`--timeout` CLI flag for subprocess timeout.** Users with large usage histories can now raise the ccusage/codex subprocess timeout: `straude --timeout 300`. Extracts the hardcoded timeout into a shared `DEFAULT_SUBPROCESS_TIMEOUT_MS` constant and threads it through all 4 exec paths (ccusage sync/async, codex sync/async). Default bumped from 120s to 240s to give more headroom out of the box. (PR #49, @jsnider3)
+- **Local Supabase development workflow.** Docker-backed local Supabase setup with `supabase/config.toml`, auto-generated `.env.local`, demo seed data, a dev-only `/dev/local-env` setup route, and friendlier missing-env handling. Full local dev flow documented in `docs/LOCAL_DEV.md`. (PR #47, @markmdev)
+- **Consistency cards and inline share panels.** Added a new public `/consistency/[username]` share page backed by `/api/consistency/[username]/image`, using a 52-week Claude-orange heatmap card with streak, recent output, active days, and most-used model. Profile pages now expose a visible share URL plus PNG preview/download panel directly under Contributions. Post detail pages now expose the canonical permalink plus generated session-card preview/download UI above the comments. The CLI now prints a profile consistency-card URL after successful syncs.
+
+### Fixed
+
+- **Audit remediation for privacy/auth/storage boundaries.** Removed the exact-email search fallback so `/api/search` only returns public-profile matches. Private-profile access is now consistently owner-or-follower across the profile API, contribution API, main profile page, and follows page. `/notifications` and `/recap` now redirect guests cleanly instead of rendering misleading unauthorized states, and the notifications UI no longer advertises a Messages filter the API does not serve. Post image updates now reject non-Straude storage URLs, DM attachments now use private bucket storage plus signed read URLs instead of public links, and `/api/unsubscribe` now supports one-click POST requests while surfacing write failures truthfully.
+- **Test flakiness from unfrozen Date.now()/new Date().** Added `vi.useFakeTimers({ toFake: ['Date'] })` to 4 test files (`push.test.ts`, `cli-sync-flow.test.ts`, `cli-push-flow.test.ts`, `cli-auth.test.ts`) so 15+ date-dependent assertions cannot fail at midnight boundaries or across timezones. Replaced the fragile counter-based `deviceCallCount` mock in `cli-push-flow.test.ts` with a stateless chain that routes by Supabase method (select/upsert) instead of call order. Fixed inconsistent `delete process.env` mutations in `cli-auth.test.ts` to use `vi.stubEnv()` consistently.
+
+### Added
 - **Golden path e2e test suite.** 35 Playwright specs across 5 files covering unauthenticated user journeys: landing-to-signup funnel (8 tests), public leaderboard browsing with period/region filters (6 tests), public profile viewing including 404 and private guards (6 tests), CLI verify page (5 tests), and cross-page navigation with dark/light theme persistence (10 tests). Fixed Playwright config to use a dedicated port (3099 locally) to avoid conflicts with other dev servers, which also fixed 4 pre-existing broken landing tests.
 - **Model Usage chart on admin dashboard.** New line chart showing daily Claude vs Codex spend over time, placed after the Cumulative Spend chart. Includes 7D/14D/30D/All time range selector. Backed by a new `admin_model_usage_by_day()` Postgres RPC that splits `model_breakdown` JSONB by model family.
 - **Developer documentation: API, CLI, and Setup guides.** Added `docs/API.md` (complete API endpoint reference for all 36 route files and 49 HTTP method handlers, organized by category with auth requirements, rate limits, request/response shapes, and side effects), `docs/CLI.md` (CLI command reference with installation, authentication flow, data sources, merge logic, config format, multi-device support, and troubleshooting), and `docs/SETUP.md` (developer setup guide with prerequisites, env configuration, database setup, local dev instructions, testing, CI pipeline, and project conventions).
@@ -28,6 +46,7 @@
 
 ### Changed
 
+- **Post share cards now use a session-first layout.** The square share image at `/api/posts/[id]/share-image` now prioritizes the post story first and the spend/output/model stats second, matching the new inline share flow instead of the older generic promo-card composition.
 - **Dev script uses Portless.** Updated `apps/web` dev script to `portless run next dev --turbopack` for stable named `.localhost` URLs during development.
 
 ### Added

@@ -33,12 +33,17 @@ export async function GET(request: NextRequest, context: RouteContext) {
     return new Response("Post not found", { status: 404 });
   }
 
-  const u = post.user as unknown as {
+  const userRow = Array.isArray(post.user) ? post.user[0] : post.user;
+  const usageRow = Array.isArray(post.daily_usage)
+    ? post.daily_usage[0]
+    : post.daily_usage;
+
+  const u = userRow as unknown as {
     username: string;
     avatar_url: string | null;
     display_name: string | null;
   };
-  const usage = post.daily_usage as unknown as {
+  const usage = usageRow as unknown as {
     cost_usd: number;
     input_tokens: number;
     output_tokens: number;
@@ -65,7 +70,7 @@ export async function GET(request: NextRequest, context: RouteContext) {
         }}
         themeId={themeId}
       />,
-      { width: 1080, height: 1080, fonts }
+      { width: 1200, height: 630, fonts }
     );
 
     response.headers.set(

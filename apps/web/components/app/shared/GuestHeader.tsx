@@ -3,12 +3,13 @@
 import { useState, useEffect } from "react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { Home, Trophy } from "lucide-react";
+import { Home, Trophy, Flame } from "lucide-react";
 import { cn } from "@/lib/utils/cn";
 
 const navLinks = [
   { href: "/feed", label: "Feed" },
   { href: "/leaderboard", label: "Leaderboard" },
+  { href: "/token-rich", label: "Prometheus List" },
 ] as const;
 
 export function GuestHeader() {
@@ -66,6 +67,7 @@ export function GuestHeader() {
 const mobileNavItems = [
   { href: "/feed", label: "Home", icon: Home },
   { href: "/leaderboard", label: "Leaderboard", icon: Trophy },
+  { href: "/token-rich", label: "Prometheus", icon: Flame },
 ] as const;
 
 export function GuestMobileNav() {

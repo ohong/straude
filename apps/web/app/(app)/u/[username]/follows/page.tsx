@@ -1,9 +1,25 @@
-import { createClient } from "@/lib/supabase/server";
 import { getServiceClient } from "@/lib/supabase/service";
+import { getProfileAccessContext } from "@/lib/profile-access";
 import { notFound } from "next/navigation";
 import Link from "next/link";
+import { firstRelation } from "@/lib/utils/first-relation";
 import { Avatar } from "@/components/ui/Avatar";
 import type { Metadata } from "next";
+
+type FollowsProfileRow = {
+  id: string;
+  username: string | null;
+  is_public: boolean;
+};
+type FollowUserRow = {
+  id: string;
+  username: string | null;
+  display_name: string | null;
+  avatar_url: string | null;
+  bio: string | null;
+};
+type FollowingRelationRow = { following: FollowUserRow[] | null };
+type FollowerRelationRow = { follower: FollowUserRow[] | null };
 
 export async function generateMetadata({
   params,
@@ -28,39 +44,38 @@ export default async function FollowsPage({
   const { username } = await params;
   const { tab } = await searchParams;
   const activeTab = tab === "followers" ? "followers" : "following";
+  const access = await getProfileAccessContext<FollowsProfileRow>(
+    username,
+    "id, username, is_public",
+  );
+  if (!access) notFound();
+  if (!access.canView) notFound();
 
-  const supabase = await createClient();
-
+  const { profile } = access;
   const db = getServiceClient();
-  const { data: profile } = await db
-    .from("users")
-    .select("id, username, is_public")
-    .eq("username", username)
-    .single();
-
-  if (!profile) notFound();
-
-  const { data: { user: authUser } } = await supabase.auth.getUser();
-  if (!profile.is_public && authUser?.id !== profile.id) notFound();
 
   let users: { id: string; username: string | null; display_name: string | null; avatar_url: string | null; bio: string | null }[] = [];
 
   if (activeTab === "following") {
-    const { data } = await supabase
+    const { data } = await db
       .from("follows")
       .select("following:users!follows_following_id_fkey(id, username, display_name, avatar_url, bio)")
       .eq("follower_id", profile.id)
       .order("created_at", { ascending: false });
 
-    users = (data ?? []).map((r: any) => r.following).filter(Boolean);
+    users = ((data ?? []) as FollowingRelationRow[])
+      .map((row) => firstRelation(row.following))
+      .filter((user): user is FollowUserRow => Boolean(user));
   } else {
-    const { data } = await supabase
+    const { data } = await db
       .from("follows")
       .select("follower:users!follows_follower_id_fkey(id, username, display_name, avatar_url, bio)")
       .eq("following_id", profile.id)
       .order("created_at", { ascending: false });
 
-    users = (data ?? []).map((r: any) => r.follower).filter(Boolean);
+    users = ((data ?? []) as FollowerRelationRow[])
+      .map((row) => firstRelation(row.follower))
+      .filter((user): user is FollowUserRow => Boolean(user));
   }
 
   return (

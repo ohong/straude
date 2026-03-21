@@ -9,8 +9,17 @@ const mockSupabase = {
   rpc: vi.fn(),
 };
 
+const mockServiceClient = {
+  from: vi.fn(),
+  rpc: vi.fn(),
+};
+
 vi.mock("@/lib/supabase/server", () => ({
   createClient: vi.fn(() => mockSupabase),
+}));
+
+vi.mock("@/lib/supabase/service", () => ({
+  getServiceClient: vi.fn(() => mockServiceClient),
 }));
 
 // ---------------------------------------------------------------------------
@@ -45,6 +54,8 @@ const USERNAME_CTX = (u: string) => ({ params: Promise.resolve({ username: u }) 
 describe("Flow: Profile and Contributions", () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    mockServiceClient.from.mockReset();
+    mockServiceClient.rpc.mockReset();
   });
 
   it("sets profile via PATCH /api/users/me", async () => {
@@ -152,23 +163,26 @@ describe("Flow: Profile and Contributions", () => {
     (isFollowingChain.maybeSingle as ReturnType<typeof vi.fn>).mockResolvedValue({ data: null });
 
     // Streak
-    mockSupabase.rpc.mockResolvedValue({ data: 5 });
+    mockServiceClient.rpc.mockResolvedValue({ data: 5 });
 
-    let callCount = 0;
     mockSupabase.from.mockImplementation((table: string) => {
-      callCount++;
+      if (table === "follows") return isFollowingChain;
+      return chainBuilder();
+    });
+
+    let serviceCallCount = 0;
+    mockServiceClient.from.mockImplementation((table: string) => {
+      serviceCallCount++;
       if (table === "users") return profileChain;
       if (table === "follows") {
-        // First follows call = followers count, second = following count, third = is_following
-        if (callCount <= 3) return followerCount;
-        if (callCount <= 4) return followingCount;
-        return isFollowingChain;
+        if (serviceCallCount <= 2) return followerCount;
+        return followingCount;
       }
       if (table === "posts") return postsCount;
       if (table === "daily_usage") return costChain;
       if (table === "leaderboard_weekly") {
-        if (callCount <= 7) return weeklyChain;
-        if (callCount <= 8) return rankCountChain;
+        if (serviceCallCount <= 6) return weeklyChain;
+        if (serviceCallCount <= 7) return rankCountChain;
         return regionRankChain;
       }
       return chainBuilder();
@@ -226,9 +240,10 @@ describe("Flow: Profile and Contributions", () => {
     });
 
     // Streak
-    mockSupabase.rpc.mockResolvedValue({ data: 5 });
+    mockServiceClient.rpc.mockResolvedValue({ data: 5 });
 
-    mockSupabase.from.mockImplementation((table: string) => {
+    mockSupabase.from.mockImplementation(() => chainBuilder());
+    mockServiceClient.from.mockImplementation((table: string) => {
       if (table === "users") return profileChain;
       if (table === "daily_usage") return usageChain;
       if (table === "posts") return postsChain;
@@ -254,7 +269,8 @@ describe("Flow: Profile and Contributions", () => {
 
     const notFoundChain = chainBuilder({ data: null, error: { message: "not found" } });
 
-    mockSupabase.from.mockImplementation(() => notFoundChain);
+    mockSupabase.from.mockImplementation(() => chainBuilder());
+    mockServiceClient.from.mockImplementation(() => notFoundChain);
 
     const { GET } = await import("@/app/api/users/[username]/route");
     const req = makeRequest("http://localhost:3000/api/users/nonexistent");

@@ -3,8 +3,26 @@ import { notFound } from "next/navigation";
 import { ActivityCard } from "@/components/app/feed/ActivityCard";
 import { CommentThread } from "@/components/app/post/CommentThread";
 import { PostEditor } from "@/components/app/post/PostEditor";
+import { PostSharePanel } from "@/components/app/post/PostSharePanel";
 import { loadPostComments } from "@/lib/comments";
+import { firstRelation } from "@/lib/utils/first-relation";
+import type { AggregateCount, FeedPostRow, UserSummary } from "@/types";
 import type { Metadata } from "next";
+
+type MetadataPostRow = {
+  title: string | null;
+  description: string | null;
+  user: Array<{ username: string | null }> | null;
+  daily_usage: Array<{
+    cost_usd: number | null;
+    output_tokens: number | null;
+    models: string[] | null;
+  }> | null;
+};
+
+type RecentKudosRow = {
+  user: Array<UserSummary> | null;
+};
 
 export async function generateMetadata({
   params,
@@ -13,14 +31,52 @@ export async function generateMetadata({
 }): Promise<Metadata> {
   const { id } = await params;
   const supabase = await createClient();
-  const { data: post } = await supabase
+  const { data: rawPost } = await supabase
     .from("posts")
-    .select("title, user:users!posts_user_id_fkey(username)")
+    .select(
+      "title, description, user:users!posts_user_id_fkey(username), daily_usage:daily_usage!posts_daily_usage_id_fkey(cost_usd, output_tokens, models)"
+    )
     .eq("id", id)
     .single();
+  const post = rawPost as MetadataPostRow | null;
+
+  const userRow = firstRelation(post?.user);
+  const usageRow = firstRelation(post?.daily_usage);
+  const username = userRow?.username ?? "user";
+  const description =
+    post?.description?.trim() ||
+    [
+      typeof usageRow?.cost_usd === "number"
+        ? `$${usageRow.cost_usd.toFixed(2)} spend`
+        : null,
+      typeof usageRow?.output_tokens === "number"
+        ? `${usageRow.output_tokens.toLocaleString()} output tokens`
+        : null,
+      Array.isArray(usageRow?.models) && usageRow.models.length > 0
+        ? `using ${usageRow.models[0]}`
+        : null,
+    ]
+      .filter(Boolean)
+      .join(" · ");
+  const pageUrl = `/post/${id}`;
 
   return {
-    title: post?.title ?? `Post by ${(post?.user as any)?.username ?? "user"}`,
+    title: post?.title ?? `Post by @${username}`,
+    description,
+    alternates: {
+      canonical: pageUrl,
+    },
+    openGraph: {
+      title: post?.title ?? `Post by @${username}`,
+      description,
+      url: pageUrl,
+      type: "article",
+    },
+    twitter: {
+      title: post?.title ?? `Post by @${username}`,
+      description,
+      card: "summary_large_image",
+    },
   };
 }
 
@@ -100,11 +156,12 @@ export default async function PostDetailPage({
 
   const hasKudosed = !!kudosCheck;
 
+  const postRow = post as FeedPostRow;
   const normalizedPost = {
-    ...post,
-    kudos_count: (post.kudos_count as any)?.[0]?.count ?? 0,
-    kudos_users: (recentKudos ?? []).map((k) => k.user as any),
-    comment_count: (post.comment_count as any)?.[0]?.count ?? 0,
+    ...postRow,
+    kudos_count: ((postRow.kudos_count as AggregateCount[] | undefined)?.[0]?.count ?? 0),
+    kudos_users: (recentKudos ?? []).map((k) => firstRelation((k as RecentKudosRow).user)).filter((user): user is UserSummary => Boolean(user)),
+    comment_count: ((postRow.comment_count as AggregateCount[] | undefined)?.[0]?.count ?? 0),
     has_kudosed: hasKudosed,
   };
 
@@ -119,6 +176,25 @@ export default async function PostDetailPage({
         <h3 className="text-lg font-medium">Post</h3>
       </header>
       <ActivityCard post={normalizedPost} />
+      <PostSharePanel
+        postId={id}
+        sharePost={{
+          id: normalizedPost.id,
+          title: normalizedPost.title,
+          images: normalizedPost.images ?? [],
+          user: normalizedPost.user
+            ? { username: normalizedPost.user.username }
+            : null,
+          daily_usage: normalizedPost.daily_usage
+            ? {
+                cost_usd: normalizedPost.daily_usage.cost_usd,
+                output_tokens: normalizedPost.daily_usage.output_tokens,
+                models: normalizedPost.daily_usage.models,
+                is_verified: normalizedPost.daily_usage.is_verified,
+              }
+            : null,
+        }}
+      />
       {isOwner && <PostEditor post={normalizedPost} autoEdit={query.edit === "1"} />}
       <CommentThread
         postId={id}

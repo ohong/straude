@@ -3,6 +3,12 @@ import { createClient } from "@/lib/supabase/server";
 import { getServiceClient } from "@/lib/supabase/service";
 import { isAdmin } from "@/lib/admin";
 
+type TimeToFirstSyncRow = {
+  bucket: string;
+  bucket_order: number | string;
+  user_count: number | string;
+};
+
 export async function GET() {
   const auth = await createClient();
   const {
@@ -20,10 +26,10 @@ export async function GET() {
     return NextResponse.json({ error: error.message }, { status: 500 });
   }
 
-  const rows = (data ?? []).map((r: any) => ({
-    bucket: r.bucket,
-    bucket_order: Number(r.bucket_order),
-    user_count: Number(r.user_count),
+  const rows = ((data ?? []) as TimeToFirstSyncRow[]).map((row) => ({
+    bucket: row.bucket,
+    bucket_order: Number(row.bucket_order),
+    user_count: Number(row.user_count),
   }));
 
   return NextResponse.json(rows);
