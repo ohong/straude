@@ -3,6 +3,7 @@ import { Navbar } from "@/components/landing/Navbar";
 import { Hero } from "@/components/landing/Hero";
 import { Ticker } from "@/components/landing/Ticker";
 import { FeaturesGrid } from "@/components/landing/FeaturesGrid";
+import { PrometheusPreview } from "@/components/landing/PrometheusPreview";
 import { GlobalFeed } from "@/components/landing/GlobalFeed";
 import { WallOfLove } from "@/components/landing/WallOfLove";
 import { CTASection } from "@/components/landing/CTASection";
@@ -143,6 +144,7 @@ export default function LandingPage() {
             <TickerWithData />
           </Suspense>
           <FeaturesGrid />
+          <PrometheusPreview />
           <Suspense fallback={null}>
             <GlobalFeed />
           </Suspense>

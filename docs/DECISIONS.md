@@ -1,5 +1,18 @@
 # Architecture & Design Decisions
 
+## The Prometheus List: Static Data with Supabase Migration Path (2026-03-20)
+
+**Decision:** Company data for The Prometheus List starts as a static TypeScript array (`apps/web/data/token-rich.ts`) rather than a Supabase table. User submissions land in a separate `company_suggestions` table for admin triage.
+
+**Alternatives considered:**
+1. **All data in Supabase from day one** — requires seeding, admin CRUD for the core list, and more complex SSR queries. Overkill for a curated list that changes infrequently.
+2. **Static-only, no submission pipeline** — simpler but no path for community contributions.
+3. **Static core list + Supabase suggestions table** (chosen) — the core list renders instantly with no DB dependency, while the suggestions table captures community input for manual curation. When the list grows large enough to warrant dynamic management, the static array can be replaced with a Supabase table without changing the component interface.
+
+**Stage categorization:** Companies are classified as "Big Tech" (Nvidia, Shopify, Meta, OpenAI, Anthropic, Vercel, Polygon, GitHub) or "Startup" (all others). This is a rough heuristic based on scale and public market presence, not a strict definition.
+
+**Route placement:** `/token-rich` sits under the `(app)` layout group alongside `/feed` and `/leaderboard`, added to `PUBLIC_PAGES` for unauthenticated access with guest header.
+
 ## Security Advisor Remediation: Pinned Search Paths and SECURITY INVOKER View (2026-03-17)
 
 **Decision:** Fixed all SQL-level findings from Supabase Security Advisor in a single migration.

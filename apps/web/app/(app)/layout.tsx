@@ -13,7 +13,7 @@ import { firstRelation } from "@/lib/utils/first-relation";
 import type { DailyUsage } from "@/types";
 
 // Pages that are publicly accessible without login
-const PUBLIC_PAGES = ["/feed", "/leaderboard"];
+const PUBLIC_PAGES = ["/feed", "/leaderboard", "/token-rich"];
 type LatestPostRow = {
   id: string;
   title: string | null;

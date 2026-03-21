@@ -14,6 +14,7 @@ import { CodexGrowthCharts } from "./components/CodexGrowthCharts";
 import { RevenueConcentration } from "./components/RevenueConcentration";
 import { TimeToFirstSync } from "./components/TimeToFirstSync";
 import { PromptInbox } from "./components/PromptInbox";
+import { CompanySuggestionsInbox } from "./components/CompanySuggestionsInbox";
 
 type SpendRow = {
   date: string;
@@ -47,6 +48,17 @@ type TopUsersTableRow = {
   last_active: string;
   signed_up: string;
 };
+type CompanySuggestionInboxRow = {
+  id: string;
+  company_name: string;
+  company_url: string;
+  policy_description: string;
+  source_url: string;
+  status: "new" | "accepted" | "rejected" | "published";
+  is_hidden: boolean;
+  created_at: string;
+  user: Array<{ username: string | null; display_name: string | null }> | null;
+};
 
 export default async function AdminPage() {
   const authClient = await createClient();
@@ -68,6 +80,7 @@ export default async function AdminPage() {
     dauRes,
     wauRes,
     promptsRes,
+    companySuggestionsRes,
   ] = await Promise.all([
     supabase.rpc("admin_cumulative_spend"),
     supabase.rpc("admin_top_users", { p_limit: 20 }),
@@ -79,6 +92,13 @@ export default async function AdminPage() {
       .from("prompt_submissions")
       .select(
         "id,prompt,is_anonymous,status,is_hidden,created_at,user:users!prompt_submissions_user_id_fkey(username,display_name)"
+      )
+      .order("created_at", { ascending: false })
+      .limit(200),
+    supabase
+      .from("company_suggestions")
+      .select(
+        "id,company_name,company_url,policy_description,source_url,status,is_hidden,created_at,user:users!company_suggestions_user_id_fkey(username,display_name)"
       )
       .order("created_at", { ascending: false })
       .limit(200),
@@ -140,6 +160,18 @@ export default async function AdminPage() {
     lastWeekSpend > 0
       ? ((thisWeekSpend - lastWeekSpend) / lastWeekSpend) * 100
       : null;
+
+  const companySuggestionRows = ((companySuggestionsRes.data ?? []) as CompanySuggestionInboxRow[]).map((row) => ({
+    id: row.id,
+    company_name: row.company_name,
+    company_url: row.company_url,
+    policy_description: row.policy_description,
+    source_url: row.source_url,
+    status: row.status,
+    is_hidden: row.is_hidden,
+    created_at: row.created_at,
+    user: firstRelation(row.user),
+  }));
 
   const promptRows = ((promptsRes.data ?? []) as PromptInboxRow[]).map((row) => ({
     id: row.id,
@@ -206,6 +238,8 @@ export default async function AdminPage() {
       </div>
 
       <PromptInbox initialPrompts={promptRows} />
+
+      <CompanySuggestionsInbox initialSuggestions={companySuggestionRows} />
 
       {/* Top users table */}
       <TopUsersTable users={topUsers} />

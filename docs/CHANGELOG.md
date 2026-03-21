@@ -2,6 +2,14 @@
 
 ## Unreleased
 
+### Added
+
+- **The Prometheus List (`/token-rich`).** New public page showcasing 43 verified companies with unlimited or very high AI token budgets. Dramatic Prometheus-themed hero with classical oil painting, sortable/filterable table (location, stage, policy), full source quotes with links, country flags, and mobile card layout. Data lives in a `token_rich_companies` Supabase table so the list can be updated without deploying code. First 20 companies visible to all visitors; sign-in required to see the full list (gradient fadeout gate). Page revalidates every 5 minutes via ISR with static fallback.
+- **"Add a Company" form.** Authenticated users can submit company suggestions via a modal form. Submissions include company name, URL, policy description, and source link. Rate-limited to 5/day per user. Backed by a `company_suggestions` Supabase table with RLS.
+- **Company suggestions admin inbox.** Admin dashboard includes CompanySuggestionsInbox with status filtering (New/Accepted/Rejected/Published), status changes, and hide/unhide actions.
+- **Homepage Prometheus preview section.** `PrometheusPreview` landing section between FeaturesGrid and GlobalFeed, showing top 5 companies with a link to the full list.
+- **Prometheus List in navigation.** Added to landing page navbar, guest header, and guest mobile nav for visitor discoverability.
+
 ### Fixed
 
 - **Security advisor remediation.** Applied migration to fix all SQL-level security issues flagged by Supabase Security Advisor: recreated `leaderboard_daily` view with `security_invoker = true` (was `SECURITY DEFINER`), pinned `SET search_path = 'public'` on 4 functions (`search_companies_fuzzy`, `increment_streak_freezes`, `calculate_user_streak`, `calculate_streaks_batch`), added explicit deny-all RLS policy on `email_suppressions`, and added authenticated SELECT policy on `user_levels`.

@@ -95,6 +95,12 @@ export function Navbar({ variant = "dark" }: { variant?: "dark" | "light" }) {
             Leaderboard
           </Link>
           <Link
+            href="/token-rich"
+            className={`${text} hover:text-accent transition-colors`}
+          >
+            Prometheus List
+          </Link>
+          <Link
             href={authHref}
             className={`text-accent ${hoverCta} transition-colors`}
           >
@@ -139,6 +145,13 @@ export function Navbar({ variant = "dark" }: { variant?: "dark" | "light" }) {
                 onClick={() => setMobileOpen(false)}
               >
                 Leaderboard
+              </Link>
+              <Link
+                href="/token-rich"
+                className={text}
+                onClick={() => setMobileOpen(false)}
+              >
+                Prometheus List
               </Link>
               <Link
                 href={authHref}

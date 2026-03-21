@@ -296,6 +296,24 @@ export interface UserAchievement {
   earned_at: string;
 }
 
+export type CompanySuggestionStatus = "new" | "accepted" | "rejected" | "published";
+
+export interface CompanySuggestion {
+  id: string;
+  user_id: string;
+  company_name: string;
+  company_url: string;
+  policy_description: string;
+  source_url: string;
+  status: CompanySuggestionStatus;
+  is_hidden: boolean;
+  admin_notes: string | null;
+  reviewed_by: string | null;
+  reviewed_at: string | null;
+  created_at: string;
+  updated_at: string;
+}
+
 export interface WallOfLovePost {
   url: string;
   author_name: string;

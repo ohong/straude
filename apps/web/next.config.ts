@@ -5,6 +5,7 @@ const nextConfig: NextConfig = {
   images: {
     remotePatterns: [
       { protocol: "https", hostname: "avatars.githubusercontent.com" },
+      { protocol: "https", hostname: "unavatar.io" },
       { protocol: "https", hostname: "*.supabase.co", pathname: "/storage/v1/object/public/avatars/**" },
       { protocol: "https", hostname: "*.supabase.co", pathname: "/storage/v1/object/public/post-images/**" },
       { protocol: "https", hostname: "*.supabase.co", pathname: "/storage/v1/object/sign/dm-attachments/**" },
@@ -41,7 +42,7 @@ const nextConfig: NextConfig = {
               "default-src 'self'",
               "script-src 'self' 'unsafe-inline' https://va.vercel-scripts.com",
               "style-src 'self' 'unsafe-inline'",
-              "img-src 'self' data: blob: https://avatars.githubusercontent.com https://*.supabase.co http://127.0.0.1:54321 http://localhost:54321",
+              "img-src 'self' data: blob: https://avatars.githubusercontent.com https://unavatar.io https://*.supabase.co http://127.0.0.1:54321 http://localhost:54321",
               "font-src 'self' data:",
               "connect-src 'self' https://*.supabase.co https://va.vercel-scripts.com http://127.0.0.1:54321 http://localhost:54321",
               "frame-ancestors 'none'",
