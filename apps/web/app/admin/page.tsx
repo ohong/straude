@@ -13,6 +13,7 @@ import { CodexGrowthCharts } from "./components/CodexGrowthCharts";
 import { RevenueConcentration } from "./components/RevenueConcentration";
 import { TimeToFirstSync } from "./components/TimeToFirstSync";
 import { PromptInbox } from "./components/PromptInbox";
+import { UsersByCountry } from "./components/UsersByCountry";
 
 export default async function AdminPage() {
   const authClient = await createClient();
@@ -170,6 +171,9 @@ export default async function AdminPage() {
         <RevenueConcentration />
         <TimeToFirstSync />
       </div>
+
+      {/* Users by Country */}
+      <UsersByCountry />
 
       <PromptInbox initialPrompts={promptRows} />
 
