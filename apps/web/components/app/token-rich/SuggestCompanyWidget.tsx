@@ -156,7 +156,7 @@ export function SuggestCompanyWidget({ isLoggedIn, children }: SuggestCompanyWid
                     Add a company
                   </h2>
                   <p className="mt-1 text-sm text-muted">
-                    Know a company with unlimited or very high AI token budgets? Add it to the list.
+                    Does your company empower employees with high token budgets? Add it.
                   </p>
                 </div>
                 <button

@@ -10,6 +10,10 @@
 - **Homepage Prometheus preview section.** `PrometheusPreview` landing section between FeaturesGrid and GlobalFeed, showing top 5 companies with a link to the full list.
 - **Prometheus List in navigation.** Added to landing page navbar, guest header, and guest mobile nav for visitor discoverability.
 
+### Changed
+
+- **Prometheus List polish.** Company names link to their websites. Filters use responsive `flex-wrap` layout (no overflow on mobile). Sort indicators use lucide chevron icons instead of plain text arrows. Blockquote has more breathing room. Mobile cards show company URL links. OG image updated to use hero painting.
+
 ### Fixed
 
 - **Security advisor remediation.** Applied migration to fix all SQL-level security issues flagged by Supabase Security Advisor: recreated `leaderboard_daily` view with `security_invoker = true` (was `SECURITY DEFINER`), pinned `SET search_path = 'public'` on 4 functions (`search_companies_fuzzy`, `increment_streak_freezes`, `calculate_user_streak`, `calculate_streaks_batch`), added explicit deny-all RLS policy on `email_suppressions`, and added authenticated SELECT policy on `user_levels`.

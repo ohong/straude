@@ -11,12 +11,12 @@ export const revalidate = 300; // revalidate every 5 minutes
 const DESCRIPTION =
   "Companies fueling unlimited AI spend for their engineers. Verified policies, public sources.";
 
-const SOCIAL_IMAGE = {
-  url: "/images/prometheus-og.jpg",
-  width: 1200,
-  height: 630,
+const OG_IMAGE = {
+  url: "/images/prometheus-hero.png",
+  width: 1584,
+  height: 672,
   alt: "The Prometheus List — Companies fueling unlimited AI spend for their engineers.",
-  type: "image/jpeg",
+  type: "image/png",
 };
 
 export const metadata: Metadata = {
@@ -26,16 +26,17 @@ export const metadata: Metadata = {
     canonical: "/token-rich",
   },
   openGraph: {
-    url: "https://straude.com/token-rich",
+    type: "website",
+    url: "/token-rich",
     title: "The Prometheus List | Straude",
     description: DESCRIPTION,
-    images: [SOCIAL_IMAGE],
+    images: [OG_IMAGE],
   },
   twitter: {
     card: "summary_large_image",
     title: "The Prometheus List | Straude",
     description: DESCRIPTION,
-    images: [SOCIAL_IMAGE],
+    images: [OG_IMAGE],
   },
 };
 

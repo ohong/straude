@@ -3,7 +3,7 @@
 import { useMemo, useState } from "react";
 import Image from "next/image";
 import Link from "next/link";
-import { ExternalLink } from "lucide-react";
+import { ExternalLink, ChevronUp, ChevronDown, ChevronsUpDown } from "lucide-react";
 import { Badge } from "@/components/ui/Badge";
 import type { TokenRichCompany } from "@/data/token-rich";
 
@@ -65,8 +65,12 @@ function compare(a: string, b: string, dir: SortDir): number {
 }
 
 function SortIndicator({ column, sortKey, sortDir }: { column: string; sortKey: string | null; sortDir: SortDir }) {
-  if (sortKey !== column) return null;
-  return <span aria-hidden="true">{sortDir === "asc" ? " ▲" : " ▼"}</span>;
+  if (sortKey !== column) {
+    return <ChevronsUpDown size={12} className="ml-1 inline opacity-30" aria-hidden />;
+  }
+  return sortDir === "asc"
+    ? <ChevronUp size={12} className="ml-1 inline text-foreground" aria-hidden />
+    : <ChevronDown size={12} className="ml-1 inline text-foreground" aria-hidden />;
 }
 
 const FREE_LIMIT = 20;
@@ -146,7 +150,7 @@ export function PrometheusTable({
             Last updated Mar 20, 2026
           </p>
 
-          <blockquote className="mt-6 max-w-lg border-l-2 border-[#df561f] pl-4 text-sm italic leading-relaxed text-[#bbb]">
+          <blockquote className="mt-10 max-w-lg border-l-2 border-[#df561f] pl-4 text-sm italic leading-relaxed text-[#bbb]">
             &ldquo;For any worker who is able to wield AI agents effectively in an organization, their compute budgets are just going to monotonically go up over time.&rdquo;
             <cite className="mt-2 block text-xs font-semibold not-italic text-[#df561f]">&mdash; Aaron Levie, CEO of Box</cite>
           </blockquote>
@@ -178,13 +182,13 @@ export function PrometheusTable({
       </div>
 
       {/* Filters */}
-      <div className="flex items-center justify-end gap-4 border-b border-border px-6 py-4 sm:px-10">
-        <div className="flex items-center gap-2">
+      <div className="flex flex-wrap gap-3 border-b border-border px-4 py-3 sm:flex-nowrap sm:items-center sm:justify-end sm:gap-4 sm:px-10 sm:py-4">
+        <div className="flex flex-col gap-1 sm:flex-row sm:items-center sm:gap-2">
           <span className="font-[family-name:var(--font-mono)] text-[10px] uppercase tracking-widest text-muted">Location</span>
           <select
             value={countryFilter}
             onChange={(e) => setCountryFilter(e.target.value)}
-            className="appearance-none rounded-[4px] border border-border bg-subtle py-1.5 pl-3 pr-7 text-xs font-semibold text-foreground outline-none transition-colors focus:border-accent"
+            className="appearance-none rounded-[4px] border border-border bg-subtle py-2 pl-3 pr-7 text-xs font-semibold text-foreground outline-none transition-colors focus:border-accent sm:py-1.5"
             aria-label="Filter by country"
             style={{ backgroundImage: "url(\"data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='10' height='10' viewBox='0 0 24 24' fill='none' stroke='%23888' stroke-width='2'%3E%3Cpath d='M6 9l6 6 6-6'/%3E%3C/svg%3E\")", backgroundRepeat: "no-repeat", backgroundPosition: "right 8px center" }}
           >
@@ -194,12 +198,12 @@ export function PrometheusTable({
             ))}
           </select>
         </div>
-        <div className="flex items-center gap-2">
+        <div className="flex flex-col gap-1 sm:flex-row sm:items-center sm:gap-2">
           <span className="font-[family-name:var(--font-mono)] text-[10px] uppercase tracking-widest text-muted">Stage</span>
           <select
             value={stageFilter}
             onChange={(e) => setStageFilter(e.target.value as StageFilter)}
-            className="appearance-none rounded-[4px] border border-border bg-subtle py-1.5 pl-3 pr-7 text-xs font-semibold text-foreground outline-none transition-colors focus:border-accent"
+            className="appearance-none rounded-[4px] border border-border bg-subtle py-2 pl-3 pr-7 text-xs font-semibold text-foreground outline-none transition-colors focus:border-accent sm:py-1.5"
             aria-label="Filter by stage"
             style={{ backgroundImage: "url(\"data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='10' height='10' viewBox='0 0 24 24' fill='none' stroke='%23888' stroke-width='2'%3E%3Cpath d='M6 9l6 6 6-6'/%3E%3C/svg%3E\")", backgroundRepeat: "no-repeat", backgroundPosition: "right 8px center" }}
           >
@@ -208,12 +212,12 @@ export function PrometheusTable({
             ))}
           </select>
         </div>
-        <div className="flex items-center gap-2">
+        <div className="flex flex-col gap-1 sm:flex-row sm:items-center sm:gap-2">
           <span className="font-[family-name:var(--font-mono)] text-[10px] uppercase tracking-widest text-muted">Policy</span>
           <select
             value={policyFilter}
             onChange={(e) => setPolicyFilter(e.target.value as PolicyFilter)}
-            className="appearance-none rounded-[4px] border border-border bg-subtle py-1.5 pl-3 pr-7 text-xs font-semibold text-foreground outline-none transition-colors focus:border-accent"
+            className="appearance-none rounded-[4px] border border-border bg-subtle py-2 pl-3 pr-7 text-xs font-semibold text-foreground outline-none transition-colors focus:border-accent sm:py-1.5"
             aria-label="Filter by policy"
             style={{ backgroundImage: "url(\"data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='10' height='10' viewBox='0 0 24 24' fill='none' stroke='%23888' stroke-width='2'%3E%3Cpath d='M6 9l6 6 6-6'/%3E%3C/svg%3E\")", backgroundRepeat: "no-repeat", backgroundPosition: "right 8px center" }}
           >
@@ -284,7 +288,11 @@ export function PrometheusTable({
                   className="group border-b border-border transition-colors hover:bg-subtle"
                 >
                   <td className="px-6 py-4 sm:px-10">
-                    <span className="font-semibold">{company.name}</span>
+                    {company.companyUrl ? (
+                      <a href={company.companyUrl} target="_blank" rel="noopener noreferrer" className="font-semibold hover:text-accent hover:underline">{company.name}</a>
+                    ) : (
+                      <span className="font-semibold">{company.name}</span>
+                    )}
                   </td>
                   <td className="px-4 py-4 text-muted">
                     {loc.city} {loc.flag}
@@ -339,7 +347,11 @@ export function PrometheusTable({
             className="border-b border-border px-4 py-4"
           >
             <div className="flex items-start justify-between gap-2">
-              <span className="font-semibold">{company.name}</span>
+              {company.companyUrl ? (
+                <a href={company.companyUrl} target="_blank" rel="noopener noreferrer" className="font-semibold hover:text-accent hover:underline">{company.name}</a>
+              ) : (
+                <span className="font-semibold">{company.name}</span>
+              )}
               <Badge variant={company.policy === "Unlimited" ? "accent" : "default"}>
                 {company.policy}
               </Badge>
@@ -378,8 +390,8 @@ export function PrometheusTable({
 
       {/* Sign-in gate */}
       {isGated && (
-        <div className="relative">
-          <div className="pointer-events-none absolute -top-44 left-0 right-0 h-44 bg-gradient-to-t from-background via-background/70 to-transparent" />
+        <div className="relative -mt-[1px]">
+          <div className="pointer-events-none absolute bottom-full left-0 right-0 h-[25vh] min-h-32 bg-gradient-to-t from-background from-10% via-background/50 via-50% to-transparent" />
           <div className="flex flex-col items-center gap-4 border-t border-border px-6 py-12 text-center">
             <p className="max-w-md text-sm text-muted">
               Sign in to Straude to see the full list for free.
