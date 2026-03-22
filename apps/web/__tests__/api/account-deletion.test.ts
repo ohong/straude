@@ -4,10 +4,12 @@ vi.mock("@/lib/supabase/server", () => ({
   createClient: vi.fn(),
 }));
 
-const mockDeleteUser = vi.fn();
+const mockUpdateUserById = vi.fn();
+const mockServiceFrom = vi.fn();
 vi.mock("@/lib/supabase/service", () => ({
   getServiceClient: vi.fn(() => ({
-    auth: { admin: { deleteUser: mockDeleteUser } },
+    from: mockServiceFrom,
+    auth: { admin: { updateUserById: mockUpdateUserById } },
   })),
 }));
 
@@ -35,118 +37,116 @@ function makeRequest(body?: Record<string, unknown>) {
   });
 }
 
-beforeEach(() => {
-  vi.clearAllMocks();
-});
+/** Returns a chainable mock for service client .from(table).delete().eq()/.update().eq() */
+function serviceChain(result: Record<string, unknown> = { error: null }) {
+  const chain: Record<string, any> = {};
+  for (const m of ["select", "delete", "update", "eq", "or", "single"]) {
+    chain[m] = vi.fn(() => chain);
+  }
+  chain.then = (resolve: any, reject: any) =>
+    Promise.resolve(result).then(resolve, reject);
+  return chain;
+}
 
-describe("DELETE /api/users/me", () => {
-  it("deletes account when username matches", async () => {
-    const client: Record<string, any> = {
-      auth: {
-        getUser: vi.fn().mockResolvedValue({
-          data: { user: { id: "user-1" } },
-          error: null,
-        }),
-      },
-      from: vi.fn().mockReturnValue({
-        select: vi.fn().mockReturnValue({
-          eq: vi.fn().mockReturnValue({
-            single: vi.fn().mockResolvedValue({
-              data: { username: "alice" },
-              error: null,
-            }),
+function mockAuthClient(userId: string | null, profileData?: Record<string, any>) {
+  const client: Record<string, any> = {
+    auth: {
+      getUser: vi.fn().mockResolvedValue({
+        data: { user: userId ? { id: userId } : null },
+        error: null,
+      }),
+    },
+    from: vi.fn().mockReturnValue({
+      select: vi.fn().mockReturnValue({
+        eq: vi.fn().mockReturnValue({
+          single: vi.fn().mockResolvedValue({
+            data: profileData ?? null,
+            error: profileData ? null : { code: "PGRST116" },
           }),
         }),
       }),
-    };
-    (createClient as any).mockResolvedValue(client);
-    mockDeleteUser.mockResolvedValue({ error: null });
+    }),
+  };
+  (createClient as any).mockResolvedValue(client);
+  return client;
+}
+
+beforeEach(() => {
+  vi.clearAllMocks();
+  mockServiceFrom.mockReturnValue(serviceChain());
+  mockUpdateUserById.mockResolvedValue({ error: null });
+});
+
+describe("DELETE /api/users/me", () => {
+  it("anonymizes account and bans auth user when username matches", async () => {
+    mockAuthClient("user-1", { username: "alice" });
 
     const res = await DELETE(makeRequest({ username: "alice" }));
     const json = await res.json();
 
     expect(res.status).toBe(200);
     expect(json.ok).toBe(true);
-    expect(mockDeleteUser).toHaveBeenCalledWith("user-1");
+
+    // Verify posts, follows, notifications, etc. were deleted
+    const deletedTables = mockServiceFrom.mock.calls.map((c: any[]) => c[0]);
+    expect(deletedTables).toContain("posts");
+    expect(deletedTables).toContain("follows");
+    expect(deletedTables).toContain("notifications");
+    expect(deletedTables).toContain("user_achievements");
+    expect(deletedTables).toContain("user_levels");
+    expect(deletedTables).toContain("device_usage");
+
+    // Verify daily_usage was NOT deleted
+    expect(deletedTables).not.toContain("daily_usage");
+    // Verify comments and kudos were NOT deleted
+    expect(deletedTables).not.toContain("comments");
+    expect(deletedTables).not.toContain("kudos");
+    expect(deletedTables).not.toContain("direct_messages");
+
+    // Verify profile was anonymized (users table updated, not deleted)
+    const usersCall = mockServiceFrom.mock.calls.find((c: any[]) => c[0] === "users");
+    expect(usersCall).toBeDefined();
+
+    // Verify auth user was banned, not deleted
+    expect(mockUpdateUserById).toHaveBeenCalledWith("user-1", {
+      ban_duration: "876600h",
+    });
   });
 
   it("rejects unauthenticated request", async () => {
-    const client: Record<string, any> = {
-      auth: {
-        getUser: vi.fn().mockResolvedValue({
-          data: { user: null },
-          error: null,
-        }),
-      },
-    };
-    (createClient as any).mockResolvedValue(client);
+    mockAuthClient(null);
 
     const res = await DELETE(makeRequest({ username: "alice" }));
     const json = await res.json();
 
     expect(res.status).toBe(401);
     expect(json.error).toBe("Unauthorized");
-    expect(mockDeleteUser).not.toHaveBeenCalled();
+    expect(mockServiceFrom).not.toHaveBeenCalled();
   });
 
   it("rejects when username does not match", async () => {
-    const client: Record<string, any> = {
-      auth: {
-        getUser: vi.fn().mockResolvedValue({
-          data: { user: { id: "user-1" } },
-          error: null,
-        }),
-      },
-      from: vi.fn().mockReturnValue({
-        select: vi.fn().mockReturnValue({
-          eq: vi.fn().mockReturnValue({
-            single: vi.fn().mockResolvedValue({
-              data: { username: "alice" },
-              error: null,
-            }),
-          }),
-        }),
-      }),
-    };
-    (createClient as any).mockResolvedValue(client);
+    mockAuthClient("user-1", { username: "alice" });
 
     const res = await DELETE(makeRequest({ username: "wrong_name" }));
     const json = await res.json();
 
     expect(res.status).toBe(400);
     expect(json.error).toBe("Username does not match");
-    expect(mockDeleteUser).not.toHaveBeenCalled();
+    expect(mockServiceFrom).not.toHaveBeenCalled();
   });
 
   it("rejects when username confirmation is missing", async () => {
-    const client: Record<string, any> = {
-      auth: {
-        getUser: vi.fn().mockResolvedValue({
-          data: { user: { id: "user-1" } },
-          error: null,
-        }),
-      },
-    };
-    (createClient as any).mockResolvedValue(client);
+    mockAuthClient("user-1");
 
     const res = await DELETE(makeRequest({}));
     const json = await res.json();
 
     expect(res.status).toBe(400);
     expect(json.error).toBe("Username confirmation is required");
-    expect(mockDeleteUser).not.toHaveBeenCalled();
   });
 
   it("rejects empty string username", async () => {
-    const client: Record<string, any> = {
-      auth: {
-        getUser: vi.fn().mockResolvedValue({
-          data: { user: { id: "user-1" } },
-          error: null,
-        }),
-      },
-    };
-    (createClient as any).mockResolvedValue(client);
+    mockAuthClient("user-1");
 
     const res = await DELETE(makeRequest({ username: "   " }));
     const json = await res.json();
@@ -155,45 +155,30 @@ describe("DELETE /api/users/me", () => {
     expect(json.error).toBe("Username confirmation is required");
   });
 
-  it("returns 500 when admin.deleteUser fails", async () => {
-    const client: Record<string, any> = {
-      auth: {
-        getUser: vi.fn().mockResolvedValue({
-          data: { user: { id: "user-1" } },
-          error: null,
-        }),
-      },
-      from: vi.fn().mockReturnValue({
-        select: vi.fn().mockReturnValue({
-          eq: vi.fn().mockReturnValue({
-            single: vi.fn().mockResolvedValue({
-              data: { username: "alice" },
-              error: null,
-            }),
-          }),
-        }),
-      }),
-    };
-    (createClient as any).mockResolvedValue(client);
-    mockDeleteUser.mockResolvedValue({ error: { message: "Internal error" } });
+  it("returns 500 when deletion fails", async () => {
+    mockAuthClient("user-1", { username: "alice" });
+    mockServiceFrom.mockReturnValue(serviceChain({ error: { message: "DB error" } }));
 
     const res = await DELETE(makeRequest({ username: "alice" }));
     const json = await res.json();
 
     expect(res.status).toBe(500);
-    expect(json.error).toBe("Failed to delete account");
+    expect(json.error).toBe("Failed to delete account data");
+  });
+
+  it("returns 500 when ban fails", async () => {
+    mockAuthClient("user-1", { username: "alice" });
+    mockUpdateUserById.mockResolvedValue({ error: { message: "Auth error" } });
+
+    const res = await DELETE(makeRequest({ username: "alice" }));
+    const json = await res.json();
+
+    expect(res.status).toBe(500);
+    expect(json.error).toBe("Failed to disable account");
   });
 
   it("handles malformed JSON body gracefully", async () => {
-    const client: Record<string, any> = {
-      auth: {
-        getUser: vi.fn().mockResolvedValue({
-          data: { user: { id: "user-1" } },
-          error: null,
-        }),
-      },
-    };
-    (createClient as any).mockResolvedValue(client);
+    mockAuthClient("user-1");
 
     const req = new NextRequest(new URL("http://localhost/api/users/me"), {
       method: "DELETE",

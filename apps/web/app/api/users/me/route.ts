@@ -207,12 +207,68 @@ export async function DELETE(request: NextRequest) {
     );
   }
 
-  const admin = getServiceClient();
-  const { error } = await admin.auth.admin.deleteUser(user.id);
+  // Instead of admin.deleteUser() (which cascades and destroys other users'
+  // data), we selectively delete owned content and anonymize the profile.
+  // This preserves: daily_usage (north star metric), the user's comments on
+  // other posts, their kudos, and DM history for the other party.
+  const db = getServiceClient();
 
-  if (error) {
+  // 1. Delete owned content and relationships
+  const deletions = [
+    db.from("posts").delete().eq("user_id", user.id),
+    db.from("follows").delete().or(`follower_id.eq.${user.id},following_id.eq.${user.id}`),
+    db.from("notifications").delete().or(`user_id.eq.${user.id},actor_id.eq.${user.id}`),
+    db.from("user_achievements").delete().eq("user_id", user.id),
+    db.from("user_levels").delete().eq("user_id", user.id),
+    db.from("device_usage").delete().eq("user_id", user.id),
+    db.from("prompt_submissions").delete().eq("user_id", user.id),
+    db.from("cli_auth_codes").delete().eq("user_id", user.id),
+  ];
+
+  const results = await Promise.all(deletions);
+  const deletionError = results.find((r) => r.error);
+  if (deletionError?.error) {
     return NextResponse.json(
-      { error: "Failed to delete account" },
+      { error: "Failed to delete account data" },
+      { status: 500 },
+    );
+  }
+
+  // 2. Anonymize the profile (keep row for FK integrity with daily_usage, comments, DMs)
+  const { error: updateError } = await db
+    .from("users")
+    .update({
+      username: `deleted_${user.id.slice(0, 8)}`,
+      display_name: null,
+      bio: null,
+      avatar_url: null,
+      country: null,
+      region: null,
+      link: null,
+      github_username: null,
+      heard_about: null,
+      is_public: false,
+      email_notifications: false,
+      email_mention_notifications: false,
+      email_dm_notifications: false,
+    })
+    .eq("id", user.id);
+
+  if (updateError) {
+    return NextResponse.json(
+      { error: "Failed to anonymize account" },
+      { status: 500 },
+    );
+  }
+
+  // 3. Ban the auth user so they cannot sign in again
+  const { error: banError } = await db.auth.admin.updateUserById(user.id, {
+    ban_duration: "876600h",
+  });
+
+  if (banError) {
+    return NextResponse.json(
+      { error: "Failed to disable account" },
       { status: 500 },
     );
   }
