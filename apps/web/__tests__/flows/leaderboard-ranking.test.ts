@@ -52,11 +52,10 @@ function chainBuilder(resolvedData: Record<string, unknown> = { data: [], error:
   return chain;
 }
 
-function makeRequest(url: string, init?: RequestInit) {
-  const parsedUrl = new URL(url, "http://localhost:3000");
-  const req = new Request(parsedUrl, init);
-  (req as any).nextUrl = parsedUrl;
-  return req;
+import { NextRequest } from "next/server";
+
+function makeRequest(url: string) {
+  return new NextRequest(new URL(url, "http://localhost:3000"));
 }
 
 // ---------------------------------------------------------------------------
@@ -92,7 +91,7 @@ describe("Flow: Leaderboard Ranking", () => {
 
     const { GET } = await import("@/app/api/leaderboard/route");
     const req = makeRequest("http://localhost:3000/api/leaderboard?period=week");
-    const res = await GET(req as Request & { nextUrl: URL });
+    const res = await GET(req);
     const data = await res.json();
 
     expect(res.status).toBe(200);
@@ -125,7 +124,7 @@ describe("Flow: Leaderboard Ranking", () => {
 
     const { GET } = await import("@/app/api/leaderboard/route");
     const req = makeRequest("http://localhost:3000/api/leaderboard?period=week&region=north_america");
-    const res = await GET(req as Request & { nextUrl: URL });
+    const res = await GET(req);
     const data = await res.json();
 
     expect(res.status).toBe(200);
@@ -157,7 +156,7 @@ describe("Flow: Leaderboard Ranking", () => {
       mockSupabase.from.mockImplementation(() => lbChain);
 
       const req = makeRequest(`http://localhost:3000/api/leaderboard?period=${period}`);
-      await GET(req as Request & { nextUrl: URL });
+      await GET(req);
 
       expect(mockSupabase.from).toHaveBeenCalledWith(view);
     }
@@ -170,7 +169,7 @@ describe("Flow: Leaderboard Ranking", () => {
 
     const { GET } = await import("@/app/api/leaderboard/route");
     const req = makeRequest("http://localhost:3000/api/leaderboard?period=invalid");
-    const res = await GET(req as Request & { nextUrl: URL });
+    const res = await GET(req);
 
     expect(res.status).toBe(400);
   });
@@ -211,7 +210,7 @@ describe("Flow: Leaderboard Ranking", () => {
 
     const { GET } = await import("@/app/api/leaderboard/route");
     const req = makeRequest("http://localhost:3000/api/leaderboard?period=week");
-    const res = await GET(req as Request & { nextUrl: URL });
+    const res = await GET(req);
     const data = await res.json();
 
     expect(res.status).toBe(200);

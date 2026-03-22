@@ -1,5 +1,7 @@
 import { describe, expect, it } from "vitest";
 import type { ReactElement } from "react";
+
+type SatoriNode = ReactElement<{ children?: React.ReactNode; style?: React.CSSProperties }>;
 import { ProfileShareCardImage } from "@/lib/share-assets/profile-card-image";
 import type { ProfileShareCardData } from "@/lib/share-assets/profile-card-data";
 
@@ -19,7 +21,7 @@ const SAMPLE_DATA: ProfileShareCardData = {
   ],
 };
 
-function assertSatoriDisplayFlex(node: ReactElement, path = "root"): void {
+function assertSatoriDisplayFlex(node: SatoriNode, path = "root"): void {
   if (!node || typeof node !== "object") return;
 
   const { type, props } = node;
@@ -47,8 +49,8 @@ function assertSatoriDisplayFlex(node: ReactElement, path = "root"): void {
     children.forEach((child: unknown, index: number) => {
       if (child && typeof child === "object" && "type" in (child as object)) {
         assertSatoriDisplayFlex(
-          child as ReactElement,
-          `${path} > ${String((child as ReactElement).type)}[${index}]`
+          child as SatoriNode,
+          `${path} > ${String((child as SatoriNode).type)}[${index}]`
         );
       }
     });
@@ -58,6 +60,6 @@ function assertSatoriDisplayFlex(node: ReactElement, path = "root"): void {
 describe("ProfileShareCardImage Satori compatibility", () => {
   it("all multi-child divs use flex layout", () => {
     const element = ProfileShareCardImage({ data: SAMPLE_DATA });
-    assertSatoriDisplayFlex(element as ReactElement);
+    assertSatoriDisplayFlex(element as SatoriNode);
   });
 });

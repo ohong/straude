@@ -25,8 +25,10 @@ import {
 import { createClient } from "@/lib/supabase/server";
 import { NextRequest } from "next/server";
 
-function makeContext(key: string, value: string) {
-  return { params: Promise.resolve({ [key]: value }) };
+type RouteContext<K extends string = string> = { params: Promise<Record<K, string>> };
+
+function makeContext<K extends string>(key: K, value: string): RouteContext<K> {
+  return { params: Promise.resolve({ [key]: value } as Record<K, string>) };
 }
 
 function makeRequest(

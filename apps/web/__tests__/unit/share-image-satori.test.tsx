@@ -1,5 +1,7 @@
 import { describe, it, expect } from "vitest";
 import type { ReactElement } from "react";
+
+type SatoriNode = ReactElement<{ children?: React.ReactNode; style?: React.CSSProperties }>;
 import { ShareCardImage } from "@/lib/utils/share-image";
 
 const SAMPLE_POST = {
@@ -15,7 +17,7 @@ const SAMPLE_POST = {
   is_verified: true,
 };
 
-function assertSatoriDisplayFlex(node: ReactElement, path = "root"): void {
+function assertSatoriDisplayFlex(node: SatoriNode, path = "root"): void {
   if (!node || typeof node !== "object") return;
 
   const { type, props } = node;
@@ -43,8 +45,8 @@ function assertSatoriDisplayFlex(node: ReactElement, path = "root"): void {
     children.forEach((child: unknown, index: number) => {
       if (child && typeof child === "object" && "type" in (child as object)) {
         assertSatoriDisplayFlex(
-          child as ReactElement,
-          `${path} > ${String((child as ReactElement).type)}[${index}]`
+          child as SatoriNode,
+          `${path} > ${String((child as SatoriNode).type)}[${index}]`
         );
       }
     });
@@ -58,6 +60,6 @@ describe("ShareCardImage Satori compatibility", () => {
       themeId: "accent",
     });
 
-    assertSatoriDisplayFlex(element as ReactElement);
+    assertSatoriDisplayFlex(element as SatoriNode);
   });
 });

@@ -174,6 +174,52 @@ export async function PATCH(request: NextRequest) {
   return NextResponse.json(profile);
 }
 
+export async function DELETE(request: NextRequest) {
+  const supabase = await createClient();
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
+
+  if (!user) {
+    return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  }
+
+  const body = await request.json().catch(() => ({}));
+  const confirmUsername = typeof body.username === "string" ? body.username.trim() : "";
+
+  if (!confirmUsername) {
+    return NextResponse.json(
+      { error: "Username confirmation is required" },
+      { status: 400 },
+    );
+  }
+
+  const { data: profile } = await supabase
+    .from("users")
+    .select("username")
+    .eq("id", user.id)
+    .single();
+
+  if (!profile || profile.username !== confirmUsername) {
+    return NextResponse.json(
+      { error: "Username does not match" },
+      { status: 400 },
+    );
+  }
+
+  const admin = getServiceClient();
+  const { error } = await admin.auth.admin.deleteUser(user.id);
+
+  if (error) {
+    return NextResponse.json(
+      { error: "Failed to delete account" },
+      { status: 500 },
+    );
+  }
+
+  return NextResponse.json({ ok: true });
+}
+
 async function autoFollowTopUsers(userId: string) {
   const db = getServiceClient();
   const { data: topUsers } = await db

@@ -1,6 +1,7 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
+import { createPortal } from "react-dom";
 import { useRouter } from "next/navigation";
 import { createClient } from "@/lib/supabase/client";
 import Link from "next/link";
@@ -33,6 +34,11 @@ export default function SettingsPage() {
   const [timezone, setTimezone] = useState("");
   const [crewCount, setCrewCount] = useState(0);
   const [refCopied, setRefCopied] = useState(false);
+  const [deleteOpen, setDeleteOpen] = useState(false);
+  const [deleteConfirm, setDeleteConfirm] = useState("");
+  const [deleting, setDeleting] = useState(false);
+  const [deleteError, setDeleteError] = useState<string | null>(null);
+  const deleteInputRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
     async function load() {
@@ -404,7 +410,175 @@ export default function SettingsPage() {
             </button>
           </div>
         </div>
+
+        {/* ── Delete Account ── */}
+        <fieldset className="mt-12 space-y-4">
+          <legend className="text-2xl font-semibold text-error">Delete account</legend>
+          <hr className="border-error/30" />
+
+          <p className="text-sm">
+            Once you delete your account, all of your data&mdash;usage logs, posts, comments, and profile&mdash;will be permanently removed. This cannot be undone.
+          </p>
+
+          <button
+            type="button"
+            onClick={() => {
+              setDeleteConfirm("");
+              setDeleteError(null);
+              setDeleteOpen(true);
+            }}
+            className="rounded-[4px] border border-error/30 px-5 py-2.5 text-sm font-semibold text-error transition-colors hover:bg-error/10"
+          >
+            Delete your account
+          </button>
+        </fieldset>
       </form>
+
+      {deleteOpen &&
+        createPortal(
+          <DeleteAccountDialog
+            username={username}
+            confirmValue={deleteConfirm}
+            onConfirmChange={setDeleteConfirm}
+            deleting={deleting}
+            error={deleteError}
+            inputRef={deleteInputRef}
+            onClose={() => setDeleteOpen(false)}
+            onDelete={async () => {
+              setDeleting(true);
+              setDeleteError(null);
+
+              const res = await fetch("/api/users/me", {
+                method: "DELETE",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({ username }),
+              });
+
+              if (!res.ok) {
+                const data = await res.json().catch(() => ({}));
+                setDeleteError(data.error ?? "Failed to delete account");
+                setDeleting(false);
+                return;
+              }
+
+              const supabase = createClient();
+              await supabase.auth.signOut();
+              router.push("/");
+            }}
+          />,
+          document.body,
+        )}
     </>
+  );
+}
+
+function DeleteAccountDialog({
+  username,
+  confirmValue,
+  onConfirmChange,
+  deleting,
+  error,
+  inputRef,
+  onClose,
+  onDelete,
+}: {
+  username: string;
+  confirmValue: string;
+  onConfirmChange: (value: string) => void;
+  deleting: boolean;
+  error: string | null;
+  inputRef: React.RefObject<HTMLInputElement | null>;
+  onClose: () => void;
+  onDelete: () => void;
+}) {
+  const confirmSentence = `I, ${username}, wish to delete my Straude account. I understand this cannot be undone.`;
+  const canDelete = confirmValue === confirmSentence && username.length > 0;
+
+  useEffect(() => {
+    const originalOverflow = document.body.style.overflow;
+    document.body.style.overflow = "hidden";
+    inputRef.current?.focus();
+    return () => {
+      document.body.style.overflow = originalOverflow;
+    };
+  }, [inputRef]);
+
+  useEffect(() => {
+    function handleKeyDown(event: KeyboardEvent) {
+      if (event.key === "Escape" && !deleting) {
+        onClose();
+      }
+    }
+    document.addEventListener("keydown", handleKeyDown);
+    return () => document.removeEventListener("keydown", handleKeyDown);
+  }, [onClose, deleting]);
+
+  return (
+    <div
+      className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4"
+      onClick={(event) => {
+        if (event.target === event.currentTarget && !deleting) onClose();
+      }}
+    >
+      <div
+        role="alertdialog"
+        aria-modal="true"
+        aria-labelledby="delete-account-title"
+        aria-describedby="delete-account-desc"
+        className="w-full max-w-md rounded-[8px] border border-border bg-background shadow-xl"
+      >
+        <div className="border-b border-border px-5 py-4">
+          <h2 id="delete-account-title" className="text-lg font-semibold text-error">
+            Are you sure you want to do this?
+          </h2>
+        </div>
+
+        <div className="space-y-4 px-5 py-5">
+          <p id="delete-account-desc" className="text-sm text-muted">
+            This will permanently delete your account and all associated data including usage logs, posts, comments, followers, and your profile. <strong className="text-foreground">This action cannot be undone.</strong>
+          </p>
+
+          <div>
+            <label htmlFor="delete-confirm-input" className="mb-1.5 block text-sm">
+              To confirm, type the following statement below:
+            </label>
+            <p className="mb-2 select-all rounded border border-border bg-subtle px-3 py-2 font-[family-name:var(--font-mono)] text-xs text-foreground">
+              {confirmSentence}
+            </p>
+            <Input
+              ref={inputRef}
+              id="delete-confirm-input"
+              value={confirmValue}
+              onChange={(e) => onConfirmChange(e.target.value)}
+              placeholder="Type the sentence above to confirm"
+              autoComplete="off"
+              spellCheck={false}
+              disabled={deleting}
+            />
+          </div>
+
+          {error && <p className="text-sm text-error">{error}</p>}
+        </div>
+
+        <div className="flex items-center justify-end gap-3 border-t border-border px-5 py-4">
+          <button
+            type="button"
+            onClick={onClose}
+            disabled={deleting}
+            className="rounded-[4px] border border-border px-4 py-2 text-sm font-semibold transition-colors hover:bg-subtle disabled:opacity-50"
+          >
+            Cancel
+          </button>
+          <button
+            type="button"
+            onClick={onDelete}
+            disabled={!canDelete || deleting}
+            className="rounded-[4px] bg-error px-4 py-2 text-sm font-semibold text-white transition-[filter,opacity] hover:brightness-110 disabled:cursor-not-allowed disabled:opacity-50"
+          >
+            {deleting ? "Deleting\u2026" : "Delete this account"}
+          </button>
+        </div>
+      </div>
+    </div>
   );
 }

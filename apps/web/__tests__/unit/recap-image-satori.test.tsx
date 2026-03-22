@@ -3,6 +3,8 @@ import { RecapCardImage } from "@/lib/utils/recap-image";
 import type { RecapData } from "@/lib/utils/recap";
 import type { ReactElement } from "react";
 
+type SatoriNode = ReactElement<{ children?: React.ReactNode; style?: React.CSSProperties }>;
+
 const SAMPLE_DATA: RecapData = {
   total_cost: 47.87,
   output_tokens: 42300,
@@ -24,7 +26,7 @@ const SAMPLE_DATA: RecapData = {
  * This is a hard Satori requirement — violating it crashes ImageResponse.
  */
 function assertSatoriDisplayFlex(
-  node: ReactElement,
+  node: SatoriNode,
   path = "root"
 ): void {
   if (!node || typeof node !== "object") return;
@@ -66,7 +68,7 @@ describe("RecapCardImage Satori compatibility", () => {
       format: "square",
       backgroundCss: "linear-gradient(135deg, #E8B68A 0%, #D4764E 50%, #F5CBA7 100%)",
     });
-    assertSatoriDisplayFlex(element as ReactElement);
+    assertSatoriDisplayFlex(element as SatoriNode);
   });
 
   it("landscape format: all multi-child divs have display flex", () => {
@@ -75,7 +77,7 @@ describe("RecapCardImage Satori compatibility", () => {
       format: "landscape",
       backgroundCss: "linear-gradient(135deg, #FDB99B 0%, #F6D365 50%, #FCE38A 100%)",
     });
-    assertSatoriDisplayFlex(element as ReactElement);
+    assertSatoriDisplayFlex(element as SatoriNode);
   });
 
   it("square format without background: all multi-child divs have display flex", () => {
@@ -83,6 +85,6 @@ describe("RecapCardImage Satori compatibility", () => {
       data: SAMPLE_DATA,
       format: "square",
     });
-    assertSatoriDisplayFlex(element as ReactElement);
+    assertSatoriDisplayFlex(element as SatoriNode);
   });
 });

@@ -4,6 +4,8 @@
 
 ### Added
 
+- **Account deletion.** Users can delete their account from the settings page. Prominent red "Delete account" section with a GitHub-style confirmation dialog — users must type the full sentence "I, {username}, wish to delete my Straude account. I understand this cannot be undone." before the delete button activates. Cascades to all user data. Requested by @isalafont.
+
 - **The Prometheus List (`/token-rich`).** New public page showcasing 43 verified companies with unlimited or very high AI token budgets. Dramatic Prometheus-themed hero with classical oil painting, sortable/filterable table (location, stage, policy), full source quotes with links, country flags, and mobile card layout. Data lives in a `token_rich_companies` Supabase table so the list can be updated without deploying code. First 20 companies visible to all visitors; sign-in required to see the full list (gradient fadeout gate). Page revalidates every 5 minutes via ISR with static fallback.
 - **"Add a Company" form.** Authenticated users can submit company suggestions via a modal form. Submissions include company name, URL, policy description, and source link. Rate-limited to 5/day per user. Backed by a `company_suggestions` Supabase table with RLS.
 - **Company suggestions admin inbox.** Admin dashboard includes CompanySuggestionsInbox with status filtering (New/Accepted/Rejected/Published), status changes, and hide/unhide actions.
@@ -16,6 +18,7 @@
 
 ### Fixed
 
+- **Test suite TypeScript errors.** Fixed all pre-existing TS errors across 8 test files: `RouteContext` type mismatches in social tests, `NextRequest` casting in leaderboard tests, `ReactElement` prop typing in satori tests, missing `Twitter.card` type in metadata tests, missing required fields in type tests, and added ambient declarations for `heic2any` and `@fal-ai/client`.
 - **Security advisor remediation.** Applied migration to fix all SQL-level security issues flagged by Supabase Security Advisor: recreated `leaderboard_daily` view with `security_invoker = true` (was `SECURITY DEFINER`), pinned `SET search_path = 'public'` on 4 functions (`search_companies_fuzzy`, `increment_streak_freezes`, `calculate_user_streak`, `calculate_streaks_batch`), added explicit deny-all RLS policy on `email_suppressions`, and added authenticated SELECT policy on `user_levels`.
 
 ### Added

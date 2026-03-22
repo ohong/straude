@@ -17,7 +17,7 @@ describe("route metadata", () => {
     expect(getFirstImageUrl(feedMetadata.openGraph?.images as any)).toBe(
       "/og-image.png?v=2"
     );
-    expect(feedMetadata.twitter?.card).toBe("summary_large_image");
+    expect((feedMetadata.twitter as Record<string, unknown>)?.card).toBe("summary_large_image");
     expect(getFirstImageUrl(feedMetadata.twitter?.images as any)).toBe(
       "/og-image.png?v=2"
     );
@@ -31,7 +31,7 @@ describe("route metadata", () => {
     expect(getFirstImageUrl(leaderboardMetadata.openGraph?.images as any)).toBe(
       "/og-image.png?v=2"
     );
-    expect(leaderboardMetadata.twitter?.card).toBe("summary_large_image");
+    expect((leaderboardMetadata.twitter as Record<string, unknown>)?.card).toBe("summary_large_image");
     expect(getFirstImageUrl(leaderboardMetadata.twitter?.images as any)).toBe(
       "/og-image.png?v=2"
     );
