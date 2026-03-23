@@ -74,13 +74,17 @@ export async function loginCommand(apiUrlOverride?: string): Promise<void> {
       process.stdout.write(" done\n\n");
 
       const existing = loadConfig();
+      const sameIdentity =
+        existing != null &&
+        existing.api_url === apiUrl &&
+        existing.username === (pollRes.username ?? "");
       saveConfig({
         token: pollRes.token,
         username: pollRes.username ?? "",
         api_url: apiUrl,
-        last_push_date: existing?.last_push_date,
-        device_id: existing?.device_id,
-        device_name: existing?.device_name,
+        last_push_date: sameIdentity ? existing.last_push_date : undefined,
+        device_id: sameIdentity ? existing.device_id : undefined,
+        device_name: sameIdentity ? existing.device_name : undefined,
       });
 
       const displayName = pollRes.username ? `@${pollRes.username}` : "successfully";
