@@ -5,6 +5,7 @@ vi.mock("../../src/lib/api.js", () => ({
 }));
 
 vi.mock("../../src/lib/auth.js", () => ({
+  loadConfig: vi.fn(() => null),
   saveConfig: vi.fn(),
 }));
 
@@ -23,9 +24,10 @@ vi.mock("node:child_process", () => ({
 
 import { loginCommand } from "../../src/commands/login.js";
 import { apiRequestNoAuth } from "../../src/lib/api.js";
-import { saveConfig } from "../../src/lib/auth.js";
+import { loadConfig, saveConfig } from "../../src/lib/auth.js";
 
 const mockApiRequestNoAuth = vi.mocked(apiRequestNoAuth);
+const mockLoadConfig = vi.mocked(loadConfig);
 const mockSaveConfig = vi.mocked(saveConfig);
 
 class ExitError extends Error {
@@ -68,6 +70,9 @@ describe("loginCommand", () => {
       token: "tok-123",
       username: "alice",
       api_url: "https://straude.com",
+      last_push_date: undefined,
+      device_id: undefined,
+      device_name: undefined,
     });
   });
 
@@ -108,5 +113,89 @@ describe("loginCommand", () => {
     await expect(loginCommand("https://straude.com")).rejects.toThrow(ExitError);
 
     expect(process.exit).toHaveBeenCalledWith(1);
+  });
+
+  it("preserves config fields when re-logging into the same account", async () => {
+    mockLoadConfig.mockReturnValueOnce({
+      token: "old-tok",
+      username: "alice",
+      api_url: "https://straude.com",
+      last_push_date: "2026-03-20",
+      device_id: "dev-123",
+      device_name: "my-laptop",
+    });
+    mockApiRequestNoAuth
+      .mockResolvedValueOnce({
+        code: "ABCD-EFGH",
+        verify_url: "https://straude.com/cli/verify?code=ABCD-EFGH",
+      })
+      .mockResolvedValueOnce({ status: "completed", token: "new-tok", username: "alice" });
+
+    await loginCommand("https://straude.com");
+
+    expect(mockSaveConfig).toHaveBeenCalledWith({
+      token: "new-tok",
+      username: "alice",
+      api_url: "https://straude.com",
+      last_push_date: "2026-03-20",
+      device_id: "dev-123",
+      device_name: "my-laptop",
+    });
+  });
+
+  it("drops config fields when logging into a different account", async () => {
+    mockLoadConfig.mockReturnValueOnce({
+      token: "old-tok",
+      username: "alice",
+      api_url: "https://straude.com",
+      last_push_date: "2026-03-20",
+      device_id: "dev-123",
+      device_name: "my-laptop",
+    });
+    mockApiRequestNoAuth
+      .mockResolvedValueOnce({
+        code: "ABCD-EFGH",
+        verify_url: "https://straude.com/cli/verify?code=ABCD-EFGH",
+      })
+      .mockResolvedValueOnce({ status: "completed", token: "new-tok", username: "bob" });
+
+    await loginCommand("https://straude.com");
+
+    expect(mockSaveConfig).toHaveBeenCalledWith({
+      token: "new-tok",
+      username: "bob",
+      api_url: "https://straude.com",
+      last_push_date: undefined,
+      device_id: undefined,
+      device_name: undefined,
+    });
+  });
+
+  it("drops config fields when logging into a different server", async () => {
+    mockLoadConfig.mockReturnValueOnce({
+      token: "old-tok",
+      username: "alice",
+      api_url: "https://straude.com",
+      last_push_date: "2026-03-20",
+      device_id: "dev-123",
+      device_name: "my-laptop",
+    });
+    mockApiRequestNoAuth
+      .mockResolvedValueOnce({
+        code: "ABCD-EFGH",
+        verify_url: "https://other.com/cli/verify?code=ABCD-EFGH",
+      })
+      .mockResolvedValueOnce({ status: "completed", token: "new-tok", username: "alice" });
+
+    await loginCommand("https://other.com");
+
+    expect(mockSaveConfig).toHaveBeenCalledWith({
+      token: "new-tok",
+      username: "alice",
+      api_url: "https://other.com",
+      last_push_date: undefined,
+      device_id: undefined,
+      device_name: undefined,
+    });
   });
 });
