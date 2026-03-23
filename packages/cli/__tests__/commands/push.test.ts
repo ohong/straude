@@ -95,9 +95,15 @@ describe("pushCommand", () => {
       ],
     });
 
+    // Dashboard call will fail in test (not mocked) — triggers fallback
     await pushCommand({ dryRun: true });
 
-    expect(mockApiRequest).not.toHaveBeenCalled();
+    // Dry run fetches dashboard for full history, but skips submit
+    expect(mockApiRequest).toHaveBeenCalledTimes(1);
+    expect(mockApiRequest).toHaveBeenCalledWith(
+      expect.anything(),
+      "/api/cli/dashboard",
+    );
     expect(console.log).toHaveBeenCalledWith(
       expect.stringContaining("dry run"),
     );

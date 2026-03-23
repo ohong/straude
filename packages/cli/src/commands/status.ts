@@ -1,51 +1,38 @@
 import { requireAuth } from "../lib/auth.js";
 import { apiRequest } from "../lib/api.js";
-
-interface StatusResponse {
-  username: string;
-  streak: number;
-  week_cost: number;
-  week_tokens: number;
-  global_rank: number | null;
-  last_push_date: string | null;
-}
-
-function formatTokens(n: number): string {
-  if (n >= 1_000_000) return `${(n / 1_000_000).toFixed(1)}M`;
-  if (n >= 1_000) return `${Math.round(n / 1_000)}k`;
-  return String(n);
-}
-
-function formatCost(n: number): string {
-  return `$${n.toFixed(2)}`;
-}
-
-function formatLastPush(dateStr: string | null): string {
-  if (!dateStr) return "never";
-  const today = new Date();
-  const todayStr = `${today.getFullYear()}-${String(today.getMonth() + 1).padStart(2, "0")}-${String(today.getDate()).padStart(2, "0")}`;
-  if (dateStr === todayStr) return `${dateStr} (today)`;
-  return dateStr;
-}
+import type { DashboardData } from "../components/PushSummary.js";
 
 export async function statusCommand(): Promise<void> {
   const config = requireAuth();
 
-  let status: StatusResponse;
+  let dashboard: DashboardData;
   try {
-    status = await apiRequest<StatusResponse>(config, "/api/users/me/status");
+    dashboard = await apiRequest<DashboardData>(config, "/api/cli/dashboard");
   } catch (err) {
     console.error(`Failed to fetch status: ${(err as Error).message}`);
     process.exit(1);
   }
 
-  console.log(`@${status.username}`);
-  console.log(`  Streak: ${status.streak} day${status.streak !== 1 ? "s" : ""}`);
-  console.log(
-    `  This week: ${formatCost(status.week_cost)} · ${formatTokens(status.week_tokens)} tokens`,
-  );
-  if (status.global_rank !== null) {
-    console.log(`  Global rank: #${status.global_rank}`);
+  try {
+    const { render } = await import("ink");
+    const { createElement } = await import("react");
+    const { PushSummary } = await import("../components/PushSummary.js");
+
+    const shareUrl = config.username
+      ? new URL(`/consistency/${config.username}`, config.api_url).toString()
+      : undefined;
+
+    const { waitUntilExit } = render(
+      createElement(PushSummary, { dashboard, shareUrl }),
+    );
+    await waitUntilExit();
+  } catch (err) {
+    // Fallback: plain text if Ink fails
+    console.log(`@${dashboard.username}`);
+    console.log(`  Streak: ${dashboard.streak} day${dashboard.streak !== 1 ? "s" : ""}`);
+    console.log(`  This week: $${dashboard.week_cost.toFixed(2)}`);
+    if (dashboard.leaderboard) {
+      console.log(`  Global rank: #${dashboard.leaderboard.rank}`);
+    }
   }
-  console.log(`\nLast push: ${formatLastPush(status.last_push_date)}`);
 }

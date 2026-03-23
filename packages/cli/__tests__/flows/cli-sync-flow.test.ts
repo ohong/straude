@@ -144,6 +144,7 @@ function mockCcusageOnly(json: string) {
 }
 
 function mockSuccessfulSubmit(dates: string[]) {
+  // 1st fetch: POST /api/usage/submit
   mockFetch.mockResolvedValueOnce({
     ok: true,
     json: () =>
@@ -156,6 +157,8 @@ function mockSuccessfulSubmit(dates: string[]) {
         })),
       }),
   });
+  // 2nd fetch: GET /api/cli/dashboard (visual summary — fail triggers fallback)
+  mockFetch.mockRejectedValueOnce(new Error("dashboard not mocked"));
 }
 
 // ---------------------------------------------------------------------------
@@ -216,8 +219,8 @@ describe("sync flow", () => {
 
     await pushCommand({}, "https://straude.com");
 
-    // Login was called (init + poll = 2 fetches), then push (submit = 1 fetch)
-    expect(mockFetch).toHaveBeenCalledTimes(3);
+    // Login was called (init + poll = 2 fetches), then push (submit + dashboard = 2 fetches)
+    expect(mockFetch).toHaveBeenCalledTimes(4);
     // Config was saved with token
     const saved = readPersistedConfig();
     expect(saved.token).toBe("tok-new");
@@ -232,7 +235,7 @@ describe("sync flow", () => {
 
     await pushCommand({});
 
-    expect(mockFetch).toHaveBeenCalledTimes(1);
+    expect(mockFetch).toHaveBeenCalledTimes(2);
     const saved = readPersistedConfig();
     expect(saved.last_push_date).toBe(today);
   });
@@ -246,7 +249,7 @@ describe("sync flow", () => {
     await pushCommand({});
 
     // Re-syncs today's data (1 API call)
-    expect(mockFetch).toHaveBeenCalledTimes(1);
+    expect(mockFetch).toHaveBeenCalledTimes(2);
     // 2 calls: ccusage daily + codex attempt (no more --version probe)
     expect(mockExecFileSync).toHaveBeenCalledTimes(2);
     const saved = readPersistedConfig();
@@ -265,7 +268,7 @@ describe("sync flow", () => {
 
     // 2 calls: ccusage daily + codex attempt (no more --version probe)
     expect(mockExecFileSync).toHaveBeenCalledTimes(2);
-    expect(mockFetch).toHaveBeenCalledTimes(1);
+    expect(mockFetch).toHaveBeenCalledTimes(2);
 
     const saved = readPersistedConfig();
     expect(saved.last_push_date).toBe(todayStr());
@@ -339,7 +342,7 @@ describe("Codex integration", () => {
     await pushCommand({});
 
     // Verify the API call was made
-    expect(mockFetch).toHaveBeenCalledTimes(1);
+    expect(mockFetch).toHaveBeenCalledTimes(2);
     const [, options] = mockFetch.mock.calls[0]!;
     const body = JSON.parse(options.body);
 
@@ -394,7 +397,7 @@ describe("Codex integration", () => {
 
     await pushCommand({});
 
-    expect(mockFetch).toHaveBeenCalledTimes(1);
+    expect(mockFetch).toHaveBeenCalledTimes(2);
     const [, options] = mockFetch.mock.calls[0]!;
     const body = JSON.parse(options.body);
     const data = body.entries[0].data;
@@ -404,18 +407,17 @@ describe("Codex integration", () => {
     expect(data.modelBreakdown).toEqual([{ model: "gpt-5-codex", cost_usd: 3.0 }]);
   });
 
-  it("dry-run shows merged Codex models in summary", async () => {
+  it("dry-run fetches dashboard but skips submit", async () => {
     seedConfig();
     const today = todayStr();
     mockBothSources(ccusageJson([today]), codexJson([today]));
 
     await pushCommand({ dryRun: true });
 
-    expect(mockFetch).not.toHaveBeenCalled();
-    // Should print model names in summary
-    expect(console.log).toHaveBeenCalledWith(
-      expect.stringContaining("gpt-5-codex"),
-    );
+    // Dry run calls dashboard API for full history, but no submit
+    expect(mockFetch).toHaveBeenCalledTimes(1);
+    const [url] = mockFetch.mock.calls[0]!;
+    expect(url).toContain("/api/cli/dashboard");
     expect(console.log).toHaveBeenCalledWith(
       expect.stringContaining("dry run"),
     );
@@ -430,7 +432,7 @@ describe("Codex integration", () => {
 
     await pushCommand({});
 
-    expect(mockFetch).toHaveBeenCalledTimes(1);
+    expect(mockFetch).toHaveBeenCalledTimes(2);
     const [, options] = mockFetch.mock.calls[0]!;
     const body = JSON.parse(options.body);
     const data = body.entries[0].data;
@@ -461,7 +463,7 @@ describe("Codex integration", () => {
 
     await pushCommand({});
 
-    expect(mockFetch).toHaveBeenCalledTimes(1);
+    expect(mockFetch).toHaveBeenCalledTimes(2);
     expect(console.log).toHaveBeenCalledWith(
       "No Claude Code data found locally; syncing Codex usage only.",
     );

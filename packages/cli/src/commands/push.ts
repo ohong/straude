@@ -8,6 +8,7 @@ import { runCcusageRawAsync, parseCcusageOutput } from "../lib/ccusage.js";
 import type { CcusageDailyEntry, ModelBreakdownEntry } from "../lib/ccusage.js";
 import { runCodexRawAsync, parseCodexOutput } from "../lib/codex.js";
 import { MAX_BACKFILL_DAYS } from "../config.js";
+import type { DashboardData as DashboardResponse } from "../components/PushSummary.js";
 
 interface UsageSubmitRequest {
   entries: Array<{
@@ -292,17 +293,29 @@ export async function pushCommand(options: PushOptions, apiUrlOverride?: string)
     return;
   }
 
-  // Print summary for each day
-  for (const entry of entries) {
-    console.log(`  ${entry.date}:`);
-    console.log(`    Cost: ${formatCost(entry.costUSD)}`);
-    console.log(
-      `    Tokens: ${formatTokens(entry.totalTokens)} (input: ${formatTokens(entry.inputTokens)}, output: ${formatTokens(entry.outputTokens)})`,
-    );
-    console.log(`    Models: ${entry.models.join(", ")}`);
-  }
-
   if (options.dryRun) {
+    // Dry run: fetch full dashboard from API (skip submit only)
+    try {
+      const dashboard = await apiRequest<DashboardResponse>(config, "/api/cli/dashboard");
+      const { render } = await import("ink");
+      const { createElement } = await import("react");
+      const { PushSummary } = await import("../components/PushSummary.js");
+
+      const { waitUntilExit } = render(
+        createElement(PushSummary, { dashboard }),
+      );
+      await waitUntilExit();
+    } catch {
+      // Fallback: plain text if API or Ink fails
+      for (const entry of entries) {
+        console.log(`  ${entry.date}:`);
+        console.log(`    Cost: ${formatCost(entry.costUSD)}`);
+        console.log(
+          `    Tokens: ${formatTokens(entry.totalTokens)} (input: ${formatTokens(entry.inputTokens)}, output: ${formatTokens(entry.outputTokens)})`,
+        );
+        console.log(`    Models: ${entry.models.join(", ")}`);
+      }
+    }
     console.log("\n(dry run — nothing submitted)");
     return;
   }
@@ -340,17 +353,34 @@ export async function pushCommand(options: PushOptions, apiUrlOverride?: string)
   );
   updateLastPushDate(latestDate);
 
-  console.log("");
-  for (const result of response.results) {
-    const verb = result.action === "updated" ? "Updated" : "Posted";
-    console.log(`${verb} ${result.date}: ${result.post_url}?edit=1`);
-  }
+  // Render visual dashboard
+  const shareUrl = config.username
+    ? new URL(`/consistency/${config.username}`, config.api_url).toString()
+    : undefined;
 
-  if (config.username) {
-    const profileShareUrl = new URL(
-      `/consistency/${config.username}`,
-      config.api_url,
-    ).toString();
-    console.log(`Share your consistency card: ${profileShareUrl}`);
+  try {
+    const dashboard = await apiRequest<DashboardResponse>(config, "/api/cli/dashboard");
+    const { render } = await import("ink");
+    const { createElement } = await import("react");
+    const { PushSummary } = await import("../components/PushSummary.js");
+
+    const { waitUntilExit } = render(
+      createElement(PushSummary, {
+        dashboard,
+        results: response.results,
+        shareUrl,
+      }),
+    );
+    await waitUntilExit();
+  } catch {
+    // Fallback: if dashboard fetch or Ink render fails, show plain text
+    console.log("");
+    for (const result of response.results) {
+      const verb = result.action === "updated" ? "Updated" : "Posted";
+      console.log(`${verb} ${result.date}: ${result.post_url}?edit=1`);
+    }
+    if (shareUrl) {
+      console.log(`Share your consistency card: ${shareUrl}`);
+    }
   }
 }

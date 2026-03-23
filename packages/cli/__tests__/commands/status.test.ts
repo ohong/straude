@@ -8,6 +8,14 @@ vi.mock("../../src/lib/api.js", () => ({
   apiRequest: vi.fn(),
 }));
 
+// Mock Ink's render to capture what gets rendered without terminal output
+vi.mock("ink", () => ({
+  render: vi.fn(() => ({
+    waitUntilExit: () => Promise.resolve(),
+    unmount: vi.fn(),
+  })),
+}));
+
 import { statusCommand } from "../../src/commands/status.js";
 import { requireAuth } from "../../src/lib/auth.js";
 import { apiRequest } from "../../src/lib/api.js";
@@ -40,24 +48,20 @@ afterEach(() => {
 });
 
 describe("statusCommand", () => {
-  it("fetches and prints status", async () => {
+  it("fetches dashboard and renders", async () => {
     mockApiRequest.mockResolvedValue({
       username: "alice",
+      level: 3,
       streak: 5,
+      daily: [{ date: "2026-03-13", cost_usd: 12.5 }],
       week_cost: 12.5,
-      week_tokens: 1_500_000,
-      global_rank: 42,
-      last_push_date: "2026-02-15",
+      prev_week_cost: 8.0,
+      leaderboard: { rank: 42, above: [], below: [] },
     });
 
     await statusCommand();
 
-    expect(mockApiRequest).toHaveBeenCalledWith(fakeConfig, "/api/users/me/status");
-    expect(console.log).toHaveBeenCalledWith("@alice");
-    expect(console.log).toHaveBeenCalledWith(expect.stringContaining("5 days"));
-    expect(console.log).toHaveBeenCalledWith(expect.stringContaining("$12.50"));
-    expect(console.log).toHaveBeenCalledWith(expect.stringContaining("1.5M"));
-    expect(console.log).toHaveBeenCalledWith(expect.stringContaining("#42"));
+    expect(mockApiRequest).toHaveBeenCalledWith(fakeConfig, "/api/cli/dashboard");
   });
 
   it("handles API failure", async () => {
@@ -67,27 +71,28 @@ describe("statusCommand", () => {
     expect(process.exit).toHaveBeenCalledWith(1);
   });
 
-  it("formats tokens and cost correctly", async () => {
+  it("falls back to plain text when Ink render fails", async () => {
     mockApiRequest.mockResolvedValue({
       username: "bob",
+      level: null,
       streak: 1,
+      daily: [],
       week_cost: 0.5,
-      week_tokens: 500,
-      global_rank: null,
-      last_push_date: null,
+      prev_week_cost: 0,
+      leaderboard: null,
+    });
+
+    // Make Ink render throw
+    const { render } = await import("ink");
+    vi.mocked(render).mockImplementationOnce(() => {
+      throw new Error("Ink render failed");
     });
 
     await statusCommand();
 
+    // Falls back to console.log
+    expect(console.log).toHaveBeenCalledWith("@bob");
     expect(console.log).toHaveBeenCalledWith(expect.stringContaining("1 day"));
     expect(console.log).toHaveBeenCalledWith(expect.stringContaining("$0.50"));
-    expect(console.log).toHaveBeenCalledWith(expect.stringContaining("500 tokens"));
-    // global_rank is null — should not print rank
-    const logCalls = (console.log as ReturnType<typeof vi.fn>).mock.calls;
-    const rankCalls = logCalls.filter(([msg]: [unknown]) =>
-      typeof msg === "string" && msg.includes("rank"),
-    );
-    expect(rankCalls).toHaveLength(0);
-    expect(console.log).toHaveBeenCalledWith(expect.stringContaining("never"));
   });
 });

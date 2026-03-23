@@ -3,7 +3,7 @@ import { createClient } from "@/lib/supabase/server";
 
 export async function GET(request: Request) {
   const { searchParams, origin: requestOrigin } = new URL(request.url);
-  const origin = process.env.PORTLESS_URL ?? requestOrigin;
+  const origin = requestOrigin;
   const code = searchParams.get("code");
   const rawNext = searchParams.get("next") ?? "/feed";
   // Prevent open redirect: only allow relative paths starting with /
