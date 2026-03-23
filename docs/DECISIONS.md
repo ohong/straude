@@ -1,5 +1,35 @@
 # Architecture & Design Decisions
 
+## Auto-Push: Two Mechanisms (2026-03-23)
+
+**Decision:** Offer two auto-push mechanisms — OS scheduler (default) and Claude Code hooks (opt-in). Users choose via `straude --auto` (scheduler) or `straude --auto hooks`.
+
+**Why two mechanisms:**
+- **OS scheduler** (launchd/cron) is the default because it's universal (works for Claude Code and Codex users), survives reboots, and fires even on days the user doesn't code. Downside: writes outside `~/.straude/` and relies on captured PATH.
+- **Claude Code hooks** (`SessionEnd`) are lighter-weight — just a JSON entry in `~/.claude/settings.json`, no background process, no system files. Fires at the natural moment (when coding ends). Available via `straude --auto hooks` for users who prefer minimal system footprint.
+
+**Codex hooks deferred:** Codex v0.114.0 shipped hooks but only has `Stop` (per-turn), not a session-end event. Using `Stop` would fire after every model response (dozens per session), which is noisy and wasteful. We'll add Codex hook support once they ship their equivalent of `SessionEnd`.
+
+**Alternatives rejected:**
+1. **In-process daemon** (like nightshift) — dies when terminal closes. Unreliable for daily push.
+2. **Opportunistic staleness check** — only fires when user runs CLI, which is the exact problem we're solving.
+3. **Hooks-only (no scheduler)** — would leave Codex-only users without auto-push.
+
+**Wrapper script design:** The OS scheduler points at `~/.straude/auto-push.sh` which captures `$PATH` at enable-time and falls back through `straude` → `bunx` → `npx`.
+
+## CLI Visual Redesign with Ink (2026-03-22)
+
+**Decision:** Adopt Ink (React for CLI) to render a visual post-push dashboard with bar charts, heatmap, streak flame, and leaderboard snippet. First production dependencies added to the previously zero-dep CLI.
+
+**Alternatives considered:**
+1. **chalk + raw console.log** — lower dependency footprint but manual layout math, no flexbox, harder to compose complex multi-section output.
+2. **SVG/PNG generation (like slopmeter)** — produces shareable images but requires opening a file; doesn't render in-terminal for instant gratification.
+3. **Ink (chosen)** — React component model with flexbox layout via Yoga, semantic color via chalk, component composition for maintainability. Used by Claude Code, GitHub Copilot CLI, Cloudflare Wrangler. One-shot `render()` for static output, with graceful fallback to plain text if Ink fails.
+
+**Color system:** Semantic tokens (`theme.ts`) rather than hardcoded hex values, so output degrades gracefully across terminal emulators. Brand orange `#DF561F` for accent/highlights, warm heatmap gradient (ember → fire → bright fire).
+
+**API design:** Single `/api/cli/dashboard` endpoint returns all dashboard data in one round-trip (28 days of usage, streak, level, week-over-week delta, leaderboard neighbors). Avoids N+1 API calls from the CLI.
+
 ## The Prometheus List: Static Data with Supabase Migration Path (2026-03-20)
 
 **Decision:** Company data for The Prometheus List starts as a static TypeScript array (`apps/web/data/token-rich.ts`) rather than a Supabase table. User submissions land in a separate `company_suggestions` table for admin triage.

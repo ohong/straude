@@ -4,6 +4,12 @@
 
 ### Added
 
+- **Auto-push (`--auto`).** Users can opt into automatic usage syncs. Two mechanisms: OS scheduler (default, `straude --auto`) installs launchd/cron to push daily at a configurable time; Claude Code hooks (`straude --auto hooks`) adds a `SessionEnd` hook to `~/.claude/settings.json` to push after every session. Disable either with `straude --no-auto`. Check status with `straude auto`. Codex hook support deferred until Codex ships a session-end event.
+
+- **Visual CLI dashboard with Ink.** The post-push summary is now a rich terminal UI built with Ink (React for CLI). Features a 7-day cost bar chart with accent-colored bars and dim track, a 28-day activity heatmap with quartile-based color intensity, a streak flame counter with warm gradient, and a leaderboard snippet showing your rank with 2 neighbors above and below. Uses a semantic color token system (brand orange, warm heatmap palette) that degrades gracefully across terminals. Falls back to plain text if rendering fails.
+- **`GET /api/cli/dashboard` endpoint.** New authenticated API endpoint returning all data needed for the CLI visual dashboard in a single round-trip: 28 days of daily cost, streak, level, week-over-week comparison, and leaderboard neighbors.
+- **CLI `status` command now renders the visual dashboard.** Previously called a nonexistent `/api/users/me/status` endpoint (404). Now uses `/api/cli/dashboard` and renders the same Ink-based visual summary.
+
 - **Account deletion.** Users can delete their account from the settings page. Prominent red "Delete account" section with a GitHub-style confirmation dialog — users must type the full sentence "I, {username}, wish to delete my Straude account. I understand this cannot be undone." before the delete button activates. Cascades to all user data. Requested by @isalafont.
 
 - **The Prometheus List (`/token-rich`).** New public page showcasing 43 verified companies with unlimited or very high AI token budgets. Dramatic Prometheus-themed hero with classical oil painting, sortable/filterable table (location, stage, policy), full source quotes with links, country flags, and mobile card layout. Data lives in a `token_rich_companies` Supabase table so the list can be updated without deploying code. First 20 companies visible to all visitors; sign-in required to see the full list (gradient fadeout gate). Page revalidates every 5 minutes via ISR with static fallback.

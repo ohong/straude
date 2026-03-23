@@ -36,12 +36,6 @@ Requires: new server-side call in the leaderboard API route, caching strategy (r
 
 ## Activation
 
-### Auto-Push Daemon / Post-Session Hook
-
-The biggest activation blocker: users install the CLI but never run `straude push` again. Replace the manual push with a background daemon or a Claude Code post-session hook that auto-syncs after every session. Users who don't push can't activate, can't retain. This is the single highest-leverage feature.
-
-Requires: investigate Claude Code hook system or a lightweight background process, opt-in config in `straude init`, graceful conflict handling with manual pushes.
-
 ### Ship Week Countdown Banner
 
 Show "4 days left — 3/5 synced" banner for users in their first week. The Ship Week achievement is live but the countdown UI is deferred. Creates urgency in the critical first 7 days.
@@ -139,6 +133,10 @@ Requires:
 ---
 
 ## Shipped
+
+### Auto-Push via OS Scheduler (2026-03-22)
+
+`straude --auto` installs a daily OS scheduler (launchd on macOS, cron on Linux) to run `straude push` at 21:00 by default. Custom time via `--time HH:MM`. Disable with `--no-auto`. Status/logs via `straude auto` subcommand. Wrapper script captures PATH at enable-time and falls back through `straude` → `bunx` → `npx`.
 
 ### Create Post Hub Page (2026-02-18)
 

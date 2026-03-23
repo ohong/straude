@@ -1,6 +1,13 @@
 import { readFileSync, writeFileSync, mkdirSync, existsSync } from "node:fs";
 import { CONFIG_DIR, CONFIG_FILE, DEFAULT_API_URL } from "../config.js";
 
+export interface AutoPushConfig {
+  enabled: boolean;
+  time: string; // "HH:MM"
+  scheduler: "launchd" | "cron";
+  mechanism?: "scheduler" | "hooks"; // defaults to "scheduler" for existing configs
+}
+
 export interface StraudeConfig {
   token: string;
   username: string;
@@ -8,6 +15,7 @@ export interface StraudeConfig {
   last_push_date?: string;
   device_id?: string;
   device_name?: string;
+  auto_push?: AutoPushConfig;
 }
 
 export function loadConfig(): StraudeConfig | null {
@@ -23,6 +31,7 @@ export function loadConfig(): StraudeConfig | null {
       last_push_date: parsed.last_push_date ?? undefined,
       device_id: parsed.device_id ?? undefined,
       device_name: parsed.device_name ?? undefined,
+      auto_push: parsed.auto_push ?? undefined,
     };
   } catch {
     return null;
