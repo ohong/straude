@@ -5,6 +5,7 @@ vi.mock("../../src/lib/api.js", () => ({
 }));
 
 vi.mock("../../src/lib/auth.js", () => ({
+  loadConfig: vi.fn(() => null),
   saveConfig: vi.fn(),
 }));
 
@@ -68,6 +69,9 @@ describe("loginCommand", () => {
       token: "tok-123",
       username: "alice",
       api_url: "https://straude.com",
+      last_push_date: undefined,
+      device_id: undefined,
+      device_name: undefined,
     });
   });
 
