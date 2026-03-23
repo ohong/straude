@@ -1,5 +1,17 @@
 # Architecture & Design Decisions
 
+## CLI Scorecard Compaction: Remove Heatmap, Inline Streak (2026-03-23)
+
+**Decision:** Removed the 28-day heatmap and standalone streak flame from the post-push scorecard. Streak is inlined into the header line. Added model breakdown palette and percentile context line instead.
+
+**Why:** The scorecard's primary job shifted from "dashboard" to "shareable artifact." At ~31 lines, it was too tall to screenshot. The heatmap added 9 lines for information already partially conveyed by the 7-day bar chart. The model palette and percentile provide more shareable, differentiating content — users want to show *what* they're using and *where they rank*, not a 4-week calendar.
+
+**Alternatives considered:**
+1. **Keep heatmap, shrink everything** — couldn't get below ~25 lines without making each element too small to read.
+2. **Toggleable modes (`--compact` / `--full`)** — adds complexity; better to pick one good default.
+
+**Heatmap preserved:** Component file (`Heatmap.tsx`) stays in the codebase for potential future `straude heatmap` command or web use.
+
 ## Auto-Push: Two Mechanisms (2026-03-23)
 
 **Decision:** Offer two auto-push mechanisms — OS scheduler (default) and Claude Code hooks (opt-in). Users choose via `straude --auto` (scheduler) or `straude --auto hooks`.

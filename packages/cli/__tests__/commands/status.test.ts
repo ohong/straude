@@ -56,7 +56,9 @@ describe("statusCommand", () => {
       daily: [{ date: "2026-03-13", cost_usd: 12.5 }],
       week_cost: 12.5,
       prev_week_cost: 8.0,
-      leaderboard: { rank: 42, above: [], below: [] },
+      leaderboard: { rank: 42, total_users: 63, above: [], below: [] },
+      model_breakdown: [{ model: "claude-opus-4-20250505", cost_usd: 12.5 }],
+      total_output_tokens: 5_000_000,
     });
 
     await statusCommand();
@@ -80,6 +82,8 @@ describe("statusCommand", () => {
       week_cost: 0.5,
       prev_week_cost: 0,
       leaderboard: null,
+      model_breakdown: [],
+      total_output_tokens: 0,
     });
 
     // Make Ink render throw

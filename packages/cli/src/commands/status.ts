@@ -18,12 +18,8 @@ export async function statusCommand(): Promise<void> {
     const { createElement } = await import("react");
     const { PushSummary } = await import("../components/PushSummary.js");
 
-    const shareUrl = config.username
-      ? new URL(`/consistency/${config.username}`, config.api_url).toString()
-      : undefined;
-
     const { waitUntilExit } = render(
-      createElement(PushSummary, { dashboard, shareUrl }),
+      createElement(PushSummary, { dashboard }),
     );
     await waitUntilExit();
   } catch (err) {

@@ -2,8 +2,7 @@ import React from 'react';
 import { Box, Text } from 'ink';
 import { theme } from './theme.js';
 import { BarChart } from './BarChart.js';
-import { Heatmap } from './Heatmap.js';
-import { StreakFlame } from './StreakFlame.js';
+import { ModelPalette } from './ModelPalette.js';
 import { LeaderboardSnippet } from './LeaderboardSnippet.js';
 
 export interface DashboardData {
@@ -15,9 +14,15 @@ export interface DashboardData {
   prev_week_cost: number;
   leaderboard: {
     rank: number;
+    total_users: number;
     above: Array<{ username: string; cost: number; rank: number }>;
     below: Array<{ username: string; cost: number; rank: number }>;
   } | null;
+  model_breakdown?: Array<{
+    model: string;
+    cost_usd: number;
+  }>;
+  total_output_tokens?: number;
 }
 
 export interface PostResult {
@@ -29,68 +34,85 @@ export interface PostResult {
 export interface PushSummaryProps {
   dashboard: DashboardData;
   results?: PostResult[];
-  shareUrl?: string;
 }
 
-export function PushSummary({ dashboard, results, shareUrl }: PushSummaryProps) {
+function formatTokens(n: number): string {
+  if (n >= 1_000_000_000) return `${(n / 1_000_000_000).toFixed(1)}B`;
+  if (n >= 1_000_000) return `${(n / 1_000_000).toFixed(1)}M`;
+  if (n >= 1_000) return `${(n / 1_000).toFixed(1)}k`;
+  return String(n);
+}
+
+export function PushSummary({ dashboard, results }: PushSummaryProps) {
   // Last 7 days for bar chart
   const last7 = dashboard.daily.slice(-7);
 
-  // Level display
-  const levelStr = dashboard.level != null ? ` · Lv ${dashboard.level}` : '';
+  // Percentile from leaderboard
+  const percentile = dashboard.leaderboard && dashboard.leaderboard.total_users > 0
+    ? Math.max(1, Math.round((dashboard.leaderboard.rank / dashboard.leaderboard.total_users) * 100))
+    : null;
+
+  // Latest post URL for the footer link
+  const latestResult = results && results.length > 0 ? results[results.length - 1] : null;
 
   return (
     <Box flexDirection="column" paddingX={1} paddingY={1}>
-      {/* Header */}
+      {/* Header: straude · @username · Lv N · 🔥 Xd · 42.3M tokens */}
       <Box>
         <Text color={theme.accent} bold>straude</Text>
         <Text color={theme.muted}> · </Text>
         <Text color={theme.bright} bold>@{dashboard.username}</Text>
-        <Text color={theme.muted}>{levelStr}</Text>
+        {dashboard.level != null && (
+          <Text color={theme.muted}> · Lv {dashboard.level}</Text>
+        )}
+        {dashboard.streak > 0 && (
+          <>
+            <Text color={theme.muted}> · </Text>
+            <Text>🔥 </Text>
+            <Text color={theme.accent} bold>{dashboard.streak}d</Text>
+          </>
+        )}
+        {dashboard.total_output_tokens != null && dashboard.total_output_tokens > 0 && (
+          <>
+            <Text color={theme.muted}> · </Text>
+            <Text color={theme.text}>{formatTokens(dashboard.total_output_tokens)} tokens</Text>
+          </>
+        )}
       </Box>
 
-      {/* Bar chart */}
+      {/* Bar chart with percentile context */}
       <Box marginTop={1}>
         <BarChart
           data={last7}
           weekTotal={dashboard.week_cost}
           prevWeekTotal={dashboard.prev_week_cost}
+          percentile={percentile}
         />
       </Box>
 
-      {/* Heatmap + Streak side by side */}
-      <Box marginTop={1} flexDirection="row">
-        <Box flexDirection="column">
-          <Heatmap data={dashboard.daily} />
+      {/* Model palette */}
+      {dashboard.model_breakdown && dashboard.model_breakdown.length > 0 && (
+        <Box marginTop={1}>
+          <ModelPalette breakdown={dashboard.model_breakdown} />
         </Box>
-        <Box flexDirection="column" marginLeft={4}>
-          <StreakFlame streak={dashboard.streak} />
+      )}
+
+      {/* Leaderboard (compact: 1 above, you, 1 below) */}
+      {dashboard.leaderboard && (
+        <Box marginTop={1}>
+          <LeaderboardSnippet
+            leaderboard={dashboard.leaderboard}
+            username={dashboard.username}
+            userCost={dashboard.week_cost}
+          />
         </Box>
-      </Box>
+      )}
 
-      {/* Leaderboard */}
-      <Box marginTop={1}>
-        <LeaderboardSnippet
-          leaderboard={dashboard.leaderboard}
-          username={dashboard.username}
-          userCost={dashboard.week_cost}
-        />
-      </Box>
-
-      {/* Posted URLs */}
-      {results && results.length > 0 && (
-        <Box marginTop={1} flexDirection="column">
-          {results.map((r) => {
-            const verb = r.action === 'updated' ? 'Updated' : 'Posted';
-            return (
-              <Text key={r.date} color={theme.positive}>
-                {'✓ '}{verb} {r.date}
-              </Text>
-            );
-          })}
-          {shareUrl && (
-            <Text color={theme.muted}>→ {shareUrl}</Text>
-          )}
+      {/* Compact footer: link to latest post */}
+      {latestResult && (
+        <Box marginTop={1}>
+          <Text color={theme.positive}>✓ </Text>
+          <Text color={theme.muted}>{latestResult.post_url}</Text>
         </Box>
       )}
     </Box>

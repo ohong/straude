@@ -354,10 +354,6 @@ export async function pushCommand(options: PushOptions, apiUrlOverride?: string)
   updateLastPushDate(latestDate);
 
   // Render visual dashboard
-  const shareUrl = config.username
-    ? new URL(`/consistency/${config.username}`, config.api_url).toString()
-    : undefined;
-
   try {
     const dashboard = await apiRequest<DashboardResponse>(config, "/api/cli/dashboard");
     const { render } = await import("ink");
@@ -368,7 +364,6 @@ export async function pushCommand(options: PushOptions, apiUrlOverride?: string)
       createElement(PushSummary, {
         dashboard,
         results: response.results,
-        shareUrl,
       }),
     );
     await waitUntilExit();
@@ -378,9 +373,6 @@ export async function pushCommand(options: PushOptions, apiUrlOverride?: string)
     for (const result of response.results) {
       const verb = result.action === "updated" ? "Updated" : "Posted";
       console.log(`${verb} ${result.date}: ${result.post_url}?edit=1`);
-    }
-    if (shareUrl) {
-      console.log(`Share your consistency card: ${shareUrl}`);
     }
   }
 }

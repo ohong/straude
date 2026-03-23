@@ -35,17 +35,28 @@ export async function GET(request: Request) {
   startDate.setDate(startDate.getDate() - 27); // 28 days including today
   const startStr = startDate.toISOString().split("T")[0];
 
-  const { data: usage } = await db
-    .from("daily_usage")
-    .select("date, cost_usd")
-    .eq("user_id", userId)
-    .gte("date", startStr)
-    .order("date", { ascending: true });
+  const [{ data: usage }, { data: lifetimeTokenRows }] = await Promise.all([
+    db
+      .from("daily_usage")
+      .select("date, cost_usd")
+      .eq("user_id", userId)
+      .gte("date", startStr)
+      .order("date", { ascending: true }),
+    db
+      .from("daily_usage")
+      .select("output_tokens")
+      .eq("user_id", userId),
+  ]);
 
   const daily = (usage ?? []).map((d) => ({
     date: d.date as string,
     cost_usd: Number(d.cost_usd),
   }));
+
+  const total_output_tokens = (lifetimeTokenRows ?? []).reduce(
+    (sum, row) => sum + Number(row.output_tokens),
+    0,
+  );
 
   // 3. Week costs: compute from daily array
   const todayStr = today.toISOString().split("T")[0];
@@ -55,6 +66,26 @@ export async function GET(request: Request) {
   const d14 = new Date(today);
   d14.setDate(d14.getDate() - 13);
   const d14Str = d14.toISOString().split("T")[0];
+
+  // 3b. Model breakdown (last 7 days aggregate)
+  const { data: breakdownRows } = await db
+    .from("daily_usage")
+    .select("model_breakdown")
+    .eq("user_id", userId)
+    .gte("date", d7Str)
+    .not("model_breakdown", "is", null);
+
+  const modelAgg = new Map<string, number>();
+  for (const row of breakdownRows ?? []) {
+    const entries = row.model_breakdown as Array<{ model: string; cost_usd: number }> | null;
+    if (!entries) continue;
+    for (const entry of entries) {
+      modelAgg.set(entry.model, (modelAgg.get(entry.model) ?? 0) + entry.cost_usd);
+    }
+  }
+  const model_breakdown = [...modelAgg.entries()]
+    .sort((a, b) => b[1] - a[1])
+    .map(([model, cost_usd]) => ({ model, cost_usd }));
 
   let week_cost = 0;
   let prev_week_cost = 0;
@@ -76,6 +107,7 @@ export async function GET(request: Request) {
   // 5. Leaderboard neighbors
   let leaderboard: {
     rank: number;
+    total_users: number;
     above: Array<{ username: string; cost: number; rank: number }>;
     below: Array<{ username: string; cost: number; rank: number }>;
   } | null = null;
@@ -89,13 +121,19 @@ export async function GET(request: Request) {
   if (userEntry) {
     const userCost = Number(userEntry.total_cost);
 
-    // Count users with higher cost to determine rank
-    const { count } = await db
-      .from("leaderboard_weekly")
-      .select("*", { count: "exact", head: true })
-      .gt("total_cost", userCost);
+    // Count users with higher cost to determine rank + total users for percentile
+    const [{ count }, { count: totalCount }] = await Promise.all([
+      db
+        .from("leaderboard_weekly")
+        .select("*", { count: "exact", head: true })
+        .gt("total_cost", userCost),
+      db
+        .from("leaderboard_weekly")
+        .select("*", { count: "exact", head: true }),
+    ]);
 
     const rank = (count ?? 0) + 1;
+    const totalUsers = totalCount ?? 0;
 
     // 2 rows with cost just above (closest higher costs)
     const { data: aboveRows } = await db
@@ -135,7 +173,7 @@ export async function GET(request: Request) {
       rank: rank + (i + 1),
     }));
 
-    leaderboard = { rank, above, below };
+    leaderboard = { rank, total_users: totalUsers, above, below };
   }
 
   return NextResponse.json({
@@ -146,5 +184,7 @@ export async function GET(request: Request) {
     week_cost,
     prev_week_cost,
     leaderboard,
+    model_breakdown,
+    total_output_tokens,
   });
 }

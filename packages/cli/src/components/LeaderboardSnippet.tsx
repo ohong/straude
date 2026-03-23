@@ -55,12 +55,7 @@ export function LeaderboardSnippet({
   userCost,
 }: LeaderboardSnippetProps) {
   if (!leaderboard) {
-    return (
-      <Box flexDirection="column">
-        <Text color={theme.muted}>{'WEEKLY LEADERBOARD'}</Text>
-        <Text color={theme.muted}>{'Not ranked this week'}</Text>
-      </Box>
-    );
+    return null;
   }
 
   const currentUser: LeaderboardEntry = {
@@ -69,14 +64,17 @@ export function LeaderboardSnippet({
     rank: leaderboard.rank,
   };
 
+  // Compact: show only 1 user above + current + 1 user below
+  const above = leaderboard.above.slice(-1);
+  const below = leaderboard.below.slice(0, 1);
+
   return (
     <Box flexDirection="column">
-      <Text color={theme.muted}>{'WEEKLY LEADERBOARD'}</Text>
-      {leaderboard.above.map((entry) => (
+      {above.map((entry) => (
         <LeaderboardRow key={entry.rank} entry={entry} isCurrent={false} />
       ))}
       <LeaderboardRow entry={currentUser} isCurrent={true} />
-      {leaderboard.below.map((entry) => (
+      {below.map((entry) => (
         <LeaderboardRow key={entry.rank} entry={entry} isCurrent={false} />
       ))}
     </Box>
