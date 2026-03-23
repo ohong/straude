@@ -1,6 +1,6 @@
 import { exec } from "node:child_process";
 import { CONFIG_FILE, DEFAULT_API_URL, POLL_INTERVAL_MS, POLL_TIMEOUT_MS } from "../config.js";
-import { saveConfig } from "../lib/auth.js";
+import { loadConfig, saveConfig } from "../lib/auth.js";
 import { apiRequestNoAuth } from "../lib/api.js";
 
 interface CliInitResponse {
@@ -73,10 +73,14 @@ export async function loginCommand(apiUrlOverride?: string): Promise<void> {
     if (pollRes.status === "completed" && pollRes.token) {
       process.stdout.write(" done\n\n");
 
+      const existing = loadConfig();
       saveConfig({
         token: pollRes.token,
         username: pollRes.username ?? "",
         api_url: apiUrl,
+        last_push_date: existing?.last_push_date,
+        device_id: existing?.device_id,
+        device_name: existing?.device_name,
       });
 
       const displayName = pollRes.username ? `@${pollRes.username}` : "successfully";
