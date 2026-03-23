@@ -32,6 +32,7 @@ export async function GET(request: NextRequest) {
     )
     .eq("is_public", true)
     .eq("is_hidden", false)
+    .not("status", "in", "(shipped,rejected)")
     .order("created_at", { ascending: false })
     .range(offset, offset + limit - 1);
 

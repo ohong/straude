@@ -29,6 +29,7 @@ export default async function PromptsPage() {
     )
     .eq("is_public", true)
     .eq("is_hidden", false)
+    .not("status", "in", "(shipped,rejected)")
     .order("created_at", { ascending: false })
     .limit(100);
 
