@@ -63,10 +63,11 @@ describe("installClaudeCodeHook", () => {
 
     const settings = readSettings();
     const hooks = settings.hooks as Record<string, unknown>;
-    const sessionEnd = hooks.SessionEnd as Array<{ hooks: Array<{ type: string; command: string }> }>;
+    const sessionEnd = hooks.SessionEnd as Array<{ hooks: Array<{ type: string; command: string; async?: boolean }> }>;
     expect(sessionEnd).toHaveLength(1);
     expect(sessionEnd[0]!.hooks[0]!.type).toBe("command");
     expect(sessionEnd[0]!.hooks[0]!.command).toBe("straude push");
+    expect(sessionEnd[0]!.hooks[0]!.async).toBe(true);
   });
 
   it("preserves existing hooks on other events", () => {

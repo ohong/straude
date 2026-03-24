@@ -10,6 +10,7 @@ interface HookEntry {
   type: string;
   command: string;
   timeout?: number;
+  async?: boolean;
 }
 
 interface HookGroup {
@@ -69,6 +70,7 @@ export function installClaudeCodeHook(): void {
         type: "command",
         command: STRAUDE_HOOK_COMMAND,
         timeout: 120,
+        async: true,
       },
     ],
   });
