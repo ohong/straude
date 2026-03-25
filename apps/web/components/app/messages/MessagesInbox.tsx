@@ -448,7 +448,10 @@ export function MessagesInbox({
           </button>
 
           {counterpart ? (
-            <div className="flex min-w-0 items-center gap-3">
+            <Link
+              href={`/u/${encodeURIComponent(counterpart.username ?? "")}`}
+              className="flex min-w-0 items-center gap-3 hover:opacity-80"
+            >
               <Avatar
                 src={counterpart.avatar_url}
                 alt={counterpart.username ?? ""}
@@ -465,7 +468,7 @@ export function MessagesInbox({
                   </p>
                 )}
               </div>
-            </div>
+            </Link>
           ) : (
             <div>
               <p className="text-sm font-semibold text-balance">Direct messages</p>

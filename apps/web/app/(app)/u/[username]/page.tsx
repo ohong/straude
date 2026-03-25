@@ -147,8 +147,9 @@ export default async function ProfilePage({
       : Promise.resolve({ data: null }),
     db
       .from("users")
-      .select("id", { count: "exact", head: true })
-      .eq("referred_by", profile.id),
+      .select("username, display_name, avatar_url")
+      .eq("referred_by", profile.id)
+      .order("created_at", { ascending: true }),
   ]);
   const totalSpend = totalSpendRows?.reduce((s, r) => s + Number(r.cost_usd), 0) ?? 0;
   const lifetimeOutputTokens = totalSpendRows?.reduce((s, r) => s + Number(r.output_tokens), 0) ?? 0;
@@ -362,15 +363,23 @@ export default async function ProfilePage({
 
         {/* Stats row */}
         <div className="mt-6 grid grid-cols-3 gap-4 sm:grid-cols-4">
-          <div>
-            <p className="text-[0.7rem] uppercase tracking-widest text-muted">Level</p>
-            <p className="font-[family-name:var(--font-mono)] text-lg font-medium tabular-nums text-accent">
-              {levelRow?.level ? `L${Number(levelRow.level)}` : "L0"}
-            </p>
-            <p className="text-xs text-muted">
-              {levelRow?.level ? "Your 30-day heat check" : "Just getting started"}
-            </p>
-          </div>
+          {levelRow?.level ? (
+            <LevelDialogTrigger level={Number(levelRow.level)} className="cursor-pointer text-left hover:opacity-80">
+              <p className="text-[0.7rem] uppercase tracking-widest text-muted">Level</p>
+              <p className="font-[family-name:var(--font-mono)] text-lg font-medium tabular-nums text-accent">
+                L{Number(levelRow.level)}
+              </p>
+              <p className="text-xs text-muted">Your 30-day heat check</p>
+            </LevelDialogTrigger>
+          ) : (
+            <div>
+              <p className="text-[0.7rem] uppercase tracking-widest text-muted">Level</p>
+              <p className="font-[family-name:var(--font-mono)] text-lg font-medium tabular-nums text-accent">
+                L0
+              </p>
+              <p className="text-xs text-muted">Just getting started</p>
+            </div>
+          )}
           <div>
             <p className="text-[0.7rem] uppercase tracking-widest text-muted">Streak</p>
             <p className="inline-flex items-center gap-1 font-[family-name:var(--font-mono)] text-lg font-medium tabular-nums">

@@ -6,7 +6,7 @@ const PUBLIC_USER_FIELDS = "id, username, display_name, bio, avatar_url, is_publ
 
 /** Strip characters that could break PostgREST filter syntax */
 function sanitizeFilter(s: string): string {
-  return s.replace(/[,()\\]/g, "");
+  return s.replace(/[,()\\@]/g, "");
 }
 
 export async function GET(request: NextRequest) {

@@ -10,7 +10,8 @@ import { Input } from "@/components/ui/Input";
 import { Textarea } from "@/components/ui/Textarea";
 import { Button } from "@/components/ui/Button";
 import { Avatar } from "@/components/ui/Avatar";
-import { LogOut, Copy, Check } from "lucide-react";
+import { LogOut, Copy, Check, Camera, Loader2 } from "lucide-react";
+import { compressImage } from "@/lib/utils/compress-image";
 import { CountryPicker } from "@/components/ui/CountryPicker";
 
 export default function SettingsPage() {
@@ -34,6 +35,8 @@ export default function SettingsPage() {
   const [timezone, setTimezone] = useState("");
   const [crewCount, setCrewCount] = useState(0);
   const [refCopied, setRefCopied] = useState(false);
+  const [avatarUploading, setAvatarUploading] = useState(false);
+  const avatarInputRef = useRef<HTMLInputElement>(null);
   const [deleteOpen, setDeleteOpen] = useState(false);
   const [deleteConfirm, setDeleteConfirm] = useState("");
   const [deleting, setDeleting] = useState(false);
@@ -79,6 +82,50 @@ export default function SettingsPage() {
     }
     load();
   }, []);
+
+  async function handleAvatarUpload(e: React.ChangeEvent<HTMLInputElement>) {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    if (avatarInputRef.current) avatarInputRef.current.value = "";
+
+    setAvatarUploading(true);
+    setError(null);
+
+    try {
+      const compressed = await compressImage(file);
+      const form = new FormData();
+      form.append("file", compressed);
+
+      const uploadRes = await fetch("/api/upload?bucket=post-images", {
+        method: "POST",
+        body: form,
+      });
+
+      if (!uploadRes.ok) {
+        const data = await uploadRes.json().catch(() => ({}));
+        throw new Error(data.error ?? "Upload failed");
+      }
+
+      const { url } = await uploadRes.json();
+
+      const patchRes = await fetch("/api/users/me", {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ avatar_url: url }),
+      });
+
+      if (!patchRes.ok) {
+        const data = await patchRes.json().catch(() => ({}));
+        throw new Error(data.error ?? "Failed to save avatar");
+      }
+
+      setProfile((prev) => (prev ? { ...prev, avatar_url: url } : prev));
+    } catch (err) {
+      setError((err as Error).message);
+    } finally {
+      setAvatarUploading(false);
+    }
+  }
 
   async function handleSave(e: React.FormEvent) {
     e.preventDefault();
@@ -132,15 +179,40 @@ export default function SettingsPage() {
 
       <form onSubmit={handleSave} className="mx-auto max-w-lg px-6 py-8">
         <div className="flex items-center gap-4 pb-6">
-          <Avatar
-            src={profile.avatar_url}
-            alt={profile.username ?? ""}
-            fallback={displayName || username || "?"}
-            size="lg"
-          />
+          <div className="relative">
+            <Avatar
+              src={profile.avatar_url}
+              alt={profile.username ?? ""}
+              fallback={displayName || username || "?"}
+              size="lg"
+            />
+            <button
+              type="button"
+              onClick={() => avatarInputRef.current?.click()}
+              disabled={avatarUploading}
+              className="absolute -right-1 -bottom-1 flex size-8 items-center justify-center rounded-full border-2 border-background bg-subtle text-muted hover:bg-accent hover:text-white disabled:opacity-60"
+              aria-label="Upload profile picture"
+            >
+              {avatarUploading ? (
+                <Loader2 size={14} className="animate-spin" />
+              ) : (
+                <Camera size={14} />
+              )}
+            </button>
+            <input
+              ref={avatarInputRef}
+              type="file"
+              accept="image/jpeg,image/png,image/webp,image/gif,image/heic,image/heif,.heic,.heif"
+              onChange={handleAvatarUpload}
+              className="hidden"
+              aria-label="Choose profile picture"
+            />
+          </div>
           <div>
-            <p className="font-medium">{profile.username ?? "No username set"}</p>
-            <p className="text-sm text-muted">{profile.id}</p>
+            <p className="font-medium">{profile.display_name ?? profile.username ?? "No username set"}</p>
+            {profile.username && (
+              <p className="text-sm text-muted">@{profile.username}</p>
+            )}
           </div>
         </div>
 
