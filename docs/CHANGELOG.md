@@ -2,6 +2,10 @@
 
 ## Unreleased
 
+### Fixed
+
+- **SessionEnd hook no longer blocks Claude Code.** Added `async: true` to the hook entry so `straude push` runs in the background. (PR #59 by @alexesprit)
+
 ### Changed
 
 - **CLI scorecard redesign for shareability.** Compacted the post-push terminal output from ~31 lines to ~19 lines — tight enough to screenshot and share. Removed the 28-day heatmap (still on web), inlined streak into the header (`🔥 12d`), compacted the leaderboard to 3 rows (1 above, you, 1 below), and collapsed posted URLs into a single footer line. Added two new data visualizations: a **contextual percentile** line (`Top 12% this week · ↑ 34% vs last week`) and a **model breakdown palette** showing proportional cost split across models with per-model colors. Dashboard API now returns `model_breakdown` (7-day aggregate) and `total_users` for percentile calculation.
