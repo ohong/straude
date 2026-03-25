@@ -1,5 +1,18 @@
 # Architecture & Design Decisions
 
+## GitHub README Stats Card: Single Size, Dedicated Query, 2hr Cache (2026-03-25)
+
+**Decision:** Ship a single compact card size (495x270), use a dedicated lightweight data fetcher instead of reusing `getProfileShareCardData()`, and cache cards for 2 hours.
+
+**Why:**
+- **Single size over multiple variants** — github-readme-stats proves one well-designed card is sufficient. Adding badge/compact/full variants increases maintenance for marginal gain. Users who want the full heatmap already have `/api/consistency/[username]/image`.
+- **Dedicated query over reusing profile card data** — `getProfileShareCardData()` fetches 365 days of contribution data and all lifetime token rows. The GitHub card only needs 84 days (12 weeks for the mini heatmap). Since these images may get high traffic from popular GitHub profiles, the lighter query matters.
+- **2-hour cache TTL** — GitHub's camo proxy respects `Cache-Control`. Too short (< 1hr) risks rate limiting on popular profiles. Too long (> 24hr) makes stats feel stale. 2 hours with `stale-while-revalidate` is the sweet spot: reasonably fresh, no cold-fetch penalty for viewers.
+
+**Alternatives considered:**
+1. **SVG instead of PNG** — GitHub sanitizes SVGs aggressively (strips styles, scripts, external refs). The existing `ImageResponse` (Satori → PNG) pipeline is proven and avoids SVG sanitization gotchas.
+2. **Shields.io-style individual stat badges** — Deferred to roadmap. Individual badges (streak, rank) would complement the card but are additive, not a replacement.
+
 ## CLI Scorecard Compaction: Remove Heatmap, Inline Streak (2026-03-23)
 
 **Decision:** Removed the 28-day heatmap and standalone streak flame from the post-push scorecard. Streak is inlined into the header line. Added model breakdown palette and percentile context line instead.

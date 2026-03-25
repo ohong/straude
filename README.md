@@ -29,6 +29,38 @@ Options: `--date YYYY-MM-DD` to push a specific date, `--days N` to backfill the
 - **Compete** — Global and regional leaderboards (daily/weekly/monthly/all-time).
 - **Streak** — Code with Claude every day. Your streak is your badge of honor.
 
+## Stats Card
+
+Display your Straude stats on your GitHub profile:
+
+<a href="https://straude.com/u/ohong">
+  <picture>
+    <source media="(prefers-color-scheme: dark)" srcset="https://straude.com/api/card/ohong?theme=dark" />
+    <source media="(prefers-color-scheme: light)" srcset="https://straude.com/api/card/ohong?theme=light" />
+    <img alt="Straude Stats" src="https://straude.com/api/card/ohong" />
+  </picture>
+</a>
+
+Add this to your README (replace `YOUR_USERNAME` with your Straude username):
+
+```markdown
+[![Straude Stats](https://straude.com/api/card/YOUR_USERNAME)](https://straude.com/u/YOUR_USERNAME)
+```
+
+**Dark theme:** append `?theme=dark`. **Auto-match GitHub theme:**
+
+```html
+<a href="https://straude.com/u/YOUR_USERNAME">
+  <picture>
+    <source media="(prefers-color-scheme: dark)" srcset="https://straude.com/api/card/YOUR_USERNAME?theme=dark" />
+    <source media="(prefers-color-scheme: light)" srcset="https://straude.com/api/card/YOUR_USERNAME?theme=light" />
+    <img alt="Straude Stats" src="https://straude.com/api/card/YOUR_USERNAME" />
+  </picture>
+</a>
+```
+
+Get your personalized embed code at [straude.com/card](https://straude.com/card).
+
 ## Privacy
 
 Go public and compete on the leaderboard, or stay private and share only with followers.

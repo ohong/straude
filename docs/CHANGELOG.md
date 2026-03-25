@@ -2,6 +2,10 @@
 
 ## Unreleased
 
+### Added
+
+- **GitHub README stats card.** New `/api/card/[username]` endpoint serves a compact 495x270 PNG card showing lifetime spend, streak, rank, active days, primary model, and a 12-week contribution heatmap. Supports `?theme=light` (default) and `?theme=dark` for matching GitHub's color scheme. Cards are cached for 2 hours via `Cache-Control` headers for GitHub's camo proxy. Private profiles render a "private profile" placeholder instead of 404 so embeds don't break. New `/card` page in the app lets users preview their card and copy markdown embed snippets (light, dark, auto-match via `<picture>` element). README updated with embed instructions.
+
 ### Fixed
 
 - **SessionEnd hook no longer blocks Claude Code.** Added `async: true` to the hook entry so `straude push` runs in the background. (PR #59 by @alexesprit)

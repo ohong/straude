@@ -6,6 +6,15 @@ Grouped by the pirate metric (AARRR) each feature primarily moves.
 
 ## Acquisition
 
+### Stats Card Enhancements
+
+The GitHub README stats card shipped as a single compact PNG. Future enhancements:
+
+- **Shields.io-style individual stat badges** — Tiny badges for streak, rank, or total spend (e.g. `![Streak](https://straude.com/api/badge/ohong/streak)`). Useful for badge walls alongside other shields.io badges.
+- **SVG variant** — Lighter payload, scalable, potential for subtle animations. Requires working around GitHub's SVG sanitization.
+- **Card customization** — Custom accent color, show/hide specific stats, border radius options via query params.
+- **Embed analytics** — Track how many times a card is fetched to measure backlink effectiveness.
+
 ### Team / Org Workspaces
 
 Private groups where a company's eng team shares a scoped leaderboard, combined contribution graph, and team streak. A manager signs up, invites 10 engineers, and all 10 become users with a built-in audience. The team admin cares about the spend dashboard the same way they care about a cloud bill — this is a B2B wedge that doesn't require viral growth. Requires invites, permissions, team-scoped views, and billing context.
