@@ -100,7 +100,7 @@ describe("GET /api/search", () => {
 
     expect(res.status).toBe(200);
     expect(json.users).toHaveLength(1);
-    expect(supabaseChain.or.mock.calls[0]?.[0]).toContain("user@something");
+    expect(supabaseChain.or.mock.calls[0]?.[0]).toContain("usersomething");
   });
 
   it("respects limit parameter", async () => {

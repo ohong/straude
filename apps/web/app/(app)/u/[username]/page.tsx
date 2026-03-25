@@ -6,12 +6,14 @@ import Link from "next/link";
 import { MapPin, LinkIcon, Github, Flame, Zap, Users, Lock } from "lucide-react";
 import { Avatar } from "@/components/ui/Avatar";
 import { Badge } from "@/components/ui/Badge";
+import { LevelBadge, LevelDialogTrigger } from "@/components/app/shared/LevelBadge";
 import { AchievementBadges } from "@/components/app/profile/AchievementBadges";
 import { ContributionGraph } from "@/components/app/profile/ContributionGraph";
 import { ProfileSharePanel } from "@/components/app/profile/ProfileSharePanel";
 import { FeedList } from "@/components/app/feed/FeedList";
 import { FollowButton } from "@/components/app/profile/FollowButton";
 import { InviteButton } from "@/components/app/profile/InviteButton";
+import { CrewPopover, type CrewMember } from "@/components/app/profile/CrewPopover";
 import { formatTokens } from "@/lib/utils/format";
 import { normalizeCommentPreview, type JoinedUserSummary, type RawCommentPreviewRow } from "@/lib/feed-normalization";
 import { firstRelation } from "@/lib/utils/first-relation";
@@ -110,7 +112,7 @@ export default async function ProfilePage({
     { data: achievements },
     { data: levelRow },
     { data: referrerData },
-    { count: crewCount },
+    { data: crewMembers },
   ] = await Promise.all([
     db
       .from("follows")
@@ -269,13 +271,7 @@ export default async function ProfilePage({
                 {profile.display_name ?? profile.username}
               </h1>
               {levelRow?.level ? (
-                <Badge
-                  variant="default"
-                  className="font-mono tabular-nums text-accent"
-                  title={`L${Number(levelRow.level)} · 30-day heat check`}
-                >
-                  L{Number(levelRow.level)}
-                </Badge>
+                <LevelBadge level={Number(levelRow.level)} />
               ) : null}
               {!isOwn && authUserId && (
                 <>
@@ -400,14 +396,11 @@ export default async function ProfilePage({
               ${totalSpend.toFixed(2)}
             </p>
           </div>
-          {(crewCount ?? 0) > 0 && (
-            <div>
-              <p className="text-[0.7rem] uppercase tracking-widest text-muted">Crew</p>
-              <p className="inline-flex items-center gap-1 font-[family-name:var(--font-mono)] text-lg font-medium tabular-nums">
-                <Users size={16} className="text-accent" />
-                {crewCount}
-              </p>
-            </div>
+          {(crewMembers ?? []).length > 0 && (
+            <CrewPopover
+              count={(crewMembers ?? []).length}
+              members={(crewMembers ?? []) as CrewMember[]}
+            />
           )}
         </div>
 
@@ -421,10 +414,10 @@ export default async function ProfilePage({
 
         <div className="mt-6 rounded-[10px] border border-border bg-subtle/40 px-4 py-3 text-sm">
           <p className="font-medium text-foreground">
-            Levels are your 30-day heat check.
+            Levels reflect how deep you've gone into agentic coding.
           </p>
           <p className="mt-1 text-muted">
-            Show up, stack spend, climb up. Go quiet for a bit and it cools off.
+            From first completions to building your own orchestrator.
           </p>
         </div>
       </div>
