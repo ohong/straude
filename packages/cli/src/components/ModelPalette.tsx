@@ -77,62 +77,136 @@ function buildSegments(breakdown: Array<{ model: string; cost_usd: number }>): M
     .filter((s) => s.pct > 0);
 }
 
+// --- Pie chart rendering ---
+
+const PIE_W = 11; // grid width in chars
+const PIE_H = 7;  // grid height in chars (aspect ratio ~2:1)
+const CX = (PIE_W - 1) / 2;
+const CY = (PIE_H - 1) / 2;
+const RX = PIE_W / 2;
+const RY = PIE_H / 2;
+
+function isInCircle(x: number, y: number): boolean {
+  const dx = (x - CX) / RX;
+  const dy = (y - CY) / RY;
+  return dx * dx + dy * dy <= 1;
+}
+
+/** Angle from 12 o'clock, clockwise, normalised to [0, 1). */
+function getAngle(x: number, y: number): number {
+  const a = Math.atan2(x - CX, -(y - CY));
+  return ((a / (2 * Math.PI)) + 1) % 1;
+}
+
+interface ColoredSegment {
+  name: string;
+  pct: number;
+  color: string;
+}
+
+function segmentColorAt(angle: number, segs: ColoredSegment[]): string | null {
+  let cumulative = 0;
+  for (const seg of segs) {
+    cumulative += seg.pct / 100;
+    if (angle < cumulative) return seg.color;
+  }
+  return segs.length > 0 ? segs[segs.length - 1]!.color : null;
+}
+
+/** Build a 2-D grid of colors (null = empty). */
+function buildPieGrid(segs: ColoredSegment[]): (string | null)[][] {
+  const grid: (string | null)[][] = [];
+  for (let y = 0; y < PIE_H; y++) {
+    const row: (string | null)[] = [];
+    for (let x = 0; x < PIE_W; x++) {
+      if (isInCircle(x, y)) {
+        row.push(segmentColorAt(getAngle(x, y), segs));
+      } else {
+        row.push(null);
+      }
+    }
+    grid.push(row);
+  }
+  return grid;
+}
+
+/** Render one row of the grid as grouped <Text> runs. */
+function PieRow({ row }: { row: (string | null)[] }) {
+  const spans: React.ReactNode[] = [];
+  let currentColor: string | null = null;
+  let buf = '';
+
+  const flush = () => {
+    if (buf.length === 0) return;
+    if (currentColor) {
+      spans.push(<Text key={spans.length} color={currentColor}>{buf}</Text>);
+    } else {
+      spans.push(<Text key={spans.length}>{buf}</Text>);
+    }
+    buf = '';
+  };
+
+  for (const cell of row) {
+    const ch = cell ? '█' : ' ';
+    if (cell !== currentColor) {
+      flush();
+      currentColor = cell;
+    }
+    buf += ch;
+  }
+  flush();
+
+  return <Box>{spans}</Box>;
+}
+
 export function ModelPalette({ breakdown }: ModelPaletteProps) {
   if (!breakdown || breakdown.length === 0) return null;
 
   const segments = buildSegments(breakdown);
   if (segments.length === 0) return null;
 
-  // Single model: just show the name
+  // Single model: just show the name with a colored dot
   if (segments.length === 1) {
     return (
-      <Box flexDirection="column">
-        <Box>
-          <Text color={theme.muted}>{'MODELS  '}</Text>
-          <Text color={getModelColor(segments[0]!.name)}>{segments[0]!.name}</Text>
-        </Box>
+      <Box>
+        <Text color={theme.muted}>{'MODELS  '}</Text>
+        <Text color={getModelColor(segments[0]!.name)}>● </Text>
+        <Text color={getModelColor(segments[0]!.name)}>{segments[0]!.name}</Text>
       </Box>
     );
   }
 
-  // Multi-model: proportional bar + legend
-  const labelWidth = 8; // "MODELS  "
-  const columns = process.stdout.columns ?? 80;
-  const availableWidth = Math.max(columns - labelWidth - 2, 20); // -2 for paddingX
+  const colored: ColoredSegment[] = segments.map((s) => ({
+    name: s.name,
+    pct: s.pct,
+    color: getModelColor(s.name),
+  }));
 
-  const totalCost = segments.reduce((sum, s) => sum + s.cost, 0);
+  const grid = buildPieGrid(colored);
 
-  // Compute bar segment widths (minimum 1 char per segment)
-  const barWidths = segments.map((s) => Math.max(Math.round((s.cost / totalCost) * availableWidth), 1));
-  const totalBar = barWidths.reduce((sum, w) => sum + w, 0);
-  const overflow = totalBar - availableWidth;
-  if (overflow > 0) {
-    // Shrink the largest segment to compensate
-    const largestIdx = barWidths.indexOf(Math.max(...barWidths));
-    barWidths[largestIdx] = Math.max(barWidths[largestIdx]! - overflow, 1);
-  }
-
-  // Build legend text
-  const legend = segments
-    .map((s) => `${s.name} ${s.pct}%`)
-    .join('  ');
+  // Legend lines — one per segment, vertically centred beside the pie
+  const legendLines = colored.map((s) => ({ label: `${s.name} ${s.pct}%`, color: s.color }));
+  const legendStart = Math.max(0, Math.floor((PIE_H - legendLines.length) / 2));
 
   return (
     <Box flexDirection="column">
-      {/* Bar line */}
-      <Box>
-        <Text color={theme.muted}>{'MODELS  '}</Text>
-        {segments.map((seg, i) => (
-          <Text key={seg.name} color={getModelColor(seg.name)}>
-            {'█'.repeat(barWidths[i]!)}
-          </Text>
-        ))}
-      </Box>
-      {/* Legend line */}
-      <Box>
-        <Text>{' '.repeat(labelWidth)}</Text>
-        <Text color={theme.muted}>{legend}</Text>
-      </Box>
+      <Text color={theme.muted}>MODELS</Text>
+      {grid.map((row, y) => {
+        const legendIdx = y - legendStart;
+        const legend = legendLines[legendIdx];
+
+        return (
+          <Box key={y} gap={1}>
+            <PieRow row={row} />
+            {legend ? (
+              <Box>
+                <Text color={legend.color}>● </Text>
+                <Text color={theme.muted}>{legend.label}</Text>
+              </Box>
+            ) : null}
+          </Box>
+        );
+      })}
     </Box>
   );
 }

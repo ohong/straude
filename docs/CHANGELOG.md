@@ -4,6 +4,13 @@
 
 ### Added
 
+- **Level explainer dialog.** Clicking any level badge (profile, leaderboard) opens a popup explaining the 8 levels of agentic coding — from "No AI" (L1) to "Build your own orchestrator" (L8). Based on the viral meme about stages of AI adoption. No calculation details revealed.
+- **Levels documentation (`docs/LEVELS.md`).** Full internal reference for how the L1–L8 system works: rolling 30-day window, dual gates (active days + spend), origin meme, all surfaces, schema.
+
+### Changed
+
+- **CLI model palette is now a pie chart.** Replaced the proportional bar with a colored terminal pie chart rendered in Unicode block characters. Legend dots vertically centred beside the chart.
+
 - **GitHub README stats card.** New `/api/card/[username]` endpoint serves a compact 495x270 PNG card showing lifetime spend, streak, rank, active days, primary model, and a 12-week contribution heatmap. Supports `?theme=light` (default) and `?theme=dark` for matching GitHub's color scheme. Cards are cached for 2 hours via `Cache-Control` headers for GitHub's camo proxy. Private profiles render a "private profile" placeholder instead of 404 so embeds don't break. New `/card` page in the app lets users preview their card and copy markdown embed snippets (light, dark, auto-match via `<picture>` element). README updated with embed instructions.
 
 ### Fixed

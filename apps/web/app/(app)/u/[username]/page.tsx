@@ -257,10 +257,6 @@ export default async function ProfilePage({
 
   return (
     <>
-      <header className="sticky top-0 z-10 flex h-14 items-center border-b border-border bg-background px-4 sm:px-6">
-        <h3 className="text-lg font-medium">@{username}</h3>
-      </header>
-
       {/* Profile header */}
       <div className="border-b border-border px-4 py-5 sm:p-6">
         <div className="flex items-start gap-4 sm:gap-5">
