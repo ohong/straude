@@ -28,7 +28,7 @@ export async function apiRequest<T>(
       // ignore parse errors
     }
     if (res.status === 401) {
-      throw new Error("Session expired or invalid. Run `straude login` to re-authenticate.");
+      throw new Error("Session expired or invalid. Run `npx straude@latest login` to re-authenticate.");
     }
     if (res.status === 404) {
       throw new Error(`Endpoint not found (${path}). Try updating the CLI: bunx straude@latest`);

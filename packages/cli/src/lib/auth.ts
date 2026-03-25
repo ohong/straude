@@ -56,7 +56,7 @@ export function updateLastPushDate(date: string): void {
 export function requireAuth(): StraudeConfig {
   const config = loadConfig();
   if (!config) {
-    console.error("Not logged in. Run `straude login` first.");
+    console.error("Not logged in. Run `npx straude@latest login` first.");
     process.exit(1);
   }
   return config;
