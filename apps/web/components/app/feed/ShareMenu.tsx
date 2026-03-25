@@ -7,8 +7,6 @@ import {
   Image as ImageIcon,
   Download,
   Check,
-  ExternalLink,
-  Copy,
   Send,
 } from "lucide-react";
 import { cn } from "@/lib/utils/cn";
@@ -37,7 +35,7 @@ export function ShareMenu({ post }: { post: Post }) {
   const [open, setOpen] = useState(false);
   const [theme, setTheme] = useState<ShareThemeId>("accent");
   const [busyAction, setBusyAction] = useState<BusyAction>(null);
-  const [copiedAction, setCopiedAction] = useState<"link" | "image" | "caption" | null>(null);
+  const [copiedAction, setCopiedAction] = useState<"link" | "image" | null>(null);
   const [feedback, setFeedback] = useState<{
     tone: "success" | "error";
     message: string;
@@ -90,7 +88,7 @@ export function ShareMenu({ post }: { post: Post }) {
   const supportsNativeShare =
     typeof window !== "undefined" && typeof navigator.share === "function";
 
-  function flashCopied(action: "link" | "image" | "caption") {
+  function flashCopied(action: "link" | "image") {
     setCopiedAction(action);
     window.setTimeout(() => {
       setCopiedAction((current) => (current === action ? null : current));
@@ -125,37 +123,11 @@ export function ShareMenu({ post }: { post: Post }) {
       const url = buildPostShareUrl(window.location.origin, post.id);
       await navigator.clipboard.writeText(url);
       flashCopied("link");
-      setFeedback({
-        tone: "success",
-        message: "Link copied. Drop it into any post or DM.",
-      });
     } catch (error) {
       console.error("Copy link failed:", error);
       setFeedback({
         tone: "error",
         message: "Could not copy the link on this browser.",
-      });
-    }
-  }
-
-  async function handleCopyCaption() {
-    setFeedback(null);
-    try {
-      if (!supportsClipboardText) {
-        throw new Error("Clipboard text unsupported");
-      }
-
-      await navigator.clipboard.writeText(shareText);
-      flashCopied("caption");
-      setFeedback({
-        tone: "success",
-        message: "Starter caption copied. Add your take and hit post.",
-      });
-    } catch (error) {
-      console.error("Copy caption failed:", error);
-      setFeedback({
-        tone: "error",
-        message: "Could not copy the caption on this browser.",
       });
     }
   }
@@ -170,10 +142,6 @@ export function ShareMenu({ post }: { post: Post }) {
         new ClipboardItem({ "image/png": blob }),
       ]);
       flashCopied("image");
-      setFeedback({
-        tone: "success",
-        message: "Image copied. Paste it directly into X, LinkedIn, or Slack.",
-      });
     } catch (error) {
       console.error("Copy image failed:", error);
       setFeedback({
@@ -201,11 +169,6 @@ export function ShareMenu({ post }: { post: Post }) {
       anchor.remove();
 
       window.setTimeout(() => URL.revokeObjectURL(objectUrl), 1000);
-
-      setFeedback({
-        tone: "success",
-        message: "PNG downloaded. Drag it into your next post.",
-      });
     } catch (error) {
       console.error("Download failed:", error);
       setFeedback({
@@ -288,18 +251,9 @@ export function ShareMenu({ post }: { post: Post }) {
           aria-label="Share this post"
         >
           <div className="rounded-[24px] border border-border bg-subtle/30 p-3">
-            <div>
-              <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-muted">
-                Share This Build
-              </p>
-              <p className="mt-1 text-sm font-semibold text-balance">
-                Export a square card people will actually repost.
-              </p>
-              <p className="mt-1 text-xs text-muted text-pretty">
-                Sized for X, LinkedIn, Instagram, and story screenshots that no
-                longer need to be screenshots.
-              </p>
-            </div>
+            <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-muted">
+              Share Card
+            </p>
 
             <div
               className="mx-auto mt-3 overflow-hidden rounded-[22px] border border-border bg-background"
@@ -365,8 +319,11 @@ export function ShareMenu({ post }: { post: Post }) {
               type="button"
               onClick={handleShareToX}
               className="flex items-center gap-2 rounded-2xl border border-border bg-background px-4 py-3 text-sm font-medium hover:border-accent/40 hover:text-accent"
+              aria-label="Post to X"
             >
-              <ExternalLink size={16} aria-hidden="true" />
+              <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 1200 1227" fill="currentColor" aria-hidden="true">
+                <path d="M714.163 519.284 1160.89 0h-105.86L667.137 450.887 357.328 0H0l468.492 681.821L0 1226.37h105.866l409.625-476.152 327.181 476.152H1200L714.137 519.284h.026ZM569.165 687.828l-47.468-67.894-377.686-540.24h162.604l304.797 435.991 47.468 67.894 396.2 566.721H892.476L569.165 687.854v-.026Z" />
+              </svg>
               Post to X
             </button>
 
@@ -415,34 +372,6 @@ export function ShareMenu({ post }: { post: Post }) {
               <Download size={16} aria-hidden="true" />
               {busyAction === "download" ? "Preparing..." : "Download PNG"}
             </button>
-          </div>
-
-          <div className="mt-3 rounded-[22px] border border-border bg-subtle/30 p-3">
-            <div className="flex items-start justify-between gap-3">
-              <div className="min-w-0">
-                <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-muted">
-                  Starter Caption
-                </p>
-                <p className="mt-1 whitespace-pre-line text-sm text-foreground/85 text-pretty">
-                  {shareText}
-                </p>
-              </div>
-
-              <button
-                type="button"
-                onClick={handleCopyCaption}
-                className="shrink-0 rounded-xl border border-border bg-background px-3 py-2 text-xs font-medium hover:border-accent/40 hover:text-accent"
-              >
-                <span className="flex items-center gap-1.5">
-                  {copiedAction === "caption" ? (
-                    <Check size={14} className="text-accent" aria-hidden="true" />
-                  ) : (
-                    <Copy size={14} aria-hidden="true" />
-                  )}
-                  {copiedAction === "caption" ? "Copied" : "Copy"}
-                </span>
-              </button>
-            </div>
           </div>
 
           {feedback && (

@@ -2,7 +2,7 @@
 
 import Image from "next/image";
 import { useEffect, useMemo, useState } from "react";
-import { Check, Download, ExternalLink, ImageIcon } from "lucide-react";
+import { Check, ChevronDown, Copy, Download, ImageIcon } from "lucide-react";
 import { buildPostIntentUrl } from "@/lib/utils/post-share";
 
 type ShareablePost = {
@@ -29,8 +29,9 @@ export function PostSharePanel({
   shareUrlOverride?: string;
   imageUrlOverride?: string;
 }) {
+  const [open, setOpen] = useState(false);
   const [busy, setBusy] = useState<"share-x" | "copy-image" | "download" | null>(null);
-  const [copied, setCopied] = useState<"image" | null>(null);
+  const [copied, setCopied] = useState<"image" | "link" | null>(null);
   const [feedback, setFeedback] = useState<string | null>(null);
   const [shareUrl, setShareUrl] = useState("");
   const [supportsClipboardImage, setSupportsClipboardImage] = useState(false);
@@ -64,7 +65,6 @@ export function PostSharePanel({
         new ClipboardItem({ "image/png": blob }),
       ]);
       setCopied("image");
-      setFeedback("Session card copied. Paste it directly into your post.");
       window.setTimeout(() => setCopied(null), 2000);
     } catch {
       setFeedback("Could not copy the post image. Try Download PNG.");
@@ -110,10 +110,7 @@ export function PostSharePanel({
 
     if (imageCopied) {
       setCopied("image");
-      setFeedback("Opened X and copied the image. Paste it into the composer.");
       window.setTimeout(() => setCopied(null), 2000);
-    } else {
-      setFeedback("Opened X with the text and link. Add the image manually if needed.");
     }
 
     setBusy(null);
@@ -137,7 +134,6 @@ export function PostSharePanel({
       anchor.click();
       anchor.remove();
       window.setTimeout(() => URL.revokeObjectURL(objectUrl), 1000);
-      setFeedback("Session card downloaded.");
     } catch {
       setFeedback("Could not generate the session card PNG.");
     } finally {
@@ -147,74 +143,99 @@ export function PostSharePanel({
 
   return (
     <section className="border-b border-border px-4 py-5 sm:px-6">
-      <div>
-        <p className="text-[0.7rem] font-semibold uppercase tracking-widest text-muted">
+      <button
+        type="button"
+        onClick={() => setOpen((v) => !v)}
+        className="flex w-full items-center justify-between"
+        aria-expanded={open}
+      >
+        <span className="text-[0.7rem] font-semibold uppercase tracking-widest text-muted">
           Share This Session
-        </p>
+        </span>
+        <ChevronDown
+          size={16}
+          className={`text-muted transition-transform duration-200 ${open ? "rotate-180" : ""}`}
+          aria-hidden
+        />
+      </button>
 
-        <div className="mt-4 max-w-[520px] overflow-hidden rounded-[24px] border border-border bg-background shadow-sm">
-          <Image
-            src={imageUrl}
-            alt="Generated session share card preview"
-            width={1200}
-            height={630}
-            unoptimized
-            className="block h-auto w-full"
-          />
-        </div>
+      {open && (
+        <div className="mt-4">
+          <div className="max-w-[520px] overflow-hidden rounded-[24px] border border-border bg-background shadow-sm">
+            <Image
+              src={imageUrl}
+              alt="Generated session share card preview"
+              width={1200}
+              height={630}
+              unoptimized
+              className="block h-auto w-full"
+            />
+          </div>
 
-        <div className="mt-4 inline-flex max-w-full flex-col gap-2 px-1 py-1">
-          <p className="text-[0.65rem] font-semibold uppercase tracking-widest text-muted">
-            Permalink
-          </p>
-          <div className="flex flex-col gap-3 sm:flex-row sm:items-center">
-            <code className="max-w-full overflow-x-auto whitespace-nowrap rounded-xl bg-subtle px-3 py-2 text-sm text-foreground">
-              {shareUrl}
-            </code>
+          <div className="mt-4 flex items-center gap-2">
+            <button
+              type="button"
+              onClick={async () => {
+                try {
+                  await navigator.clipboard.writeText(shareUrl);
+                  setCopied("link");
+                  window.setTimeout(() => setCopied((c) => c === "link" ? null : c), 2000);
+                } catch {
+                  setFeedback("Could not copy the link.");
+                }
+              }}
+              className="inline-flex min-w-0 items-center gap-2 rounded-full border border-border px-3 py-2 text-sm hover:bg-subtle"
+              aria-label="Copy permalink"
+            >
+              {copied === "link" ? <Check size={14} className="shrink-0 text-accent" aria-hidden /> : <Copy size={14} className="shrink-0" aria-hidden />}
+              <span className="truncate text-muted">{shareUrl}</span>
+            </button>
             <button
               type="button"
               onClick={shareOnX}
               disabled={busy !== null}
-              className="inline-flex items-center justify-center gap-2 rounded-full border border-border px-4 py-2 text-sm font-semibold hover:bg-subtle"
+              className="inline-flex shrink-0 items-center justify-center rounded-full border border-border p-2.5 hover:bg-subtle disabled:opacity-60"
+              aria-label="Share on X"
             >
-              <ExternalLink size={16} aria-hidden />
-              {busy === "share-x" ? "Preparing..." : "Share on X"}
+              <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 1200 1227" fill="currentColor" aria-hidden>
+                <path d="M714.163 519.284 1160.89 0h-105.86L667.137 450.887 357.328 0H0l468.492 681.821L0 1226.37h105.866l409.625-476.152 327.181 476.152H1200L714.137 519.284h.026ZM569.165 687.828l-47.468-67.894-377.686-540.24h162.604l304.797 435.991 47.468 67.894 396.2 566.721H892.476L569.165 687.854v-.026Z" />
+              </svg>
             </button>
           </div>
-        </div>
 
-        <div className="mt-4 flex flex-wrap gap-3">
-          {supportsClipboardImage && (
+          <div className="mt-4 flex flex-wrap gap-3">
+            {supportsClipboardImage && (
+              <button
+                type="button"
+                onClick={copyImage}
+                disabled={busy !== null}
+                className="inline-flex items-center gap-2 rounded-full border border-border px-4 py-2 text-sm font-semibold hover:bg-subtle disabled:opacity-60"
+              >
+                {copied === "image" ? <Check size={16} aria-hidden /> : <ImageIcon size={16} aria-hidden />}
+                {busy === "copy-image"
+                  ? "Preparing..."
+                  : copied === "image"
+                    ? "Copied"
+                    : "Copy PNG"}
+              </button>
+            )}
+
             <button
               type="button"
-              onClick={copyImage}
+              onClick={downloadImage}
               disabled={busy !== null}
-              className="inline-flex items-center gap-2 rounded-full border border-border px-4 py-2 text-sm font-semibold hover:bg-subtle disabled:opacity-60"
+              className="inline-flex items-center gap-2 rounded-full bg-accent px-4 py-2 text-sm font-semibold text-white hover:opacity-90 disabled:opacity-60"
             >
-              {copied === "image" ? <Check size={16} aria-hidden /> : <ImageIcon size={16} aria-hidden />}
-              {busy === "copy-image"
-                ? "Preparing..."
-                : copied === "image"
-                  ? "Copied"
-                  : "Copy PNG"}
+              <Download size={16} aria-hidden />
+              {busy === "download" ? "Preparing..." : "Download PNG"}
             </button>
+          </div>
+
+          {feedback && (
+            <p className="mt-3 text-sm text-muted">{feedback}</p>
           )}
-
-          <button
-            type="button"
-            onClick={downloadImage}
-            disabled={busy !== null}
-            className="inline-flex items-center gap-2 rounded-full bg-accent px-4 py-2 text-sm font-semibold text-white hover:opacity-90 disabled:opacity-60"
-          >
-            <Download size={16} aria-hidden />
-            {busy === "download" ? "Preparing..." : "Download PNG"}
-          </button>
         </div>
-
-        {feedback && (
-          <p className="mt-3 text-sm text-muted">{feedback}</p>
-        )}
-      </div>
+      )}
     </section>
   );
 }

@@ -218,7 +218,7 @@ function CompletenessRing({ post }: { post: Post }) {
   );
 }
 
-export function ActivityCard({ post, userId }: { post: Post; userId?: string | null }) {
+export function ActivityCard({ post, userId, hideShareMenu }: { post: Post; userId?: string | null; hideShareMenu?: boolean }) {
   const router = useRouter();
   const [kudosed, setKudosed] = useState(post.has_kudosed ?? false);
   const [kudosCount, setKudosCount] = useState(post.kudos_count ?? 0);
@@ -432,7 +432,7 @@ export function ActivityCard({ post, userId }: { post: Post; userId?: string | n
           <MessageCircle size={16} aria-hidden="true" />
           {commentCount} {commentCount === 1 ? "comment" : "comments"}
         </Link>
-        <ShareMenu post={post} />
+        {!hideShareMenu && <ShareMenu post={post} />}
       </div>
 
       {/* Lightbox */}
