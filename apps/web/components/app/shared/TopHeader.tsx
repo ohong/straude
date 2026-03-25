@@ -14,6 +14,7 @@ import {
 } from "lucide-react";
 import { Avatar } from "@/components/ui/Avatar";
 import { cn } from "@/lib/utils/cn";
+import { BoltIcon } from "@/components/landing/icons";
 import { createClient } from "@/lib/supabase/client";
 import { timeAgo, notificationMessage, notificationHref } from "@/lib/utils/notifications";
 import type { Notification } from "@/types";
@@ -130,12 +131,7 @@ export function TopHeader({ username, avatarUrl }: TopHeaderProps) {
           href="/feed"
           className="inline-flex items-center gap-2 text-lg font-semibold tracking-tight"
         >
-          <span
-            className="inline-block h-5 w-5 bg-accent"
-            style={{
-              clipPath: "polygon(20% 0%, 80% 0%, 100% 100%, 0% 100%)",
-            }}
-          />
+          <BoltIcon className="h-5 w-5 text-accent" />
           STRAUDE
         </Link>
 

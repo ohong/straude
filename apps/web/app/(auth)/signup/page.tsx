@@ -3,6 +3,7 @@
 import { createClient } from "@/lib/supabase/client";
 import { useState } from "react";
 import Link from "next/link";
+import { BoltIcon } from "@/components/landing/icons";
 import { Button } from "@/components/ui/Button";
 import { Input } from "@/components/ui/Input";
 
@@ -43,10 +44,7 @@ export default function SignupPage() {
     <>
       <div className="mb-8">
         <Link href="/" className="inline-flex items-center gap-2 text-xl font-semibold tracking-tight">
-          <span
-            className="inline-block h-6 w-6 bg-accent"
-            style={{ clipPath: "polygon(20% 0%, 80% 0%, 100% 100%, 0% 100%)" }}
-          />
+          <BoltIcon className="h-6 w-6 text-accent" />
           STRAUDE
         </Link>
       </div>

@@ -5,6 +5,7 @@ import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { Home, Trophy, Flame } from "lucide-react";
 import { cn } from "@/lib/utils/cn";
+import { BoltIcon } from "@/components/landing/icons";
 
 const navLinks = [
   { href: "/feed", label: "Feed" },
@@ -25,12 +26,7 @@ export function GuestHeader() {
   return (
     <header className="safe-top flex h-14 shrink-0 items-center justify-between border-b border-border bg-background px-4 sm:px-6">
       <Link href="/" className="flex items-center gap-2">
-        <div
-          className="h-5 w-5 bg-accent"
-          style={{
-            clipPath: "polygon(20% 0%, 80% 0%, 100% 100%, 0% 100%)",
-          }}
-        />
+        <BoltIcon className="h-5 w-5 text-accent" />
         <span className="text-base font-semibold tracking-tight">
           STRAUDE
         </span>
