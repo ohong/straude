@@ -52,6 +52,8 @@ next-env.d.ts
 
 # claude code (machine-local)
 .claude/settings.local.json
+.claude/worktrees/
+.claude/review-loop.log
 
 # OG image variants (local experiments)
 og-variants/
