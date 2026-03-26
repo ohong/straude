@@ -10,6 +10,7 @@ import { LevelBadge, LevelDialogTrigger } from "@/components/app/shared/LevelBad
 import { AchievementBadges } from "@/components/app/profile/AchievementBadges";
 import { ContributionGraph } from "@/components/app/profile/ContributionGraph";
 import { ProfileSharePanel } from "@/components/app/profile/ProfileSharePanel";
+import { RadarChart } from "@/components/app/profile/RadarChart";
 import { FeedList } from "@/components/app/feed/FeedList";
 import { FollowButton } from "@/components/app/profile/FollowButton";
 import { InviteButton } from "@/components/app/profile/InviteButton";
@@ -156,22 +157,26 @@ export default async function ProfilePage({
   const totalSpend = totalSpendRows?.reduce((s, r) => s + Number(r.cost_usd), 0) ?? 0;
   const lifetimeOutputTokens = totalSpendRows?.reduce((s, r) => s + Number(r.output_tokens), 0) ?? 0;
 
-  // Contribution data (current year)
+  // Contribution data (current year) + radar chart data
   const currentYear = new Date().getFullYear();
   const yearStart = `${currentYear}-01-01`;
   const yearEnd = `${currentYear}-12-31`;
 
-  const { data: contributions } = await db
-    .from("daily_usage")
-    .select("date, cost_usd")
-    .eq("user_id", profile.id)
-    .gte("date", yearStart)
-    .lte("date", yearEnd);
-
-  const { data: postDates } = await db
-    .from("posts")
-    .select("daily_usage:daily_usage!posts_daily_usage_id_fkey(date)")
-    .eq("user_id", profile.id);
+  const [{ data: contributions }, { data: postDates }, radarResponse] = await Promise.all([
+    db
+      .from("daily_usage")
+      .select("date, cost_usd")
+      .eq("user_id", profile.id)
+      .gte("date", yearStart)
+      .lte("date", yearEnd),
+    db
+      .from("posts")
+      .select("daily_usage:daily_usage!posts_daily_usage_id_fkey(date)")
+      .eq("user_id", profile.id),
+    fetch(`${process.env.NEXT_PUBLIC_SITE_URL ?? "http://localhost:3000"}/api/users/${username}/radar`)
+      .then((r) => (r.ok ? r.json() : null))
+      .catch(() => null),
+  ]);
 
   const postDateSet = new Set(
     ((postDates ?? []) as PostDateRow[])
@@ -424,6 +429,11 @@ export default async function ProfilePage({
           Contributions
         </p>
         <ContributionGraph data={contributionData} />
+        {radarResponse && (
+          <div className="mt-5 flex justify-center">
+            <RadarChart data={radarResponse} />
+          </div>
+        )}
         <ProfileSharePanel
           username={profile.username ?? username}
           isPublic={profile.is_public}
