@@ -61,11 +61,12 @@
     },
     "packages/cli": {
       "name": "straude",
-      "version": "0.1.14",
+      "version": "0.1.16",
       "bin": {
         "straude": "dist/index.js",
       },
       "dependencies": {
+        "@pppp606/ink-chart": "^0.2.4",
         "chalk": "^5.6.2",
         "ink": "^6.8.0",
         "react": "^19.2.4",
@@ -342,6 +343,8 @@
     "@nolyfill/is-core-module": ["@nolyfill/is-core-module@1.0.39", "", {}, "sha512-nn5ozdjYQpUCZlWGuxcJY/KpxkWQs4DcbMCmKojjyrYDEAGy4Ce19NN4v5MduafTwJlbKc99UA8YhSVqq9yPZA=="],
 
     "@playwright/test": ["@playwright/test@1.58.2", "", { "dependencies": { "playwright": "1.58.2" }, "bin": { "playwright": "cli.js" } }, "sha512-akea+6bHYBBfA9uQqSYmlJXn61cTa+jbO87xVLCWbTqbWadRVmhxlXATaOjOgcBaWU4ePo0wB41KMFv3o35IXA=="],
+
+    "@pppp606/ink-chart": ["@pppp606/ink-chart@0.2.4", "", { "peerDependencies": { "ink": ">=6", "react": ">=19" }, "bin": { "ink-chart-demo": "bin/demo.js" } }, "sha512-iqzTFePJKgzypEMdziIIo/uRDtQGBnunWxsvmaHTIBBxQIK0sRDoOszJzDc0UNGRxM+bOSPtuC844sqH/lJorg=="],
 
     "@radix-ui/react-compose-refs": ["@radix-ui/react-compose-refs@1.1.2", "", { "peerDependencies": { "@types/react": "*", "react": "^16.8 || ^17.0 || ^18.0 || ^19.0 || ^19.0.0-rc" }, "optionalPeers": ["@types/react"] }, "sha512-z4eqJvfiNnFMHIIvXP3CY57y2WJs5g2v3X0zm9mEJkrkNv4rDxu+sg9Jh8EkXyeqBkB7SOcboo9dMVqhyrACIg=="],
 

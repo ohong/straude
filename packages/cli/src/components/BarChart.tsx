@@ -1,5 +1,6 @@
 import React from 'react';
 import { Box, Text } from 'ink';
+import { BarChart as InkBarChart } from '@pppp606/ink-chart';
 import { theme } from './theme.js';
 
 export interface BarChartProps {
@@ -16,17 +17,7 @@ function getDayLabel(dateStr: string): string {
   return DAY_LABELS[d.getDay()]!;
 }
 
-function formatCost(cost: number): string {
-  return `$${cost.toFixed(2)}`;
-}
-
 export function BarChart({ data, weekTotal, prevWeekTotal, percentile }: BarChartProps) {
-  const maxCost = Math.max(...data.map((d) => d.cost_usd), 0);
-  const dayLabelWidth = 5; // "Mon  "
-  const costLabelWidth = 9; // " $XXX.XX"
-  const columns = process.stdout.columns ?? 80;
-  const availableWidth = Math.max(columns - dayLabelWidth - costLabelWidth, 10);
-
   const weekTotalStr = `$${weekTotal.toFixed(2)} this week`;
 
   // Context line: percentile + week-over-week change
@@ -73,32 +64,17 @@ export function BarChart({ data, weekTotal, prevWeekTotal, percentile }: BarChar
       </Box>
 
       {/* Bars */}
-      {data.map((entry) => {
-        const label = getDayLabel(entry.date);
-        const cost = entry.cost_usd;
-        const costStr = formatCost(cost);
-
-        let barLen = 0;
-        if (maxCost > 0 && cost > 0) {
-          barLen = Math.round((cost / maxCost) * availableWidth);
-          barLen = Math.max(barLen, 1); // At least 1 char for non-zero
-        }
-        const trackLen = availableWidth - barLen;
-
-        const bar = '█'.repeat(barLen);
-        const track = '░'.repeat(trackLen);
-
-        return (
-          <Box key={entry.date}>
-            <Text color={theme.muted}>
-              {label.padEnd(dayLabelWidth)}
-            </Text>
-            <Text color={theme.accent}>{bar}</Text>
-            <Text color={theme.dim}>{track}</Text>
-            <Text color={theme.text}>{costStr.padStart(costLabelWidth)}</Text>
-          </Box>
-        );
-      })}
+      <InkBarChart
+        data={data.map((entry) => ({
+          label: getDayLabel(entry.date),
+          value: entry.cost_usd,
+          color: theme.accent,
+        }))}
+        width="full"
+        showValue="right"
+        format={(v) => `$${v.toFixed(2)}`}
+        barChar="█"
+      />
 
       {/* Context: percentile + week-over-week */}
       {contextLine}

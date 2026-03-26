@@ -1,5 +1,6 @@
 import React from 'react';
 import { Box, Text } from 'ink';
+import { StackedBarChart } from '@pppp606/ink-chart';
 import { theme, modelColors, modelFallback } from './theme.js';
 
 export interface ModelPaletteProps {
@@ -77,88 +78,6 @@ function buildSegments(breakdown: Array<{ model: string; cost_usd: number }>): M
     .filter((s) => s.pct > 0);
 }
 
-// --- Pie chart rendering ---
-
-const PIE_W = 11; // grid width in chars
-const PIE_H = 7;  // grid height in chars (aspect ratio ~2:1)
-const CX = (PIE_W - 1) / 2;
-const CY = (PIE_H - 1) / 2;
-const RX = PIE_W / 2;
-const RY = PIE_H / 2;
-
-function isInCircle(x: number, y: number): boolean {
-  const dx = (x - CX) / RX;
-  const dy = (y - CY) / RY;
-  return dx * dx + dy * dy <= 1;
-}
-
-/** Angle from 12 o'clock, clockwise, normalised to [0, 1). */
-function getAngle(x: number, y: number): number {
-  const a = Math.atan2(x - CX, -(y - CY));
-  return ((a / (2 * Math.PI)) + 1) % 1;
-}
-
-interface ColoredSegment {
-  name: string;
-  pct: number;
-  color: string;
-}
-
-function segmentColorAt(angle: number, segs: ColoredSegment[]): string | null {
-  let cumulative = 0;
-  for (const seg of segs) {
-    cumulative += seg.pct / 100;
-    if (angle < cumulative) return seg.color;
-  }
-  return segs.length > 0 ? segs[segs.length - 1]!.color : null;
-}
-
-/** Build a 2-D grid of colors (null = empty). */
-function buildPieGrid(segs: ColoredSegment[]): (string | null)[][] {
-  const grid: (string | null)[][] = [];
-  for (let y = 0; y < PIE_H; y++) {
-    const row: (string | null)[] = [];
-    for (let x = 0; x < PIE_W; x++) {
-      if (isInCircle(x, y)) {
-        row.push(segmentColorAt(getAngle(x, y), segs));
-      } else {
-        row.push(null);
-      }
-    }
-    grid.push(row);
-  }
-  return grid;
-}
-
-/** Render one row of the grid as grouped <Text> runs. */
-function PieRow({ row }: { row: (string | null)[] }) {
-  const spans: React.ReactNode[] = [];
-  let currentColor: string | null = null;
-  let buf = '';
-
-  const flush = () => {
-    if (buf.length === 0) return;
-    if (currentColor) {
-      spans.push(<Text key={spans.length} color={currentColor}>{buf}</Text>);
-    } else {
-      spans.push(<Text key={spans.length}>{buf}</Text>);
-    }
-    buf = '';
-  };
-
-  for (const cell of row) {
-    const ch = cell ? '█' : ' ';
-    if (cell !== currentColor) {
-      flush();
-      currentColor = cell;
-    }
-    buf += ch;
-  }
-  flush();
-
-  return <Box>{spans}</Box>;
-}
-
 export function ModelPalette({ breakdown }: ModelPaletteProps) {
   if (!breakdown || breakdown.length === 0) return null;
 
@@ -176,37 +95,17 @@ export function ModelPalette({ breakdown }: ModelPaletteProps) {
     );
   }
 
-  const colored: ColoredSegment[] = segments.map((s) => ({
-    name: s.name,
-    pct: s.pct,
-    color: getModelColor(s.name),
-  }));
-
-  const grid = buildPieGrid(colored);
-
-  // Legend lines — one per segment, vertically centred beside the pie
-  const legendLines = colored.map((s) => ({ label: `${s.name} ${s.pct}%`, color: s.color }));
-  const legendStart = Math.max(0, Math.floor((PIE_H - legendLines.length) / 2));
-
   return (
     <Box flexDirection="column">
       <Text color={theme.muted}>MODELS</Text>
-      {grid.map((row, y) => {
-        const legendIdx = y - legendStart;
-        const legend = legendLines[legendIdx];
-
-        return (
-          <Box key={y} gap={1}>
-            <PieRow row={row} />
-            {legend ? (
-              <Box>
-                <Text color={legend.color}>● </Text>
-                <Text color={theme.muted}>{legend.label}</Text>
-              </Box>
-            ) : null}
-          </Box>
-        );
-      })}
+      <StackedBarChart
+        data={segments.map((s) => ({
+          label: s.name,
+          value: s.pct,
+          color: getModelColor(s.name),
+        }))}
+        width="full"
+      />
     </Box>
   );
 }

@@ -67,12 +67,15 @@ export async function GET(request: Request) {
   d14.setDate(d14.getDate() - 13);
   const d14Str = d14.toISOString().split("T")[0];
 
-  // 3b. Model breakdown (last 7 days aggregate)
+  // 3b. Model breakdown (last 30 days aggregate)
+  const d30 = new Date(today);
+  d30.setDate(d30.getDate() - 29);
+  const d30Str = d30.toISOString().split("T")[0];
   const { data: breakdownRows } = await db
     .from("daily_usage")
     .select("model_breakdown")
     .eq("user_id", userId)
-    .gte("date", d7Str)
+    .gte("date", d30Str)
     .not("model_breakdown", "is", null);
 
   const modelAgg = new Map<string, number>();
