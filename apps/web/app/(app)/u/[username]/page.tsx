@@ -173,7 +173,7 @@ export default async function ProfilePage({
       .from("posts")
       .select("daily_usage:daily_usage!posts_daily_usage_id_fkey(date)")
       .eq("user_id", profile.id),
-    fetch(`${process.env.NEXT_PUBLIC_SITE_URL ?? "http://localhost:3000"}/api/users/${username}/radar`)
+    fetch(`${process.env.NEXT_PUBLIC_APP_URL ?? "https://straude.com"}/api/users/${username}/radar`)
       .then((r) => (r.ok ? r.json() : null))
       .catch(() => null),
   ]);
