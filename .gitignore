@@ -13,6 +13,7 @@ package-lock.json
 
 # testing
 coverage
+playwright-report
 
 # next.js
 .next
