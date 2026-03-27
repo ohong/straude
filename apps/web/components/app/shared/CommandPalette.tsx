@@ -12,6 +12,7 @@ import {
 } from "kbar";
 import { useRouter } from "next/navigation";
 import { useTheme } from "@/components/providers/ThemeProvider";
+import { createClient } from "@/lib/supabase/client";
 
 function RenderResults() {
   const { results } = useMatches();
@@ -106,6 +107,17 @@ export function CommandPalette({
       name: "Profile",
       shortcut: ["g", "m"],
       perform: () => router.push(username ? `/u/${username}` : "/feed"),
+    },
+    {
+      id: "logout",
+      name: "Log out",
+      section: "Account",
+      shortcut: [],
+      perform: async () => {
+        const supabase = createClient();
+        await supabase.auth.signOut();
+        router.push("/");
+      },
     },
     {
       id: "theme-light",
