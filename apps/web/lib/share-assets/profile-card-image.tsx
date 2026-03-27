@@ -170,7 +170,7 @@ export function ProfileShareCardImage({
                 color: "#705D4F",
               }}
             >
-              {`@${data.username} consistency card`}
+              {`@${data.username}`}
             </div>
           </div>
 
@@ -212,7 +212,7 @@ export function ProfileShareCardImage({
                 color: "#7C6656",
               }}
             >
-              show the grind, not just the result
+              {`straude.com/stats/${data.username}`}
             </div>
           </div>
         </div>

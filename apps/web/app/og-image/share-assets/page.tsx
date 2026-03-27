@@ -76,7 +76,7 @@ export default function ShareAssetsPreviewPage() {
 
         <section>
           <h2 className="mb-4 text-lg font-semibold text-[#1f1a16]">
-            Consistency Card
+            Stats Card
           </h2>
           <div className="overflow-hidden rounded-[28px] border border-[#d9c3af] bg-white shadow-[0_20px_80px_rgba(92,48,21,0.10)]">
             <div
@@ -121,7 +121,7 @@ export default function ShareAssetsPreviewPage() {
               username="mark"
               isPublic
               isOwner
-              shareUrlOverride="https://straude.com/consistency/mark"
+              shareUrlOverride="https://straude.com/stats/mark"
               imageUrlOverride={PANEL_IMAGE_URL}
               downloadUrlOverride={PANEL_IMAGE_URL}
             />

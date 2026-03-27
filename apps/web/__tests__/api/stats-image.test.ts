@@ -26,7 +26,7 @@ vi.mock("@/lib/og-fonts", () => ({
 }));
 
 import { NextRequest } from "next/server";
-import { GET } from "@/app/api/consistency/[username]/image/route";
+import { GET } from "@/app/api/stats/[username]/image/route";
 import { createClient } from "@/lib/supabase/server";
 import { getServiceClient } from "@/lib/supabase/service";
 
@@ -36,7 +36,7 @@ function makeContext(username: string) {
 
 function makeRequest(params = "") {
   return new NextRequest(
-    new URL(`/api/consistency/alice/image?${params}`, "http://localhost")
+    new URL(`/api/stats/alice/image?${params}`, "http://localhost")
   );
 }
 
@@ -140,7 +140,7 @@ beforeEach(() => {
   vi.clearAllMocks();
 });
 
-describe("GET /api/consistency/[username]/image", () => {
+describe("GET /api/stats/[username]/image", () => {
   it("returns a PNG for a public profile", async () => {
     mockServiceClient({
       profile: {
@@ -170,7 +170,7 @@ describe("GET /api/consistency/[username]/image", () => {
     const response = await GET(makeRequest("download=1"), makeContext("alice"));
 
     expect(response.headers.get("Content-Disposition")).toContain(
-      'attachment; filename="straude-consistency-alice.png"'
+      'attachment; filename="straude-stats-alice.png"'
     );
   });
 

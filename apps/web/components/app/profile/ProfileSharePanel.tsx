@@ -29,7 +29,7 @@ export function ProfileSharePanel({
   const [publicUrl, setPublicUrl] = useState("");
   const [supportsClipboardImage, setSupportsClipboardImage] = useState(false);
   const imageUrl = useMemo(
-    () => imageUrlOverride ?? `/api/consistency/${username}/image`,
+    () => imageUrlOverride ?? `/api/stats/${username}/image`,
     [imageUrlOverride, username]
   );
   const downloadUrl = useMemo(
@@ -101,7 +101,7 @@ export function ProfileSharePanel({
       setCopied("image");
       window.setTimeout(() => setCopied(null), 2000);
     } catch {
-      setFeedback("Could not copy the consistency image. Try Download PNG.");
+      setFeedback("Could not copy the image. Try downloading instead.");
     } finally {
       setBusy(null);
     }
@@ -120,13 +120,13 @@ export function ProfileSharePanel({
       const objectUrl = URL.createObjectURL(blob);
       const anchor = document.createElement("a");
       anchor.href = objectUrl;
-      anchor.download = `straude-consistency-${username}.png`;
+      anchor.download = `straude-stats-${username}.png`;
       document.body.appendChild(anchor);
       anchor.click();
       anchor.remove();
       window.setTimeout(() => URL.revokeObjectURL(objectUrl), 1000);
     } catch {
-      setFeedback("Could not generate the consistency card PNG.");
+      setFeedback("Could not generate the stats card.");
     } finally {
       setBusy(null);
     }
@@ -137,7 +137,7 @@ export function ProfileSharePanel({
       <div className="flex flex-col gap-2 sm:flex-row sm:items-end sm:justify-between">
         <div>
           <p className="text-[0.7rem] font-semibold uppercase tracking-widest text-muted">
-            Share Your Consistency Card
+            Your Coding Rhythm
           </p>
         </div>
         {!isPublic && isOwner && (
@@ -147,10 +147,10 @@ export function ProfileSharePanel({
         )}
       </div>
 
-      <div className="mt-4 max-w-[620px] overflow-hidden rounded-[24px] border border-border bg-background shadow-sm">
+      <div className="mt-4 max-w-[480px] overflow-hidden rounded-[24px] border border-border bg-background shadow-sm">
         <Image
           src={imageUrl}
-          alt={`@${username}'s consistency card`}
+          alt={`@${username}'s stats card`}
           width={1200}
           height={630}
           unoptimized
@@ -172,13 +172,10 @@ export function ProfileSharePanel({
               setFeedback("Could not copy the link.");
             }
           }}
-          className="inline-flex min-w-0 items-center gap-2 rounded-full border border-border px-3 py-2 text-sm hover:bg-subtle disabled:cursor-not-allowed disabled:opacity-50"
+          className="inline-flex shrink-0 items-center justify-center rounded-full border border-border p-2.5 hover:bg-subtle disabled:cursor-not-allowed disabled:opacity-50"
           aria-label="Copy share URL"
         >
-          {copied === "link" ? <Check size={14} className="shrink-0 text-accent" aria-hidden /> : <Copy size={14} className="shrink-0" aria-hidden />}
-          <span className="truncate text-muted">
-            {isPublic && publicUrl ? publicUrl : "Make your profile public to unlock a shareable URL."}
-          </span>
+          {copied === "link" ? <Check size={14} className="text-accent" aria-hidden /> : <Copy size={14} aria-hidden />}
         </button>
         <button
           type="button"
@@ -191,33 +188,25 @@ export function ProfileSharePanel({
             <path d="M714.163 519.284 1160.89 0h-105.86L667.137 450.887 357.328 0H0l468.492 681.821L0 1226.37h105.866l409.625-476.152 327.181 476.152H1200L714.137 519.284h.026ZM569.165 687.828l-47.468-67.894-377.686-540.24h162.604l304.797 435.991 47.468 67.894 396.2 566.721H892.476L569.165 687.854v-.026Z" />
           </svg>
         </button>
-      </div>
-
-      <div className="mt-4 flex flex-wrap gap-3">
         {supportsClipboardImage && (
           <button
             type="button"
             onClick={copyImage}
             disabled={busy !== null}
-            className="inline-flex items-center gap-2 rounded-full border border-border px-4 py-2 text-sm font-semibold hover:bg-subtle disabled:opacity-60"
+            className="inline-flex shrink-0 items-center justify-center rounded-full border border-border p-2.5 hover:bg-subtle disabled:opacity-60"
+            aria-label="Copy PNG to clipboard"
           >
-            {copied === "image" ? <Check size={16} aria-hidden /> : <ImageIcon size={16} aria-hidden />}
-            {busy === "copy-image"
-              ? "Preparing..."
-              : copied === "image"
-                ? "Copied"
-                : "Copy PNG"}
+            {copied === "image" ? <Check size={14} className="text-accent" aria-hidden /> : <ImageIcon size={14} aria-hidden />}
           </button>
         )}
-
         <button
           type="button"
           onClick={downloadImage}
           disabled={busy !== null}
-          className="inline-flex items-center gap-2 rounded-full bg-accent px-4 py-2 text-sm font-semibold text-white hover:opacity-90 disabled:opacity-60"
+          className="inline-flex shrink-0 items-center justify-center rounded-full bg-accent p-2.5 text-white hover:opacity-90 disabled:opacity-60"
+          aria-label="Download PNG"
         >
-          <Download size={16} aria-hidden />
-          {busy === "download" ? "Preparing..." : "Download PNG"}
+          <Download size={14} aria-hidden />
         </button>
       </div>
 

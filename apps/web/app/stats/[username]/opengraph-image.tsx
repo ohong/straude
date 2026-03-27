@@ -4,7 +4,7 @@ import { loadFonts } from "@/lib/og-fonts";
 import { getProfileShareCardData } from "@/lib/share-assets/profile-card-data";
 import { ProfileShareCardImage } from "@/lib/share-assets/profile-card-image";
 
-export const alt = "Straude Consistency Card";
+export const alt = "Straude Stats Card";
 export const size = { width: 1200, height: 630 };
 export const contentType = "image/png";
 

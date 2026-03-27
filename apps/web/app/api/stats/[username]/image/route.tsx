@@ -48,13 +48,13 @@ export async function GET(request: NextRequest, context: RouteContext) {
     if (request.nextUrl.searchParams.get("download") === "1") {
       response.headers.set(
         "Content-Disposition",
-        `attachment; filename="straude-consistency-${profile.username}.png"`
+        `attachment; filename="straude-stats-${profile.username}.png"`
       );
     }
 
     return response;
   } catch (error) {
-    console.error("Consistency image generation failed:", error);
+    console.error("Stats image generation failed:", error);
     return new Response("Image generation failed", { status: 500 });
   }
 }

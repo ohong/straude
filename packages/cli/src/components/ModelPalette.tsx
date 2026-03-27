@@ -1,6 +1,5 @@
 import React from 'react';
 import { Box, Text } from 'ink';
-import { StackedBarChart } from '@pppp606/ink-chart';
 import { theme, modelColors, modelFallback } from './theme.js';
 
 export interface ModelPaletteProps {
@@ -78,6 +77,9 @@ function buildSegments(breakdown: Array<{ model: string; cost_usd: number }>): M
     .filter((s) => s.pct > 0);
 }
 
+/** Hide labels for segments under this threshold to avoid clipping */
+const MIN_LABEL_PCT = 5;
+
 export function ModelPalette({ breakdown }: ModelPaletteProps) {
   if (!breakdown || breakdown.length === 0) return null;
 
@@ -95,17 +97,48 @@ export function ModelPalette({ breakdown }: ModelPaletteProps) {
     );
   }
 
+  const termWidth = process.stdout.columns ?? 80;
+  const parentPadding = 2;
+  const barWidth = Math.max(20, termWidth - parentPadding);
+
+  // Allocate character widths proportionally
+  const segWidths = segments.map((s) => Math.max(1, Math.round((s.pct / 100) * barWidth)));
+  const totalChars = segWidths.reduce((a, b) => a + b, 0);
+  if (totalChars !== barWidth && segWidths.length > 0) {
+    segWidths[0]! += barWidth - totalChars;
+  }
+
   return (
     <Box flexDirection="column">
       <Text color={theme.muted}>MODELS</Text>
-      <StackedBarChart
-        data={segments.map((s) => ({
-          label: s.name,
-          value: s.pct,
-          color: getModelColor(s.name),
-        }))}
-        width="full"
-      />
+      {/* Labels row — only show if segment is wide enough */}
+      <Box>
+        {segments.map((s, i) => (
+          <Box key={s.name} width={segWidths[i]}>
+            <Text color={getModelColor(s.name)}>
+              {s.pct >= MIN_LABEL_PCT ? s.name : ''}
+            </Text>
+          </Box>
+        ))}
+      </Box>
+      {/* Stacked bar */}
+      <Box>
+        {segments.map((s, i) => (
+          <Text key={s.name} color={getModelColor(s.name)}>
+            {'▇'.repeat(segWidths[i]!)}
+          </Text>
+        ))}
+      </Box>
+      {/* Percentages row — only show if segment is wide enough */}
+      <Box>
+        {segments.map((s, i) => (
+          <Box key={s.name} width={segWidths[i]}>
+            <Text color={theme.muted}>
+              {s.pct >= MIN_LABEL_PCT ? `${s.pct}%` : ''}
+            </Text>
+          </Box>
+        ))}
+      </Box>
     </Box>
   );
 }

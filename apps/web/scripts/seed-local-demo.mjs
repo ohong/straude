@@ -232,7 +232,7 @@ async function main() {
       buildPostPayload(
         aliceId,
         latestAliceUsage.id,
-        "Dialed in the consistency card",
+        "Dialed in the stats card",
         "Heatmap first, stats second, and a share flow that feels more like Strava than a screenshot."
       ),
     ],

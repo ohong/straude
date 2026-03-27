@@ -1,6 +1,5 @@
 import React from 'react';
 import { Box, Text } from 'ink';
-import { BarChart as InkBarChart } from '@pppp606/ink-chart';
 import { theme } from './theme.js';
 
 export interface BarChartProps {
@@ -17,8 +16,24 @@ function getDayLabel(dateStr: string): string {
   return DAY_LABELS[d.getDay()]!;
 }
 
+function getTodayStr(): string {
+  const d = new Date();
+  const y = d.getFullYear();
+  const m = String(d.getMonth() + 1).padStart(2, '0');
+  const day = String(d.getDate()).padStart(2, '0');
+  return `${y}-${m}-${day}`;
+}
+
+const LABEL_W = 4;
+const VALUE_W = 9;
+const GAP = 1;
+
 export function BarChart({ data, weekTotal, prevWeekTotal, percentile }: BarChartProps) {
-  const weekTotalStr = `$${weekTotal.toFixed(2)} this week`;
+  const termWidth = process.stdout.columns ?? 80;
+  const parentPadding = 2; // paddingX={1} on PushSummary parent
+  const barArea = Math.max(10, termWidth - parentPadding - LABEL_W - VALUE_W - GAP);
+  const maxValue = Math.max(...data.map((d) => d.cost_usd), 0.01);
+  const todayStr = getTodayStr();
 
   // Context line: percentile + week-over-week change
   const contextParts: React.ReactNode[] = [];
@@ -44,40 +59,50 @@ export function BarChart({ data, weekTotal, prevWeekTotal, percentile }: BarChar
     );
   }
 
-  const contextLine = contextParts.length > 0 ? (
-    <Box justifyContent="flex-end">
-      {contextParts.map((part, i) => (
-        <React.Fragment key={i}>
-          {i > 0 && <Text color={theme.muted}>{' · '}</Text>}
-          {part}
-        </React.Fragment>
-      ))}
-    </Box>
-  ) : null;
-
   return (
     <Box flexDirection="column">
       {/* Header */}
       <Box justifyContent="space-between">
         <Text color={theme.muted}>LAST 7 DAYS</Text>
-        <Text color={theme.bright}>{weekTotalStr}</Text>
+        <Text color={theme.bright} bold>{`$${weekTotal.toFixed(2)} this week`}</Text>
       </Box>
 
-      {/* Bars */}
-      <InkBarChart
-        data={data.map((entry) => ({
-          label: getDayLabel(entry.date),
-          value: entry.cost_usd,
-          color: theme.accent,
-        }))}
-        width="full"
-        showValue="right"
-        format={(v) => `$${v.toFixed(2)}`}
-        barChar="█"
-      />
+      {/* Bars — ▇ (lower seven-eighths block) leaves a natural 1px gap between rows */}
+      {data.map((entry) => {
+        const label = getDayLabel(entry.date);
+        const isToday = entry.date === todayStr;
+        const filled = maxValue > 0
+          ? Math.max(entry.cost_usd > 0 ? 1 : 0, Math.round((entry.cost_usd / maxValue) * barArea))
+          : 0;
+        const bar = '▇'.repeat(filled);
+        const pad = ' '.repeat(Math.max(0, barArea - filled) + GAP);
+        const formatted = `$${entry.cost_usd.toFixed(2)}`.padStart(VALUE_W);
+
+        return (
+          <Box key={entry.date}>
+            <Text color={isToday ? theme.bright : theme.muted} bold={isToday}>
+              {label.padEnd(LABEL_W)}
+            </Text>
+            <Text color={theme.accent}>{bar}</Text>
+            <Text>{pad}</Text>
+            <Text color={isToday ? theme.bright : theme.muted} bold={isToday}>
+              {formatted}
+            </Text>
+          </Box>
+        );
+      })}
 
       {/* Context: percentile + week-over-week */}
-      {contextLine}
+      {contextParts.length > 0 && (
+        <Box justifyContent="flex-end">
+          {contextParts.map((part, i) => (
+            <React.Fragment key={i}>
+              {i > 0 && <Text color={theme.muted}>{' · '}</Text>}
+              {part}
+            </React.Fragment>
+          ))}
+        </Box>
+      )}
     </Box>
   );
 }

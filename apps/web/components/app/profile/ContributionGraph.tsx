@@ -3,7 +3,10 @@
 import { useState, useCallback } from "react";
 import { cn } from "@/lib/utils/cn";
 import { getCellColor } from "@/lib/utils/format";
+import { getHeatmapLegend } from "@/lib/share-assets/heatmap";
 import type { ContributionDay } from "@/types";
+
+const LEGEND = getHeatmapLegend();
 
 const CELL_SIZE = 12;
 const GAP = 3;
@@ -117,6 +120,18 @@ export function ContributionGraph({ data, onCellClick, className }: Contribution
 
   return (
     <div className={cn("relative", className)}>
+      <div className="mb-2 flex items-center justify-end gap-1.5 text-[10px] text-muted">
+        <span>Less</span>
+        {LEGEND.map((l) => (
+          <span
+            key={l.label}
+            className="inline-block h-[10px] w-[10px] rounded-[2px]"
+            style={{ backgroundColor: l.color }}
+            title={l.label}
+          />
+        ))}
+        <span>More</span>
+      </div>
       <svg
         viewBox={`0 0 ${svgWidth} ${svgHeight}`}
         className="block w-full"

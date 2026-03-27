@@ -6,7 +6,7 @@ import Link from "next/link";
 import { MapPin, LinkIcon, Github, Flame, Zap, Users, Lock } from "lucide-react";
 import { Avatar } from "@/components/ui/Avatar";
 import { Badge } from "@/components/ui/Badge";
-import { LevelBadge, LevelDialogTrigger } from "@/components/app/shared/LevelBadge";
+import { LevelBadge } from "@/components/app/shared/LevelBadge";
 import { AchievementBadges } from "@/components/app/profile/AchievementBadges";
 import { ContributionGraph } from "@/components/app/profile/ContributionGraph";
 import { ProfileSharePanel } from "@/components/app/profile/ProfileSharePanel";
@@ -359,24 +359,7 @@ export default async function ProfilePage({
         </div>
 
         {/* Stats row */}
-        <div className="mt-6 grid grid-cols-3 gap-4 sm:grid-cols-4">
-          {levelRow?.level ? (
-            <LevelDialogTrigger level={Number(levelRow.level)} className="cursor-pointer text-left hover:opacity-80">
-              <p className="text-[0.7rem] uppercase tracking-widest text-muted">Level</p>
-              <p className="font-[family-name:var(--font-mono)] text-lg font-medium tabular-nums text-accent">
-                L{Number(levelRow.level)}
-              </p>
-              <p className="text-xs text-muted">Your 30-day heat check</p>
-            </LevelDialogTrigger>
-          ) : (
-            <div>
-              <p className="text-[0.7rem] uppercase tracking-widest text-muted">Level</p>
-              <p className="font-[family-name:var(--font-mono)] text-lg font-medium tabular-nums text-accent">
-                L0
-              </p>
-              <p className="text-xs text-muted">Just getting started</p>
-            </div>
-          )}
+        <div className="mt-6 flex flex-wrap items-end gap-x-8 gap-y-4">
           <div>
             <p className="text-[0.7rem] uppercase tracking-widest text-muted">Streak</p>
             <p className="inline-flex items-center gap-1 font-[family-name:var(--font-mono)] text-lg font-medium tabular-nums">
@@ -412,15 +395,6 @@ export default async function ProfilePage({
             <AchievementBadges earned={achievements ?? []} showLocked={isOwn} />
           </div>
         )}
-
-        <div className="mt-6 rounded-[10px] border border-border bg-subtle/40 px-4 py-3 text-sm">
-          <p className="font-medium text-foreground">
-            Levels reflect how deep you've gone into agentic coding.
-          </p>
-          <p className="mt-1 text-muted">
-            From first completions to building your own orchestrator.
-          </p>
-        </div>
       </div>
 
       {/* Contribution graph */}
@@ -429,16 +403,20 @@ export default async function ProfilePage({
           Contributions
         </p>
         <ContributionGraph data={contributionData} />
-        {radarResponse && (
-          <div className="mt-5 flex justify-center">
-            <RadarChart data={radarResponse} />
+        <div className="flex flex-col gap-4 md:flex-row md:items-stretch">
+          <div className="min-w-0 md:flex-[5]">
+            <ProfileSharePanel
+              username={profile.username ?? username}
+              isPublic={profile.is_public}
+              isOwner={isOwn}
+            />
           </div>
-        )}
-        <ProfileSharePanel
-          username={profile.username ?? username}
-          isPublic={profile.is_public}
-          isOwner={isOwn}
-        />
+          {radarResponse && (
+            <div className="min-w-0 md:flex-[4]">
+              <RadarChart data={radarResponse} />
+            </div>
+          )}
+        </div>
       </div>
 
       {/* Posts */}

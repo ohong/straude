@@ -10,9 +10,9 @@ export async function generateMetadata({
   params: Promise<{ username: string }>;
 }): Promise<Metadata> {
   const { username } = await params;
-  const title = `@${username}'s Consistency Card — Straude`;
-  const description = `See @${username}'s Claude Code consistency card on Straude.`;
-  const pageUrl = `/consistency/${username}`;
+  const title = `@${username}'s Stats — Straude`;
+  const description = `See @${username}'s Claude Code stats on Straude.`;
+  const pageUrl = `/stats/${username}`;
 
   return {
     title,
@@ -34,7 +34,7 @@ export async function generateMetadata({
   };
 }
 
-export default async function ConsistencyPage({
+export default async function StatsPage({
   params,
 }: {
   params: Promise<{ username: string }>;
@@ -51,14 +51,14 @@ export default async function ConsistencyPage({
     notFound();
   }
 
-  const imageUrl = `/api/consistency/${profile.username}/image`;
+  const imageUrl = `/api/stats/${profile.username}/image`;
 
   return (
     <main className="flex min-h-screen flex-col items-center justify-center bg-[#f8efe5] px-4 py-10">
       <div className="w-full max-w-5xl">
         <div className="mb-6 text-center">
           <p className="text-xs font-semibold uppercase tracking-[0.24em] text-[#8B6B57]">
-            Straude Consistency Card
+            Straude Stats
           </p>
           <h1
             className="mt-3 text-3xl font-semibold text-[#1f1a16] sm:text-4xl"
@@ -67,15 +67,14 @@ export default async function ConsistencyPage({
             {profile.display_name?.trim() || `@${profile.username}`}
           </h1>
           <p className="mt-2 text-sm text-[#705D4F] sm:text-base">
-            Code like an athlete. Share the streak, the pace, and the last 52
-            weeks of grind.
+            52 weeks of Claude Code usage. Tracked, visualized, shareable.
           </p>
         </div>
 
         <div className="overflow-hidden rounded-[28px] border border-[#d9c3af] bg-white/70 shadow-[0_20px_80px_rgba(92,48,21,0.10)]">
           <Image
             src={imageUrl}
-            alt={`@${profile.username}'s consistency card`}
+            alt={`@${profile.username}'s stats card`}
             width={1200}
             height={630}
             className="h-auto w-full"
