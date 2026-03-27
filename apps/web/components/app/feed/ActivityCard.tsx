@@ -20,20 +20,38 @@ const ReactMarkdown = dynamic(() => import("react-markdown"), {
 });
 
 function timeAgo(dateStr: string, usageDate?: string | null) {
-  // Use the session date (usageDate) as the anchor when available,
-  // falling back to created_at only when there's no linked daily_usage.
-  const anchor = usageDate
-    ? new Date(usageDate + "T12:00:00")
-    : new Date(dateStr);
-  const diff = Date.now() - anchor.getTime();
-  const mins = Math.floor(diff / 60000);
+  const now = Date.now();
+  const createdAt = new Date(dateStr);
+
+  if (usageDate) {
+    // Compare usage date to today's local date (not UTC)
+    const d = new Date();
+    const todayStr = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
+    if (usageDate === todayStr) {
+      // Today's session — use created_at for hour precision
+      const mins = Math.floor((now - createdAt.getTime()) / 60000);
+      if (mins < 1) return "just now";
+      if (mins < 60) return `${mins}m ago`;
+      const hrs = Math.floor(mins / 60);
+      return `${hrs}h ago`;
+    }
+    // Older session — anchor to the usage date
+    const anchor = new Date(usageDate + "T12:00:00");
+    const days = Math.floor((now - anchor.getTime()) / 86400000);
+    if (days < 1) return "today";
+    if (days < 7) return `${days}d ago`;
+    return anchor.toLocaleDateString("en-US", { month: "short", day: "numeric" });
+  }
+
+  // No usage date — fall back to created_at
+  const mins = Math.floor((now - createdAt.getTime()) / 60000);
   if (mins < 1) return "just now";
   if (mins < 60) return `${mins}m ago`;
   const hrs = Math.floor(mins / 60);
   if (hrs < 24) return `${hrs}h ago`;
   const days = Math.floor(hrs / 24);
   if (days < 7) return `${days}d ago`;
-  return anchor.toLocaleDateString("en-US", { month: "short", day: "numeric" });
+  return createdAt.toLocaleDateString("en-US", { month: "short", day: "numeric" });
 }
 
 export function prettifyModel(model: string): string {
