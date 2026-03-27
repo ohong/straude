@@ -52,6 +52,17 @@ export async function GET(request: NextRequest, context: RouteContext) {
       );
     }
 
+    // When a ?v= fingerprint is present the URL changes on new data,
+    // so the response can be cached indefinitely. Without it, fall back
+    // to a short TTL for direct / external hits.
+    const hasFingerprint = request.nextUrl.searchParams.has("v");
+    response.headers.set(
+      "Cache-Control",
+      hasFingerprint
+        ? "public, max-age=31536000, s-maxage=31536000, immutable"
+        : "public, max-age=7200, s-maxage=7200, stale-while-revalidate=3600"
+    );
+
     return response;
   } catch (error) {
     console.error("Stats image generation failed:", error);

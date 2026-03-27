@@ -412,6 +412,7 @@ export default async function ProfilePage({
               username={profile.username ?? username}
               isPublic={profile.is_public}
               isOwner={isOwn}
+              cacheVersion={`${(totalSpendRows ?? []).length}-${Math.round(totalSpend * 100)}`}
             />
           </div>
           {radarResponse && (

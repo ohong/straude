@@ -15,6 +15,7 @@ export function ProfileSharePanel({
   shareUrlOverride,
   imageUrlOverride,
   downloadUrlOverride,
+  cacheVersion,
 }: {
   username: string;
   isPublic: boolean;
@@ -22,19 +23,22 @@ export function ProfileSharePanel({
   shareUrlOverride?: string;
   imageUrlOverride?: string;
   downloadUrlOverride?: string;
+  /** Fingerprint that changes when card data changes (e.g. usage count). */
+  cacheVersion?: string;
 }) {
   const [busy, setBusy] = useState<"share-x" | "copy-image" | "download" | null>(null);
   const [copied, setCopied] = useState<"image" | "link" | null>(null);
   const [feedback, setFeedback] = useState<string | null>(null);
   const [publicUrl, setPublicUrl] = useState("");
   const [supportsClipboardImage, setSupportsClipboardImage] = useState(false);
+  const vParam = cacheVersion ? `?v=${cacheVersion}` : "";
   const imageUrl = useMemo(
-    () => imageUrlOverride ?? `/api/stats/${username}/image`,
-    [imageUrlOverride, username]
+    () => imageUrlOverride ?? `/api/stats/${username}/image${vParam}`,
+    [imageUrlOverride, username, vParam]
   );
   const downloadUrl = useMemo(
-    () => downloadUrlOverride ?? `${imageUrl}?download=1`,
-    [downloadUrlOverride, imageUrl]
+    () => downloadUrlOverride ?? `/api/stats/${username}/image?download=1${cacheVersion ? `&v=${cacheVersion}` : ""}`,
+    [downloadUrlOverride, username, cacheVersion]
   );
 
   useEffect(() => {
@@ -57,7 +61,7 @@ export function ProfileSharePanel({
 
     try {
       if (supportsClipboardImage) {
-        const response = await fetch(imageUrl, { cache: "no-store" });
+        const response = await fetch(imageUrl, {});
         if (!response.ok) {
           throw new Error(`HTTP ${response.status}`);
         }
@@ -90,7 +94,7 @@ export function ProfileSharePanel({
     setFeedback(null);
 
     try {
-      const response = await fetch(imageUrl, { cache: "no-store" });
+      const response = await fetch(imageUrl, {});
       if (!response.ok) {
         throw new Error(`HTTP ${response.status}`);
       }
@@ -112,7 +116,7 @@ export function ProfileSharePanel({
     setFeedback(null);
 
     try {
-      const response = await fetch(downloadUrl, { cache: "no-store" });
+      const response = await fetch(downloadUrl, {});
       if (!response.ok) {
         throw new Error(`HTTP ${response.status}`);
       }
