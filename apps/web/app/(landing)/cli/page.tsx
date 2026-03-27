@@ -51,9 +51,44 @@ function Flag({
   );
 }
 
+const cliFaqJsonLd = {
+  "@context": "https://schema.org",
+  "@type": "FAQPage",
+  mainEntity: [
+    {
+      "@type": "Question",
+      name: "How do I install the Straude CLI?",
+      acceptedAnswer: {
+        "@type": "Answer",
+        text: "Run npx straude@latest — this logs you in and pushes today's Claude Code stats in one step. No global install required.",
+      },
+    },
+    {
+      "@type": "Question",
+      name: "How do I track my Claude Code spending automatically?",
+      acceptedAnswer: {
+        "@type": "Answer",
+        text: "Run straude --auto to enable daily auto-push via your OS scheduler (launchd on macOS, cron on Linux). For real-time tracking after every session, use straude --auto hooks to install a Claude Code SessionEnd hook.",
+      },
+    },
+    {
+      "@type": "Question",
+      name: "What data does Straude track from Claude Code?",
+      acceptedAnswer: {
+        "@type": "Answer",
+        text: "Straude reads your local Claude Code usage logs and tracks: cost per session, input/output tokens, models used, session count, and daily totals. All data stays local until you explicitly push it.",
+      },
+    },
+  ],
+};
+
 export default function CliReferencePage() {
   return (
     <>
+      <script
+        type="application/ld+json"
+        dangerouslySetInnerHTML={{ __html: JSON.stringify(cliFaqJsonLd) }}
+      />
       <Navbar variant="light" />
       <main className="bg-background py-32 text-foreground md:py-40">
         <article className="mx-auto max-w-2xl px-6 md:px-8">

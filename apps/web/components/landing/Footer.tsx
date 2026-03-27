@@ -50,6 +50,12 @@ export function Footer({ hideLogo = false }: { hideLogo?: boolean }) {
           >
             Terms
           </Link>
+          <Link
+            href="/open"
+            className="hover:text-landing-text transition-colors"
+          >
+            Open Stats
+          </Link>
           <a
             href="https://github.com/ohong/straude"
             target="_blank"

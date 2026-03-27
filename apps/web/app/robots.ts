@@ -6,7 +6,7 @@ export default function robots(): MetadataRoute.Robots {
       {
         userAgent: "*",
         allow: "/",
-        disallow: ["/admin", "/og-image", "/cli/", "/onboarding", "/settings"],
+        disallow: ["/admin", "/og-image", "/onboarding", "/settings"],
       },
     ],
     sitemap: "https://straude.com/sitemap.xml",

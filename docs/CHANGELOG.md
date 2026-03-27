@@ -4,6 +4,11 @@
 
 ### Added
 
+- **`/open` public usage statistics page.** Live anonymized data: total spend, tokens, avg streak, spending concentration (top 1%/5%/10%), model popularity. FAQPage + BreadcrumbList JSON-LD dynamically populated with real numbers. ISR 1hr. Targets "how much does the average Claude Code user spend?" in search and LLM citations.
+- **SEO/GEO structured data.** Organization JSON-LD in root layout. ItemList + FAQPage JSON-LD on leaderboard. FAQPage on CLI page and feed. FAQ questions target exact search queries ("Is there a Strava for Claude Code?", "Who spends the most on Claude Code?", "What are people building with Claude Code?").
+- **Internal link mesh.** Cross-links between `/open`, `/leaderboard`, `/feed` for guest visitors. "Open Stats" link in footer.
+- **Improved page metadata.** Leaderboard → "Claude Code Global Leaderboard", feed → "Claude Code Community Feed", profiles → "@username — Claude Code Stats" with descriptions and canonical URLs. sr-only H1 headings on feed and leaderboard.
+- **Sitemap expansion.** Dynamic sitemap includes all public user profiles (`/u/[username]`). Added `/open` and `/cli`. Removed `/cli/` from robots.txt disallow.
 - **Profile radar chart ("Engineer Archetype").** New 5-axis SVG radar chart on user profiles showing what kind of agentic engineer someone is. Axes: Output (total output tokens), Intensity (cost per active day), Consistency (% of days active since joining), Toolkit (unique model count), and Community (followers + kudos received + crew size). Each axis is percentile-ranked against all users (0–100). Backed by a new `GET /api/users/[username]/radar` endpoint. Creates recognizable archetypes: The Workhorse, The Sprinter, The Polyglot, The Leader, The Specialist.
 - **Growth loop documentation (`docs/growth-loop.md`).** Internal strategic reference mapping all shipped and planned features to Straude's core growth loop (Code → Push → Share → Discover → Join). Identifies the two load-bearing loops (UGC distribution + direct referral), categorizes features by loop role, and documents gaps.
 - **Level explainer dialog.** Clicking any level badge (profile, leaderboard) opens a popup explaining the 8 levels of agentic coding — from "No AI" (L1) to "Build your own orchestrator" (L8). Based on the viral meme about stages of AI adoption. No calculation details revealed.

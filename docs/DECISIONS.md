@@ -1,5 +1,19 @@
 # Architecture & Design Decisions
 
+## `/open` Page: Server Component with Full Fetch, No Client Components (2026-03-26)
+
+**Decision:** Build the `/open` stats page as a single server component file with no client-side interactivity. All data is fetched in a single `Promise.all()` and rendered statically with ISR (1-hour revalidation).
+
+**Why:**
+- **SEO/GEO priority** — This page exists to be cited by LLMs and indexed by search engines. Server-rendered HTML with structured data (FAQPage + BreadcrumbList JSON-LD) maximizes discoverability. No hydration means the full content is in the initial HTML response.
+- **Single file over component extraction** — The page has no reusable patterns worth extracting. `StatCard` is defined inline. Keeping everything in one file makes the data flow obvious and avoids prop-drilling fetched stats through component boundaries.
+- **Model normalization duplicated from CLI** — The `prettifyModel()` function is ported from `packages/cli/src/components/ModelPalette.tsx` rather than shared. The CLI uses Ink (terminal) and the web uses React DOM — sharing a utility across these would require a shared package for a 20-line function. Not worth the dependency.
+- **Revenue concentration via RPC** — Uses `admin_revenue_concentration` database function rather than computing percentiles in JS. The RPC already handles test-user exclusion and segment bucketing. Keeps the page component focused on presentation.
+
+**Alternatives considered:**
+1. **Client component with `useEffect` fetching** — Worse for SEO. Search engines and LLMs need the stats in the initial HTML.
+2. **Separate API route + static page** — Adds a network hop. The server component can call Supabase directly.
+
 ## GitHub README Stats Card: Single Size, Dedicated Query, 2hr Cache (2026-03-25)
 
 **Decision:** Ship a single compact card size (495x270), use a dedicated lightweight data fetcher instead of reusing `getProfileShareCardData()`, and cache cards for 2 hours.

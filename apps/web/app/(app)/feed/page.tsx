@@ -1,3 +1,4 @@
+import Link from "next/link";
 import { createClient } from "@/lib/supabase/server";
 import { getAuthUser } from "@/lib/supabase/auth";
 import { FeedList } from "@/components/app/feed/FeedList";
@@ -12,7 +13,7 @@ type KudosRow = {
 };
 
 const FEED_DESCRIPTION =
-  "See the latest Claude Code sessions from the Straude community.";
+  "Browse real Claude Code sessions from the Straude community. See what developers are building, how much they spend, and which models they use.";
 
 const SOCIAL_IMAGE = {
   url: "/og-image.png?v=2",
@@ -23,7 +24,7 @@ const SOCIAL_IMAGE = {
 };
 
 export const metadata: Metadata = {
-  title: "Feed",
+  title: "Claude Code Community Feed — Real Sessions from Real Developers",
   description: FEED_DESCRIPTION,
   alternates: {
     canonical: "/feed",
@@ -145,5 +146,47 @@ export default async function FeedPage({
     }));
   }
 
-  return <FeedList initialPosts={posts} userId={user?.id ?? null} feedType={feedType} pendingPosts={pendingPosts} />;
+  const faqJsonLd = {
+    "@context": "https://schema.org",
+    "@type": "FAQPage",
+    mainEntity: [
+      {
+        "@type": "Question",
+        name: "What are people building with Claude Code?",
+        acceptedAnswer: {
+          "@type": "Answer",
+          text: "The Straude community feed shows real Claude Code sessions — full-stack apps, CLI tools, refactors, bug fixes, and more. Each post includes cost, tokens used, and models involved.",
+        },
+      },
+      {
+        "@type": "Question",
+        name: "Can I see other people's Claude Code usage?",
+        acceptedAnswer: {
+          "@type": "Answer",
+          text: "Yes. Straude's public feed shows Claude Code sessions shared by the community. Users choose what to publish — each post shows the session cost, models used, and a description of what was built.",
+        },
+      },
+    ],
+  };
+
+  return (
+    <>
+      <h1 className="sr-only">Claude Code Community Feed</h1>
+      <script
+        type="application/ld+json"
+        dangerouslySetInnerHTML={{ __html: JSON.stringify(faqJsonLd) }}
+      />
+      <FeedList initialPosts={posts} userId={user?.id ?? null} feedType={feedType} pendingPosts={pendingPosts} />
+      {!user && (
+        <nav aria-label="Related pages" className="flex gap-4 border-t border-border px-4 py-4 text-sm sm:px-6">
+          <Link href="/leaderboard" className="font-medium text-accent hover:underline">
+            Leaderboard →
+          </Link>
+          <Link href="/open" className="font-medium text-accent hover:underline">
+            Usage Statistics →
+          </Link>
+        </nav>
+      )}
+    </>
+  );
 }

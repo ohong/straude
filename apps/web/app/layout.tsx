@@ -101,6 +101,21 @@ export default function RootLayout({
             }),
           }}
         />
+        <script
+          type="application/ld+json"
+          dangerouslySetInnerHTML={{
+            __html: JSON.stringify({
+              "@context": "https://schema.org",
+              "@type": "Organization",
+              name: "Straude",
+              url: "https://straude.com",
+              logo: "https://straude.com/icon.svg",
+              description:
+                "Strava for Claude Code. Track your AI-assisted coding sessions, share your wins, and compete on the leaderboard.",
+              sameAs: ["https://github.com/ohong/straude"],
+            }),
+          }}
+        />
         <a
           href="#main-content"
           className="sr-only focus:not-sr-only focus:fixed focus:left-4 focus:top-4 focus:z-[100] focus:rounded-[4px] focus:bg-accent focus:px-4 focus:py-2 focus:text-sm focus:font-semibold focus:text-white"

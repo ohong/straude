@@ -51,7 +51,11 @@ export async function generateMetadata({
   params: Promise<{ username: string }>;
 }): Promise<Metadata> {
   const { username } = await params;
-  return { title: `@${username}` };
+  return {
+    title: `@${username} — Claude Code Stats`,
+    description: `See @${username}'s Claude Code usage on Straude — spend, streaks, output tokens, and session history.`,
+    alternates: { canonical: `/u/${username}` },
+  };
 }
 
 export default async function ProfilePage({
