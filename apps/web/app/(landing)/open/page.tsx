@@ -8,7 +8,7 @@ import type { Metadata } from "next";
 export const revalidate = 3600; // cache for 1 hour
 
 export const metadata: Metadata = {
-  title: "Open Stats",
+  title: { absolute: "Global AI Token Usage Statistics | Straude" },
   description:
     "How much does the average Claude Code user spend? See live, anonymized usage statistics: total spend, tokens processed, most popular models, and spending distribution across all Straude users.",
   alternates: { canonical: "/open" },
@@ -379,16 +379,6 @@ export default async function OpenStatsPage() {
                 </strong>{" "}
                 in Claude Code spend so far.
               </p>
-              {top10Pct > 0 && (
-                <p className="mt-3">
-                  Spending is concentrated at the top: the top 10% of users
-                  account for{" "}
-                  <strong className="text-foreground">{top10Pct}%</strong> of
-                  total spend. The distribution mirrors endurance training
-                  volume — a small group logs serious mileage while most keep a
-                  steady, sustainable pace.
-                </p>
-              )}
 
               {stats.concentration.length > 0 && (
                 <div className="mt-6 overflow-x-auto">
