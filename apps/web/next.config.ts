@@ -45,6 +45,7 @@ const nextConfig: NextConfig = {
               "img-src 'self' data: blob: https://avatars.githubusercontent.com https://unavatar.io https://*.supabase.co http://127.0.0.1:54321 http://localhost:54321",
               "font-src 'self' data:",
               "connect-src 'self' https://*.supabase.co https://va.vercel-scripts.com http://127.0.0.1:54321 http://localhost:54321",
+              "worker-src 'self' blob:",
               "frame-ancestors 'none'",
               "base-uri 'self'",
               "form-action 'self'",
