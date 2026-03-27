@@ -1,3 +1,4 @@
+import { Suspense } from "react";
 import Link from "next/link";
 import { createClient } from "@/lib/supabase/server";
 import { getAuthUser } from "@/lib/supabase/auth";
@@ -48,24 +49,21 @@ export default async function AppLayout({
     );
   }
 
-  const { data: profile } = await supabase
-    .from("users")
-    .select("*")
-    .eq("id", user.id)
-    .single();
-
-  const onboardingIncomplete = !profile?.onboarding_completed;
-
-  // Fetch sidebar data in parallel
+  // Fetch profile + sidebar data in a single parallel batch
   const [
+    { data: profile },
     followingRes,
     followersRes,
     postsRes,
     latestPostRes,
-    streakRes,
     allTimeUsageRes,
     photoAchievementRes,
   ] = await Promise.all([
+    supabase
+      .from("users")
+      .select("*")
+      .eq("id", user.id)
+      .single(),
     supabase
       .from("follows")
       .select("id", { count: "exact", head: true })
@@ -84,7 +82,6 @@ export default async function AppLayout({
       .eq("user_id", user.id)
       .order("created_at", { ascending: false })
       .limit(3),
-    supabase.rpc("calculate_user_streak", { p_user_id: user.id, p_freeze_days: profile?.streak_freezes ?? 0 }),
     supabase
       .from("daily_usage")
       .select("cost_usd, output_tokens")
@@ -96,6 +93,14 @@ export default async function AppLayout({
       .eq("achievement_slug", "first-photo")
       .maybeSingle(),
   ]);
+
+  const onboardingIncomplete = !profile?.onboarding_completed;
+
+  // Streak needs profile.streak_freezes, so it runs after the parallel batch
+  const streakRes = await supabase.rpc("calculate_user_streak", {
+    p_user_id: user.id,
+    p_freeze_days: profile?.streak_freezes ?? 0,
+  });
 
   const followingCount = followingRes.count ?? 0;
   const followersCount = followersRes.count ?? 0;
@@ -170,9 +175,11 @@ export default async function AppLayout({
             </div>
           </main>
 
-          {/* Right sidebar — hidden below xl */}
+          {/* Right sidebar — hidden below xl, streams independently */}
           <aside className="hidden w-80 shrink-0 overflow-y-auto overscroll-contain border-l border-border xl:flex xl:flex-col">
-            <RightSidebar userId={user.id} />
+            <Suspense>
+              <RightSidebar userId={user.id} />
+            </Suspense>
           </aside>
         </div>
 

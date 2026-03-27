@@ -60,28 +60,26 @@ export default async function FeedPage({
       ? params.tab
       : "global";
 
-  // Unified RPC — sorts by daily_usage.date DESC, posts.created_at DESC
-  const { data } = await supabase.rpc("get_feed", {
-    p_type: feedType,
-    p_user_id: user?.id ?? null,
-    p_limit: 20,
-  });
-  let posts: Post[] = ((data ?? []) as FeedPostRow[]).map(normalizeFeedPost);
-
-  // Fetch incomplete posts for the logged-in user (bare synced sessions).
-  // Show nudge on all tabs so the user is reminded regardless of which feed they view.
-  let pendingPosts: Post[] = [];
-  if (user) {
-    const { data } = await supabase
-      .from("posts")
-      .select("*, daily_usage:daily_usage!posts_daily_usage_id_fkey(*)")
-      .eq("user_id", user.id)
-      .is("description", null)
-      .eq("images", "[]")
-      .order("created_at", { ascending: false })
-      .limit(5);
-    pendingPosts = ((data ?? []) as FeedPostRow[]).map(normalizeFeedPost);
-  }
+  // Feed + pending posts in parallel (independent queries)
+  const [{ data: feedData }, { data: pendingData }] = await Promise.all([
+    supabase.rpc("get_feed", {
+      p_type: feedType,
+      p_user_id: user?.id ?? null,
+      p_limit: 20,
+    }),
+    user
+      ? supabase
+          .from("posts")
+          .select("*, daily_usage:daily_usage!posts_daily_usage_id_fkey(*)")
+          .eq("user_id", user.id)
+          .is("description", null)
+          .eq("images", "[]")
+          .order("created_at", { ascending: false })
+          .limit(5)
+      : Promise.resolve({ data: null }),
+  ]);
+  let posts: Post[] = ((feedData ?? []) as FeedPostRow[]).map(normalizeFeedPost);
+  const pendingPosts: Post[] = ((pendingData ?? []) as FeedPostRow[]).map(normalizeFeedPost);
 
   // Enrich with kudos status + kudos users + recent comments
   if (posts.length > 0) {

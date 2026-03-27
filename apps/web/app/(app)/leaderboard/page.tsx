@@ -68,23 +68,19 @@ export default async function LeaderboardPage({
   const { data: rawEntries } = await query;
   const entries = (rawEntries ?? []) as LeaderboardViewRow[];
 
-  // Fetch streaks for all leaderboard users in a single RPC call
+  // Fetch streaks + levels for all leaderboard users in parallel
   const userIds = entries.map((entry) => entry.user_id);
-  const { data: streakRows } = userIds.length > 0
-    ? await supabase.rpc("calculate_streaks_batch", { p_user_ids: userIds })
-    : { data: [] };
+  const [{ data: streakRows }, { data: levelRows }] = userIds.length > 0
+    ? await Promise.all([
+        supabase.rpc("calculate_streaks_batch", { p_user_ids: userIds }),
+        db.from("user_levels").select("user_id, level").in("user_id", userIds),
+      ])
+    : [{ data: [] }, { data: [] }];
 
   const streakMap = new Map<string, number>();
   for (const row of streakRows ?? []) {
     streakMap.set(row.user_id, row.streak);
   }
-
-  const { data: levelRows } = userIds.length > 0
-    ? await db
-        .from("user_levels")
-        .select("user_id, level")
-        .in("user_id", userIds)
-    : { data: [] };
 
   const levelMap = new Map<string, number>();
   for (const row of levelRows ?? []) {

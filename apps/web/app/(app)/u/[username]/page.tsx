@@ -1,6 +1,7 @@
 import { createClient } from "@/lib/supabase/server";
 import { getServiceClient } from "@/lib/supabase/service";
 import { getProfileAccessContext } from "@/lib/profile-access";
+import { computeRadarScores } from "@/lib/radar";
 import { notFound } from "next/navigation";
 import Link from "next/link";
 import { MapPin, LinkIcon, Github, Flame, Zap, Users, Lock } from "lucide-react";
@@ -107,7 +108,12 @@ export default async function ProfilePage({
     );
   }
 
-  // Run all independent queries in parallel (including follow check)
+  // Run ALL independent queries in a single parallel batch.
+  // Everything here only depends on profile.id (available from phase 1).
+  const currentYear = new Date().getFullYear();
+  const yearStart = `${currentYear}-01-01`;
+  const yearEnd = `${currentYear}-12-31`;
+
   const [
     { count: followersCount },
     { count: followingCount },
@@ -118,6 +124,10 @@ export default async function ProfilePage({
     { data: levelRow },
     { data: referrerData },
     { data: crewMembers },
+    { data: contributions },
+    { data: postDates },
+    radarResponse,
+    { data: posts },
   ] = await Promise.all([
     db
       .from("follows")
@@ -157,16 +167,6 @@ export default async function ProfilePage({
       .select("username, display_name, avatar_url")
       .eq("referred_by", profile.id)
       .order("created_at", { ascending: true }),
-  ]);
-  const totalSpend = totalSpendRows?.reduce((s, r) => s + Number(r.cost_usd), 0) ?? 0;
-  const lifetimeOutputTokens = totalSpendRows?.reduce((s, r) => s + Number(r.output_tokens), 0) ?? 0;
-
-  // Contribution data (current year) + radar chart data
-  const currentYear = new Date().getFullYear();
-  const yearStart = `${currentYear}-01-01`;
-  const yearEnd = `${currentYear}-12-31`;
-
-  const [{ data: contributions }, { data: postDates }, radarResponse] = await Promise.all([
     db
       .from("daily_usage")
       .select("date, cost_usd")
@@ -177,10 +177,16 @@ export default async function ProfilePage({
       .from("posts")
       .select("daily_usage:daily_usage!posts_daily_usage_id_fkey(date)")
       .eq("user_id", profile.id),
-    fetch(`${process.env.NEXT_PUBLIC_APP_URL ?? "https://straude.com"}/api/users/${username}/radar`)
-      .then((r) => (r.ok ? r.json() : null))
-      .catch(() => null),
+    computeRadarScores(profile.id).catch(() => null),
+    db.rpc("get_feed", {
+      p_type: "mine",
+      p_user_id: profile.id,
+      p_limit: 20,
+    }),
   ]);
+
+  const totalSpend = totalSpendRows?.reduce((s, r) => s + Number(r.cost_usd), 0) ?? 0;
+  const lifetimeOutputTokens = totalSpendRows?.reduce((s, r) => s + Number(r.output_tokens), 0) ?? 0;
 
   const postDateSet = new Set(
     ((postDates ?? []) as PostDateRow[])
@@ -193,13 +199,6 @@ export default async function ProfilePage({
     cost_usd: Number(c.cost_usd),
     has_post: postDateSet.has(c.date),
   }));
-
-  // Recent posts — sorted by session date via unified RPC
-  const { data: posts } = await db.rpc("get_feed", {
-    p_type: "mine",
-    p_user_id: profile.id,
-    p_limit: 20,
-  });
 
   let normalizedPosts: Post[] = [];
   if (posts && posts.length > 0) {

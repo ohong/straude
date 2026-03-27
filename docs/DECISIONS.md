@@ -1,5 +1,19 @@
 # Architecture & Design Decisions
 
+## Profile Page Performance: Inline Radar + Flattened Waterfall (2026-03-27)
+
+**Decision:** Extract radar computation from the API route into `lib/radar.ts`, call it directly from the profile server component, cache global distributions in-memory (5-minute TTL), and merge all independent queries into a single `Promise.all`.
+
+**Why:**
+- **HTTP self-fetch was the biggest bottleneck.** The profile page called `fetch(/api/users/[username]/radar)` from a server component — a full HTTP round-trip to itself. Calling the function directly eliminates ~200ms+ of unnecessary network overhead.
+- **Radar endpoint was sequential.** It ran 5 queries one after another (daily_usage, users, follows, posts, kudos) scanning entire tables. Parallelizing them with `Promise.all` cuts the wall-clock time to the slowest single query.
+- **Global distributions change slowly.** The radar percentiles are computed across all users. Caching them for 5 minutes avoids re-scanning every table on every profile view. Per-user percentile computation from cached data is O(n log n) sort + scan — negligible.
+- **Profile page had 5 sequential phases.** Phases 2–4 only depended on `profile.id` from phase 1, not on each other. Merging them into one `Promise.all` eliminates 2 unnecessary round-trip delays.
+
+**Alternatives considered:**
+1. **Database-level materialized view for radar.** Would be the fastest option, but adds migration complexity and a refresh schedule. The in-memory cache achieves similar results with zero schema changes.
+2. **Client-side lazy load for radar.** Would unblock the page render but adds a loading flash. Since the cache makes radar fast, inline rendering is preferable.
+
 ## `/open` Page: Server Component with Full Fetch, No Client Components (2026-03-26)
 
 **Decision:** Build the `/open` stats page as a single server component file with no client-side interactivity. All data is fetched in a single `Promise.all()` and rendered statically with ISR (1-hour revalidation).

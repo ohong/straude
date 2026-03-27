@@ -2,6 +2,19 @@
 
 ## Unreleased
 
+### Changed
+
+- **Navigation performance overhaul.** Systematic optimization across all major pages:
+  - **Profile page:** Merged 5 sequential query phases into 2 (access check → single `Promise.all` for all 13 queries). Eliminated HTTP self-fetch for radar chart by extracting into `lib/radar.ts` called directly. Radar distributions cached in-memory (5-min TTL), all 5 heavy table scans parallelized.
+  - **Feed page:** Feed RPC and pending-posts query now run in parallel instead of sequentially.
+  - **Leaderboard page:** Streak and level enrichment queries now run in parallel via `Promise.all`.
+  - **App layout:** Profile fetch merged into sidebar query batch. RightSidebar wrapped in `Suspense` so it streams independently without blocking page content.
+  - **Auth dedup:** `getProfileAccessContext` now uses `getAuthUser()` (React `cache()`-ed) instead of a fresh `supabase.auth.getUser()` call, eliminating a duplicate auth round-trip shared with middleware/layout.
+
+### Fixed
+
+- **Sitemap build failure in CI.** Added `export const dynamic = "force-dynamic"` to `sitemap.ts` to prevent build-time prerendering, which failed when `SUPABASE_SECRET_KEY` wasn't available to build workers.
+
 ### Added
 
 - **`/open` public usage statistics page.** Live anonymized data: total spend, tokens, avg streak, spending concentration (top 1%/5%/10%), model popularity. FAQPage + BreadcrumbList JSON-LD dynamically populated with real numbers. ISR 1hr. Targets "how much does the average Claude Code user spend?" in search and LLM citations.

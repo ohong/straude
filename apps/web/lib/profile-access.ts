@@ -1,4 +1,5 @@
 import { createClient } from "@/lib/supabase/server";
+import { getAuthUser } from "@/lib/supabase/auth";
 import { getServiceClient } from "@/lib/supabase/service";
 
 type ProfileShape = {
@@ -18,22 +19,18 @@ export async function getProfileAccessContext<TProfile extends ProfileShape>(
   username: string,
   selectFields: string,
 ): Promise<ProfileAccessContext<TProfile> | null> {
-  const supabase = await createClient();
   const db = getServiceClient();
 
-  const [
-    {
-      data: { user: authUser },
-    },
-    { data: rawProfile, error: profileError },
-  ] = await Promise.all([
-    supabase.auth.getUser(),
-    db
-      .from("users")
-      .select(selectFields)
-      .eq("username", username)
-      .single(),
-  ]);
+  // Use cached auth (shared with middleware/layout) + profile fetch in parallel
+  const [authUser, { data: rawProfile, error: profileError }] =
+    await Promise.all([
+      getAuthUser(),
+      db
+        .from("users")
+        .select(selectFields)
+        .eq("username", username)
+        .single(),
+    ]);
 
   if (profileError || !rawProfile) {
     return null;
@@ -54,6 +51,7 @@ export async function getProfileAccessContext<TProfile extends ProfileShape>(
   let isFollowing = false;
 
   if (authUserId && !isOwn) {
+    const supabase = await createClient();
     const { data: follow } = await supabase
       .from("follows")
       .select("id")
