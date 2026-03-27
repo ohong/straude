@@ -65,6 +65,31 @@ Get your personalized embed code at [straude.com/card](https://straude.com/card)
 
 Go public and compete on the leaderboard, or stay private and share only with followers.
 
+## FAQ
+
+### What data does Straude collect?
+
+Only **aggregate token usage statistics** — the same numbers you'd see on your Anthropic/OpenAI billing dashboard:
+
+- Token counts (input, output, cache read, cache creation)
+- Cost in USD
+- Model names used (e.g. "Claude Opus", "GPT-4.1")
+- Session count and dates
+
+That's it. **We have zero access to your prompts, code, conversations, file contents, or anything you do inside Claude Code or Codex.** The CLI reads pre-aggregated daily totals from local [ccusage](https://github.com/ryoppippi/ccusage) data — it never touches your session transcripts or project files.
+
+### Where does the usage data come from?
+
+The CLI runs [ccusage](https://github.com/ryoppippi/ccusage) locally on your machine, which reads the JSONL log files that Claude Code writes to `~/.claude/`. These logs contain token counts and cost per API call. ccusage aggregates them into daily totals, and the Straude CLI sends those totals to the server. The raw logs never leave your machine.
+
+### Can Straude see my code or prompts?
+
+No. The data pipeline is: local JSONL logs → ccusage (local aggregation) → daily totals sent to Straude. At no point does any conversation content, prompt text, code, or file path leave your machine. You can verify this yourself — the CLI is open source, and you can run `npx straude --dry-run` to see exactly what would be sent before it's sent.
+
+### Is my profile public by default?
+
+No. You choose your visibility during onboarding. Private profiles are only visible to approved followers. You can switch between public and private at any time in settings.
+
 ## Hackathon
 
 Straude is an entry in [**Built with Opus 4.6: a Claude Code hackathon**](https://cerebralvalley.ai/e/claude-code-hackathon) under **Problem Statement One: Build a Tool That Should Exist**. The entire project was built by Claude Opus 4.6, with special help from the experimental *Agent Teams* feature.
