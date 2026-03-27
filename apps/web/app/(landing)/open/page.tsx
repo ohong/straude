@@ -8,7 +8,7 @@ import type { Metadata } from "next";
 export const revalidate = 3600; // cache for 1 hour
 
 export const metadata: Metadata = {
-  title: "Claude Code Usage Statistics — Live Data",
+  title: "Open Stats",
   description:
     "How much does the average Claude Code user spend? See live, anonymized usage statistics: total spend, tokens processed, most popular models, and spending distribution across all Straude users.",
   alternates: { canonical: "/open" },

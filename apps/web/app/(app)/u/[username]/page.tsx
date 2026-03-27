@@ -52,7 +52,7 @@ export async function generateMetadata({
 }): Promise<Metadata> {
   const { username } = await params;
   return {
-    title: `@${username} — Claude Code Stats`,
+    title: `@${username}`,
     description: `See @${username}'s Claude Code usage on Straude — spend, streaks, output tokens, and session history.`,
     alternates: { canonical: `/u/${username}` },
   };

@@ -24,7 +24,7 @@ const SOCIAL_IMAGE = {
 };
 
 export const metadata: Metadata = {
-  title: "Claude Code Community Feed — Real Sessions from Real Developers",
+  title: "Feed",
   description: FEED_DESCRIPTION,
   alternates: {
     canonical: "/feed",

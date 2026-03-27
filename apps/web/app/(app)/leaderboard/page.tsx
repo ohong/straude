@@ -24,7 +24,7 @@ const SOCIAL_IMAGE = {
 };
 
 export const metadata: Metadata = {
-  title: "Claude Code Global Leaderboard",
+  title: "Leaderboard",
   description: LEADERBOARD_DESCRIPTION,
   alternates: {
     canonical: "/leaderboard",
