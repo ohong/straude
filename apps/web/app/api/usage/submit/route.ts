@@ -165,6 +165,13 @@ export async function POST(request: Request) {
   const deviceId = body.device_id;
   const deviceName = body.device_name;
 
+  if (!deviceId) {
+    return NextResponse.json(
+      { error: "device_id is required. Please update your CLI: npx straude@latest" },
+      { status: 400 },
+    );
+  }
+
   // Process all entries concurrently — each entry is independent per-date
   const settled = await Promise.allSettled(
     body.entries.map(async (entry) => {
@@ -180,139 +187,133 @@ export async function POST(request: Request) {
 
       let usage: { id: string } | null = null;
       let usageErrorMessage: string | null = null;
-      let titleCostUSD: number;
-      let titleModels: string[] | undefined;
 
-      if (deviceId) {
-        // Multi-device path: upsert into device_usage, then aggregate into daily_usage
+      // Guard against decreasing values (e.g., ccusage log rotation)
+      const { data: existingDevice } = await db
+        .from("device_usage")
+        .select("cost_usd")
+        .eq("user_id", userId)
+        .eq("date", entry.date)
+        .eq("device_id", deviceId)
+        .maybeSingle();
 
-        // Guard against decreasing values (e.g., ccusage log rotation)
-        const { data: existingDevice } = await db
+      // Only upsert if new data is >= existing (prevent overwrite with lower values)
+      if (!existingDevice || entry.data.costUSD >= Number(existingDevice.cost_usd)) {
+        const { error: deviceError } = await db
           .from("device_usage")
-          .select("cost_usd")
-          .eq("user_id", userId)
-          .eq("date", entry.date)
-          .eq("device_id", deviceId)
-          .maybeSingle();
-
-        // Only upsert if new data is >= existing (prevent overwrite with lower values)
-        if (!existingDevice || entry.data.costUSD >= Number(existingDevice.cost_usd)) {
-          const { error: deviceError } = await db
-            .from("device_usage")
-            .upsert(
-              {
-                user_id: userId,
-                device_id: deviceId,
-                device_name: deviceName ?? null,
-                date: entry.date,
-                cost_usd: entry.data.costUSD,
-                input_tokens: entry.data.inputTokens,
-                output_tokens: entry.data.outputTokens,
-                cache_creation_tokens: entry.data.cacheCreationTokens,
-                cache_read_tokens: entry.data.cacheReadTokens,
-                total_tokens: entry.data.totalTokens,
-                models: entry.data.models,
-                model_breakdown: entry.data.modelBreakdown ?? null,
-                session_count: 1,
-                raw_hash: body.hash ?? null,
-                updated_at: new Date().toISOString(),
-              },
-              { onConflict: "user_id,date,device_id" },
-            )
-            .select("id")
-            .single();
-
-          if (deviceError) {
-            throw new Error(`Failed to upsert device_usage for ${entry.date}: ${deviceError.message}`);
-          }
-        }
-
-        // Fetch all device rows for this (user_id, date) and aggregate
-        const { data: deviceRows, error: fetchError } = await db
-          .from("device_usage")
-          .select("cost_usd,input_tokens,output_tokens,cache_creation_tokens,cache_read_tokens,total_tokens,models,model_breakdown")
-          .eq("user_id", userId)
-          .eq("date", entry.date);
-
-        if (fetchError || !deviceRows) {
-          throw new Error(`Failed to fetch device_usage for ${entry.date}: ${fetchError?.message}`);
-        }
-
-        const agg = aggregateDeviceRows(deviceRows as DeviceUsageRow[]);
-
-        const { data, error } = await db
-          .from("daily_usage")
           .upsert(
             {
               user_id: userId,
+              device_id: deviceId,
+              device_name: deviceName ?? null,
               date: entry.date,
-              cost_usd: agg.cost_usd,
-              input_tokens: agg.input_tokens,
-              output_tokens: agg.output_tokens,
-              cache_creation_tokens: agg.cache_creation_tokens,
-              cache_read_tokens: agg.cache_read_tokens,
-              total_tokens: agg.total_tokens,
-              models: agg.models,
-              model_breakdown: agg.model_breakdown,
-              session_count: agg.session_count,
-              is_verified: isVerified,
+              cost_usd: entry.data.costUSD,
+              input_tokens: entry.data.inputTokens,
+              output_tokens: entry.data.outputTokens,
+              cache_creation_tokens: entry.data.cacheCreationTokens,
+              cache_read_tokens: entry.data.cacheReadTokens,
+              total_tokens: entry.data.totalTokens,
+              models: entry.data.models,
+              model_breakdown: entry.data.modelBreakdown ?? null,
+              session_count: 1,
               raw_hash: body.hash ?? null,
               updated_at: new Date().toISOString(),
             },
-            { onConflict: "user_id,date" },
+            { onConflict: "user_id,date,device_id" },
           )
           .select("id")
           .single();
 
-        usage = data;
-        usageErrorMessage = error?.message ?? null;
-        titleCostUSD = agg.cost_usd;
-        titleModels = agg.models;
-      } else {
-        // Legacy path: direct upsert into daily_usage (no device tracking)
-        // Guard against decreasing values
-        if (!existing || entry.data.costUSD >= Number(existing.cost_usd)) {
-          const { data, error } = await db
-            .from("daily_usage")
-            .upsert(
-              {
-                user_id: userId,
-                date: entry.date,
-                cost_usd: entry.data.costUSD,
-                input_tokens: entry.data.inputTokens,
-                output_tokens: entry.data.outputTokens,
-                cache_creation_tokens: entry.data.cacheCreationTokens,
-                cache_read_tokens: entry.data.cacheReadTokens,
-                total_tokens: entry.data.totalTokens,
-                models: entry.data.models,
-                model_breakdown: entry.data.modelBreakdown ?? null,
-                is_verified: isVerified,
-                raw_hash: body.hash ?? null,
-                updated_at: new Date().toISOString(),
-              },
-              { onConflict: "user_id,date" },
-            )
-            .select("id")
-            .single();
-
-          usage = data;
-          usageErrorMessage = error?.message ?? null;
-          titleCostUSD = entry.data.costUSD;
-          titleModels = entry.data.models;
-        } else {
-          // Cost decreased — keep existing data, skip upsert
-          usage = existing as { id: string };
-          titleCostUSD = Number(existing.cost_usd);
-          titleModels = (existing.models as string[]) ?? undefined;
+        if (deviceError) {
+          throw new Error(`Failed to upsert device_usage for ${entry.date}: ${deviceError.message}`);
         }
       }
+
+      // Backfill legacy data: if daily_usage exists but has no device_usage rows,
+      // the data was written before device tracking. Insert it as a "legacy" device
+      // so the aggregation doesn't discard it.
+      if (existing) {
+        const { count: deviceCount } = await db
+          .from("device_usage")
+          .select("id", { count: "exact", head: true })
+          .eq("user_id", userId)
+          .eq("date", entry.date);
+
+        if (deviceCount === 0) {
+          const { data: legacyRow } = await db
+            .from("daily_usage")
+            .select("cost_usd,input_tokens,output_tokens,cache_creation_tokens,cache_read_tokens,total_tokens,models,model_breakdown,raw_hash")
+            .eq("id", existing.id)
+            .single();
+
+          if (legacyRow) {
+            await db.from("device_usage").insert({
+              user_id: userId,
+              device_id: "00000000-0000-0000-0000-000000000000",
+              device_name: "legacy",
+              date: entry.date,
+              cost_usd: legacyRow.cost_usd,
+              input_tokens: legacyRow.input_tokens,
+              output_tokens: legacyRow.output_tokens,
+              cache_creation_tokens: legacyRow.cache_creation_tokens ?? 0,
+              cache_read_tokens: legacyRow.cache_read_tokens ?? 0,
+              total_tokens: legacyRow.total_tokens,
+              models: legacyRow.models ?? [],
+              model_breakdown: legacyRow.model_breakdown ?? null,
+              session_count: 1,
+              raw_hash: legacyRow.raw_hash ?? null,
+              updated_at: new Date().toISOString(),
+            });
+          }
+        }
+      }
+
+      // Fetch all device rows for this (user_id, date) and aggregate
+      const { data: deviceRows, error: fetchError } = await db
+        .from("device_usage")
+        .select("cost_usd,input_tokens,output_tokens,cache_creation_tokens,cache_read_tokens,total_tokens,models,model_breakdown")
+        .eq("user_id", userId)
+        .eq("date", entry.date);
+
+      if (fetchError || !deviceRows) {
+        throw new Error(`Failed to fetch device_usage for ${entry.date}: ${fetchError?.message}`);
+      }
+
+      const agg = aggregateDeviceRows(deviceRows as DeviceUsageRow[]);
+
+      const { data, error } = await db
+        .from("daily_usage")
+        .upsert(
+          {
+            user_id: userId,
+            date: entry.date,
+            cost_usd: agg.cost_usd,
+            input_tokens: agg.input_tokens,
+            output_tokens: agg.output_tokens,
+            cache_creation_tokens: agg.cache_creation_tokens,
+            cache_read_tokens: agg.cache_read_tokens,
+            total_tokens: agg.total_tokens,
+            models: agg.models,
+            model_breakdown: agg.model_breakdown,
+            session_count: agg.session_count,
+            is_verified: isVerified,
+            raw_hash: body.hash ?? null,
+            updated_at: new Date().toISOString(),
+          },
+          { onConflict: "user_id,date" },
+        )
+        .select("id")
+        .single();
+
+      usage = data;
+      usageErrorMessage = error?.message ?? null;
 
       if (usageErrorMessage || !usage) {
         throw new Error(`Failed to upsert usage for ${entry.date}: ${usageErrorMessage ?? "Unknown error"}`);
       }
 
       // Build auto-title from aggregated usage data
-      const models = titleModels;
+      const models = agg.models;
       const hasClaude = models?.some((m) => m.includes("claude") || m.includes("opus") || m.includes("sonnet") || m.includes("haiku"));
       const claudeLabel = models?.some((m) => m.includes("opus")) ? "Claude Opus"
         : models?.some((m) => m.includes("sonnet")) ? "Claude Sonnet"
@@ -328,7 +329,7 @@ export async function POST(request: Request) {
       const toolLabels = [claudeLabel, codexLabel].filter(Boolean);
       const modelLabel = toolLabels.length > 0 ? toolLabels.join(" + ") : (hasClaude ? "Claude" : null);
       const dateLabel = new Date(entry.date).toLocaleDateString("en-US", { month: "short", day: "numeric" });
-      const costLabel = titleCostUSD > 0 ? `, $${titleCostUSD.toFixed(2)}` : "";
+      const costLabel = agg.cost_usd > 0 ? `, $${agg.cost_usd.toFixed(2)}` : "";
       const autoTitle = modelLabel ? `${dateLabel} — ${modelLabel}${costLabel}` : `${dateLabel}${costLabel}`;
 
       // Create or update post linked to the daily_usage record

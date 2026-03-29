@@ -36,6 +36,7 @@
 
 ### Fixed
 
+- **Multi-device push no longer overwrites legacy data.** When a user's first push had no `device_id` (legacy path), subsequent pushes from a device-aware CLI would aggregate only the new device's `device_usage` row and overwrite `daily_usage`, discarding the original data. Eliminated the legacy code path entirely — all submissions (CLI and web import) now require `device_id` and go through the multi-device path. The submit endpoint also backfills any remaining orphaned `daily_usage` rows into `device_usage` (as a "legacy" sentinel device) before aggregation. Backfilled 382 orphaned rows across 72 users. Reported by @caspian.
 - **SessionEnd hook no longer blocks Claude Code.** Added `async: true` to the hook entry so `straude push` runs in the background. (PR #59 by @alexesprit)
 
 ### Changed

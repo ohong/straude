@@ -46,7 +46,11 @@ const mockServiceClient = {
 // Helpers
 // ---------------------------------------------------------------------------
 function chainBuilder(resolved: Record<string, unknown> = {}) {
-  const chain: Record<string, any> = {};
+  const chain: Record<string, any> = {
+    data: [],
+    error: null,
+    count: 0,
+  };
   const methods = [
     "select", "insert", "update", "upsert", "delete",
     "eq", "neq", "gt", "lt", "gte", "lte", "in", "is",
@@ -119,6 +123,8 @@ describe("Flow: Web JSON Import", () => {
           },
         ],
         source: "web",
+        device_id: "00000000-0000-0000-0000-000000000001",
+        device_name: "web-import",
       }),
     });
 

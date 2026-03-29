@@ -1,5 +1,18 @@
 # Architecture & Design Decisions
 
+## Legacy-to-Device Usage Backfill Strategy (2026-03-28)
+
+**Decision:** When the multi-device push path encounters a `daily_usage` row with zero `device_usage` backing rows, automatically insert a sentinel `device_usage` row (device_id `00000000-...`, device_name "legacy") before aggregation.
+
+**Why:** Early CLI versions and web pushes wrote directly to `daily_usage` with no `device_id`. When a newer CLI (with device tracking) pushed for the same date, the aggregation only read `device_usage` rows — missing the legacy data entirely — and overwrote `daily_usage` with just the new device's numbers. This caused real data loss for users (~$111 drop reported by @caspian).
+
+**Alternatives considered:**
+1. **Read existing `daily_usage` into aggregation directly** — Would require knowing which portion of `daily_usage` came from legacy vs. devices, creating ambiguity on re-aggregation.
+2. **Skip aggregation if legacy data exists** — Would prevent multi-device from ever working for dates that had legacy data.
+3. **One-time migration only (no runtime backfill)** — Doesn't protect against future edge cases where data enters via the legacy path.
+
+**Data fix:** Backfilled 382 orphaned rows across 72 users in production.
+
 ## Profile Page Performance: Inline Radar + Flattened Waterfall (2026-03-27)
 
 **Decision:** Extract radar computation from the API route into `lib/radar.ts`, call it directly from the profile server component, cache global distributions in-memory (5-minute TTL), and merge all independent queries into a single `Promise.all`.

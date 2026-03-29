@@ -66,7 +66,12 @@ export default function ImportPage() {
     const res = await fetch("/api/usage/submit", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ entries, source: "web" }),
+      body: JSON.stringify({
+        entries,
+        source: "web",
+        device_id: "00000000-0000-0000-0000-000000000001",
+        device_name: "web-import",
+      }),
     });
 
     if (!res.ok) {

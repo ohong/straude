@@ -68,6 +68,11 @@ function mockServiceClient(overrides: Record<string, any> = {}) {
       data: { id: "usage-1" },
       error: null,
     }),
+    // These make the chain itself act as a resolved query result,
+    // needed for calls that end with .eq() (e.g. device_usage fetch)
+    data: [],
+    error: null,
+    count: 0,
     ...overrides,
   };
   (getServiceClient as any).mockReturnValue(chain);
@@ -87,7 +92,24 @@ function mockSupabaseAuth(userId: string | null) {
   return client;
 }
 
+const DEFAULT_DEVICE_ID = "aaaaaaaa-bbbb-cccc-dddd-eeeeeeeeeeee";
+const DEFAULT_DEVICE_NAME = "test-device";
+
 function mockRequest(body: any, headers: Record<string, string> = {}) {
+  // All requests must include device_id unless explicitly testing the rejection
+  const withDevice = {
+    device_id: DEFAULT_DEVICE_ID,
+    device_name: DEFAULT_DEVICE_NAME,
+    ...body,
+  };
+  return new Request("http://localhost/api/usage/submit", {
+    method: "POST",
+    headers: { "Content-Type": "application/json", ...headers },
+    body: JSON.stringify(withDevice),
+  });
+}
+
+function mockRequestRaw(body: any, headers: Record<string, string> = {}) {
   return new Request("http://localhost/api/usage/submit", {
     method: "POST",
     headers: { "Content-Type": "application/json", ...headers },
@@ -121,8 +143,9 @@ describe("POST /api/usage/submit", () => {
     (verifyCliToken as any).mockReturnValue("cli-user-id");
     mockSupabaseAuth(null);
     const svc = mockServiceClient();
-    // Each entry needs two .single() calls: usage + post
+    // Each entry needs three .single() calls: device upsert + daily upsert + post
     svc.single
+      .mockResolvedValueOnce({ data: { id: "dev-1" }, error: null })
       .mockResolvedValueOnce({ data: { id: "usage-1" }, error: null })
       .mockResolvedValueOnce({ data: { id: "post-1" }, error: null });
 
@@ -143,6 +166,7 @@ describe("POST /api/usage/submit", () => {
     mockSupabaseAuth("web-user-id");
     const svc = mockServiceClient();
     svc.single
+      .mockResolvedValueOnce({ data: { id: "dev-1" }, error: null })
       .mockResolvedValueOnce({ data: { id: "usage-1" }, error: null })
       .mockResolvedValueOnce({ data: { id: "post-1" }, error: null });
 
@@ -159,6 +183,7 @@ describe("POST /api/usage/submit", () => {
     (verifyCliToken as any).mockReturnValue("user-1");
     const svc = mockServiceClient();
     svc.single
+      .mockResolvedValueOnce({ data: { id: "dev-1" }, error: null })
       .mockResolvedValueOnce({ data: { id: "usage-1" }, error: null })
       .mockResolvedValueOnce({ data: { id: "post-1" }, error: null });
 
@@ -179,10 +204,12 @@ describe("POST /api/usage/submit", () => {
   it("submits multiple days (batch)", async () => {
     (verifyCliToken as any).mockReturnValue("user-1");
     const svc = mockServiceClient();
-    // 2 entries, each needing 2 .single() calls
+    // 2 entries, each needing 3 .single() calls (device + daily + post)
     svc.single
+      .mockResolvedValueOnce({ data: { id: "d1" }, error: null })
       .mockResolvedValueOnce({ data: { id: "u1" }, error: null })
       .mockResolvedValueOnce({ data: { id: "p1" }, error: null })
+      .mockResolvedValueOnce({ data: { id: "d2" }, error: null })
       .mockResolvedValueOnce({ data: { id: "u2" }, error: null })
       .mockResolvedValueOnce({ data: { id: "p2" }, error: null });
 
@@ -246,10 +273,11 @@ describe("POST /api/usage/submit", () => {
     expect(json.error).toContain("Negative input tokens");
   });
 
-  it("uses upsert on conflict (user_id,date)", async () => {
+  it("uses upsert on conflict for device_usage and daily_usage", async () => {
     (verifyCliToken as any).mockReturnValue("user-1");
     const svc = mockServiceClient();
     svc.single
+      .mockResolvedValueOnce({ data: { id: "dev-1" }, error: null })
       .mockResolvedValueOnce({ data: { id: "usage-1" }, error: null })
       .mockResolvedValueOnce({ data: { id: "post-1" }, error: null });
 
@@ -257,16 +285,17 @@ describe("POST /api/usage/submit", () => {
       mockRequest({ entries: [makeEntry(todayStr())], source: "cli" })
     );
 
-    // Verify upsert was called with onConflict
-    expect(svc.upsert).toHaveBeenCalled();
-    const firstUpsertCall = svc.upsert.mock.calls[0];
-    expect(firstUpsertCall[1]).toEqual({ onConflict: "user_id,date" });
+    // Verify upsert was called for both device_usage and daily_usage
+    expect(svc.upsert).toHaveBeenCalledTimes(2);
+    expect(svc.upsert.mock.calls[0][1]).toEqual({ onConflict: "user_id,date,device_id" });
+    expect(svc.upsert.mock.calls[1][1]).toEqual({ onConflict: "user_id,date" });
   });
 
   it("auto-creates post for each usage entry", async () => {
     (verifyCliToken as any).mockReturnValue("user-1");
     const svc = mockServiceClient();
     svc.single
+      .mockResolvedValueOnce({ data: { id: "dev-1" }, error: null })
       .mockResolvedValueOnce({ data: { id: "usage-1" }, error: null })
       .mockResolvedValueOnce({ data: { id: "post-1" }, error: null });
 
@@ -274,8 +303,8 @@ describe("POST /api/usage/submit", () => {
       mockRequest({ entries: [makeEntry(todayStr())], source: "cli" })
     );
 
-    // upsert called once for usage, insert called once for new post
-    expect(svc.upsert).toHaveBeenCalledTimes(1);
+    // upsert called twice (device_usage + daily_usage), insert once for new post
+    expect(svc.upsert).toHaveBeenCalledTimes(2);
     expect(svc.insert).toHaveBeenCalledTimes(1);
     const postInsertCall = svc.insert.mock.calls[0];
     expect(postInsertCall[0]).toMatchObject({
@@ -328,6 +357,7 @@ describe("POST /api/usage/submit", () => {
     (verifyCliToken as any).mockReturnValue("user-1");
     const svc = mockServiceClient();
     svc.single
+      .mockResolvedValueOnce({ data: { id: "dev-1" }, error: null })
       .mockResolvedValueOnce({ data: { id: "usage-1" }, error: null })
       .mockResolvedValueOnce({ data: { id: "post-1" }, error: null });
 
@@ -359,6 +389,7 @@ describe("POST /api/usage/submit", () => {
     (verifyCliToken as any).mockReturnValue("user-1");
     const svc = mockServiceClient();
     svc.single
+      .mockResolvedValueOnce({ data: { id: "dev-1" }, error: null })
       .mockResolvedValueOnce({ data: { id: "usage-1" }, error: null })
       .mockResolvedValueOnce({ data: { id: "post-1" }, error: null });
 
@@ -378,6 +409,7 @@ describe("POST /api/usage/submit", () => {
     (verifyCliToken as any).mockReturnValue("user-1");
     const svc = mockServiceClient();
     svc.single
+      .mockResolvedValueOnce({ data: { id: "dev-1" }, error: null })
       .mockResolvedValueOnce({ data: { id: "usage-1" }, error: null })
       .mockResolvedValueOnce({ data: { id: "post-1" }, error: null });
 
@@ -410,8 +442,19 @@ describe("POST /api/usage/submit", () => {
 
   it("auto-title keeps full GPT Codex model version", async () => {
     (verifyCliToken as any).mockReturnValue("user-1");
-    const svc = mockServiceClient();
+    const deviceRow = {
+      cost_usd: 3.2,
+      input_tokens: 2100,
+      output_tokens: 900,
+      cache_creation_tokens: 0,
+      cache_read_tokens: 0,
+      total_tokens: 3000,
+      models: ["gpt-5.3-codex"],
+      model_breakdown: [{ model: "gpt-5.3-codex", cost_usd: 3.2 }],
+    };
+    const svc = mockServiceClient({ data: [deviceRow] });
     svc.single
+      .mockResolvedValueOnce({ data: { id: "dev-1" }, error: null })
       .mockResolvedValueOnce({ data: { id: "usage-1" }, error: null })
       .mockResolvedValueOnce({ data: { id: "post-1" }, error: null });
 
@@ -526,31 +569,24 @@ describe("POST /api/usage/submit", () => {
     expect(dailyChain.upsert.mock.calls[0][0].session_count).toBe(1);
   });
 
-  it("multi-device: backwards compat — no device_id uses legacy path", async () => {
+  it("rejects requests without device_id", async () => {
     (verifyCliToken as any).mockReturnValue("user-1");
-    const svc = mockServiceClient();
-    svc.single
-      .mockResolvedValueOnce({ data: { id: "usage-1" }, error: null })
-      .mockResolvedValueOnce({ data: { id: "post-1" }, error: null });
+    mockServiceClient();
 
     const res = await POST(
-      mockRequest({ entries: [makeEntry(todayStr())], source: "cli" })
+      mockRequestRaw({ entries: [makeEntry(todayStr())], source: "cli" })
     );
     const json = await res.json();
 
-    expect(res.status).toBe(200);
-    // Legacy path: upsert directly to daily_usage, device_usage never touched
-    const fromCalls = svc.from.mock.calls.map((c: any[]) => c[0]);
-    expect(fromCalls).not.toContain("device_usage");
-    expect(svc.upsert).toHaveBeenCalled();
-    const upsertCall = svc.upsert.mock.calls[0];
-    expect(upsertCall[1]).toEqual({ onConflict: "user_id,date" });
+    expect(res.status).toBe(400);
+    expect(json.error).toContain("device_id is required");
   });
 
   it("accepts merged Claude + Codex usage in a single entry", async () => {
     (verifyCliToken as any).mockReturnValue("user-1");
     const svc = mockServiceClient();
     svc.single
+      .mockResolvedValueOnce({ data: { id: "dev-1" }, error: null })
       .mockResolvedValueOnce({ data: { id: "usage-1" }, error: null })
       .mockResolvedValueOnce({ data: { id: "post-1" }, error: null });
 

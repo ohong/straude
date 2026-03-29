@@ -32,7 +32,13 @@ import { verifyCliToken } from "@/lib/api/cli-auth";
 // Helpers
 // ---------------------------------------------------------------------------
 function chainBuilder(resolved: Record<string, unknown> = {}) {
-  const chain: Record<string, any> = {};
+  const chain: Record<string, any> = {
+    // Default query result properties — used when a chain ends with .eq()
+    // instead of .single()/.maybeSingle() (e.g. device_usage fetch)
+    data: [],
+    error: null,
+    count: 0,
+  };
   const methods = [
     "select", "insert", "update", "upsert", "delete",
     "eq", "neq", "gt", "lt", "gte", "lte", "in", "is",
@@ -196,6 +202,8 @@ describe("Flow: CLI Push", () => {
         ],
         hash: "abc123",
         source: "cli",
+        device_id: "aaaaaaaa-0000-0000-0000-000000000001",
+        device_name: "test-device",
       }),
     });
     const res = await POST(req);
@@ -249,7 +257,7 @@ describe("Flow: CLI Push", () => {
         "Content-Type": "application/json",
         Authorization: "Bearer mock-cli-jwt-token",
       },
-      body: JSON.stringify({ entries: [entry], hash: "def456", source: "cli" }),
+      body: JSON.stringify({ entries: [entry], hash: "def456", source: "cli", device_id: "aaaaaaaa-0000-0000-0000-000000000001", device_name: "test-device" }),
     });
     const res = await POST(req);
     const data = await res.json();
@@ -269,9 +277,17 @@ describe("Flow: CLI Push", () => {
 
     const usageChain = chainBuilder({ data: { id: "usage-1" }, error: null });
     const postChain = chainBuilder({ data: { id: "post-1" }, error: null });
+    const deviceChain = chainBuilder({ data: { id: "dev-1" }, error: null });
+    deviceChain.data = [{
+      cost_usd: 13.0, input_tokens: 3000, output_tokens: 1300,
+      cache_creation_tokens: 100, cache_read_tokens: 50, total_tokens: 4450,
+      models: ["claude-opus-4-20250505", "gpt-5-codex"],
+      model_breakdown: [{ model: "claude-opus-4-20250505", cost_usd: 10.0 }, { model: "gpt-5-codex", cost_usd: 3.0 }],
+    }];
 
     mockServiceClient.from.mockImplementation((table: string) => {
       if (table === "daily_usage") return usageChain;
+      if (table === "device_usage") return deviceChain;
       if (table === "posts") return postChain;
       return chainBuilder();
     });
@@ -305,6 +321,8 @@ describe("Flow: CLI Push", () => {
         ],
         hash: "merged-hash-123",
         source: "cli",
+        device_id: "aaaaaaaa-0000-0000-0000-000000000001",
+        device_name: "test-device",
       }),
     });
     const res = await POST(req);
@@ -338,9 +356,17 @@ describe("Flow: CLI Push", () => {
 
     const usageChain = chainBuilder({ data: { id: "usage-2" }, error: null });
     const postChain = chainBuilder({ data: { id: "post-2" }, error: null });
+    const deviceChain = chainBuilder({ data: { id: "dev-2" }, error: null });
+    deviceChain.data = [{
+      cost_usd: 3.20, input_tokens: 2000, output_tokens: 800,
+      cache_creation_tokens: 0, cache_read_tokens: 0, total_tokens: 2800,
+      models: ["gpt-5-codex"],
+      model_breakdown: [{ model: "gpt-5-codex", cost_usd: 3.20 }],
+    }];
 
     mockServiceClient.from.mockImplementation((table: string) => {
       if (table === "daily_usage") return usageChain;
+      if (table === "device_usage") return deviceChain;
       if (table === "posts") return postChain;
       return chainBuilder();
     });
@@ -371,6 +397,8 @@ describe("Flow: CLI Push", () => {
         ],
         hash: "codex-only-hash",
         source: "cli",
+        device_id: "aaaaaaaa-0000-0000-0000-000000000001",
+        device_name: "test-device",
       }),
     });
     const res = await POST(req);
