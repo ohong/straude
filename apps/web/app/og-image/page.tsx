@@ -133,7 +133,7 @@ export default function OGImagePage() {
             borderRadius: 4,
           }}
         >
-          <div style={{ color: "#F0F0F0" }}>&gt; bunx straude</div>
+          <div style={{ color: "#F0F0F0" }}>&gt; npx straude</div>
           <div>
             Tokens: <span style={{ color: "#F0F0F0" }}>27.8M</span>
           </div>

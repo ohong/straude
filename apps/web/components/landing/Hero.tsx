@@ -65,13 +65,13 @@ export function Hero() {
           >
             Start Your Streak
           </Link>
-          <CopySnippet command="bunx straude" />
+          <CopySnippet command="npx straude" />
         </div>
 
         {/* Terminal output */}
         <div className="mt-10 font-[family-name:var(--font-mono)] text-[0.8rem] text-landing-muted leading-relaxed max-w-[600px]">
           <span className="block text-landing-text">
-            &gt; bunx straude
+            &gt; npx straude
           </span>
           <span className="block">Analyzing ~/.config/claude/projects/...</span>
           <span className="block">

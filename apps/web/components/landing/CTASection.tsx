@@ -25,7 +25,7 @@ export function CTASection() {
         <div className="inline-flex items-center gap-4 border border-landing-border bg-landing-panel px-6 py-3 font-[family-name:var(--font-mono)] text-lg text-landing-muted">
           ${" "}
           <span className="text-landing-text">
-            bunx straude push --days 7
+            npx straude push --days 7
           </span>
         </div>
       </motion.div>
