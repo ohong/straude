@@ -22,12 +22,5 @@ export default async function MessagesPage({
     redirect("/login");
   }
 
-  return (
-    <>
-      <header className="sticky top-0 z-10 flex h-14 items-center border-b border-border bg-background px-4 sm:px-6">
-        <h3 className="text-lg font-medium">Messages</h3>
-      </header>
-      <MessagesInbox initialUsername={withUsername ?? null} />
-    </>
-  );
+  return <MessagesInbox initialUsername={withUsername ?? null} />;
 }

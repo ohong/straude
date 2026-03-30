@@ -2,6 +2,14 @@
 
 :root {
   --mobile-nav-height: 60px;
+  --app-shell-header-height: 56px;
+  --app-page-padding-x: 1rem;
+  --app-main-bottom-offset: calc(var(--mobile-nav-height) + env(safe-area-inset-bottom));
+  --app-left-panel-width: 0px;
+  --app-right-panel-width: 0px;
+  --app-messages-inbox-width: 320px;
+  --app-messages-bubble-max-width: 85%;
+  --app-messages-attachment-size: 80px;
   --app-background: #ffffff;
   --app-foreground: #111111;
   --app-accent: #df561f;
@@ -23,6 +31,37 @@
   --landing-dim: #555555;
   --landing-panel: rgba(255, 255, 255, 0.03);
   --landing-hover: rgba(255, 255, 255, 0.05);
+}
+
+@media (min-width: 640px) {
+  :root {
+    --app-page-padding-x: 1.5rem;
+  }
+}
+
+@media (min-width: 880px) {
+  :root {
+    --app-messages-bubble-max-width: 72%;
+    --app-messages-attachment-size: 96px;
+  }
+}
+
+@media (min-width: 1180px) {
+  :root {
+    --app-left-panel-width: 15rem;
+  }
+}
+
+@media (min-width: 1440px) {
+  :root {
+    --app-right-panel-width: 20rem;
+  }
+}
+
+@media (min-width: 1024px) {
+  :root {
+    --app-main-bottom-offset: 0px;
+  }
 }
 
 html[data-theme="dark"] {
@@ -81,6 +120,7 @@ body {
   color: var(--color-foreground);
   -webkit-tap-highlight-color: transparent;
   overscroll-behavior: none;
+  overflow-x: hidden;
   text-wrap: pretty;
 }
 

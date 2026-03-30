@@ -39,7 +39,6 @@ export function LeaderboardTable({
   currentUserId,
   currentPeriod,
   currentRegion,
-  userCountry: _userCountry,
 }: {
   entries: LeaderboardEntry[];
   currentUserId: string | null;
@@ -75,7 +74,7 @@ export function LeaderboardTable({
       </div>
 
       {/* Region filter */}
-      <div className="flex gap-1 overflow-x-auto border-b border-border px-4 py-2">
+      <div className="flex gap-1 overflow-x-auto border-b border-border px-[var(--app-page-padding-x)] py-2">
         {REGIONS.map(({ value, label }) => (
           <button
             key={value}
@@ -152,7 +151,7 @@ export function LeaderboardTable({
             ))}
             {entries.length === 0 && (
               <tr>
-                <td colSpan={5} className="px-6 py-12 text-center text-muted">
+                <td colSpan={5} className="px-[var(--app-page-padding-x)] py-12 text-center text-muted">
                   No entries yet.
                 </td>
               </tr>
@@ -168,7 +167,7 @@ export function LeaderboardTable({
             key={entry.user_id}
             href={`/u/${entry.username}`}
             className={cn(
-              "flex items-center gap-3 border-b border-border px-4 py-3 hover:bg-subtle",
+              "flex items-center gap-3 border-b border-border px-[var(--app-page-padding-x)] py-3 hover:bg-subtle",
               entry.user_id === currentUserId &&
                 "border-l-4 border-l-accent bg-highlight-row",
             )}
@@ -208,7 +207,7 @@ export function LeaderboardTable({
           </Link>
         ))}
         {entries.length === 0 && (
-          <p className="px-6 py-12 text-center text-muted">No entries yet.</p>
+          <p className="px-[var(--app-page-padding-x)] py-12 text-center text-muted">No entries yet.</p>
         )}
       </div>
     </div>

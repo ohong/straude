@@ -21,7 +21,7 @@ function SyncCommandHint() {
   }
 
   return (
-    <div className="ml-auto hidden items-center gap-2.5 sm:flex">
+    <div className="hidden items-center gap-2.5 sm:flex">
       <span className="text-xs text-muted whitespace-nowrap">
         Sync your Claude sessions:
       </span>
@@ -203,7 +203,7 @@ export function FeedList({
     <div>
       {/* Sync command + feed type dropdown in one row (logged-in only) */}
       {userId && (
-        <div className="flex items-center justify-between border-b border-border px-4 py-3">
+        <div className="flex flex-wrap items-center gap-3 border-b border-border px-[var(--app-page-padding-x)] py-3">
           <SyncCommandHint />
 
           {showTabs && (

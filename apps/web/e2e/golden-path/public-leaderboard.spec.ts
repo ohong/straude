@@ -57,6 +57,14 @@ test.describe("Public leaderboard", () => {
     const table = page.locator("table");
     const emptyState = page.getByText("No entries yet");
 
+    await expect
+      .poll(async () => {
+        const hasTable = await table.isVisible().catch(() => false);
+        const hasEmpty = await emptyState.isVisible().catch(() => false);
+        return hasTable || hasEmpty;
+      })
+      .toBeTruthy();
+
     const hasTable = await table.isVisible().catch(() => false);
     const hasEmpty = await emptyState.isVisible().catch(() => false);
     expect(hasTable || hasEmpty).toBeTruthy();

@@ -2,19 +2,14 @@ import { Suspense } from "react";
 import Link from "next/link";
 import { createClient } from "@/lib/supabase/server";
 import { getAuthUser } from "@/lib/supabase/auth";
-import { redirect } from "next/navigation";
-import { TopHeader } from "@/components/app/shared/TopHeader";
 import { Sidebar } from "@/components/app/shared/Sidebar";
 import { RightSidebar } from "@/components/app/shared/RightSidebar";
-import { MobileNav } from "@/components/app/shared/MobileNav";
+import { ResponsiveShellFrame } from "@/components/app/shared/ResponsiveShellFrame";
 import { GuestHeader, GuestMobileNav } from "@/components/app/shared/GuestHeader";
 import { CommandPalette } from "@/components/app/shared/CommandPalette";
-import { SubmitPromptWidget } from "@/components/app/prompts/SubmitPromptWidget";
 import { firstRelation } from "@/lib/utils/first-relation";
 import type { DailyUsage } from "@/types";
 
-// Pages that are publicly accessible without login
-const PUBLIC_PAGES = ["/feed", "/leaderboard", "/token-rich"];
 type LatestPostRow = {
   id: string;
   title: string | null;
@@ -126,6 +121,34 @@ export default async function AppLayout({
     })
     .sort((a, b) => b.sortKey.localeCompare(a.sortKey));
 
+  const leftPanel = (
+    <Sidebar
+      username={profile?.username ?? null}
+      avatarUrl={profile?.avatar_url ?? null}
+      displayName={profile?.display_name ?? null}
+      followingCount={followingCount}
+      followersCount={followersCount}
+      postsCount={postsCount}
+      streak={streak}
+      streakFreezes={profile?.streak_freezes ?? 0}
+      latestPosts={latestPosts}
+      totalOutputTokens={totalOutputTokens}
+      totalCost={totalCost}
+    />
+  );
+
+  const rightPanel = (
+    <Suspense
+      fallback={
+        <div className="p-6 text-sm text-muted">
+          Loading discovery panel&hellip;
+        </div>
+      }
+    >
+      <RightSidebar userId={user.id} />
+    </Suspense>
+  );
+
   return (
     <CommandPalette username={profile?.username ?? null}>
       <div className="fixed inset-0 flex flex-col overflow-hidden">
@@ -145,50 +168,15 @@ export default async function AppLayout({
             </Link>
           </div>
         )}
-        <TopHeader
+
+        <ResponsiveShellFrame
           username={profile?.username ?? null}
           avatarUrl={profile?.avatar_url ?? null}
-        />
-
-        <div className="mx-auto flex min-h-0 w-full max-w-[1600px] flex-1 border-x border-border">
-          {/* Left sidebar — hidden below lg */}
-          <aside className="hidden w-60 shrink-0 overflow-y-auto overscroll-contain border-r border-border lg:flex lg:flex-col">
-            <Sidebar
-              username={profile?.username ?? null}
-              avatarUrl={profile?.avatar_url ?? null}
-              displayName={profile?.display_name ?? null}
-              followingCount={followingCount}
-              followersCount={followersCount}
-              postsCount={postsCount}
-              streak={streak}
-              streakFreezes={profile?.streak_freezes ?? 0}
-              latestPosts={latestPosts}
-              totalOutputTokens={totalOutputTokens}
-              totalCost={totalCost}
-            />
-          </aside>
-
-          {/* Main content */}
-          <main id="main-content" className="min-w-0 flex-1 overflow-y-auto" style={{ scrollbarWidth: "none", overscrollBehavior: "contain" }}>
-            <div className="pb-[var(--mobile-nav-height)] lg:pb-0">
-              {children}
-            </div>
-          </main>
-
-          {/* Right sidebar — hidden below xl, streams independently */}
-          <aside className="hidden w-80 shrink-0 overflow-y-auto overscroll-contain border-l border-border xl:flex xl:flex-col">
-            <Suspense>
-              <RightSidebar userId={user.id} />
-            </Suspense>
-          </aside>
-        </div>
-
-        {/* Mobile bottom nav */}
-        <MobileNav username={profile?.username} />
-
-        <SubmitPromptWidget
-          username={profile?.username ?? null}
-        />
+          leftPanel={leftPanel}
+          rightPanel={rightPanel}
+        >
+          {children}
+        </ResponsiveShellFrame>
       </div>
     </CommandPalette>
   );

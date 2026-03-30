@@ -10,11 +10,11 @@ import { Button } from "@/components/ui/Button";
 import { Textarea } from "@/components/ui/Textarea";
 import { cn } from "@/lib/utils/cn";
 import { compressImage } from "@/lib/utils/compress-image";
+import { useResponsiveShell } from "@/components/app/shared/useResponsiveShell";
 import { timeAgo } from "@/lib/utils/format";
 import type {
   DirectMessage,
   DirectMessageThread,
-  MessageAttachment,
   MessageAttachmentInput,
 } from "@/types";
 
@@ -63,6 +63,7 @@ export function MessagesInbox({
   initialUsername: string | null;
 }) {
   const router = useRouter();
+  const shellMode = useResponsiveShell();
   const [threads, setThreads] = useState<DirectMessageThread[]>([]);
   const [threadsLoading, setThreadsLoading] = useState(true);
   const [conversationLoading, setConversationLoading] = useState(false);
@@ -76,6 +77,11 @@ export function MessagesInbox({
   const [pendingAttachments, setPendingAttachments] = useState<PendingAttachment[]>([]);
   const [lightboxImage, setLightboxImage] = useState<string | null>(null);
   const fileRef = useRef<HTMLInputElement>(null);
+  const messagesEndRef = useRef<HTMLDivElement>(null);
+
+  const isPhone = shellMode === "phone";
+  const showThreadList = !isPhone || !activeUsername;
+  const showConversation = !isPhone || Boolean(activeUsername);
 
   const fetchThreads = useCallback(async () => {
     setThreadsLoading(true);
@@ -145,12 +151,13 @@ export function MessagesInbox({
 
   useEffect(() => {
     if (threadsLoading) return;
+    if (isPhone) return;
     if (!activeUsername && threads[0]?.counterpart_username) {
       const username = threads[0].counterpart_username;
       setActiveUsername(username);
       router.replace(`/messages?with=${encodeURIComponent(username)}`);
     }
-  }, [activeUsername, router, threads, threadsLoading]);
+  }, [activeUsername, isPhone, router, threads, threadsLoading]);
 
   useEffect(() => {
     if (!activeUsername) {
@@ -162,6 +169,11 @@ export function MessagesInbox({
 
     fetchConversation(activeUsername);
   }, [activeUsername, fetchConversation]);
+
+  useEffect(() => {
+    if (!counterpart || conversationLoading) return;
+    messagesEndRef.current?.scrollIntoView({ block: "end" });
+  }, [conversationLoading, counterpart, messages]);
 
   function selectConversation(username: string) {
     setActiveUsername(username);
@@ -318,26 +330,40 @@ export function MessagesInbox({
     window.dispatchEvent(new Event("messages-updated"));
   }
 
-  const showThreadList = !activeUsername;
-
   return (
-    <div className="flex min-h-[calc(100dvh-7rem)] flex-col md:flex-row">
+    <div
+      className={cn(
+        "flex flex-1 min-h-0 overflow-hidden",
+        isPhone ? "flex-col" : "flex-row",
+      )}
+    >
       <aside
+        data-testid="messages-thread-list"
         className={cn(
-          "border-b border-border md:block md:w-80 md:shrink-0 md:border-b-0 md:border-r",
-          showThreadList ? "block" : "hidden"
+          "min-h-0 border-border",
+          isPhone
+            ? showThreadList
+              ? "flex flex-1 flex-col border-b"
+              : "hidden"
+            : "flex shrink-0 flex-col border-r",
         )}
+        style={isPhone ? undefined : { width: "var(--app-messages-inbox-width)" }}
       >
-        <div className="border-b border-border px-4 py-4 sm:px-6">
-          <h2 className="text-base font-semibold text-balance">Inbox</h2>
+        <div className="border-b border-border px-[var(--app-page-padding-x)] py-4">
+          <p className="text-[0.7rem] font-semibold uppercase tracking-widest text-muted">
+            {isPhone ? "Messages" : "Inbox"}
+          </p>
+          <h2 className="mt-1 text-base font-semibold text-balance">
+            {isPhone ? "Direct messages" : "Inbox"}
+          </h2>
           <p className="mt-1 text-sm text-muted text-pretty">
             Direct messages with people you follow, discover, or build with.
           </p>
         </div>
 
-        <div aria-busy={threadsLoading}>
+        <div aria-busy={threadsLoading} className="min-h-0 flex-1 overflow-y-auto overscroll-contain">
           {threadsLoading ? (
-            <div className="p-4 sm:p-6">
+            <div className="p-[var(--app-page-padding-x)]">
               <div className="space-y-3">
                 {Array.from({ length: 4 }).map((_, index) => (
                   <div
@@ -354,7 +380,7 @@ export function MessagesInbox({
               </div>
             </div>
           ) : threads.length === 0 ? (
-            <div className="px-4 py-12 text-center sm:px-6">
+            <div className="px-[var(--app-page-padding-x)] py-12 text-center">
               <p className="text-sm text-muted text-pretty">
                 No messages yet. Open a public profile and start the conversation.
               </p>
@@ -379,7 +405,7 @@ export function MessagesInbox({
                     onClick={() => selectConversation(username)}
                     aria-pressed={selected}
                     className={cn(
-                      "flex w-full items-start gap-3 px-4 py-4 text-left hover:bg-subtle sm:px-6",
+                      "flex w-full items-start gap-3 px-[var(--app-page-padding-x)] py-4 text-left hover:bg-subtle",
                       selected && "bg-subtle/60"
                     )}
                   >
@@ -407,7 +433,7 @@ export function MessagesInbox({
                         </div>
                         <span
                           suppressHydrationWarning
-                          className="shrink-0 text-xs text-muted"
+                          className="shrink-0 text-[11px] text-muted"
                         >
                           {timeAgo(thread.last_message_created_at)}
                         </span>
@@ -432,16 +458,21 @@ export function MessagesInbox({
       </aside>
 
       <section
+        data-testid="messages-thread-panel"
         className={cn(
-          "flex flex-1 flex-col",
-          activeUsername ? "flex" : "hidden md:flex"
+          "min-h-0 flex-1 flex-col",
+          showConversation ? "flex" : "hidden"
         )}
       >
-        <div className="flex items-center gap-3 border-b border-border px-4 py-4 sm:px-6">
+        <div className="flex items-center gap-3 border-b border-border px-[var(--app-page-padding-x)] py-4">
           <button
+            data-testid="messages-back-button"
             type="button"
             onClick={clearConversation}
-            className="inline-flex items-center gap-2 text-sm font-medium text-muted hover:text-foreground md:hidden"
+            className={cn(
+              "inline-flex items-center gap-2 text-sm font-medium text-muted hover:text-foreground",
+              isPhone ? "inline-flex" : "hidden",
+            )}
           >
             <ArrowLeft size={16} aria-hidden="true" />
             Inbox
@@ -479,16 +510,17 @@ export function MessagesInbox({
           )}
         </div>
 
-        <div className="flex flex-1 flex-col px-4 py-4 sm:px-6">
+        <div className="flex min-h-0 flex-1 flex-col">
           {conversationLoading ? (
-            <div className="space-y-3" aria-busy="true">
+            <div className="space-y-3 px-[var(--app-page-padding-x)] py-4" aria-busy="true">
               {Array.from({ length: 4 }).map((_, index) => (
                 <div
                   key={index}
                   className={cn(
-                    "max-w-[80%] rounded-2xl px-4 py-3",
+                    "rounded-2xl px-4 py-3",
                     index % 2 === 0 ? "bg-subtle" : "ml-auto border border-border"
                   )}
+                  style={{ maxWidth: "var(--app-messages-bubble-max-width)" }}
                 >
                   <div className="h-3 w-40 animate-pulse rounded bg-subtle" />
                   <div className="mt-2 h-3 w-24 animate-pulse rounded bg-subtle" />
@@ -497,13 +529,13 @@ export function MessagesInbox({
             </div>
           ) : error && !counterpart ? (
             <div
-              className="rounded-2xl border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700"
+              className="mx-[var(--app-page-padding-x)] mt-4 rounded-2xl border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700"
               aria-live="polite"
             >
               {error}
             </div>
           ) : !counterpart ? (
-            <div className="m-auto max-w-sm text-center">
+            <div className="m-auto max-w-sm px-[var(--app-page-padding-x)] text-center">
               <div className="mx-auto flex size-12 items-center justify-center rounded-full border border-border bg-subtle">
                 <MessageSquare size={20} aria-hidden="true" />
               </div>
@@ -516,7 +548,8 @@ export function MessagesInbox({
             </div>
           ) : (
             <>
-              <div className="flex flex-1 flex-col justify-end space-y-3 overflow-y-auto pb-4">
+              <div className="min-h-0 flex-1 overflow-y-auto overscroll-contain px-[var(--app-page-padding-x)] py-4">
+                <div className="flex min-h-full flex-col justify-end gap-3">
                 {messages.length === 0 ? (
                   <div className="rounded-2xl border border-dashed border-border px-4 py-5 text-sm text-muted text-pretty">
                     No messages yet. Send the first note to @{counterpart.username}.
@@ -535,11 +568,12 @@ export function MessagesInbox({
                       >
                         <div
                           className={cn(
-                            "max-w-[85%] rounded-2xl px-4 py-3 sm:max-w-[75%]",
+                            "rounded-2xl px-4 py-3",
                             mine
                               ? "bg-accent text-white"
                               : "border border-border bg-background"
                           )}
+                          style={{ maxWidth: "var(--app-messages-bubble-max-width)" }}
                         >
                           {/* Image attachments */}
                           {imageAttachments.length > 0 && (
@@ -558,10 +592,10 @@ export function MessagesInbox({
                                   <Image
                                     src={attachment.url}
                                     alt={attachment.name}
-                                    width={240}
-                                    height={180}
-                                    className="max-h-48 w-auto rounded-lg object-cover"
-                                    sizes="240px"
+                                    width={96}
+                                    height={96}
+                                    className="h-[var(--app-messages-attachment-size)] w-[var(--app-messages-attachment-size)] rounded-lg object-cover"
+                                    sizes="(max-width: 879px) 80px, 96px"
                                   />
                                 </button>
                               ))}
@@ -622,134 +656,136 @@ export function MessagesInbox({
                     );
                   })
                 )}
+                  <div ref={messagesEndRef} />
+                </div>
               </div>
 
               {error && (
                 <div
-                  className="mb-3 rounded-2xl border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700"
+                  className="mx-[var(--app-page-padding-x)] mb-3 rounded-2xl border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700"
                   aria-live="polite"
                 >
                   {error}
                 </div>
               )}
 
-              <form
-                onSubmit={handleSendMessage}
-                className="border-t border-border pt-4"
-                onPaste={handlePaste}
+              <div
+                className="sticky bottom-0 z-10 border-t border-border bg-background/95 px-[var(--app-page-padding-x)] pt-4 backdrop-blur-sm"
+                style={{ paddingBottom: "calc(var(--app-main-bottom-offset) + 1rem)" }}
               >
-                <label htmlFor="dm-composer" className="mb-2 block text-sm font-medium">
-                  Message @{counterpart.username}
-                </label>
+                <form onSubmit={handleSendMessage} onPaste={handlePaste}>
+                  <label htmlFor="dm-composer" className="mb-2 block text-sm font-medium">
+                    Message @{counterpart.username}
+                  </label>
 
-                {/* Pending attachments preview */}
-                {pendingAttachments.length > 0 && (
-                  <div className="mb-3 flex flex-wrap gap-2">
-                    {pendingAttachments.map((attachment, index) => (
-                      <div
-                        key={index}
-                        className="group relative"
-                      >
-                        {attachment.preview ? (
-                          <div className="relative">
-                            {/* eslint-disable-next-line @next/next/no-img-element */}
-                            <img
-                              src={attachment.preview}
-                              alt={attachment.file.name}
+                  {pendingAttachments.length > 0 && (
+                    <div className="mb-3 flex flex-wrap gap-2">
+                      {pendingAttachments.map((attachment, index) => (
+                        <div
+                          key={index}
+                          className="group relative"
+                        >
+                          {attachment.preview ? (
+                            <div className="relative">
+                              {/* eslint-disable-next-line @next/next/no-img-element */}
+                              <img
+                                src={attachment.preview}
+                                alt={attachment.file.name}
+                                className={cn(
+                                  "h-[var(--app-messages-attachment-size)] w-[var(--app-messages-attachment-size)] rounded-lg border border-border object-cover",
+                                  attachment.uploading && "opacity-50"
+                                )}
+                              />
+                              {attachment.uploading && (
+                                <div className="absolute inset-0 flex items-center justify-center">
+                                  <Loader2 size={16} className="animate-spin text-accent" />
+                                </div>
+                              )}
+                            </div>
+                          ) : (
+                            <div
                               className={cn(
-                                "h-20 w-20 rounded-lg border border-border object-cover",
+                                "flex h-[var(--app-messages-attachment-size)] items-center gap-2 rounded-lg border border-border bg-subtle px-3",
                                 attachment.uploading && "opacity-50"
                               )}
-                            />
-                            {attachment.uploading && (
-                              <div className="absolute inset-0 flex items-center justify-center">
-                                <Loader2 size={16} className="animate-spin text-accent" />
+                            >
+                              <FileText size={16} className="shrink-0 text-muted" aria-hidden="true" />
+                              <div className="min-w-0">
+                                <p className="max-w-[120px] truncate text-xs font-medium">
+                                  {attachment.file.name}
+                                </p>
+                                <p className="text-xs text-muted">
+                                  {formatFileSize(attachment.file.size)}
+                                </p>
                               </div>
-                            )}
-                          </div>
-                        ) : (
-                          <div
-                            className={cn(
-                              "flex h-20 items-center gap-2 rounded-lg border border-border bg-subtle px-3",
-                              attachment.uploading && "opacity-50"
-                            )}
-                          >
-                            <FileText size={16} className="shrink-0 text-muted" aria-hidden="true" />
-                            <div className="min-w-0">
-                              <p className="max-w-[120px] truncate text-xs font-medium">
-                                {attachment.file.name}
-                              </p>
-                              <p className="text-xs text-muted">
-                                {formatFileSize(attachment.file.size)}
-                              </p>
+                              {attachment.uploading && (
+                                <Loader2 size={14} className="animate-spin text-accent" />
+                              )}
                             </div>
-                            {attachment.uploading && (
-                              <Loader2 size={14} className="animate-spin text-accent" />
-                            )}
-                          </div>
-                        )}
-                        {!attachment.uploading && (
-                          <button
-                            type="button"
-                            onClick={() => removeAttachment(index)}
-                            className="absolute -top-1.5 -right-1.5 flex h-5 w-5 items-center justify-center rounded-full bg-foreground text-background text-xs"
-                            aria-label={`Remove ${attachment.file.name}`}
-                          >
-                            <X size={12} />
-                          </button>
-                        )}
-                      </div>
-                    ))}
-                  </div>
-                )}
+                          )}
+                          {!attachment.uploading && (
+                            <button
+                              type="button"
+                              onClick={() => removeAttachment(index)}
+                              className="absolute -top-1.5 -right-1.5 flex h-5 w-5 items-center justify-center rounded-full bg-foreground text-background text-xs"
+                              aria-label={`Remove ${attachment.file.name}`}
+                            >
+                              <X size={12} />
+                            </button>
+                          )}
+                        </div>
+                      ))}
+                    </div>
+                  )}
 
-                <Textarea
-                  id="dm-composer"
-                  value={draft}
-                  onChange={(event) => setDraft(event.target.value)}
-                  rows={4}
-                  maxLength={1000}
-                  placeholder="Ask about a build, trade notes, or start a collaboration."
-                  aria-describedby="dm-composer-help"
-                  className="min-h-0"
-                />
-                <div className="mt-3 flex items-center justify-between gap-3">
-                  <div className="flex items-center gap-3">
-                    <input
-                      ref={fileRef}
-                      type="file"
-                      accept="image/jpeg,image/png,image/webp,image/gif,image/heic,image/heif,.heic,.heif,application/pdf,text/plain,text/markdown,text/csv,application/json,application/zip,.pdf,.txt,.md,.csv,.json,.zip"
-                      multiple
-                      onChange={handleFileSelect}
-                      className="hidden"
-                      aria-label="Attach files"
-                    />
-                    <button
-                      type="button"
-                      onClick={() => fileRef.current?.click()}
-                      disabled={sending || pendingAttachments.length >= 10}
-                      className="inline-flex items-center gap-1.5 text-sm text-muted hover:text-foreground disabled:opacity-50"
-                      aria-label="Attach a file or image"
+                  <Textarea
+                    id="dm-composer"
+                    value={draft}
+                    onChange={(event) => setDraft(event.target.value)}
+                    rows={isPhone ? 3 : 4}
+                    maxLength={1000}
+                    placeholder="Ask about a build, trade notes, or start a collaboration."
+                    aria-describedby="dm-composer-help"
+                    className="min-h-0"
+                  />
+                  <div className="mt-3 flex flex-wrap items-center justify-between gap-3">
+                    <div className="flex items-center gap-3">
+                      <input
+                        ref={fileRef}
+                        type="file"
+                        accept="image/jpeg,image/png,image/webp,image/gif,image/heic,image/heif,.heic,.heif,application/pdf,text/plain,text/markdown,text/csv,application/json,application/zip,.pdf,.txt,.md,.csv,.json,.zip"
+                        multiple
+                        onChange={handleFileSelect}
+                        className="hidden"
+                        aria-label="Attach files"
+                      />
+                      <button
+                        type="button"
+                        onClick={() => fileRef.current?.click()}
+                        disabled={sending || pendingAttachments.length >= 10}
+                        className="inline-flex items-center gap-1.5 text-sm text-muted hover:text-foreground disabled:opacity-50"
+                        aria-label="Attach a file or image"
+                      >
+                        <Paperclip size={16} />
+                      </button>
+                      <p
+                        id="dm-composer-help"
+                        className="text-xs text-muted tabular-nums"
+                      >
+                        {draft.trim().length > 0
+                          ? `${draft.length}/1000`
+                          : "\u00A0"}
+                      </p>
+                    </div>
+                    <Button
+                      type="submit"
+                      disabled={sending || (draft.trim().length === 0 && pendingAttachments.length === 0)}
                     >
-                      <Paperclip size={16} />
-                    </button>
-                    <p
-                      id="dm-composer-help"
-                      className="text-xs text-muted tabular-nums"
-                    >
-                      {draft.trim().length > 0
-                        ? `${draft.length}/1000`
-                        : "\u00A0"}
-                    </p>
+                      {sending ? "Sending..." : "Send message"}
+                    </Button>
                   </div>
-                  <Button
-                    type="submit"
-                    disabled={sending || (draft.trim().length === 0 && pendingAttachments.length === 0)}
-                  >
-                    {sending ? "Sending..." : "Send message"}
-                  </Button>
-                </div>
-              </form>
+                </form>
+              </div>
             </>
           )}
         </div>

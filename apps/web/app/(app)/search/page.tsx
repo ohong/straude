@@ -38,7 +38,7 @@ function SearchContent() {
 
   return (
     <>
-      <header className="sticky top-0 z-10 border-b border-border bg-background px-6 py-3">
+      <header className="sticky top-0 z-10 border-b border-border bg-background px-[var(--app-page-padding-x)] py-3">
         <div className="flex items-center gap-3 rounded-[4px] border border-border px-4 py-2 focus-within:border-accent focus-within:ring-3 focus-within:ring-accent/15">
           <Search size={18} className="shrink-0 text-muted" />
           <input
@@ -55,15 +55,15 @@ function SearchContent() {
 
       <div>
         {query.length < 2 && !loading && results.length === 0 && (
-          <p className="px-6 py-8 text-center text-sm text-muted">
+          <p className="px-[var(--app-page-padding-x)] py-8 text-center text-sm text-muted">
             Search by username or email
           </p>
         )}
         {loading && (
-          <p className="px-6 py-8 text-center text-sm text-muted">Searching&hellip;</p>
+          <p className="px-[var(--app-page-padding-x)] py-8 text-center text-sm text-muted">Searching&hellip;</p>
         )}
         {!loading && query.length >= 2 && results.length === 0 && (
-          <p className="px-6 py-8 text-center text-sm text-muted">
+          <p className="px-[var(--app-page-padding-x)] py-8 text-center text-sm text-muted">
             No users found for &ldquo;{query}&rdquo;
           </p>
         )}
@@ -99,14 +99,14 @@ function SearchContent() {
             <Link
               key={user.id}
               href={`/u/${user.username}`}
-              className="flex items-center gap-4 border-b border-border px-6 py-4 hover:bg-subtle"
+              className="flex items-center gap-4 border-b border-border px-[var(--app-page-padding-x)] py-4 hover:bg-subtle"
             >
               {content}
             </Link>
           ) : (
             <div
               key={user.id}
-              className="flex items-center gap-4 border-b border-border px-6 py-4"
+              className="flex items-center gap-4 border-b border-border px-[var(--app-page-padding-x)] py-4"
             >
               {content}
             </div>
@@ -121,7 +121,7 @@ export default function SearchPage() {
   return (
     <Suspense
       fallback={
-        <div className="px-6 py-8 text-center text-sm text-muted">
+        <div className="px-[var(--app-page-padding-x)] py-8 text-center text-sm text-muted">
           Loading&hellip;
         </div>
       }

@@ -22,6 +22,8 @@ import type { Notification } from "@/types";
 interface TopHeaderProps {
   username: string | null;
   avatarUrl: string | null;
+  panelTriggerLabel?: string | null;
+  onOpenPanels?: () => void;
 }
 
 const navLinks = [
@@ -30,7 +32,12 @@ const navLinks = [
   { href: "/search", label: "Search" },
 ] as const;
 
-export function TopHeader({ username, avatarUrl }: TopHeaderProps) {
+export function TopHeader({
+  username,
+  avatarUrl,
+  panelTriggerLabel,
+  onOpenPanels,
+}: TopHeaderProps) {
   const pathname = usePathname();
   const router = useRouter();
 
@@ -157,10 +164,20 @@ export function TopHeader({ username, avatarUrl }: TopHeaderProps) {
         </nav>
 
         {/* Right — Actions */}
-        <div className="flex items-center gap-3">
+        <div className="flex items-center gap-2 sm:gap-3">
           <kbd className="hidden items-center gap-1 rounded border border-border bg-subtle px-2 py-1 font-mono text-[10px] text-muted lg:inline-flex">
             <span className="text-xs">⌘</span>K
           </kbd>
+          {panelTriggerLabel && onOpenPanels && (
+            <button
+              type="button"
+              onClick={onOpenPanels}
+              className="rounded border border-border px-2.5 py-1 text-xs font-semibold uppercase tracking-wide text-muted hover:bg-subtle hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent focus-visible:ring-offset-2 focus-visible:ring-offset-background sm:px-3 sm:py-1.5"
+              aria-label={`Open ${panelTriggerLabel.toLowerCase()}`}
+            >
+              {panelTriggerLabel}
+            </button>
+          )}
           <Link
             href="/messages"
             className="relative rounded p-1.5 text-muted hover:bg-subtle hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent focus-visible:ring-offset-2 focus-visible:ring-offset-background"

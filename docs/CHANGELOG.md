@@ -4,6 +4,18 @@
 
 ### Changed
 
+- **Responsive app shell and small-screen layouts.** The authenticated web app now uses four shell modes (`full`, `compact`, `focus`, `phone`) with semantic breakpoints and no icon-collapsed rail state. Hidden sidebar content moves into a header-triggered sheet, feed/search/settings spacing is normalized, profile actions and stats reflow cleanly on narrow screens, and the messages UI now switches between split-pane and phone-specific inbox/thread views with a sticky composer that stays clear of the mobile nav.
+
+### Added
+
+- **Responsive shell primitives and tests.** Added a reusable `ResponsiveShellFrame`, `PanelSheet`, and `useResponsiveShell()` utility for authenticated pages, plus focused component tests covering panel-trigger visibility, sheet dismissal behavior, and the responsive messages inbox states.
+
+### Fixed
+
+- **Regression-suite stability for web E2E.** Playwright now runs local end-to-end tests against a built production server by default instead of `next dev --turbopack`, with serialized execution to avoid compile-time race conditions. The public leaderboard E2E assertions now wait for streamed content before checking for the table or empty state, eliminating the remaining false-negative failure in the golden path suite.
+
+### Changed
+
 - **Navigation performance overhaul.** Systematic optimization across all major pages:
   - **Profile page:** Merged 5 sequential query phases into 2 (access check → single `Promise.all` for all 13 queries). Eliminated HTTP self-fetch for radar chart by extracting into `lib/radar.ts` called directly. Radar distributions cached in-memory (5-min TTL), all 5 heavy table scans parallelized.
   - **Feed page:** Feed RPC and pending-posts query now run in parallel instead of sequentially.

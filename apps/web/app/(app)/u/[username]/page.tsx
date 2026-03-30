@@ -6,7 +6,6 @@ import { notFound } from "next/navigation";
 import Link from "next/link";
 import { MapPin, LinkIcon, Github, Flame, Zap, Users, Lock } from "lucide-react";
 import { Avatar } from "@/components/ui/Avatar";
-import { Badge } from "@/components/ui/Badge";
 import { LevelBadge } from "@/components/app/shared/LevelBadge";
 import { AchievementBadges } from "@/components/app/profile/AchievementBadges";
 import { ContributionGraph } from "@/components/app/profile/ContributionGraph";
@@ -270,40 +269,44 @@ export default async function ProfilePage({
         <div className="flex items-start gap-4 sm:gap-5">
           <Avatar src={profile.avatar_url} alt={profile.username ?? ""} size="lg" fallback={profile.username ?? "?"} />
           <div className="flex-1">
-            <div className="flex flex-wrap items-center gap-2 sm:gap-3">
-              <h1 className="text-xl font-medium sm:text-2xl" style={{ letterSpacing: "-0.03em" }}>
-                {profile.display_name ?? profile.username}
-              </h1>
-              {levelRow?.level ? (
-                <LevelBadge level={Number(levelRow.level)} />
-              ) : null}
-              {!isOwn && authUserId && (
-                <>
-                  <FollowButton
-                    username={username}
-                    initialFollowing={isFollowing}
-                  />
-                  <Link
-                    href={`/messages?with=${encodeURIComponent(username)}`}
-                    className="border border-border px-3 py-1 text-sm font-semibold hover:bg-subtle"
-                    style={{ borderRadius: 4 }}
-                  >
-                    Message
-                  </Link>
-                </>
-              )}
-              {isOwn && (
-                <>
-                  <Link
-                    href="/settings"
-                    className="border border-border px-3 py-1 text-sm font-semibold hover:bg-subtle"
-                    style={{ borderRadius: 4 }}
-                  >
-                    Edit Profile
-                  </Link>
-                  <InviteButton username={username} />
-                </>
-              )}
+            <div className="flex flex-col gap-3">
+              <div className="flex flex-wrap items-center gap-2 sm:gap-3">
+                <h1 className="text-xl font-medium sm:text-2xl" style={{ letterSpacing: "-0.03em" }}>
+                  {profile.display_name ?? profile.username}
+                </h1>
+                {levelRow?.level ? (
+                  <LevelBadge level={Number(levelRow.level)} />
+                ) : null}
+              </div>
+              <div className="flex flex-wrap gap-2">
+                {!isOwn && authUserId && (
+                  <>
+                    <FollowButton
+                      username={username}
+                      initialFollowing={isFollowing}
+                    />
+                    <Link
+                      href={`/messages?with=${encodeURIComponent(username)}`}
+                      className="border border-border px-3 py-1 text-sm font-semibold hover:bg-subtle"
+                      style={{ borderRadius: 4 }}
+                    >
+                      Message
+                    </Link>
+                  </>
+                )}
+                {isOwn && (
+                  <>
+                    <Link
+                      href="/settings"
+                      className="border border-border px-3 py-1 text-sm font-semibold hover:bg-subtle"
+                      style={{ borderRadius: 4 }}
+                    >
+                      Edit Profile
+                    </Link>
+                    <InviteButton username={username} />
+                  </>
+                )}
+              </div>
             </div>
             {profile.display_name && (
               <p className="text-sm text-muted">@{profile.username}</p>
@@ -362,7 +365,7 @@ export default async function ProfilePage({
         </div>
 
         {/* Stats row */}
-        <div className="mt-6 flex flex-wrap items-end gap-x-8 gap-y-4">
+        <div className="mt-6 grid grid-cols-2 gap-4 sm:grid-cols-4">
           <div>
             <p className="text-[0.7rem] uppercase tracking-widest text-muted">Streak</p>
             <p className="inline-flex items-center gap-1 font-[family-name:var(--font-mono)] text-lg font-medium tabular-nums">
@@ -384,10 +387,12 @@ export default async function ProfilePage({
             </p>
           </div>
           {(crewMembers ?? []).length > 0 && (
-            <CrewPopover
-              count={(crewMembers ?? []).length}
-              members={(crewMembers ?? []) as CrewMember[]}
-            />
+            <div className="min-w-0">
+              <CrewPopover
+                count={(crewMembers ?? []).length}
+                members={(crewMembers ?? []) as CrewMember[]}
+              />
+            </div>
           )}
         </div>
 

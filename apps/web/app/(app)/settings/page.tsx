@@ -162,12 +162,12 @@ export default function SettingsPage() {
   }
 
   if (!profile) {
-    return <div className="p-6 text-sm text-muted">Loading&hellip;</div>;
+    return <div className="px-[var(--app-page-padding-x)] py-6 text-sm text-muted">Loading&hellip;</div>;
   }
 
   return (
     <>
-      <header className="sticky top-0 z-10 flex h-16 items-center justify-between border-b border-border bg-background px-6">
+      <header className="sticky top-0 z-10 flex h-14 flex-wrap items-center justify-between gap-3 border-b border-border bg-background px-[var(--app-page-padding-x)]">
         <h3 className="text-lg font-medium">Settings</h3>
         <Link
           href="/settings/import"
@@ -177,7 +177,7 @@ export default function SettingsPage() {
         </Link>
       </header>
 
-      <form onSubmit={handleSave} className="mx-auto max-w-lg px-6 py-8">
+      <form onSubmit={handleSave} className="mx-auto max-w-lg px-[var(--app-page-padding-x)] py-8">
         <div className="flex items-center gap-4 pb-6">
           <div className="relative">
             <Avatar
