@@ -30,23 +30,17 @@ export function ResponsiveShellFrame({
   const [rightCollapsed, setRightCollapsed] = useState(false);
 
   const showLeftRail = mode === "full" || mode === "compact";
-  const showRightRail = mode === "full";
+  const showRightRail = mode === "full" || mode === "compact";
 
   const panelSections = useMemo(() => {
-    if (mode === "full") return [];
-    if (mode === "compact") {
-      return [
-        { key: "discover", label: "Discover", content: rightPanel },
-      ];
-    }
+    if (mode === "full" || mode === "compact") return [];
     return [
       { key: "you", label: "You", content: leftPanel },
       { key: "discover", label: "Discover", content: rightPanel },
     ];
   }, [leftPanel, mode, rightPanel]);
 
-  const panelTriggerLabel =
-    mode === "compact" ? "Discover" : mode === "full" ? null : "Panels";
+  const panelTriggerLabel = mode === "full" || mode === "compact" ? null : "Panels";
   const panelsOpen = panelOpenMode === mode && mode !== "full";
 
   return (
@@ -62,9 +56,11 @@ export function ResponsiveShellFrame({
 
       <div className="mx-auto flex min-h-0 w-full max-w-[1600px] flex-1 border-x border-border">
         {showLeftRail && (
-          <div className="relative shrink-0">
+          <div 
+            className={cn("relative shrink-0 border-r border-border", leftCollapsed && "w-6")}
+          >
             <aside
-              className="h-full overflow-y-auto overscroll-contain border-r border-border transition-[width] duration-200"
+              className="h-full overflow-y-auto overscroll-contain transition-[width] duration-200"
               style={{ width: leftCollapsed ? 0 : "var(--app-left-panel-width)" }}
             >
               <div style={{ width: "var(--app-left-panel-width)" }}>
@@ -98,9 +94,11 @@ export function ResponsiveShellFrame({
         </main>
 
         {showRightRail && (
-          <div className="relative shrink-0">
+          <div 
+            className={cn("relative shrink-0 border-l border-border", rightCollapsed && "w-6")}
+          >
             <aside
-              className="h-full overflow-y-auto overscroll-contain border-l border-border transition-[width] duration-200"
+              className="h-full overflow-y-auto overscroll-contain transition-[width] duration-200"
               style={{ width: rightCollapsed ? 0 : "var(--app-right-panel-width)" }}
             >
               <div style={{ width: "var(--app-right-panel-width)" }}>

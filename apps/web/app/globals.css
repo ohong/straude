@@ -49,6 +49,7 @@
 @media (min-width: 1180px) {
   :root {
     --app-left-panel-width: 15rem;
+    --app-right-panel-width: 20rem;
   }
 }
 
