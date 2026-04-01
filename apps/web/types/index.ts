@@ -206,6 +206,9 @@ export interface UsageSubmitResponse {
     post_id: string;
     post_url: string;
     action: "created" | "updated";
+    previous_cost?: number;
+    daily_total?: number;
+    device_count?: number;
   }>;
 }
 

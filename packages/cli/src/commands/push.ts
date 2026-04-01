@@ -28,6 +28,9 @@ interface UsageSubmitResponse {
     post_id: string;
     post_url: string;
     action: "created" | "updated";
+    previous_cost?: number;
+    daily_total?: number;
+    device_count?: number;
   }>;
 }
 
@@ -344,6 +347,22 @@ export async function pushCommand(options: PushOptions, apiUrlOverride?: string)
   } catch (err) {
     console.error(`\nFailed to submit: ${(err as Error).message}`);
     process.exit(1);
+  }
+
+  // Show per-entry delta feedback before dashboard
+  for (const result of response.results) {
+    if (result.action === "updated" && result.previous_cost != null && result.daily_total != null) {
+      const delta = result.daily_total - result.previous_cost;
+      if (Math.abs(delta) < 0.005) {
+        // No meaningful change — explain why
+        const deviceHint = result.device_count && result.device_count > 1
+          ? ` (${result.device_count} devices)`
+          : "";
+        console.log(
+          `${result.date}: $${result.daily_total.toFixed(2)}${deviceHint} — no new usage detected on this device`,
+        );
+      }
+    }
   }
 
   // Track last pushed date for incremental sync

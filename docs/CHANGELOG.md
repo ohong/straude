@@ -2,6 +2,10 @@
 
 ## Unreleased
 
+### Fixed
+
+- **CLI shows "no new usage detected" on re-push.** When re-pushing from the same device with unchanged ccusage data, the CLI now explains that no new usage was found on this device instead of silently showing the same numbers. The submit API now returns `previous_cost`, `daily_total`, and `device_count` so the CLI can display a meaningful delta.
+
 ### Changed
 
 - **Responsive app shell and small-screen layouts.** The authenticated web app now uses four shell modes (`full`, `compact`, `focus`, `phone`) with semantic breakpoints and no icon-collapsed rail state. Hidden sidebar content moves into a header-triggered sheet, feed/search/settings spacing is normalized, profile actions and stats reflow cleanly on narrow screens, and the messages UI now switches between split-pane and phone-specific inbox/thread views with a sticky composer that stays clear of the mobile nav.

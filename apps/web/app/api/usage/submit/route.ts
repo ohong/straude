@@ -184,6 +184,7 @@ export async function POST(request: Request) {
         .maybeSingle();
 
       const action: "created" | "updated" = existing ? "updated" : "created";
+      const previousCost = existing ? Number(existing.cost_usd) : undefined;
 
       let usage: { id: string } | null = null;
       let usageErrorMessage: string | null = null;
@@ -382,6 +383,9 @@ export async function POST(request: Request) {
         post_id: post.id,
         post_url: `${appUrl}/post/${post.id}`,
         action,
+        previous_cost: previousCost,
+        daily_total: agg.cost_usd,
+        device_count: deviceRows.length,
       };
     }),
   );

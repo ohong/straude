@@ -567,6 +567,130 @@ describe("POST /api/usage/submit", () => {
     expect(dailyChain.upsert).toHaveBeenCalled();
     expect(dailyChain.upsert.mock.calls[0][0].cost_usd).toBe(0.05);
     expect(dailyChain.upsert.mock.calls[0][0].session_count).toBe(1);
+    // Verify new response fields
+    expect(json.results[0].previous_cost).toBeUndefined();
+    expect(json.results[0].daily_total).toBe(0.05);
+    expect(json.results[0].device_count).toBe(1);
+  });
+
+  it("multi-device: re-push returns previous_cost and aggregated daily_total", async () => {
+    (verifyCliToken as any).mockReturnValue("user-1");
+
+    // Two device rows: existing device A ($5) + current device B ($3) = $8 total
+    const allDeviceRows = [
+      {
+        cost_usd: 5.0,
+        input_tokens: 1000,
+        output_tokens: 500,
+        cache_creation_tokens: 0,
+        cache_read_tokens: 0,
+        total_tokens: 1500,
+        models: ["claude-opus-4-20250505"],
+        model_breakdown: [{ model: "claude-opus-4-20250505", cost_usd: 5.0 }],
+      },
+      {
+        cost_usd: 3.0,
+        input_tokens: 2000,
+        output_tokens: 800,
+        cache_creation_tokens: 0,
+        cache_read_tokens: 0,
+        total_tokens: 2800,
+        models: ["claude-sonnet-4-5-20250929"],
+        model_breakdown: [{ model: "claude-sonnet-4-5-20250929", cost_usd: 3.0 }],
+      },
+    ];
+
+    // Guard: no existing device_usage for device B
+    const deviceGuardChain: Record<string, any> = {
+      select: vi.fn().mockReturnThis(),
+      eq: vi.fn().mockReturnThis(),
+      maybeSingle: vi.fn().mockResolvedValue({ data: null, error: null }),
+    };
+    const deviceUpsertChain: Record<string, any> = {
+      upsert: vi.fn().mockReturnThis(),
+      select: vi.fn().mockReturnThis(),
+      single: vi.fn().mockResolvedValue({ data: { id: "dev-2" }, error: null }),
+    };
+    // Fetch returns BOTH device rows (device A + device B)
+    const deviceFetchChain: Record<string, any> = {
+      select: vi.fn().mockReturnThis(),
+      eq: vi.fn().mockImplementation(() => ({
+        eq: vi.fn().mockResolvedValue({ data: allDeviceRows, error: null }),
+      })),
+    };
+    // daily_usage already exists with $5 (from device A's earlier push)
+    let dailySelectCount = 0;
+    const dailyChain: Record<string, any> = {
+      select: vi.fn().mockReturnThis(),
+      upsert: vi.fn().mockReturnThis(),
+      eq: vi.fn().mockReturnThis(),
+      maybeSingle: vi.fn().mockImplementation(() => {
+        dailySelectCount++;
+        // First maybeSingle: existing daily_usage check
+        if (dailySelectCount === 1) {
+          return Promise.resolve({ data: { id: "usage-1", cost_usd: 5.0, models: ["claude-opus-4-20250505"] }, error: null });
+        }
+        return Promise.resolve({ data: null, error: null });
+      }),
+      single: vi.fn().mockResolvedValue({ data: { id: "usage-1" }, error: null }),
+    };
+    const deviceCountChain: Record<string, any> = {
+      select: vi.fn().mockReturnThis(),
+      eq: vi.fn().mockImplementation(() => ({
+        eq: vi.fn().mockResolvedValue({ count: 2, data: null, error: null }),
+      })),
+      count: 2,
+    };
+    const postChain: Record<string, any> = {
+      select: vi.fn().mockReturnThis(),
+      update: vi.fn().mockReturnThis(),
+      eq: vi.fn().mockReturnThis(),
+      maybeSingle: vi.fn().mockResolvedValue({ data: { id: "post-1", title: "Mar 31" }, error: null }),
+      single: vi.fn().mockResolvedValue({ data: { id: "post-1" }, error: null }),
+    };
+
+    let deviceFromCallCount = 0;
+    const fromFn = vi.fn((table: string) => {
+      if (table === "device_usage") {
+        deviceFromCallCount++;
+        if (deviceFromCallCount === 1) return deviceGuardChain;
+        if (deviceFromCallCount === 2) return deviceUpsertChain;
+        if (deviceFromCallCount === 3) return deviceCountChain;
+        return deviceFetchChain;
+      }
+      if (table === "daily_usage") return dailyChain;
+      if (table === "posts") return postChain;
+      return dailyChain;
+    });
+
+    (getServiceClient as any).mockReturnValue({ from: fromFn, rpc: vi.fn().mockResolvedValue({ data: null, error: null }) });
+
+    const DEVICE_B = "11111111-2222-3333-4444-555555555555";
+    const res = await POST(
+      mockRequest({
+        entries: [makeEntry(todayStr(), {
+          models: ["claude-sonnet-4-5-20250929"],
+          costUSD: 3.0,
+          inputTokens: 2000,
+          outputTokens: 800,
+          totalTokens: 2800,
+        })],
+        source: "cli",
+        device_id: DEVICE_B,
+        device_name: "home-laptop",
+      })
+    );
+    const json = await res.json();
+
+    expect(res.status).toBe(200);
+    expect(json.results).toHaveLength(1);
+    expect(json.results[0].action).toBe("updated");
+    // Previous daily total was $5 from device A
+    expect(json.results[0].previous_cost).toBe(5.0);
+    // New daily total is $8 (device A $5 + device B $3)
+    expect(json.results[0].daily_total).toBe(8.0);
+    // Two devices contributed
+    expect(json.results[0].device_count).toBe(2);
   });
 
   it("rejects requests without device_id", async () => {
