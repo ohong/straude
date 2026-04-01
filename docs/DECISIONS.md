@@ -27,6 +27,21 @@
 1. **Database-level materialized view for radar.** Would be the fastest option, but adds migration complexity and a refresh schedule. The in-memory cache achieves similar results with zero schema changes.
 2. **Client-side lazy load for radar.** Would unblock the page render but adds a loading flash. Since the cache makes radar fast, inline rendering is preferable.
 
+## `/open` Page: Persist Daily Snapshots and Fall Back to Last Good Render (2026-04-01)
+
+**Decision:** Move `/open` data fetching into a dedicated server helper, revalidate the page once per day, persist each successful render into a new `open_stats_snapshots` table, and fall back to the latest stored snapshot when the live Supabase queries fail or return empty data.
+
+**Why:**
+- **Zero pages were worse than stale pages.** The first version swallowed all fetch failures and rendered `$0` totals, which then got cached by ISR and made the page look broken even after the database recovered.
+- **Daily cadence matches the content.** This page is for search/LLM citation and broad market context, not an operational dashboard. Daily refresh is fresh enough while reducing the number of regeneration attempts that can fail.
+- **Explicit snapshot persistence makes fallback deterministic.** Relying only on the last in-memory ISR artifact is fragile across deploys. Storing the last successful payload in Supabase gives the page a durable fallback independent of the current deployment cache.
+- **Empty `daily_usage` is treated as a failure.** On a project with real historical data, an empty query result is more likely to indicate a broken data path than a true zero state. Falling back to the last snapshot is safer than publishing an obviously wrong page.
+
+**Alternatives considered:**
+1. **Keep hourly ISR and just remove the catch block** — Better than caching zeros, but still loses a durable fallback across deployments and gives no way to recover if the first request after deploy fails.
+2. **Return partial live data when one RPC fails** — Would mix fresh totals with stale or missing concentration/model sections, creating inconsistent commentary and structured data. A single coherent daily snapshot is easier to trust.
+3. **Compute the snapshot entirely in SQL during migration** — Possible, but duplicating the page aggregation logic in SQL would be higher-maintenance than persisting the already-computed server payload.
+
 ## `/open` Page: Server Component with Full Fetch, No Client Components (2026-03-26)
 
 **Decision:** Build the `/open` stats page as a single server component file with no client-side interactivity. All data is fetched in a single `Promise.all()` and rendered statically with ISR (1-hour revalidation).

@@ -1,209 +1,33 @@
 import Link from "next/link";
 import { Navbar } from "@/components/landing/Navbar";
 import { Footer } from "@/components/landing/Footer";
-import { getServiceClient } from "@/lib/supabase/service";
+import {
+  OPEN_STATS_REVALIDATE_SECONDS,
+  getOpenStatsForPage,
+} from "@/lib/open-stats";
 import { formatTokens } from "@/lib/utils/format";
 import type { Metadata } from "next";
 
-export const revalidate = 3600; // cache for 1 hour
+export const revalidate = OPEN_STATS_REVALIDATE_SECONDS; // refresh once per day
 
 export const metadata: Metadata = {
   title: { absolute: "Global AI Token Usage Statistics | Straude" },
   description:
-    "How much does the average Claude Code user spend? See live, anonymized usage statistics: total spend, tokens processed, most popular models, and spending distribution across all Straude users.",
+    "How much does the average Claude Code user spend? See daily, anonymized usage statistics: total spend, tokens processed, most popular models, and spending distribution across all Straude users.",
   alternates: { canonical: "/open" },
   openGraph: {
     url: "/open",
-    title: "Claude Code Usage Statistics — Live Data from Straude",
+    title: "Claude Code Usage Statistics — Daily Snapshot from Straude",
     description:
-      "Live Claude Code usage statistics from the Straude community. Average spend, popular models, and more.",
+      "Daily Claude Code usage statistics from the Straude community. Average spend, popular models, and more.",
   },
   twitter: {
     card: "summary_large_image",
     title: "Claude Code Usage Statistics",
     description:
-      "How much does the average Claude Code user spend? Live data from Straude.",
+      "How much does the average Claude Code user spend? Daily data from Straude.",
   },
 };
-
-/* -------------------------------------------------------------------------- */
-/*  Model name normalization (ported from packages/cli ModelPalette)           */
-/* -------------------------------------------------------------------------- */
-
-function prettifyModel(model: string): string {
-  const n = model.trim();
-  if (/claude-opus-4/i.test(n)) return "Claude Opus";
-  if (/claude-sonnet-4/i.test(n)) return "Claude Sonnet";
-  if (/claude-haiku-4/i.test(n)) return "Claude Haiku";
-  if (/^gpt-/i.test(n)) {
-    return n
-      .replace(/^gpt/i, "GPT")
-      .replace(/-codex$/i, "-Codex");
-  }
-  if (/^o4/i.test(n)) return "o4";
-  if (/^o3/i.test(n)) return "o3";
-  if (n.includes("opus")) return "Claude Opus";
-  if (n.includes("sonnet")) return "Claude Sonnet";
-  if (n.includes("haiku")) return "Claude Haiku";
-  return n;
-}
-
-/* -------------------------------------------------------------------------- */
-/*  Types                                                                      */
-/* -------------------------------------------------------------------------- */
-
-interface ConcentrationRow {
-  segment: string;
-  user_count: number;
-  total_spend: number;
-  pct_of_total: number;
-}
-
-interface ModelEntry {
-  name: string;
-  pct: number;
-}
-
-/* -------------------------------------------------------------------------- */
-/*  Data fetching                                                              */
-/* -------------------------------------------------------------------------- */
-
-async function getOpenStats() {
-  const db = getServiceClient();
-
-  const [{ data: usageRows }, { data: concentrationRows }, { data: growthRows }] =
-    await Promise.all([
-      db
-        .from("daily_usage")
-        .select("session_count, total_tokens, cost_usd, user_id, date, model_breakdown")
-        .order("date", { ascending: false }),
-      db.rpc("admin_revenue_concentration"),
-      db.rpc("admin_growth_metrics"),
-    ]);
-
-  /* --- Aggregate totals from daily_usage --------------------------------- */
-  let totalSessions = 0;
-  let totalTokens = 0;
-  let totalSpend = 0;
-  const datesByUser = new Map<string, string[]>();
-  const modelCostMap = new Map<string, number>();
-
-  for (const row of usageRows ?? []) {
-    totalSessions += row.session_count ?? 0;
-    totalTokens += row.total_tokens ?? 0;
-    totalSpend += row.cost_usd ?? 0;
-
-    if (row.user_id && row.date) {
-      const dates = datesByUser.get(row.user_id) ?? [];
-      dates.push(row.date);
-      datesByUser.set(row.user_id, dates);
-    }
-
-    // Model breakdown aggregation
-    if (row.model_breakdown && Array.isArray(row.model_breakdown)) {
-      for (const entry of row.model_breakdown as Array<{
-        model: string;
-        cost_usd: number;
-      }>) {
-        if (entry.model && entry.cost_usd) {
-          const name = prettifyModel(entry.model);
-          modelCostMap.set(name, (modelCostMap.get(name) ?? 0) + entry.cost_usd);
-        }
-      }
-    }
-  }
-
-  const uniqueUsers = datesByUser.size;
-
-  /* --- Average streak (consecutive days ending at most-recent per user) --- */
-  const DAY_MS = 86_400_000;
-  let totalStreaks = 0;
-
-  for (const [, dates] of datesByUser) {
-    const sorted = [...new Set(dates)].sort(
-      (a, b) => new Date(b).getTime() - new Date(a).getTime(),
-    );
-    let streak = 1;
-    for (let i = 1; i < sorted.length; i++) {
-      const prev = new Date(sorted[i - 1]).getTime();
-      const curr = new Date(sorted[i]).getTime();
-      if (prev - curr <= DAY_MS) {
-        streak++;
-      } else {
-        break;
-      }
-    }
-    totalStreaks += streak;
-  }
-
-  const avgStreak = uniqueUsers > 0 ? Math.round(totalStreaks / uniqueUsers) : 0;
-
-  /* --- Weeks of data for avg weekly spend -------------------------------- */
-  const allDates = (usageRows ?? [])
-    .map((r) => r.date as string)
-    .filter(Boolean);
-  let weeksOfData = 1;
-  if (allDates.length > 1) {
-    const sorted = allDates.sort();
-    const earliest = new Date(sorted[0]).getTime();
-    const latest = new Date(sorted[sorted.length - 1]).getTime();
-    weeksOfData = Math.max(1, (latest - earliest) / (7 * DAY_MS));
-  }
-
-  const avgWeeklySpend =
-    uniqueUsers > 0 ? totalSpend / uniqueUsers / weeksOfData : 0;
-
-  /* --- Revenue concentration --------------------------------------------- */
-  const concentration: ConcentrationRow[] = (concentrationRows ?? []).map(
-    (r: Record<string, unknown>) => ({
-      segment: String(r.segment ?? ""),
-      user_count: Number(r.user_count ?? 0),
-      total_spend: Number(r.total_spend ?? 0),
-      pct_of_total: Number(r.pct_of_total ?? 0),
-    }),
-  );
-
-  // Cumulative percentages for top N
-  const segmentOrder = ["top_1", "top_5", "top_10"];
-  const cumulativePct: Record<string, number> = {};
-  let runningPct = 0;
-  for (const seg of segmentOrder) {
-    const row = concentration.find((c) => c.segment === seg);
-    if (row) runningPct += row.pct_of_total;
-    cumulativePct[seg] = Math.round(runningPct);
-  }
-
-  /* --- Model popularity -------------------------------------------------- */
-  const totalModelCost = [...modelCostMap.values()].reduce((a, b) => a + b, 0);
-  const models: ModelEntry[] = [...modelCostMap.entries()]
-    .sort((a, b) => b[1] - a[1])
-    .map(([name, cost]) => ({
-      name,
-      pct: totalModelCost > 0 ? Math.round((cost / totalModelCost) * 100) : 0,
-    }))
-    .filter((m) => m.pct > 0);
-
-  /* --- Growth (not displayed in main grid but available) ------------------ */
-  const latestGrowth = growthRows?.length
-    ? growthRows[growthRows.length - 1]
-    : null;
-  const cumulativeUsers = latestGrowth
-    ? Number(latestGrowth.cumulative_users ?? 0)
-    : uniqueUsers;
-
-  return {
-    uniqueUsers: cumulativeUsers || uniqueUsers,
-    totalSpend,
-    avgWeeklySpend,
-    totalTokens,
-    totalSessions,
-    avgStreak,
-    concentration,
-    cumulativePct,
-    models,
-    fetchedAt: new Date().toISOString(),
-  };
-}
 
 /* -------------------------------------------------------------------------- */
 /*  Formatting helpers                                                         */
@@ -238,23 +62,7 @@ function segmentLabel(seg: string): string {
 /* -------------------------------------------------------------------------- */
 
 export default async function OpenStatsPage() {
-  let stats: Awaited<ReturnType<typeof getOpenStats>>;
-  try {
-    stats = await getOpenStats();
-  } catch {
-    stats = {
-      uniqueUsers: 0,
-      totalSpend: 0,
-      avgWeeklySpend: 0,
-      totalTokens: 0,
-      totalSessions: 0,
-      avgStreak: 0,
-      concentration: [],
-      cumulativePct: {},
-      models: [],
-      fetchedAt: new Date().toISOString(),
-    };
-  }
+  const stats = await getOpenStatsForPage();
 
   const top10Pct = stats.cumulativePct["top_10"] ?? 0;
   const topModels = stats.models.slice(0, 3);
@@ -268,7 +76,7 @@ export default async function OpenStatsPage() {
         name: "How much does the average Claude Code user spend?",
         acceptedAnswer: {
           "@type": "Answer",
-          text: `Based on Straude community data, Claude Code spending is heavily concentrated — the top 10% of users account for ${top10Pct}% of total spend. Total tracked spend across all users is ${fmtUsd(stats.totalSpend)}.`,
+          text: `Based on Straude community data, the average tracked user spends about ${fmtUsdDecimal(stats.avgWeeklySpend)} per week. Spending is heavily concentrated — the top 10% of users account for ${top10Pct}% of total spend.`,
         },
       },
       {
@@ -276,7 +84,7 @@ export default async function OpenStatsPage() {
         name: "How do I track my Claude Code spending?",
         acceptedAnswer: {
           "@type": "Answer",
-          text: "Straude tracks Claude Code spending automatically. Run npx straude@latest to sync your usage data. Straude tracks cost per session, tokens used, model breakdown, and daily streaks.",
+          text: "Straude tracks Claude Code spending automatically. Run npx straude@latest to sync your usage data. Straude tracks cost per session, tokens used, model breakdown, and daily streaks, then refreshes the public stats snapshot every day.",
         },
       },
       {
@@ -349,7 +157,12 @@ export default async function OpenStatsPage() {
             Claude Code Usage Statistics
           </h1>
           <p className="mt-2 text-[0.9375rem] text-foreground/80">
-            Live, anonymized data from the Straude community. Updated hourly.
+            Daily, anonymized data from the Straude community.
+          </p>
+          <p className="mt-2 text-sm text-muted">
+            {stats.source === "snapshot"
+              ? "Showing the last successful snapshot while the live refresh recovers."
+              : "Updated daily from the latest successful Straude snapshot."}
           </p>
 
           {/* ---- Big Number Grid ----------------------------------------- */}
@@ -372,6 +185,21 @@ export default async function OpenStatsPage() {
               <h2 className="text-lg font-bold text-foreground">
                 How Much Does the Average Claude Code User Spend?
               </h2>
+              <p className="mt-3">
+                Across{" "}
+                <strong className="text-foreground">
+                  {stats.trackedUsers.toLocaleString("en-US")}
+                </strong>{" "}
+                tracked users and{" "}
+                <strong className="text-foreground">
+                  {stats.totalSessions.toLocaleString("en-US")}
+                </strong>{" "}
+                logged sessions, the average Straude user spends about{" "}
+                <strong className="text-foreground">
+                  {fmtUsdDecimal(stats.avgWeeklySpend)}
+                </strong>{" "}
+                per week.
+              </p>
               <p className="mt-3">
                 Straude users have tracked a combined{" "}
                 <strong className="text-foreground">
@@ -460,7 +288,7 @@ export default async function OpenStatsPage() {
               </h2>
               <p className="mt-3">
                 One command to start logging. Your data joins the community
-                totals above — anonymized, aggregated, and updated every hour.
+                totals above — anonymized, aggregated, and refreshed daily.
               </p>
               <pre className="mt-3 overflow-x-auto rounded-lg bg-subtle px-4 py-3 font-mono text-[0.8125rem] leading-relaxed">
                 npx straude@latest

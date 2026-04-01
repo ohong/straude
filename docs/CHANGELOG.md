@@ -2,6 +2,14 @@
 
 ## Unreleased
 
+### Fixed
+
+- **`/open` no longer publishes zeroed-out fallback pages.** The public stats page now throws on empty or failed live queries, persists the last successful daily snapshot in the new `open_stats_snapshots` table, and reuses that snapshot when regeneration fails instead of rendering `$0` totals and hiding the commentary sections.
+
+### Changed
+
+- **Public stats page now runs on a daily snapshot cadence.** `/open` refreshes once per day, writes a durable Supabase snapshot on successful renders, labels the page as a daily snapshot instead of live hourly data, and explicitly calls out tracked users, sessions, and average weekly spend in the spend explainer and structured FAQ copy.
+
 ### Added
 
 - **Collapsible left and right sidebars.** Small toggle buttons (chevron icons) now sit on the inner border of each sidebar in the authenticated shell. Clicking collapses or expands the panel with a smooth width transition. Available on any page where the rails are shown — particularly useful on the `/messages` page where the thread list and conversation panel compete for horizontal space.
