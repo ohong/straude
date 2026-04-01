@@ -31,4 +31,4 @@ CREATE POLICY "Users can update own device usage" ON public.device_usage FOR UPD
 
 REVOKE ALL ON public.device_usage FROM anon;
 REVOKE ALL ON public.device_usage FROM authenticated;
-GRANT SELECT, INSERT, UPDATE ON public.device_usage TO authenticated;
+GRANT SELECT, INSERT, UPDATE ON public.device_usage TO authenticated;;

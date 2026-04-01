@@ -1,7 +1,5 @@
--- Add attachments support to direct messages
--- Allows sending images and files in DMs
 
--- 1. Add attachments column
+-- 1. Add attachments column to direct_messages
 ALTER TABLE public.direct_messages
   ADD COLUMN IF NOT EXISTS attachments jsonb NOT NULL DEFAULT '[]';
 
@@ -19,12 +17,12 @@ ALTER TABLE public.direct_messages
     OR (attachments IS NOT NULL AND jsonb_array_length(attachments) > 0)
   );
 
--- 3. Create private dm-attachments storage bucket
+-- 3. Create public dm-attachments storage bucket
 INSERT INTO storage.buckets (id, name, public, file_size_limit, allowed_mime_types)
 VALUES (
   'dm-attachments',
   'dm-attachments',
-  false,
+  true,
   10485760,
   ARRAY[
     'image/jpeg', 'image/png', 'image/gif', 'image/webp',
@@ -45,6 +43,10 @@ CREATE POLICY "Authenticated users can upload dm attachments"
     AND (auth.uid())::text = (storage.foldername(name))[1]
   );
 
+CREATE POLICY "Anyone can view dm attachments"
+  ON storage.objects FOR SELECT
+  USING (bucket_id = 'dm-attachments');
+
 CREATE POLICY "Users can delete own dm attachments"
   ON storage.objects FOR DELETE
   USING (
@@ -53,7 +55,7 @@ CREATE POLICY "Users can delete own dm attachments"
     AND (auth.uid())::text = (storage.foldername(name))[1]
   );
 
--- 5. Update get_direct_message_threads to include attachment info
+-- 5. Drop and recreate get_direct_message_threads with attachment info
 DROP FUNCTION IF EXISTS public.get_direct_message_threads(int);
 
 CREATE FUNCTION public.get_direct_message_threads(p_limit int DEFAULT 50)
@@ -119,3 +121,4 @@ AS $$
 $$;
 
 GRANT EXECUTE ON FUNCTION public.get_direct_message_threads(int) TO authenticated;
+;

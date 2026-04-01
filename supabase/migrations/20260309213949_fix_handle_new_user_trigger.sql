@@ -1,15 +1,3 @@
--- =============================================
--- Fix handle_new_user() — overwritten by Bao migration 20260306150625
---
--- The Bao schema migration replaced this function to insert into
--- public.profiles instead of public.users. Every signup since
--- March 6 2026 12:19 UTC is missing a public.users row.
---
--- This migration:
---   1. Restores the function to insert into public.users
---   2. Also inserts into public.profiles (Bao compatibility)
---   3. Backfills all missing public.users rows
--- =============================================
 
 -- 1. Restore handle_new_user to insert into BOTH tables
 CREATE OR REPLACE FUNCTION public.handle_new_user()
@@ -52,3 +40,4 @@ FROM auth.users a
 LEFT JOIN public.users u ON a.id = u.id
 WHERE u.id IS NULL
 ON CONFLICT (id) DO NOTHING;
+;

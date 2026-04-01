@@ -49,4 +49,4 @@ revoke all on public.comment_reactions from anon;
 grant select on public.comment_reactions to anon;
 
 revoke all on public.comment_reactions from authenticated;
-grant select, insert, delete on public.comment_reactions to authenticated;
+grant select, insert, delete on public.comment_reactions to authenticated;;

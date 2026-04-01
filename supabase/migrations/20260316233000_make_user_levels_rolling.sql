@@ -87,7 +87,6 @@ BEGIN
   RETURN result_row;
 END;
 $$;
-
 DO $$
 DECLARE
   target_user_id uuid;

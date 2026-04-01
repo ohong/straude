@@ -114,4 +114,4 @@ AS $$
 $$;
 
 GRANT SELECT, INSERT, UPDATE ON public.direct_messages TO authenticated;
-GRANT EXECUTE ON FUNCTION public.get_direct_message_threads(int) TO authenticated;
+GRANT EXECUTE ON FUNCTION public.get_direct_message_threads(int) TO authenticated;;

@@ -107,6 +107,10 @@ Extension of Team/Org Workspaces with premium features: private team leaderboard
 
 ## Infrastructure / Housekeeping
 
+### Migration Drift Guardrails
+
+The repo drifted from the remote Supabase history because several applied migrations never made it back into `supabase/migrations`, while other local files kept older timestamps for the same logical changes. Add a lightweight guardrail in CI or release tooling that runs `supabase migration list --linked` against production metadata and fails when local and remote histories diverge.
+
 ### Public Stats Snapshot Monitoring
 
 The `/open` page now persists daily snapshots and falls back to the last good one. The next operational layer is visibility: alert when the snapshot is older than 48 hours or when the live refresh path keeps failing silently in the background. A lightweight cron or admin check could read `open_stats_snapshots`, compare the newest `snapshot_date` to today, and notify the team before the public page drifts stale.

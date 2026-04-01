@@ -8,9 +8,7 @@ CREATE TABLE public.user_levels (
   promoted_at timestamptz NOT NULL DEFAULT now(),
   updated_at timestamptz NOT NULL DEFAULT now()
 );
-
 ALTER TABLE public.user_levels ENABLE ROW LEVEL SECURITY;
-
 CREATE OR REPLACE FUNCTION public.recalculate_user_level(p_user_id uuid)
 RETURNS public.user_levels
 LANGUAGE plpgsql
@@ -154,12 +152,10 @@ BEGIN
   RETURN result_row;
 END;
 $$;
-
 REVOKE ALL ON FUNCTION public.recalculate_user_level(uuid) FROM PUBLIC;
 REVOKE ALL ON FUNCTION public.recalculate_user_level(uuid) FROM anon;
 REVOKE ALL ON FUNCTION public.recalculate_user_level(uuid) FROM authenticated;
 GRANT EXECUTE ON FUNCTION public.recalculate_user_level(uuid) TO service_role;
-
 DO $$
 DECLARE
   target_user_id uuid;

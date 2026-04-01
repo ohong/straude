@@ -5,6 +5,7 @@
 ### Fixed
 
 - **`/open` no longer publishes zeroed-out fallback pages.** The public stats page now throws on empty or failed live queries, persists the last successful daily snapshot in the new `open_stats_snapshots` table, and reuses that snapshot when regeneration fails instead of rendering `$0` totals and hiding the commentary sections.
+- **Supabase migration history is reconciled with production.** The local `supabase/migrations` directory now matches the linked Straude remote project’s applied history, including the previously missing March migrations and the remote timestamped variants of renamed files, so `supabase migration list --linked` is clean again.
 
 ### Changed
 

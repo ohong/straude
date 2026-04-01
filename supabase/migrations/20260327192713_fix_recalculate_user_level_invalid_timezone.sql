@@ -1,5 +1,4 @@
--- Fix: recalculate_user_level crashes on invalid timezone values (e.g. 'Europe')
--- by adding a BEGIN...EXCEPTION block that falls back to UTC.
+
 CREATE OR REPLACE FUNCTION public.recalculate_user_level(p_user_id uuid)
 RETURNS public.user_levels
 LANGUAGE plpgsql
@@ -95,3 +94,4 @@ BEGIN
   RETURN result_row;
 END;
 $$;
+;

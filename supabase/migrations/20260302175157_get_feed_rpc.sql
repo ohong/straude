@@ -70,4 +70,4 @@ END;
 $$;
 
 GRANT EXECUTE ON FUNCTION public.get_feed(text, uuid, int, date, timestamptz) TO authenticated;
-GRANT EXECUTE ON FUNCTION public.get_feed(text, uuid, int, date, timestamptz) TO anon;
+GRANT EXECUTE ON FUNCTION public.get_feed(text, uuid, int, date, timestamptz) TO anon;;

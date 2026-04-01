@@ -3,4 +3,4 @@ CREATE INDEX idx_users_referred_by ON public.users(referred_by) WHERE referred_b
 
 ALTER TABLE public.notifications DROP CONSTRAINT IF EXISTS notifications_type_check;
 ALTER TABLE public.notifications ADD CONSTRAINT notifications_type_check
-  CHECK (type IN ('follow', 'kudos', 'comment', 'mention', 'message', 'referral'));
+  CHECK (type IN ('follow', 'kudos', 'comment', 'mention', 'message', 'referral'));;

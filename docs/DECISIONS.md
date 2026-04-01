@@ -27,6 +27,21 @@
 1. **Database-level materialized view for radar.** Would be the fastest option, but adds migration complexity and a refresh schedule. The in-memory cache achieves similar results with zero schema changes.
 2. **Client-side lazy load for radar.** Would unblock the page render but adds a loading flash. Since the cache makes radar fast, inline rendering is preferable.
 
+## Supabase Migration Reconciliation: Local Directory Follows Remote History (2026-04-01)
+
+**Decision:** Reconcile the repo’s `supabase/migrations` directory to the linked remote project’s migration history instead of repairing the remote history table to match the repo’s divergent March filenames.
+
+**Why:**
+- **Production is the source of truth.** The remote Straude database already had a consistent applied migration history; the problem was that the repo was missing several remote migration files and still carried older locally-named variants of the same changes.
+- **History repair would have been riskier.** Rewriting the remote `schema_migrations` table to match the repo would create bookkeeping churn against a healthy production database for no functional gain.
+- **Some remote migrations were genuinely missing locally.** This wasn’t just filename drift. The remote project had additional migrations such as Bao schema creation, email suppressions, admin model-usage RPCs, company suggestions, and token-rich companies that the repo did not contain.
+- **CLI hygiene matters operationally.** Once the local directory matches remote history, normal `supabase migration list --linked` works again without scratch workdirs or manual repair steps.
+
+**Alternatives considered:**
+1. **Repair remote history to the repo’s old filenames** — rejected because it mutates production bookkeeping while the database itself is already consistent.
+2. **Keep both local and remote timestamp variants in the repo** — rejected because duplicate logical migrations would keep CLI history dirty and make future pushes ambiguous.
+3. **Squash or regenerate the entire migration chain** — rejected because it would lose historical fidelity and create unnecessary review risk.
+
 ## `/open` Page: Persist Daily Snapshots and Fall Back to Last Good Render (2026-04-01)
 
 **Decision:** Move `/open` data fetching into a dedicated server helper, revalidate the page once per day, persist each successful render into a new `open_stats_snapshots` table, and fall back to the latest stored snapshot when the live Supabase queries fail or return empty data.
