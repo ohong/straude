@@ -67,8 +67,8 @@ export function BarChart({ data, weekTotal, prevWeekTotal, percentile }: BarChar
         <Text color={theme.bright} bold>{`$${weekTotal.toFixed(2)} this week`}</Text>
       </Box>
 
-      {/* Bars — ▇ (lower seven-eighths block) leaves a natural 1px gap between rows */}
-      {data.map((entry) => {
+      {/* Bars */}
+      {data.map((entry, i) => {
         const label = getDayLabel(entry.date);
         const isToday = entry.date === todayStr;
         const filled = maxValue > 0
@@ -79,7 +79,7 @@ export function BarChart({ data, weekTotal, prevWeekTotal, percentile }: BarChar
         const formatted = `$${entry.cost_usd.toFixed(2)}`.padStart(VALUE_W);
 
         return (
-          <Box key={entry.date}>
+          <Box key={entry.date} marginBottom={i < data.length - 1 ? 1 : 0}>
             <Text color={isToday ? theme.bright : theme.muted} bold={isToday}>
               {label.padEnd(LABEL_W)}
             </Text>

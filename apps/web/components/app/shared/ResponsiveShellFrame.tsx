@@ -1,6 +1,7 @@
 "use client";
 
 import { useMemo, useState, type ReactNode } from "react";
+import { cn } from "@/lib/utils/cn";
 import { ChevronLeft, ChevronRight } from "lucide-react";
 import { MobileNav } from "@/components/app/shared/MobileNav";
 import { PanelSheet } from "@/components/app/shared/PanelSheet";
@@ -74,9 +75,14 @@ export function ResponsiveShellFrame({
               type="button"
               onClick={() => setLeftCollapsed((v) => !v)}
               aria-label={leftCollapsed ? "Expand left panel" : "Collapse left panel"}
-              className="absolute top-1/2 right-0 z-20 flex h-6 w-6 -translate-y-1/2 translate-x-1/2 items-center justify-center rounded-full border border-border bg-background text-muted shadow-sm hover:text-foreground"
+              className={cn(
+                "absolute top-1/2 right-0 z-20 flex -translate-y-1/2 translate-x-1/2 items-center justify-center rounded-full border border-border shadow-sm transition-all duration-200 hover:text-foreground",
+                leftCollapsed
+                  ? "h-8 w-8 bg-subtle text-foreground shadow-md"
+                  : "h-6 w-6 bg-background text-muted"
+              )}
             >
-              {leftCollapsed ? <ChevronRight size={12} /> : <ChevronLeft size={12} />}
+              {leftCollapsed ? <ChevronRight size={14} /> : <ChevronLeft size={12} />}
             </button>
           </div>
         )}
@@ -86,7 +92,7 @@ export function ResponsiveShellFrame({
           className="min-w-0 flex-1 overflow-y-auto overflow-x-hidden"
           style={{ scrollbarWidth: "none", overscrollBehavior: "contain" }}
         >
-          <div className="flex min-h-full flex-col pb-[var(--app-main-bottom-offset)]">
+          <div className="flex h-full flex-col pb-[var(--app-main-bottom-offset)]">
             {children}
           </div>
         </main>
@@ -105,9 +111,14 @@ export function ResponsiveShellFrame({
               type="button"
               onClick={() => setRightCollapsed((v) => !v)}
               aria-label={rightCollapsed ? "Expand right panel" : "Collapse right panel"}
-              className="absolute top-1/2 left-0 z-20 flex h-6 w-6 -translate-y-1/2 -translate-x-1/2 items-center justify-center rounded-full border border-border bg-background text-muted shadow-sm hover:text-foreground"
+              className={cn(
+                "absolute top-1/2 left-0 z-20 flex -translate-y-1/2 -translate-x-1/2 items-center justify-center rounded-full border border-border shadow-sm transition-all duration-200 hover:text-foreground",
+                rightCollapsed
+                  ? "h-8 w-8 bg-subtle text-foreground shadow-md"
+                  : "h-6 w-6 bg-background text-muted"
+              )}
             >
-              {rightCollapsed ? <ChevronLeft size={12} /> : <ChevronRight size={12} />}
+              {rightCollapsed ? <ChevronLeft size={14} /> : <ChevronRight size={12} />}
             </button>
           </div>
         )}
