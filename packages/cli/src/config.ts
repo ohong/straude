@@ -14,7 +14,8 @@ export const CLI_VERSION = pkg.version;
 export const POLL_INTERVAL_MS = 2000;
 export const POLL_TIMEOUT_MS = 300_000; // 5 minutes
 
-export const MAX_BACKFILL_DAYS = 7;
+export const MAX_BACKFILL_DAYS = 30;
+export const DEFAULT_SYNC_DAYS = 7;
 
 export const DEFAULT_SUBPROCESS_TIMEOUT_MS = 240_000; // 4 minutes
 

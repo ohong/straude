@@ -9,6 +9,7 @@ import {
   POLL_INTERVAL_MS,
   POLL_TIMEOUT_MS,
   MAX_BACKFILL_DAYS,
+  DEFAULT_SYNC_DAYS,
 } from "../src/config.js";
 
 describe("config", () => {
@@ -36,7 +37,11 @@ describe("config", () => {
     expect(POLL_TIMEOUT_MS).toBe(300_000);
   });
 
-  it("MAX_BACKFILL_DAYS is 7", () => {
-    expect(MAX_BACKFILL_DAYS).toBe(7);
+  it("MAX_BACKFILL_DAYS is 30", () => {
+    expect(MAX_BACKFILL_DAYS).toBe(30);
+  });
+
+  it("DEFAULT_SYNC_DAYS is 7", () => {
+    expect(DEFAULT_SYNC_DAYS).toBe(7);
   });
 });

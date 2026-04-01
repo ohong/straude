@@ -7,7 +7,7 @@ import { apiRequest } from "../lib/api.js";
 import { runCcusageRawAsync, parseCcusageOutput } from "../lib/ccusage.js";
 import type { CcusageDailyEntry, ModelBreakdownEntry } from "../lib/ccusage.js";
 import { runCodexRawAsync, parseCodexOutput } from "../lib/codex.js";
-import { MAX_BACKFILL_DAYS } from "../config.js";
+import { MAX_BACKFILL_DAYS, DEFAULT_SYNC_DAYS } from "../config.js";
 import type { DashboardData as DashboardResponse } from "../components/PushSummary.js";
 
 interface UsageSubmitRequest {
@@ -201,9 +201,9 @@ export async function pushCommand(options: PushOptions, apiUrlOverride?: string)
       untilDate = today;
     } else {
       const gap = daysBetweenStrings(config.last_push_date, todayStr);
-      if (gap > MAX_BACKFILL_DAYS) {
-        // Can't include last pushed date, too far back
-        const days = MAX_BACKFILL_DAYS;
+      if (gap > DEFAULT_SYNC_DAYS) {
+        // Can't include last pushed date, too far back — cap at default window
+        const days = DEFAULT_SYNC_DAYS;
         sinceDate = new Date(today);
         sinceDate.setDate(sinceDate.getDate() - days + 1);
       } else {

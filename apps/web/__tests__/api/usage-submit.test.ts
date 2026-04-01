@@ -225,20 +225,40 @@ describe("POST /api/usage/submit", () => {
     expect(json.results).toHaveLength(2);
   });
 
-  it("rejects dates older than 7 days", async () => {
+  it("rejects dates older than 30 days", async () => {
     (verifyCliToken as any).mockReturnValue("user-1");
     mockServiceClient();
 
     const res = await POST(
       mockRequest({
-        entries: [makeEntry(daysAgo(10))],
+        entries: [makeEntry(daysAgo(35))],
         source: "cli",
       })
     );
     const json = await res.json();
 
     expect(res.status).toBe(400);
-    expect(json.error).toContain("outside the 7-day backfill window");
+    expect(json.error).toContain("outside the 30-day backfill window");
+  });
+
+  it("accepts dates up to 30 days ago", async () => {
+    (verifyCliToken as any).mockReturnValue("user-1");
+    const svc = mockServiceClient();
+    svc.single
+      .mockResolvedValueOnce({ data: { id: "dev-1" }, error: null })
+      .mockResolvedValueOnce({ data: { id: "usage-1" }, error: null })
+      .mockResolvedValueOnce({ data: { id: "post-1" }, error: null });
+
+    const res = await POST(
+      mockRequest({
+        entries: [makeEntry(daysAgo(29))],
+        source: "cli",
+      })
+    );
+    const json = await res.json();
+
+    expect(res.status).toBe(200);
+    expect(json.results).toHaveLength(1);
   });
 
   it("rejects negative cost", async () => {

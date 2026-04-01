@@ -236,6 +236,22 @@ describe("pushCommand", () => {
     expect(sinceArg).not.toBe(untilArg);
   });
 
+  it("--days 30 uses the full backfill window", async () => {
+    mockRunCcusageRawAsync.mockResolvedValue("[]");
+    mockParseCcusageOutput.mockReturnValue({ data: [] });
+
+    await pushCommand({ days: 30 });
+
+    const [sinceArg, untilArg] = mockRunCcusageRawAsync.mock.calls[0]!;
+    const today = new Date();
+    const fmt = (d: Date) =>
+      `${d.getFullYear()}${String(d.getMonth() + 1).padStart(2, "0")}${String(d.getDate()).padStart(2, "0")}`;
+    const twentyNineDaysAgo = new Date(today);
+    twentyNineDaysAgo.setDate(today.getDate() - 29);
+    expect(sinceArg).toBe(fmt(twentyNineDaysAgo));
+    expect(untilArg).toBe(fmt(today));
+  });
+
   it("merges Claude + Codex data for the same day", async () => {
     const today = todayStr();
 
@@ -694,15 +710,15 @@ describe("pushCommand — smart sync", () => {
     expect(sinceArg).not.toBe(untilArg);
   });
 
-  it("caps days at MAX_BACKFILL_DAYS when gap is large", async () => {
-    mockLoadConfig.mockReturnValue({ ...fakeConfig, last_push_date: daysAgoStr(30) });
+  it("caps smart sync at DEFAULT_SYNC_DAYS (7) when gap is large", async () => {
+    mockLoadConfig.mockReturnValue({ ...fakeConfig, last_push_date: daysAgoStr(60) });
     mockRunCcusageRawAsync.mockResolvedValue("[]");
     mockParseCcusageOutput.mockReturnValue({ data: [] });
 
     await pushCommand({});
 
     const [sinceArg] = mockRunCcusageRawAsync.mock.calls[0]!;
-    // Since date should be 6 days ago (7 days total including today)
+    // Since date should be 6 days ago (DEFAULT_SYNC_DAYS=7, including today)
     const sixDaysAgo = new Date();
     sixDaysAgo.setDate(sixDaysAgo.getDate() - 6);
     const expectedSince = `${sixDaysAgo.getFullYear()}${String(sixDaysAgo.getMonth() + 1).padStart(2, "0")}${String(sixDaysAgo.getDate()).padStart(2, "0")}`;
@@ -729,7 +745,7 @@ describe("pushCommand — smart sync", () => {
     expect(untilArg).toBe(fmt(today));
   });
 
-  it("includes last_push_date when gap equals MAX_BACKFILL_DAYS", async () => {
+  it("includes last_push_date when gap equals DEFAULT_SYNC_DAYS (7)", async () => {
     const sevenDaysAgo = daysAgoStr(7);
     mockLoadConfig.mockReturnValue({ ...fakeConfig, last_push_date: sevenDaysAgo });
     mockRunCcusageRawAsync.mockResolvedValue("[]");
@@ -744,7 +760,7 @@ describe("pushCommand — smart sync", () => {
       `${d.getFullYear()}${String(d.getMonth() + 1).padStart(2, "0")}${String(d.getDate()).padStart(2, "0")}`;
     const today = new Date();
 
-    // gap=7 equals MAX_BACKFILL_DAYS — should still include last_push_date
+    // gap=7 equals DEFAULT_SYNC_DAYS — should still include last_push_date
     expect(sinceArg).toBe(fmt(sevenDaysAgoDate));
     expect(untilArg).toBe(fmt(today));
   });

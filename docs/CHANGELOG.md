@@ -2,6 +2,10 @@
 
 ## Unreleased
 
+### Changed
+
+- **`--days` flag now supports up to 30 days of backfill.** The default behaviour (no flag) is unchanged — smart sync looks back 7 days. Running `npx straude --days 30` backfills the full 30-day window. The feed sorts by usage date, so backfilled posts appear chronologically and do not flood the top of the feed.
+
 ### Fixed
 
 - **CLI shows "no new usage detected" on re-push.** When re-pushing from the same device with unchanged ccusage data, the CLI now explains that no new usage was found on this device instead of silently showing the same numbers. The submit API now returns `previous_cost`, `daily_total`, and `device_count` so the CLI can display a meaningful delta.

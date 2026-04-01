@@ -215,7 +215,8 @@ The CLI uses `shell: true` on Windows for child process calls to resolve `.cmd` 
 
 | Constant | Value | Description |
 |----------|-------|-------------|
-| `MAX_BACKFILL_DAYS` | 7 | Maximum days that can be pushed at once |
+| `MAX_BACKFILL_DAYS` | 30 | Maximum days that can be pushed via `--days` flag |
+| `DEFAULT_SYNC_DAYS` | 7 | Days synced automatically without `--days` flag |
 | `POLL_INTERVAL_MS` | 2000 | Login poll interval (2s) |
 | `POLL_TIMEOUT_MS` | 300000 | Login timeout (5 min) |
 | `DEFAULT_API_URL` | `https://straude.com` | Default API base URL |
