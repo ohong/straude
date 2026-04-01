@@ -2,6 +2,10 @@
 
 ## Unreleased
 
+### Added
+
+- **Collapsible left and right sidebars.** Small toggle buttons (chevron icons) now sit on the inner border of each sidebar in the authenticated shell. Clicking collapses or expands the panel with a smooth width transition. Available on any page where the rails are shown — particularly useful on the `/messages` page where the thread list and conversation panel compete for horizontal space.
+
 ### Changed
 
 - **`--days` flag now supports up to 30 days of backfill.** The default behaviour (no flag) is unchanged — smart sync looks back 7 days. Running `npx straude --days 30` backfills the full 30-day window. The feed sorts by usage date, so backfilled posts appear chronologically and do not flood the top of the feed.

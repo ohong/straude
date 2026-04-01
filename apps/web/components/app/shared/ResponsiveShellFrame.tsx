@@ -1,6 +1,7 @@
 "use client";
 
 import { useMemo, useState, type ReactNode } from "react";
+import { ChevronLeft, ChevronRight } from "lucide-react";
 import { MobileNav } from "@/components/app/shared/MobileNav";
 import { PanelSheet } from "@/components/app/shared/PanelSheet";
 import { SubmitPromptWidget } from "@/components/app/prompts/SubmitPromptWidget";
@@ -24,6 +25,8 @@ export function ResponsiveShellFrame({
 }: ResponsiveShellFrameProps) {
   const mode = useResponsiveShell();
   const [panelOpenMode, setPanelOpenMode] = useState<ResponsiveShellMode | null>(null);
+  const [leftCollapsed, setLeftCollapsed] = useState(false);
+  const [rightCollapsed, setRightCollapsed] = useState(false);
 
   const showLeftRail = mode === "full" || mode === "compact";
   const showRightRail = mode === "full";
@@ -58,12 +61,24 @@ export function ResponsiveShellFrame({
 
       <div className="mx-auto flex min-h-0 w-full max-w-[1600px] flex-1 border-x border-border">
         {showLeftRail && (
-          <aside
-            className="shrink-0 overflow-y-auto overscroll-contain border-r border-border"
-            style={{ width: "var(--app-left-panel-width)" }}
-          >
-            {leftPanel}
-          </aside>
+          <div className="relative shrink-0">
+            <aside
+              className="h-full overflow-y-auto overscroll-contain border-r border-border transition-[width] duration-200"
+              style={{ width: leftCollapsed ? 0 : "var(--app-left-panel-width)" }}
+            >
+              <div style={{ width: "var(--app-left-panel-width)" }}>
+                {leftPanel}
+              </div>
+            </aside>
+            <button
+              type="button"
+              onClick={() => setLeftCollapsed((v) => !v)}
+              aria-label={leftCollapsed ? "Expand left panel" : "Collapse left panel"}
+              className="absolute top-1/2 right-0 z-20 flex h-6 w-6 -translate-y-1/2 translate-x-1/2 items-center justify-center rounded-full border border-border bg-background text-muted shadow-sm hover:text-foreground"
+            >
+              {leftCollapsed ? <ChevronRight size={12} /> : <ChevronLeft size={12} />}
+            </button>
+          </div>
         )}
 
         <main
@@ -77,12 +92,24 @@ export function ResponsiveShellFrame({
         </main>
 
         {showRightRail && (
-          <aside
-            className="shrink-0 overflow-y-auto overscroll-contain border-l border-border"
-            style={{ width: "var(--app-right-panel-width)" }}
-          >
-            {rightPanel}
-          </aside>
+          <div className="relative shrink-0">
+            <aside
+              className="h-full overflow-y-auto overscroll-contain border-l border-border transition-[width] duration-200"
+              style={{ width: rightCollapsed ? 0 : "var(--app-right-panel-width)" }}
+            >
+              <div style={{ width: "var(--app-right-panel-width)" }}>
+                {rightPanel}
+              </div>
+            </aside>
+            <button
+              type="button"
+              onClick={() => setRightCollapsed((v) => !v)}
+              aria-label={rightCollapsed ? "Expand right panel" : "Collapse right panel"}
+              className="absolute top-1/2 left-0 z-20 flex h-6 w-6 -translate-y-1/2 -translate-x-1/2 items-center justify-center rounded-full border border-border bg-background text-muted shadow-sm hover:text-foreground"
+            >
+              {rightCollapsed ? <ChevronLeft size={12} /> : <ChevronRight size={12} />}
+            </button>
+          </div>
         )}
       </div>
 
