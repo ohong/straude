@@ -1,9 +1,6 @@
 {
   "$schema": "https://turbo.build/schema.json",
   "cacheDir": ".turbo/cache",
-  "cache": {
-    "maxAge": "168h"
-  },
   "tasks": {
     "build": {
       "dependsOn": ["^build"],
