@@ -1,14 +1,11 @@
 import Link from "next/link";
 import { Navbar } from "@/components/landing/Navbar";
 import { Footer } from "@/components/landing/Footer";
-import {
-  OPEN_STATS_REVALIDATE_SECONDS,
-  getOpenStatsForPage,
-} from "@/lib/open-stats";
+import { getOpenStatsForPage } from "@/lib/open-stats";
 import { formatTokens } from "@/lib/utils/format";
 import type { Metadata } from "next";
 
-export const revalidate = OPEN_STATS_REVALIDATE_SECONDS; // refresh once per day
+export const revalidate = 86400; // refresh once per day
 
 export const metadata: Metadata = {
   title: { absolute: "Global AI Token Usage Statistics | Straude" },
