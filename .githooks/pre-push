@@ -1,9 +1,19 @@
 #!/usr/bin/env bash
-# Run the test suite before pushing.
+# Run typecheck, build, and tests before pushing.
 # Enable with: git config core.hooksPath .githooks
 
 set -e
 
-echo "Running tests before push..."
+echo "pre-push: typecheck"
+bun run --cwd apps/web typecheck
+
+echo "pre-push: build"
+NEXT_PUBLIC_SUPABASE_URL="${NEXT_PUBLIC_SUPABASE_URL:-http://localhost:54321}" \
+NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY="${NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY:-sb_publishable_placeholder}" \
+SUPABASE_SECRET_KEY="${SUPABASE_SECRET_KEY:-sb_secret_placeholder}" \
+bunx turbo run build
+
+echo "pre-push: tests"
 bunx turbo run test
-echo "All tests passed."
+
+echo "pre-push: all checks passed"

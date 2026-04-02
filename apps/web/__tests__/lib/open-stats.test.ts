@@ -179,6 +179,20 @@ describe("getOpenStatsForPage", () => {
     expect(snapshotUpsert).not.toHaveBeenCalled();
   });
 
+  it("returns placeholder stats when both live and snapshot fail", async () => {
+    const { db } = makeDb({
+      usageError: { message: "connection refused" },
+      snapshotError: { message: "connection refused" },
+    });
+
+    const stats = await getOpenStatsForPage(db);
+
+    expect(stats.source).toBe("snapshot");
+    expect(stats.totalSpend).toBe(0);
+    expect(stats.trackedUsers).toBe(0);
+    expect(stats.models).toEqual([]);
+  });
+
   it("falls back to the latest snapshot when live stats come back empty", async () => {
     const snapshotStats = makeSnapshotStats({
       totalSpend: 101_001,

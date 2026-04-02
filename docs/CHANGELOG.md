@@ -2,6 +2,14 @@
 
 ## Unreleased
 
+### Fixed
+
+- **CI build no longer crashes when Supabase is unreachable.** `getOpenStatsForPage()` now catches snapshot-fallback failures and returns placeholder stats instead of throwing, so `/open` static generation succeeds even with placeholder credentials.
+
+### Changed
+
+- **Pre-push hook runs typecheck and build, not just tests.** The `.githooks/pre-push` script now runs typecheck → build → tests before pushing, catching build-time failures locally before they hit CI.
+
 ### Added
 
 - **Product Hunt badge on landing page hero.** Embedded the PH featured badge (light theme) below the CTA buttons. Added `api.producthunt.com` to the Content Security Policy `img-src` directive so the badge SVG renders.
