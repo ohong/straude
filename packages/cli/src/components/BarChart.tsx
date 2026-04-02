@@ -79,7 +79,7 @@ export function BarChart({ data, weekTotal, prevWeekTotal, percentile }: BarChar
         const formatted = `$${entry.cost_usd.toFixed(2)}`.padStart(VALUE_W);
 
         return (
-          <Box key={entry.date} marginBottom={i < data.length - 1 ? 1 : 0}>
+          <Box key={entry.date}>
             <Text color={isToday ? theme.bright : theme.muted} bold={isToday}>
               {label.padEnd(LABEL_W)}
             </Text>

@@ -2,6 +2,24 @@
 
 ## Unreleased
 
+### Added
+
+- **Product Hunt badge on landing page hero.** Embedded the PH featured badge (light theme) below the CTA buttons. Added `api.producthunt.com` to the Content Security Policy `img-src` directive so the badge SVG renders.
+- **CLI loading spinner during slow operations.** The push command now shows a braille-dot spinner with rotating messages ("Scanning session logs", "Crunching tokens", "Tallying the damage", etc.) during the ccusage subprocess and API sync phases. Inspired by Claude Code's loading sequence.
+
+### Changed
+
+- **Wall of Love tweet text is more legible.** Bumped post body color from `text-landing-muted` (#888) to `text-landing-text/85` (~#cdcdcd) for better contrast on the dark landing page while preserving visual hierarchy.
+- **CLI bar chart spacing is tighter.** Removed the blank-line gap between daily bars in the weekly chart, making the output more compact.
+
+### Fixed
+
+- **Vercel deployments broken since open stats refactor.** `turbo.json` didn't declare `SUPABASE_SECRET_KEY` (or the other Supabase env vars) in the build task's `env` array, so Turborepo stripped them during Vercel builds. The `/open` page prerenders at build time (ISR) and needs the service client, causing every deployment since `f29590a` to fail.
+- **`/open` total spend was ~$16k lower than `/admin`.** The open stats page fetched `daily_usage` rows via the Supabase JS client, which silently caps results at 1,000 rows. With 1,281 rows in the table, the oldest 281 were dropped. Total spend now comes from the `admin_cumulative_spend` RPC (runs in SQL, no row limit), and the `daily_usage` query uses `.range(0, 49999)` so tokens, sessions, streaks, and model breakdown are also complete.
+- **Next.js 16 build failure from non-literal segment config.** `export const revalidate = OPEN_STATS_REVALIDATE_SECONDS` on the `/open` page used a variable reference, which Next.js 16 rejects. Inlined to `86400`. This was breaking all deployments since `f29590a`.
+
+---
+
 ### Fixed
 
 - **`/open` no longer publishes zeroed-out fallback pages.** The public stats page now throws on empty or failed live queries, persists the last successful daily snapshot in the new `open_stats_snapshots` table, and reuses that snapshot when regeneration fails instead of rendering `$0` totals and hiding the commentary sections.

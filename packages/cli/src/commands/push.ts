@@ -8,6 +8,7 @@ import { runCcusageRawAsync, parseCcusageOutput } from "../lib/ccusage.js";
 import type { CcusageDailyEntry, ModelBreakdownEntry } from "../lib/ccusage.js";
 import { runCodexRawAsync, parseCodexOutput } from "../lib/codex.js";
 import { MAX_BACKFILL_DAYS, DEFAULT_SYNC_DAYS } from "../config.js";
+import { Spinner } from "../lib/spinner.js";
 import type { DashboardData as DashboardResponse } from "../components/PushSummary.js";
 
 interface UsageSubmitRequest {
@@ -230,10 +231,13 @@ export async function pushCommand(options: PushOptions, apiUrlOverride?: string)
   );
 
   // Run ccusage + codex in parallel — the single biggest perf win
+  const scanSpinner = new Spinner("scan");
+  scanSpinner.start();
   const [claudeResult, codexRaw] = await Promise.all([
     runCcusageRawAsync(sinceStr, untilStr, options.timeoutMs).catch((err: Error) => err),
     runCodexRawAsync(sinceStr, untilStr, options.timeoutMs),
   ]);
+  scanSpinner.stop();
 
   let claudeRaw = "";
   let claudeEntries: CcusageDailyEntry[] = [];
@@ -338,13 +342,17 @@ export async function pushCommand(options: PushOptions, apiUrlOverride?: string)
     device_name: config.device_name,
   };
 
+  const syncSpinner = new Spinner("sync");
+  syncSpinner.start();
   let response: UsageSubmitResponse;
   try {
     response = await apiRequest<UsageSubmitResponse>(config, "/api/usage/submit", {
       method: "POST",
       body: JSON.stringify(body),
     });
+    syncSpinner.stop();
   } catch (err) {
+    syncSpinner.stop();
     console.error(`\nFailed to submit: ${(err as Error).message}`);
     process.exit(1);
   }
