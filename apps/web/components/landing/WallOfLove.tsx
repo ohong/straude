@@ -84,7 +84,7 @@ function WallOfLoveCard({
       </div>
 
       {/* Post text */}
-      <p className="mt-4 text-[0.9375rem] leading-relaxed text-landing-muted">
+      <p className="mt-4 text-[0.9375rem] leading-relaxed text-landing-text/85">
         {post.text}
       </p>
 
