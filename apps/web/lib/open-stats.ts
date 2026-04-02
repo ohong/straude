@@ -185,6 +185,7 @@ function buildOpenStats(params: {
   growthRows: unknown;
   fetchedAt: string;
   source: OpenStatsSource;
+  totalSpendOverride?: number;
 }): OpenStats {
   const { usageRows, concentrationRows, growthRows, fetchedAt, source } = params;
 
@@ -249,8 +250,10 @@ function buildOpenStats(params: {
     weeksOfData = Math.max(1, (latest - earliest) / (7 * DAY_MS));
   }
 
+  const effectiveSpend = params.totalSpendOverride ?? totalSpend;
+
   const avgWeeklySpend =
-    trackedUsers > 0 ? totalSpend / trackedUsers / weeksOfData : 0;
+    trackedUsers > 0 ? effectiveSpend / trackedUsers / weeksOfData : 0;
 
   const concentration = normalizeConcentrationRows(concentrationRows);
   const cumulativePct: Record<string, number> = {};
@@ -288,7 +291,7 @@ function buildOpenStats(params: {
   return {
     trackedUsers,
     totalUsers: cumulativeUsers || trackedUsers,
-    totalSpend,
+    totalSpend: effectiveSpend,
     avgWeeklySpend,
     totalTokens,
     totalSessions,
@@ -303,15 +306,17 @@ function buildOpenStats(params: {
 }
 
 async function fetchLiveOpenStats(db: OpenStatsDb): Promise<OpenStats> {
-  const [usageResult, concentrationResult, growthResult] = await Promise.all([
+  const [usageResult, concentrationResult, growthResult, spendResult] = await Promise.all([
     db
       .from("daily_usage")
       .select(
         "session_count, total_tokens, cost_usd, user_id, date, model_breakdown",
       )
-      .order("date", { ascending: false }),
+      .order("date", { ascending: false })
+      .range(0, 49999),
     db.rpc("admin_revenue_concentration"),
     db.rpc("admin_growth_metrics"),
+    db.rpc("admin_cumulative_spend"),
   ]);
 
   throwIfSupabaseError("open stats daily_usage query failed", usageResult.error);
@@ -323,6 +328,10 @@ async function fetchLiveOpenStats(db: OpenStatsDb): Promise<OpenStats> {
     "open stats growth metrics query failed",
     growthResult.error,
   );
+  throwIfSupabaseError(
+    "open stats cumulative spend query failed",
+    spendResult.error,
+  );
 
   const usageRows = Array.isArray(usageResult.data)
     ? (usageResult.data as UsageRow[])
@@ -332,12 +341,18 @@ async function fetchLiveOpenStats(db: OpenStatsDb): Promise<OpenStats> {
     throw new Error("open stats daily_usage query returned no rows");
   }
 
+  const spendRows = Array.isArray(spendResult.data) ? spendResult.data as Array<{ cumulative_total: number | string }> : [];
+  const totalSpendFromRpc = spendRows.length > 0
+    ? Number(spendRows[spendRows.length - 1].cumulative_total)
+    : undefined;
+
   return buildOpenStats({
     usageRows,
     concentrationRows: concentrationResult.data,
     growthRows: growthResult.data,
     fetchedAt: new Date().toISOString(),
     source: "live",
+    totalSpendOverride: totalSpendFromRpc,
   });
 }
 

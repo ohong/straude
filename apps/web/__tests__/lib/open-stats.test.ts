@@ -12,6 +12,8 @@ type FixtureOptions = {
   concentrationError?: { message: string } | null;
   growthRows?: unknown[];
   growthError?: { message: string } | null;
+  spendRows?: unknown[];
+  spendError?: { message: string } | null;
   snapshotRows?: unknown[];
   snapshotError?: { message: string } | null;
   upsertError?: { message: string } | null;
@@ -53,9 +55,11 @@ function makeDb(options: FixtureOptions = {}) {
       if (table === "daily_usage") {
         return {
           select: vi.fn().mockReturnValue({
-            order: vi.fn().mockResolvedValue({
-              data: options.usageRows ?? [],
-              error: options.usageError ?? null,
+            order: vi.fn().mockReturnValue({
+              range: vi.fn().mockResolvedValue({
+                data: options.usageRows ?? [],
+                error: options.usageError ?? null,
+              }),
             }),
           }),
         };
@@ -89,6 +93,13 @@ function makeDb(options: FixtureOptions = {}) {
         return Promise.resolve({
           data: options.growthRows ?? [],
           error: options.growthError ?? null,
+        });
+      }
+
+      if (fn === "admin_cumulative_spend") {
+        return Promise.resolve({
+          data: options.spendRows ?? [],
+          error: options.spendError ?? null,
         });
       }
 
@@ -128,6 +139,7 @@ describe("getOpenStatsForPage", () => {
         },
       ],
       growthRows: [{ date: "2026-04-01", signups: 87, cumulative_users: 87 }],
+      spendRows: [{ date: "2026-04-01", daily_total: 12.5, cumulative_total: 12.5 }],
     });
 
     const stats = await getOpenStatsForPage(db);
