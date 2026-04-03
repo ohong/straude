@@ -33,11 +33,11 @@ export async function attributeReferral(
     .eq("id", newUserId)
     .is("referred_by", null);
 
-  // Create mutual follows
+  // Auto-follow referrer so the new user sees their activity.
+  // Do not create a reverse follow on behalf of the referrer.
   await db.from("follows").upsert(
     [
       { follower_id: newUserId, following_id: referrer.id },
-      { follower_id: referrer.id, following_id: newUserId },
     ],
     { onConflict: "follower_id,following_id", ignoreDuplicates: true },
   );
