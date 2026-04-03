@@ -12,7 +12,8 @@ import type { Metadata } from "next";
 type MetadataPostRow = {
   title: string | null;
   description: string | null;
-  user: Array<{ username: string | null }> | null;
+  user_id: string;
+  user: Array<{ username: string | null; is_public: boolean }> | null;
   daily_usage: Array<{
     cost_usd: number | null;
     output_tokens: number | null;
@@ -34,13 +35,32 @@ export async function generateMetadata({
   const { data: rawPost } = await supabase
     .from("posts")
     .select(
-      "title, description, user:users!posts_user_id_fkey(username), daily_usage:daily_usage!posts_daily_usage_id_fkey(cost_usd, output_tokens, models)"
+      "title, description, user_id, user:users!posts_user_id_fkey(username, is_public), daily_usage:daily_usage!posts_daily_usage_id_fkey(cost_usd, output_tokens, models)"
     )
     .eq("id", id)
     .single();
   const post = rawPost as MetadataPostRow | null;
 
+  const {
+    data: { user: authUser },
+  } = await supabase.auth.getUser();
+
   const userRow = firstRelation(post?.user);
+  const canView = Boolean(post) && (userRow?.is_public || authUser?.id === post?.user_id);
+
+  if (!canView) {
+    return {
+      title: "Post",
+      description: "This post is private.",
+      alternates: {
+        canonical: `/post/${id}`,
+      },
+      robots: {
+        index: false,
+        follow: false,
+      },
+    };
+  }
   const usageRow = firstRelation(post?.daily_usage);
   const username = userRow?.username ?? "user";
   const description =
@@ -153,6 +173,10 @@ export default async function PostDetailPage({
   ]);
 
   if (!post) notFound();
+
+  if (!post.user?.is_public && user?.id !== post.user_id) {
+    notFound();
+  }
 
   const hasKudosed = !!kudosCheck;
 
