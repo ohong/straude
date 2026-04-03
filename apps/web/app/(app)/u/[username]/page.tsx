@@ -165,6 +165,7 @@ export default async function ProfilePage({
       .from("users")
       .select("username, display_name, avatar_url")
       .eq("referred_by", profile.id)
+      .eq("is_public", true)
       .order("created_at", { ascending: true }),
     db
       .from("daily_usage")
