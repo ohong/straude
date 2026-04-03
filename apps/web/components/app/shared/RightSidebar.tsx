@@ -6,13 +6,23 @@ import { Avatar } from "@/components/ui/Avatar";
 import { FollowButton } from "@/components/app/profile/FollowButton";
 import { InviteButton } from "@/components/app/profile/InviteButton";
 
-export async function RightSidebar({ userId }: { userId: string }) {
+interface RightSidebarProps {
+  userId: string;
+  username: string | null;
+  totalOutputTokens: number;
+}
+
+export async function RightSidebar({
+  userId,
+  username,
+  totalOutputTokens,
+}: RightSidebarProps) {
   const supabase = await createClient();
   // Service client so suggestions can include all users.
   const service = getServiceClient();
 
   // Start independent queries in parallel (avoid waterfall)
-  const [{ data: topUsers }, { data: following }, { data: userUsage }, { data: userProfile }] = await Promise.all([
+  const [{ data: topUsers }, { data: following }] = await Promise.all([
     supabase
       .from("leaderboard_weekly")
       .select("user_id, username, avatar_url, total_cost")
@@ -22,15 +32,6 @@ export async function RightSidebar({ userId }: { userId: string }) {
       .from("follows")
       .select("following_id")
       .eq("follower_id", userId),
-    supabase
-      .from("daily_usage")
-      .select("output_tokens")
-      .eq("user_id", userId),
-    supabase
-      .from("users")
-      .select("username")
-      .eq("id", userId)
-      .single(),
   ]);
 
   const followingIds = following?.map((f) => f.following_id) ?? [];
@@ -90,9 +91,8 @@ export async function RightSidebar({ userId }: { userId: string }) {
   }
   const suggested = merged.slice(0, 5);
 
-  const userOutputTokens = userUsage?.reduce((s, r) => s + Number(r.output_tokens), 0) ?? 0;
   const TARGET = 1_000_000_000;
-  const pct = Math.min((userOutputTokens / TARGET) * 100, 100);
+  const pct = Math.min((totalOutputTokens / TARGET) * 100, 100);
 
   return (
     <div className="flex flex-col">
@@ -131,7 +131,7 @@ export async function RightSidebar({ userId }: { userId: string }) {
         <p className="text-sm font-semibold">The Three Comma Club</p>
         <p className="mb-3 text-xs text-muted">First to one billion output tokens</p>
         <div className="mb-1 flex items-center justify-between text-xs text-muted">
-          <span>{formatTokens(userOutputTokens)} ({pct < 0.01 ? '<0.01' : pct.toFixed(2)}%)</span>
+          <span>{formatTokens(totalOutputTokens)} ({pct < 0.01 ? '<0.01' : pct.toFixed(2)}%)</span>
           <span>1B</span>
         </div>
         <div className="h-1.5 w-full overflow-hidden rounded-full bg-subtle">
@@ -181,7 +181,7 @@ export async function RightSidebar({ userId }: { userId: string }) {
       </div>
 
       {/* Referral CTA */}
-      {userProfile?.username && (
+      {username && (
         <div className="border-b border-border p-6">
           <p className="mb-1 text-xs font-semibold uppercase tracking-widest text-muted">
             Grow Your Crew
@@ -189,7 +189,7 @@ export async function RightSidebar({ userId }: { userId: string }) {
           <p className="mb-3 text-sm text-muted">
             Invite a training partner. See who racks up more.
           </p>
-          <InviteButton username={userProfile.username} />
+          <InviteButton username={username} />
         </div>
       )}
 

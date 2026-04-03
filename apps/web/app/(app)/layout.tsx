@@ -51,7 +51,7 @@ export default async function AppLayout({
     followersRes,
     postsRes,
     latestPostRes,
-    allTimeUsageRes,
+    usageTotalsRes,
     photoAchievementRes,
   ] = await Promise.all([
     supabase
@@ -77,10 +77,7 @@ export default async function AppLayout({
       .eq("user_id", user.id)
       .order("created_at", { ascending: false })
       .limit(3),
-    supabase
-      .from("daily_usage")
-      .select("cost_usd, output_tokens")
-      .eq("user_id", user.id),
+    supabase.rpc("get_user_usage_totals", { p_user_id: user.id }),
     supabase
       .from("user_achievements")
       .select("id")
@@ -104,10 +101,9 @@ export default async function AppLayout({
   const hasPhotoAchievement = !!photoAchievementRes.data;
   const showPhotoNudge = postsCount > 0 && !hasPhotoAchievement && !onboardingIncomplete;
 
-  const totalOutputTokens =
-    allTimeUsageRes.data?.reduce((s, r) => s + Number(r.output_tokens), 0) ?? 0;
-  const totalCost =
-    allTimeUsageRes.data?.reduce((s, r) => s + Number(r.cost_usd), 0) ?? 0;
+  const usageTotals = usageTotalsRes.data?.[0];
+  const totalOutputTokens = Number(usageTotals?.total_output_tokens ?? 0);
+  const totalCost = Number(usageTotals?.total_cost ?? 0);
 
   const latestPosts = ((latestPostRes.data ?? []) as LatestPostRow[])
     .map((row) => {
@@ -145,7 +141,11 @@ export default async function AppLayout({
         </div>
       }
     >
-      <RightSidebar userId={user.id} />
+      <RightSidebar
+        userId={user.id}
+        username={profile?.username ?? null}
+        totalOutputTokens={totalOutputTokens}
+      />
     </Suspense>
   );
 
