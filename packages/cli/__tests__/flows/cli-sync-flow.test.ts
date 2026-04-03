@@ -47,7 +47,10 @@ vi.mock("../../src/config.js", async (importOriginal) => {
 let configStore: Record<string, string> = {};
 
 vi.mock("node:fs", () => ({
-  existsSync: vi.fn((path: string) => path in configStore),
+  existsSync: vi.fn((path: string) =>
+    path in configStore
+    || /(^|[\\/])ccusage(\.cmd|\.exe)?$/.test(path),
+  ),
   readFileSync: vi.fn((path: string) => configStore[path] ?? ""),
   writeFileSync: vi.fn((path: string, data: string) => {
     configStore[path] = data;

@@ -21,6 +21,11 @@ import { existsSync } from "node:fs";
 const mockExecFileSync = vi.mocked(execFileSync);
 const mockExistsSync = vi.mocked(existsSync);
 
+beforeEach(() => {
+  // Default to ccusage being available; individual tests can override.
+  mockExistsSync.mockReturnValue(true);
+});
+
 /** Build a valid ccusage v18 JSON string. */
 function validOutput() {
   return JSON.stringify({
@@ -182,20 +187,14 @@ describe("runCcusage", () => {
     );
   });
 
-  it("falls back to package runner when ccusage is not globally installed", () => {
+  it("throws when ccusage is not globally installed", () => {
     // ccusage not found on PATH
     mockExistsSync.mockReturnValue(false);
 
-    runCcusage("20250601", "20250601");
-
-    // Single call: npx fallback (process.versions.bun is undefined in Vitest env;
-    // bunx path is exercised when the CLI actually runs under bun)
-    expect(mockExecFileSync).toHaveBeenCalledTimes(1);
-    expect(mockExecFileSync).toHaveBeenCalledWith(
-      "npx",
-      ["--yes", "ccusage@17", "daily", "--json", "--breakdown", "--since", "20250601", "--until", "20250601"],
-      expect.objectContaining({ encoding: "utf-8" }),
+    expect(() => runCcusage("20250601", "20250601")).toThrow(
+      "ccusage is not installed or not on PATH",
     );
+    expect(mockExecFileSync).not.toHaveBeenCalled();
   });
 
   it("reports timeout when killed", () => {
