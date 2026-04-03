@@ -4,6 +4,7 @@ import { createClient } from "@/lib/supabase/server";
 import { ShareCardImage } from "@/lib/utils/share-image";
 import { DEFAULT_SHARE_THEME, type ShareThemeId } from "@/lib/share-themes";
 import { loadFonts } from "@/lib/og-fonts";
+import { isFirstPartyPublicStorageUrl } from "@/lib/storage";
 
 type RouteContext = { params: Promise<{ id: string }> };
 
@@ -50,6 +51,18 @@ export async function GET(request: NextRequest, context: RouteContext) {
     models: string[];
     is_verified: boolean;
   } | null;
+  const safeAvatarUrl =
+    typeof u?.avatar_url === "string" &&
+      isFirstPartyPublicStorageUrl(u.avatar_url, "avatars")
+      ? u.avatar_url
+      : null;
+  const safeImages = Array.isArray(post.images)
+    ? post.images.filter(
+        (image): image is string =>
+          typeof image === "string" &&
+          isFirstPartyPublicStorageUrl(image, "post-images"),
+      )
+    : [];
 
   try {
     const fonts = await loadFonts();
@@ -59,9 +72,9 @@ export async function GET(request: NextRequest, context: RouteContext) {
         post={{
           title: post.title,
           description: post.description,
-          images: post.images ?? [],
+          images: safeImages,
           username: u?.username ?? "anonymous",
-          avatar_url: u?.avatar_url ?? null,
+          avatar_url: safeAvatarUrl,
           cost_usd: usage?.cost_usd ?? null,
           input_tokens: usage?.input_tokens ?? 0,
           output_tokens: usage?.output_tokens ?? 0,
