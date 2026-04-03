@@ -7,8 +7,6 @@
  * before uploading, avoiding Vercel's 4.5MB body limit.
  */
 
-import heic2any from "heic2any";
-
 const MAX_DIMENSION = 2400;
 const MAX_BYTES = 4 * 1024 * 1024; // 4MB — stay under Vercel's 4.5MB body limit
 
@@ -58,6 +56,7 @@ async function canvasToJpegBlob(
 
 /** Convert a HEIC/HEIF file to a JPEG Blob using heic2any (WASM). */
 async function convertHeicToJpeg(file: File): Promise<Blob> {
+  const { default: heic2any } = await import("heic2any");
   const result = await heic2any({ blob: file, toType: "image/jpeg", quality: 0.92 });
   return Array.isArray(result) ? result[0] : result;
 }
