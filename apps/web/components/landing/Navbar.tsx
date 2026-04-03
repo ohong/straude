@@ -69,7 +69,9 @@ export function Navbar({ variant = "dark" }: { variant?: "dark" | "light" }) {
     : "border-landing-border bg-landing-bg/95";
 
   return (
-    <nav className="fixed top-0 left-0 w-full z-50">
+    <nav
+      className="sticky top-0 left-0 w-full z-50"
+    >
       <div className="flex justify-between items-start px-8 py-8">
         {/* Logo */}
         <Link

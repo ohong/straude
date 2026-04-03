@@ -9,6 +9,7 @@ import { WallOfLove } from "@/components/landing/WallOfLove";
 import { CTASection } from "@/components/landing/CTASection";
 import { Footer } from "@/components/landing/Footer";
 import { HalftoneCanvas } from "@/components/landing/HalftoneCanvas";
+import { ProductHuntBanner } from "@/components/landing/ProductHuntBanner";
 import { wallOfLovePosts } from "@/content/wall-of-love";
 import { getServiceClient } from "@/lib/supabase/service";
 import { formatTokens } from "@/lib/utils/format";
@@ -114,44 +115,47 @@ async function TickerWithData() {
 
 export default function LandingPage() {
   return (
-    <div className="bg-landing-bg text-landing-text min-h-screen relative">
-      <script
-        type="application/ld+json"
-        dangerouslySetInnerHTML={{
-          __html: JSON.stringify({
-            "@context": "https://schema.org",
-            "@type": "SoftwareApplication",
-            name: "Straude",
-            applicationCategory: "DeveloperApplication",
-            operatingSystem: "macOS, Linux, Windows",
-            url: "https://straude.com",
-            description:
-              "One command to log your Claude Code output. Track your spend, compare your pace, keep the streak alive.",
-            offers: {
-              "@type": "Offer",
-              price: "0",
-              priceCurrency: "USD",
-            },
-          }),
-        }}
-      />
-      <HalftoneCanvas />
-      <div className="relative z-10">
-        <Navbar />
-        <main>
-          <Hero />
-          <Suspense fallback={<Ticker items={TICKER_FALLBACK} />}>
-            <TickerWithData />
-          </Suspense>
-          <FeaturesGrid />
-          <PrometheusPreview />
-          <Suspense fallback={null}>
-            <GlobalFeed />
-          </Suspense>
-          <WallOfLove posts={wallOfLovePosts} />
-          <CTASection />
-        </main>
-        <Footer />
+    <div className="fixed inset-0 flex flex-col overflow-hidden bg-landing-bg text-landing-text">
+      <ProductHuntBanner />
+      <div className="relative min-h-0 flex-1 overflow-y-auto">
+        <script
+          type="application/ld+json"
+          dangerouslySetInnerHTML={{
+            __html: JSON.stringify({
+              "@context": "https://schema.org",
+              "@type": "SoftwareApplication",
+              name: "Straude",
+              applicationCategory: "DeveloperApplication",
+              operatingSystem: "macOS, Linux, Windows",
+              url: "https://straude.com",
+              description:
+                "One command to log your Claude Code output. Track your spend, compare your pace, keep the streak alive.",
+              offers: {
+                "@type": "Offer",
+                price: "0",
+                priceCurrency: "USD",
+              },
+            }),
+          }}
+        />
+        <HalftoneCanvas />
+        <div className="relative z-10">
+          <Navbar />
+          <main>
+            <Hero />
+            <Suspense fallback={<Ticker items={TICKER_FALLBACK} />}>
+              <TickerWithData />
+            </Suspense>
+            <FeaturesGrid />
+            <PrometheusPreview />
+            <Suspense fallback={null}>
+              <GlobalFeed />
+            </Suspense>
+            <WallOfLove posts={wallOfLovePosts} />
+            <CTASection />
+          </main>
+          <Footer />
+        </div>
       </div>
     </div>
   );
