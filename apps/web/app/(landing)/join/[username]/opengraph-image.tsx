@@ -1,6 +1,7 @@
 import { ImageResponse } from "next/og";
 import { getServiceClient } from "@/lib/supabase/service";
 import { loadFonts } from "@/lib/og-fonts";
+import { isFirstPartyPublicStorageUrl } from "@/lib/storage";
 
 export const alt = "Join Straude";
 export const size = { width: 1200, height: 630 };
@@ -24,6 +25,11 @@ export default async function Image({
   if (!referrer || !referrer.is_public) {
     return fallbackImage(fonts);
   }
+  const avatarUrl = referrer.avatar_url;
+  const safeAvatarUrl =
+    typeof avatarUrl === "string" && isFirstPartyPublicStorageUrl(avatarUrl, "avatars")
+      ? avatarUrl
+      : null;
 
   const now = new Date();
   const monthStart = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}-01`;
@@ -138,9 +144,9 @@ export default async function Image({
           }}
         >
           {/* Avatar */}
-          {referrer.avatar_url ? (
+          {safeAvatarUrl ? (
             <img
-              src={referrer.avatar_url}
+              src={safeAvatarUrl}
               alt=""
               width={120}
               height={120}
