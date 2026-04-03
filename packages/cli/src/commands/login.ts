@@ -1,4 +1,4 @@
-import { exec } from "node:child_process";
+import { spawn } from "node:child_process";
 import { CONFIG_FILE, DEFAULT_API_URL, POLL_INTERVAL_MS, POLL_TIMEOUT_MS } from "../config.js";
 import { loadConfig, saveConfig } from "../lib/auth.js";
 import { apiRequestNoAuth } from "../lib/api.js";
@@ -15,18 +15,43 @@ interface CliPollResponse {
 }
 
 function openBrowser(url: string): void {
-  const platform = process.platform;
-  let cmd: string;
-  if (platform === "darwin") {
-    cmd = `open "${url}"`;
-  } else if (platform === "win32") {
-    cmd = `start "${url}"`;
-  } else {
-    cmd = `xdg-open "${url}"`;
+  let parsed: URL;
+  try {
+    parsed = new URL(url);
+  } catch {
+    return;
   }
-  exec(cmd, () => {
+
+  if (parsed.protocol !== "https:" && parsed.protocol !== "http:") {
+    return;
+  }
+
+  const platform = process.platform;
+  let command: string;
+  let args: string[];
+  if (platform === "darwin") {
+    command = "open";
+    args = [url];
+  } else if (platform === "win32") {
+    command = "rundll32";
+    args = ["url.dll,FileProtocolHandler", url];
+  } else {
+    command = "xdg-open";
+    args = [url];
+  }
+
+  try {
+    const child = spawn(command, args, {
+      detached: true,
+      stdio: "ignore",
+    });
+    child.unref();
+    child.on("error", () => {
+      // ignore errors — user can open the URL manually
+    });
+  } catch {
     // ignore errors — user can open the URL manually
-  });
+  }
 }
 
 function sleep(ms: number): Promise<void> {
