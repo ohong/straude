@@ -18,6 +18,12 @@ type LatestPostRow = {
   daily_usage: Array<Pick<DailyUsage, "date">> | null;
 };
 
+type UsageFallbackRow = Pick<DailyUsage, "cost_usd" | "output_tokens">;
+type UsageTotalsRpcRow = {
+  total_cost: number | string | null;
+  total_output_tokens: number | string | null;
+};
+
 export default async function AppLayout({
   children,
 }: {
@@ -79,7 +85,7 @@ export default async function AppLayout({
       .eq("user_id", user.id)
       .order("created_at", { ascending: false })
       .limit(3),
-    supabase.rpc("get_user_usage_totals", { p_user_id: user.id }),
+    supabase.rpc("get_user_usage_totals", { p_user_id: user.id }).single(),
     supabase
       .from("user_achievements")
       .select("id")
@@ -103,9 +109,35 @@ export default async function AppLayout({
   const hasPhotoAchievement = !!photoAchievementRes.data;
   const showPhotoNudge = postsCount > 0 && !hasPhotoAchievement && !onboardingIncomplete;
 
-  const usageTotals = usageTotalsRes.data?.[0];
-  const totalOutputTokens = Number(usageTotals?.total_output_tokens ?? 0);
-  const totalCost = Number(usageTotals?.total_cost ?? 0);
+  let totalOutputTokens = 0;
+  let totalCost = 0;
+
+  if (usageTotalsRes.error) {
+    console.error("get_user_usage_totals RPC failed; using direct daily_usage fallback", {
+      userId: user.id,
+      code: usageTotalsRes.error.code,
+      message: usageTotalsRes.error.message,
+    });
+
+    const { data: fallbackRows, error: fallbackError } = await supabase
+      .from("daily_usage")
+      .select("cost_usd, output_tokens")
+      .eq("user_id", user.id);
+
+    if (fallbackError) {
+      throw new Error(
+        `Unable to load usage totals: RPC error (${usageTotalsRes.error.message}); fallback error (${fallbackError.message})`
+      );
+    }
+
+    const rows = (fallbackRows ?? []) as UsageFallbackRow[];
+    totalOutputTokens = rows.reduce((sum, row) => sum + Number(row.output_tokens), 0);
+    totalCost = rows.reduce((sum, row) => sum + Number(row.cost_usd), 0);
+  } else {
+    const usageTotals = usageTotalsRes.data as UsageTotalsRpcRow | null;
+    totalOutputTokens = Number(usageTotals?.total_output_tokens ?? 0);
+    totalCost = Number(usageTotals?.total_cost ?? 0);
+  }
 
   const latestPosts = ((latestPostRes.data ?? []) as LatestPostRow[])
     .map((row) => {
