@@ -23,11 +23,6 @@ interface ExecError extends Error {
 /** Resolved ccusage command. Cached after first resolution. */
 let _resolved: { cmd: string; args: string[] } | undefined;
 
-// Pin to v17 — ccusage v18 uses the `runtime:` protocol in its dependencies,
-// which npm doesn't support (EUNSUPPORTEDPROTOCOL). Safe to unpin once ccusage
-// drops `runtime:` or npm adds support for it.
-const CCUSAGE_PKG = "ccusage@17";
-
 /** Check if a binary exists on PATH without spawning a subprocess. */
 function isOnPath(binary: string): boolean {
   const dirs = (process.env.PATH || "").split(delimiter);
@@ -38,33 +33,22 @@ function isOnPath(binary: string): boolean {
 }
 
 /**
- * Resolve the fastest available way to run ccusage.
- * 1. Direct `ccusage` binary on PATH (globally installed) — fastest
- * 2. `bunx` if running under Bun — no subprocess needed to detect
- * 3. `npx` fallback
+ * Resolve how to run ccusage.
+ * For security reasons we only execute an explicitly installed `ccusage`
+ * binary from PATH and do not auto-install/execute package-runner fallbacks.
  */
 function resolveCcusageCommand(): { cmd: string; args: string[] } {
   if (_resolved) return _resolved;
 
-  // 1. Check if ccusage binary exists on PATH (pure fs, no subprocess)
+  // Check if ccusage binary exists on PATH (pure fs, no subprocess)
   if (isOnPath("ccusage")) {
     _resolved = { cmd: "ccusage", args: [] };
     return _resolved;
   }
 
-  // 2. Prefer bunx if running under Bun
-  if (process.versions.bun !== undefined) {
-    _resolved = { cmd: "bunx", args: ["--bun"] };
-  } else {
-    // 3. Fallback to npx
-    _resolved = { cmd: "npx", args: ["--yes"] };
-  }
-
-  console.error(
-    "Tip: Install ccusage globally for faster syncs: bun add -g ccusage",
+  throw new Error(
+    "ccusage is not installed or not on PATH. Install it globally and retry (e.g. `npm install -g ccusage`).",
   );
-
-  return _resolved;
 }
 
 /** Reset resolver cache — for testing only. */
@@ -75,9 +59,7 @@ export function _resetCcusageResolver(): void {
 /** Run ccusage via the resolved binary. */
 function execCcusage(args: string[], timeoutMs?: number): string {
   const { cmd, args: prefix } = resolveCcusageCommand();
-  // When running via bunx/npx, pin the version to avoid ccusage@18+ runtime: protocol issue
-  const pkg = cmd === "ccusage" ? null : CCUSAGE_PKG;
-  const cmdArgs = pkg ? [...prefix, pkg, ...args] : args;
+  const cmdArgs = [...prefix, ...args];
 
   try {
     return execFileSync(cmd, cmdArgs, {
@@ -90,9 +72,7 @@ function execCcusage(args: string[], timeoutMs?: number): string {
     const error = err as ExecError;
 
     if (error.killed || error.signal === "SIGTERM") {
-      const hint = pkg
-        ? `${cmd} ${prefix.join(" ")} ${pkg} daily --json`
-        : "ccusage daily --json";
+      const hint = `${cmd} ${[...prefix, "daily", "--json"].join(" ")}`;
       throw new Error(
         `ccusage timed out. Try running \`${hint}\` directly to verify it works.`,
       );
@@ -106,8 +86,7 @@ function execCcusage(args: string[], timeoutMs?: number): string {
 /** Async version of execCcusage — runs ccusage in a child process without blocking. */
 function execCcusageAsync(args: string[], timeoutMs?: number): Promise<string> {
   const { cmd, args: prefix } = resolveCcusageCommand();
-  const pkg = cmd === "ccusage" ? null : CCUSAGE_PKG;
-  const cmdArgs = pkg ? [...prefix, pkg, ...args] : args;
+  const cmdArgs = [...prefix, ...args];
 
   return new Promise((resolve, reject) => {
     execFileCb(cmd, cmdArgs, {
@@ -122,9 +101,7 @@ function execCcusageAsync(args: string[], timeoutMs?: number): Promise<string> {
       }
       const error = err as ExecError;
       if (error.killed || error.signal === "SIGTERM") {
-        const hint = pkg
-          ? `${cmd} ${prefix.join(" ")} ${pkg} daily --json`
-          : "ccusage daily --json";
+        const hint = `${cmd} ${[...prefix, "daily", "--json"].join(" ")}`;
         reject(new Error(
           `ccusage timed out. Try running \`${hint}\` directly to verify it works.`,
         ));
