@@ -19,7 +19,10 @@ vi.mock("../../src/config.js", async (importOriginal) => {
 });
 
 vi.mock("node:child_process", () => ({
-  exec: vi.fn(),
+  spawn: vi.fn(() => ({
+    unref: vi.fn(),
+    on: vi.fn(),
+  })),
 }));
 
 import { loginCommand } from "../../src/commands/login.js";
