@@ -17,12 +17,12 @@ ALTER TABLE public.direct_messages
     OR (attachments IS NOT NULL AND jsonb_array_length(attachments) > 0)
   );
 
--- 3. Create public dm-attachments storage bucket
+-- 3. Create private dm-attachments storage bucket
 INSERT INTO storage.buckets (id, name, public, file_size_limit, allowed_mime_types)
 VALUES (
   'dm-attachments',
   'dm-attachments',
-  true,
+  false,
   10485760,
   ARRAY[
     'image/jpeg', 'image/png', 'image/gif', 'image/webp',
@@ -32,7 +32,8 @@ VALUES (
     'application/json',
     'application/zip'
   ]
-) ON CONFLICT (id) DO NOTHING;
+) ON CONFLICT (id) DO UPDATE SET
+  public = false;
 
 -- 4. Storage policies for dm-attachments
 CREATE POLICY "Authenticated users can upload dm attachments"
@@ -43,9 +44,13 @@ CREATE POLICY "Authenticated users can upload dm attachments"
     AND (auth.uid())::text = (storage.foldername(name))[1]
   );
 
-CREATE POLICY "Anyone can view dm attachments"
+CREATE POLICY "Users can view own dm attachments"
   ON storage.objects FOR SELECT
-  USING (bucket_id = 'dm-attachments');
+  USING (
+    bucket_id = 'dm-attachments'
+    AND auth.role() = 'authenticated'
+    AND (auth.uid())::text = (storage.foldername(name))[1]
+  );
 
 CREATE POLICY "Users can delete own dm attachments"
   ON storage.objects FOR DELETE
