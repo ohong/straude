@@ -24,7 +24,17 @@ STABLE
 SECURITY DEFINER
 SET search_path TO 'public'
 AS $$
+DECLARE
+  v_caller_id uuid := auth.uid();
 BEGIN
+  IF v_caller_id IS NULL THEN
+    RAISE EXCEPTION 'Not authenticated' USING ERRCODE = '28000';
+  END IF;
+
+  IF p_user_id IS DISTINCT FROM v_caller_id THEN
+    RAISE EXCEPTION 'Forbidden: p_user_id must match auth.uid()' USING ERRCODE = '42501';
+  END IF;
+
   RETURN QUERY
   SELECT
     p.id,
@@ -43,10 +53,10 @@ BEGIN
   JOIN public.users u ON u.id = p.user_id
   LEFT JOIN public.daily_usage d ON d.id = p.daily_usage_id
   WHERE (
-    p.user_id = p_user_id
+    p.user_id = v_caller_id
     OR EXISTS (
       SELECT 1 FROM public.follows f
-      WHERE f.follower_id = p_user_id AND f.following_id = p.user_id
+      WHERE f.follower_id = v_caller_id AND f.following_id = p.user_id
     )
   )
   AND (p_cursor IS NULL OR p.created_at < p_cursor)
