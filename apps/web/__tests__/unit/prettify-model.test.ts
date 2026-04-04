@@ -65,9 +65,42 @@ describe("prettifyModel", () => {
     });
   });
 
+  describe("Gemini models", () => {
+    it("prettifies gemini-3.1-pro-preview", () => {
+      expect(prettifyModel("gemini-3.1-pro-preview")).toBe("Gemini 3.1 Pro");
+    });
+
+    it("prettifies gemini-3.1-flash-lite-preview", () => {
+      expect(prettifyModel("gemini-3.1-flash-lite-preview")).toBe("Gemini 3.1 Flash Lite");
+    });
+
+    it("prettifies gemini-3-flash-preview", () => {
+      expect(prettifyModel("gemini-3-flash-preview")).toBe("Gemini 3 Flash");
+    });
+
+    it("prettifies gemini-2.5-pro", () => {
+      expect(prettifyModel("gemini-2.5-pro")).toBe("Gemini 2.5 Pro");
+    });
+
+    it("prettifies gemini-2.5-flash", () => {
+      expect(prettifyModel("gemini-2.5-flash")).toBe("Gemini 2.5 Flash");
+    });
+
+    it("prettifies gemini-2.5-flash-lite", () => {
+      expect(prettifyModel("gemini-2.5-flash-lite")).toBe("Gemini 2.5 Flash Lite");
+    });
+
+    it("prettifies gemini-2.0-flash", () => {
+      expect(prettifyModel("gemini-2.0-flash")).toBe("Gemini 2.0 Flash");
+    });
+
+    it("prettifies gemini-2.0-flash-lite", () => {
+      expect(prettifyModel("gemini-2.0-flash-lite")).toBe("Gemini 2.0 Flash Lite");
+    });
+  });
+
   describe("unknown models", () => {
     it("returns the model name as-is for unrecognized models", () => {
-      expect(prettifyModel("gemini-2.0-flash")).toBe("gemini-2.0-flash");
       expect(prettifyModel("qwen-2.5-coder")).toBe("qwen-2.5-coder");
       expect(prettifyModel("mistral-large")).toBe("mistral-large");
     });

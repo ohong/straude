@@ -173,6 +173,18 @@ export function prettifyModel(model: string): string {
   }
   if (/^o4/i.test(normalized)) return "o4";
   if (/^o3/i.test(normalized)) return "o3";
+  // Gemini family: "gemini-3.1-pro-preview" → "Gemini 3.1 Pro"
+  if (/^gemini-/i.test(normalized)) {
+    return normalized
+      .replace(/^gemini-/i, "Gemini ")
+      .replace(/-preview.*$/, "")
+      .replace(/-exp.*$/, "")
+      .replace(/-/g, " ")
+      .replace(/\s+/g, " ")
+      .split(" ")
+      .map((w) => w.charAt(0).toUpperCase() + w.slice(1))
+      .join(" ");
+  }
   if (normalized.includes("opus")) return "Claude Opus";
   if (normalized.includes("sonnet")) return "Claude Sonnet";
   if (normalized.includes("haiku")) return "Claude Haiku";

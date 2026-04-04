@@ -34,7 +34,7 @@ export interface RawTokenBuckets {
 }
 
 export interface TokenSourceHints {
-  source: "codex" | "ccusage" | "generic";
+  source: "codex" | "ccusage" | "gemini" | "generic";
   cacheSemantics?: "subset_of_input" | "separate" | "auto";
 }
 

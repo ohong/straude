@@ -67,6 +67,18 @@ export function prettifyModel(model: string): string {
   }
   if (/^o4/i.test(normalized)) return "o4";
   if (/^o3/i.test(normalized)) return "o3";
+  // Gemini family: "gemini-3.1-pro-preview" → "Gemini 3.1 Pro"
+  if (/^gemini-/i.test(normalized)) {
+    return normalized
+      .replace(/^gemini-/i, "Gemini ")
+      .replace(/-preview.*$/, "")
+      .replace(/-exp.*$/, "")
+      .replace(/-/g, " ")
+      .replace(/\s+/g, " ")
+      .split(" ")
+      .map((w) => w.charAt(0).toUpperCase() + w.slice(1))
+      .join(" ");
+  }
   // Legacy: broader Claude matching
   if (normalized.includes("opus")) return "Claude Opus";
   if (normalized.includes("sonnet")) return "Claude Sonnet";
@@ -171,6 +183,15 @@ function modelColor(name: string): string {
   if (/GPT-4o/.test(name)) return "#4C78A8";
   if (/^o3/i.test(name)) return "#3B82F6";
   if (/^o4/i.test(name)) return "#6366F1";
+  if (/Gemini 3\.1 Pro/.test(name)) return "#4285F4";
+  if (/Gemini 3\.1 Flash Lite/.test(name)) return "#00ACC1";
+  if (/Gemini 3 Flash/.test(name)) return "#009688";
+  if (/Gemini 2\.5 Pro/.test(name)) return "#3F51B5";
+  if (/Gemini 2\.5 Flash Lite/.test(name)) return "#8BC34A";
+  if (/Gemini 2\.5 Flash/.test(name)) return "#34A853";
+  if (/Gemini 2\.0 Flash Lite/.test(name)) return "#FF8F00";
+  if (/Gemini 2\.0 Flash/.test(name)) return "#FBBC05";
+  if (/Gemini/i.test(name)) return "#3F51B5"; // Google indigo fallback
 
   const palette = ["#EF4444", "#F59E0B", "#10B981", "#06B6D4", "#8B5CF6", "#EC4899"];
   return palette[hashString(name) % palette.length]!;

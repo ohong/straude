@@ -166,7 +166,7 @@ export interface CcusageOutput {
 
 export interface NormalizationAnomaly {
   date: string;
-  source: "ccusage" | "codex";
+  source: "ccusage" | "codex" | "gemini";
   mode: TokenNormalizationMode;
   confidence: TokenNormalizationConfidence;
   consistencyError: number;

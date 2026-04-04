@@ -24,12 +24,18 @@ vi.mock("../../src/lib/codex.js", () => ({
   parseCodexOutput: vi.fn(),
 }));
 
+vi.mock("../../src/lib/gemini.js", () => ({
+  runGeminiRawAsync: vi.fn(),
+  parseGeminiOutput: vi.fn(),
+}));
+
 import { pushCommand, mergeEntries } from "../../src/commands/push.js";
 import { loadConfig, saveConfig } from "../../src/lib/auth.js";
 import { loginCommand } from "../../src/commands/login.js";
 import { apiRequest } from "../../src/lib/api.js";
 import { runCcusageRawAsync, parseCcusageOutput } from "../../src/lib/ccusage.js";
 import { runCodexRawAsync, parseCodexOutput } from "../../src/lib/codex.js";
+import { runGeminiRawAsync, parseGeminiOutput } from "../../src/lib/gemini.js";
 
 const mockLoadConfig = vi.mocked(loadConfig);
 const mockLoginCommand = vi.mocked(loginCommand);
@@ -39,6 +45,8 @@ const mockRunCcusageRawAsync = vi.mocked(runCcusageRawAsync);
 const mockParseCcusageOutput = vi.mocked(parseCcusageOutput);
 const mockRunCodexRawAsync = vi.mocked(runCodexRawAsync);
 const mockParseCodexOutput = vi.mocked(parseCodexOutput);
+const mockRunGeminiRawAsync = vi.mocked(runGeminiRawAsync);
+const mockParseGeminiOutput = vi.mocked(parseGeminiOutput);
 
 const fakeConfig = { token: "tok", username: "alice", api_url: "https://straude.com" };
 
@@ -65,6 +73,9 @@ beforeEach(() => {
   // Default: no Codex data
   mockRunCodexRawAsync.mockResolvedValue("");
   mockParseCodexOutput.mockReturnValue({ data: [] });
+  // Default: no Gemini data
+  mockRunGeminiRawAsync.mockResolvedValue("");
+  mockParseGeminiOutput.mockReturnValue({ data: [], anomalies: [], entryMeta: [] });
   vi.spyOn(console, "log").mockImplementation(() => {});
   vi.spyOn(console, "error").mockImplementation(() => {});
   vi.spyOn(process, "exit").mockImplementation((code) => {
@@ -494,7 +505,7 @@ describe("pushCommand", () => {
 
     expect(mockParseCcusageOutput).not.toHaveBeenCalled();
     expect(console.log).toHaveBeenCalledWith(
-      "No Claude Code data found locally; syncing Codex usage only.",
+      "No Claude Code data found locally; syncing other sources only.",
     );
 
     const submitCall = mockApiRequest.mock.calls[0]!;
@@ -514,7 +525,7 @@ describe("pushCommand", () => {
 
     expect(mockApiRequest).not.toHaveBeenCalled();
     expect(console.log).toHaveBeenCalledWith(
-      "No Claude Code data found locally; syncing Codex usage only.",
+      "No Claude Code data found locally; syncing other sources only.",
     );
     expect(console.log).toHaveBeenCalledWith(
       expect.stringContaining("No usage data found"),
@@ -617,6 +628,97 @@ describe("pushCommand", () => {
     expect(body.entries).toHaveLength(1);
     expect(body.entries[0]!.data.models).toEqual(["claude-sonnet-4-5-20250929"]);
     expect(body.entries[0]!.data.costUSD).toBe(0.05);
+  });
+
+  it("forwards --timeout to gemini subprocess", async () => {
+    mockRunCcusageRawAsync.mockResolvedValue("[]");
+    mockParseCcusageOutput.mockReturnValue({ data: [] });
+
+    await pushCommand({ timeoutMs: 300_000 });
+
+    expect(mockRunGeminiRawAsync).toHaveBeenCalledWith(
+      expect.any(String), expect.any(String), 300_000,
+    );
+  });
+
+  it("proceeds with Claude data when Gemini fails silently", async () => {
+    const today = todayStr();
+
+    mockRunCcusageRawAsync.mockResolvedValue("{}");
+    mockParseCcusageOutput.mockReturnValue({
+      data: [
+        {
+          date: today,
+          models: ["claude-sonnet-4-5-20250929"],
+          inputTokens: 1000,
+          outputTokens: 500,
+          cacheCreationTokens: 0,
+          cacheReadTokens: 0,
+          totalTokens: 1500,
+          costUSD: 0.05,
+        },
+      ],
+    });
+
+    mockRunGeminiRawAsync.mockResolvedValue("");
+
+    mockApiRequest.mockResolvedValue({
+      results: [
+        { date: today, usage_id: "u-1", post_id: "p-1", post_url: "https://straude.com/post/p-1", action: "created" },
+      ],
+    });
+
+    await pushCommand({});
+
+    // Should still submit Claude data
+    expect(mockApiRequest).toHaveBeenCalledWith(
+      expect.anything(),
+      "/api/usage/submit",
+      expect.anything(),
+    );
+  });
+
+  it("submits Gemini-only data when Claude and Codex have none", async () => {
+    const today = todayStr();
+
+    // Claude returns empty
+    mockRunCcusageRawAsync.mockResolvedValue(JSON.stringify({ daily: [] }));
+    mockParseCcusageOutput.mockReturnValue({ data: [] });
+    // Codex returns empty
+    mockRunCodexRawAsync.mockResolvedValue("");
+    // Gemini has data
+    const geminiRaw = JSON.stringify({ daily: [{ date: today, modelsUsed: ["gemini-2.5-pro"], inputTokens: 5000, outputTokens: 1200, cacheCreationTokens: 0, cacheReadTokens: 0, totalCost: 0.45 }] });
+    mockRunGeminiRawAsync.mockResolvedValue(geminiRaw);
+    mockParseGeminiOutput.mockReturnValue({
+      data: [{
+        date: today,
+        models: ["gemini-2.5-pro"],
+        inputTokens: 5000,
+        outputTokens: 1200,
+        cacheCreationTokens: 0,
+        cacheReadTokens: 0,
+        totalTokens: 6200,
+        costUSD: 0.45,
+      }],
+      anomalies: [],
+      entryMeta: [],
+    });
+
+    mockApiRequest.mockResolvedValue({
+      results: [
+        { date: today, usage_id: "u-1", post_id: "p-1", post_url: "https://straude.com/post/p-1", action: "created" },
+      ],
+    });
+
+    await pushCommand({});
+
+    const submitCall = mockApiRequest.mock.calls.find(
+      (c) => c[1] === "/api/usage/submit",
+    );
+    expect(submitCall).toBeDefined();
+    const body = JSON.parse(submitCall![2]!.body as string);
+    expect(body.entries[0].data.models).toEqual(["gemini-2.5-pro"]);
+    expect(body.entries[0].data.costUSD).toBe(0.45);
   });
 
 });

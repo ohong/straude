@@ -1,5 +1,19 @@
 # Architecture & Design Decisions
 
+## Gemini CLI Integration: gemistat Subprocess, Not Direct Telemetry Parsing (2026-04-04)
+
+**Decision:** Integrate Gemini CLI usage tracking by running `gemistat` (by ryoppippi, same author as ccusage) as a subprocess, mirroring the existing ccusage/codex pattern. Silent failure for users without Gemini CLI.
+
+**Why:**
+- **Same author, same conventions.** gemistat outputs `{ daily: [...], totals: {...} }` with field names matching ccusage (`modelsUsed`, `totalCost`, `cacheReadTokens`). This means the parser is trivial — no format translation needed.
+- **Keeps the CLI thin.** gemistat handles telemetry parsing, pricing lookup (via LiteLLM), and daily aggregation. Replicating this in Straude would mean maintaining a Gemini pricing table and OpenTelemetry parser.
+- **Proven pattern.** ccusage (fatal errors) and codex (silent errors) are battle-tested. Gemini follows the codex pattern — silent failure, so existing users are never affected.
+
+**Alternatives considered:**
+1. **Parse `~/.gemini/telemetry.log` directly** — Full control, no dependency, but requires maintaining a pricing table and OpenTelemetry parser. Telemetry must still be enabled manually.
+2. **Parse chat session files (`~/.gemini/tmp/*/chats/*.json`)** — No telemetry enablement needed, but token data is less structured and harder to aggregate reliably.
+3. **Hybrid (gemistat with fallback to direct parsing)** — More robust but doubles the code surface for marginal benefit.
+
 ## Legacy-to-Device Usage Backfill Strategy (2026-03-28)
 
 **Decision:** When the multi-device push path encounters a `daily_usage` row with zero `device_usage` backing rows, automatically insert a sentinel `device_usage` row (device_id `00000000-...`, device_name "legacy") before aggregation.
