@@ -68,21 +68,6 @@ export function Hero() {
           <CopySnippet command="npx straude" />
         </div>
 
-        <a
-          href="https://www.producthunt.com/products/straude?embed=true&utm_source=badge-featured&utm_medium=badge&utm_campaign=badge-straude"
-          target="_blank"
-          rel="noopener noreferrer"
-          className="mt-8 inline-block"
-        >
-          {/* eslint-disable-next-line @next/next/no-img-element */}
-          <img
-            alt="Straude - Strava for Claude Code / Global Leaderboard for Tokenmaxxers | Product Hunt"
-            width={250}
-            height={54}
-            src="https://api.producthunt.com/widgets/embed-image/v1/featured.svg?post_id=1114059&theme=light&t=1775120293534"
-          />
-        </a>
-
         {/* Terminal output */}
         <div className="mt-10 font-[family-name:var(--font-mono)] text-[0.8rem] text-landing-muted leading-relaxed max-w-[600px]">
           <span className="block text-landing-text">

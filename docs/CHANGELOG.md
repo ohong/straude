@@ -2,6 +2,15 @@
 
 ## Unreleased
 
+### Added
+
+- **User Signups bar chart on admin dashboard.** Shows daily new user signups with 7D/30D/All time range selector. Reuses the existing `admin_growth_metrics` RPC — no new migration needed.
+- **GitHub README embed widget.** New SVG endpoint at `/api/embed/<username>/svg` renders a scorecard (name, spend, streak, rank, active days, model, 84-day heatmap). Supports `?theme=light|dark` and `?compact=1` query params. Usage: `[![Straude Scorecard](https://straude.com/api/embed/<username>/svg)](https://straude.com/u/<username>)`.
+
+### Removed
+
+- **Product Hunt launch banner and badge.** Removed the PH banner from landing page and app shell (both guest and authenticated layouts), the PH badge embed from the Hero component, and cleaned `api.producthunt.com` from the CSP `img-src` directive. The `ProductHuntBanner` component was deleted.
+
 ### Fixed
 
 - **Profile page now shows recent activities.** The live `get_feed` Postgres function had an auth guard (`auth.uid() === p_user_id`) for the `mine` feed type that the migration file didn't reflect. The profile page called it with the service client (no auth context), so `auth.uid()` was always NULL and the RPC silently returned no posts. Added a new `user` feed type to the RPC that skips the auth check — the profile page already enforces access control via `canView`.

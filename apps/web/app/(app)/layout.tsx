@@ -7,7 +7,6 @@ import { RightSidebar } from "@/components/app/shared/RightSidebar";
 import { ResponsiveShellFrame } from "@/components/app/shared/ResponsiveShellFrame";
 import { GuestHeader, GuestMobileNav } from "@/components/app/shared/GuestHeader";
 import { CommandPalette } from "@/components/app/shared/CommandPalette";
-import { ProductHuntBanner } from "@/components/landing/ProductHuntBanner";
 import { firstRelation } from "@/lib/utils/first-relation";
 import type { DailyUsage } from "@/types";
 
@@ -38,7 +37,6 @@ export default async function AppLayout({
     // Public pages render with a guest layout below
     return (
       <div className="fixed inset-0 flex flex-col overflow-hidden">
-        <ProductHuntBanner />
         <GuestHeader />
           <div className="mx-auto flex min-h-0 w-full max-w-[1600px] flex-1 border-x border-border">
             <main id="main-content" className="min-w-0 flex-1 overflow-y-auto" style={{ scrollbarWidth: "none", overscrollBehavior: "contain" }}>
@@ -186,7 +184,6 @@ export default async function AppLayout({
   return (
     <CommandPalette username={profile?.username ?? null}>
       <div className="fixed inset-0 flex flex-col overflow-hidden">
-        <ProductHuntBanner />
         {onboardingIncomplete && (
           <div className="flex items-center justify-center gap-2 border-b border-border bg-accent/5 px-4 py-2 text-sm">
             <span className="text-muted">Finish setting up your profile</span>

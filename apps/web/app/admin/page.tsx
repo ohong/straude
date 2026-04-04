@@ -16,6 +16,7 @@ import { TimeToFirstSync } from "./components/TimeToFirstSync";
 import { PromptInbox } from "./components/PromptInbox";
 import { UsersByCountry } from "./components/UsersByCountry";
 import { CompanySuggestionsInbox } from "./components/CompanySuggestionsInbox";
+import { UserSignupsChart } from "./components/UserSignupsChart";
 
 type SpendRow = {
   date: string;
@@ -222,6 +223,9 @@ export default async function AdminPage() {
         <ModelUsageChart />
         <CodexGrowthCharts />
       </div>
+
+      {/* User Signups */}
+      <UserSignupsChart />
 
       {/* Funnel + Growth side by side */}
       <div className="grid gap-3 lg:grid-cols-2">
