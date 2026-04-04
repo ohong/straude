@@ -126,7 +126,7 @@ export default async function ProfilePage({
     { data: contributions },
     { data: postDates },
     radarResponse,
-    { data: posts },
+    postsResponse,
   ] = await Promise.all([
     db
       .from("follows")
@@ -179,7 +179,7 @@ export default async function ProfilePage({
       .eq("user_id", profile.id),
     computeRadarScores(profile.id).catch(() => null),
     db.rpc("get_feed", {
-      p_type: "mine",
+      p_type: "user",
       p_user_id: profile.id,
       p_limit: 20,
     }),
@@ -201,8 +201,17 @@ export default async function ProfilePage({
   }));
 
   let normalizedPosts: Post[] = [];
+  const posts = postsResponse.data;
   if (posts && posts.length > 0) {
-    const feedPosts = posts as FeedPostRow[];
+    // get_feed returns user/daily_usage as jsonb objects; direct query returns
+    // them as single-element arrays. Flatten to a consistent FeedPostRow shape.
+    const feedPosts = (posts as Record<string, unknown>[]).map((row) => ({
+      ...row,
+      user: Array.isArray(row.user) ? row.user[0] : row.user,
+      daily_usage: Array.isArray(row.daily_usage) ? row.daily_usage[0] : row.daily_usage,
+      kudos_count: (row.kudos_count as number) ?? 0,
+      comment_count: (row.comment_count as number) ?? 0,
+    })) as FeedPostRow[];
     const postIds = feedPosts.map((post) => post.id);
 
     const [{ data: userKudos }, { data: recentKudos }, { data: recentComments }] =
@@ -437,7 +446,7 @@ export default async function ProfilePage({
           </p>
         </div>
         {normalizedPosts.length > 0 ? (
-          <FeedList initialPosts={normalizedPosts} userId={authUserId} showTabs={false} />
+          <FeedList initialPosts={normalizedPosts} userId={authUserId} feedType="user" profileUserId={profile.id} showTabs={false} />
         ) : (
           <div className="px-4 py-12 text-center text-sm text-muted sm:px-6">
             No activities yet.

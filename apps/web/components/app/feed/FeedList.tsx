@@ -42,9 +42,9 @@ function SyncCommandHint() {
   );
 }
 
-type FeedType = "global" | "following" | "mine";
+type FeedType = "global" | "following" | "mine" | "user";
 
-const TAB_LABELS: Record<FeedType, string> = {
+const TAB_LABELS: Partial<Record<FeedType, string>> = {
   global: "Global",
   following: "Following",
   mine: "My Sessions",
@@ -56,12 +56,15 @@ export function FeedList({
   feedType: initialFeedType = "global",
   showTabs = true,
   pendingPosts = [],
+  profileUserId,
 }: {
   initialPosts: Post[];
   userId: string | null;
   feedType?: FeedType;
   showTabs?: boolean;
   pendingPosts?: Post[];
+  /** When viewing another user's profile, pass their ID so pagination fetches their posts. */
+  profileUserId?: string;
 }) {
   const router = useRouter();
   const [feedType, setFeedType] = useState<FeedType>(initialFeedType);
@@ -137,9 +140,12 @@ export function FeedList({
     setError(null);
 
     try {
-      const res = await fetch(
-        `/api/feed?type=${feedTypeRef.current}&cursor=${encodeURIComponent(cursorRef.current)}&limit=20`
-      );
+      const feedUrl = new URL("/api/feed", window.location.origin);
+      feedUrl.searchParams.set("type", feedTypeRef.current);
+      feedUrl.searchParams.set("cursor", cursorRef.current);
+      feedUrl.searchParams.set("limit", "20");
+      if (profileUserId) feedUrl.searchParams.set("user_id", profileUserId);
+      const res = await fetch(feedUrl);
       if (!res.ok) throw new Error("Failed to load posts");
       const data = await res.json();
 

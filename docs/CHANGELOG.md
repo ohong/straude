@@ -4,6 +4,10 @@
 
 ### Fixed
 
+- **Profile page now shows recent activities.** The live `get_feed` Postgres function had an auth guard (`auth.uid() === p_user_id`) for the `mine` feed type that the migration file didn't reflect. The profile page called it with the service client (no auth context), so `auth.uid()` was always NULL and the RPC silently returned no posts. Added a new `user` feed type to the RPC that skips the auth check — the profile page already enforces access control via `canView`.
+- **Profile page pagination no longer loads wrong user's posts.** The `FeedList` component defaulted `feedType` to `global` when the profile page didn't pass it, so scrolling past the first 20 posts fetched the global feed. The API route also always used the viewer's auth ID instead of the profile owner's. Both now use the `user` feed type with the profile owner's ID.
+- **Hydration mismatch in app shell.** `useResponsiveShell` branched on `typeof window !== 'undefined'` during `useState` init, producing different initial HTML on server (`full` mode) vs client (viewport-dependent mode). Now always initializes to `full`; the existing `useEffect` corrects to the actual viewport mode after hydration.
+
 - **CI build no longer crashes when Supabase is unreachable.** `getOpenStatsForPage()` now catches snapshot-fallback failures and returns placeholder stats instead of throwing, so `/open` static generation succeeds even with placeholder credentials.
 
 ### Changed

@@ -19,10 +19,7 @@ export function getResponsiveShellMode(width: number): ResponsiveShellMode {
 }
 
 export function useResponsiveShell() {
-  const [mode, setMode] = useState<ResponsiveShellMode>(() => {
-    if (typeof window === "undefined") return "full";
-    return getResponsiveShellMode(window.innerWidth);
-  });
+  const [mode, setMode] = useState<ResponsiveShellMode>("full");
 
   useEffect(() => {
     function updateMode() {

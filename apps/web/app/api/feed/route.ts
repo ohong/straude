@@ -20,8 +20,8 @@ export async function GET(request: NextRequest) {
   const limit = Math.min(Number(searchParams.get("limit") ?? 20), 50);
   const type = searchParams.get("type") ?? "global";
 
-  // Unauthenticated users can only access the global feed
-  if (!user && type !== "global") {
+  // Unauthenticated users can only access global and user (profile) feeds
+  if (!user && type !== "global" && type !== "user") {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
 
@@ -39,9 +39,15 @@ export async function GET(request: NextRequest) {
     }
   }
 
+  // When viewing a profile, the client sends the profile owner's ID so
+  // pagination continues fetching that user's posts instead of the viewer's.
+  const profileUserId = searchParams.get("user_id");
+  const effectiveUserId =
+    type === "user" && profileUserId ? profileUserId : (user?.id ?? null);
+
   const { data: rpcPosts, error } = await supabase.rpc("get_feed", {
     p_type: type,
-    p_user_id: user?.id ?? null,
+    p_user_id: effectiveUserId,
     p_limit: limit,
     p_cursor_date: cursorDate,
     p_cursor_created_at: cursorCreatedAt,
