@@ -199,7 +199,9 @@ function renderFullCard(data: ProfileShareCardData, dark: boolean): string {
   <circle cx="-50" cy="${H + 50}" r="160" fill="${t.spotlightB}"/>
 
   <!-- Logo + wordmark -->
-  <polygon points="${PAD + 3.2},${PAD} ${PAD + 12.8},${PAD} ${PAD + 16},${PAD + 16} ${PAD},${PAD + 16}" fill="#DF561F"/>
+  <g transform="translate(${PAD}, ${PAD - 2})">
+    <svg width="16" height="16" viewBox="0 0 24 24" fill="#DF561F"><path d="M13 2L3 14H12L11 22L21 10H12L13 2Z"/></svg>
+  </g>
   <text x="${PAD + 22}" y="${PAD + 12}" fill="${t.textPrimary}" font-size="12" font-weight="700" letter-spacing="0.08em">STRAUDE</text>
 
   <!-- Name -->
@@ -253,9 +255,11 @@ function renderCompactCard(data: ProfileShareCardData, dark: boolean): string {
   <rect width="${W}" height="${H}" fill="${bgFill(dark)}"/>
 
   <!-- Logo -->
-  <polygon points="14,12 23.6,12 27,40 10,40" fill="#DF561F" transform="scale(0.5) translate(24, 16)"/>
-  <text x="30" y="25" fill="${t.textPrimary}" font-size="14" font-weight="700" letter-spacing="-0.02em">${heroName}</text>
-  <text x="30" y="40" fill="${t.textMuted}" font-size="9" font-weight="500">@${esc(data.username)}</text>
+  <g transform="translate(12, 16)">
+    <svg width="14" height="14" viewBox="0 0 24 24" fill="#DF561F"><path d="M13 2L3 14H12L11 22L21 10H12L13 2Z"/></svg>
+  </g>
+  <text x="32" y="25" fill="${t.textPrimary}" font-size="14" font-weight="700" letter-spacing="-0.02em">${heroName}</text>
+  <text x="32" y="40" fill="${t.textMuted}" font-size="9" font-weight="500">@${esc(data.username)}</text>
 
   ${statsSvg}
 </svg>`;
@@ -271,8 +275,10 @@ function renderPrivateCard(username: string, dark: boolean, compact: boolean): s
   <style>text { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Helvetica, Arial, sans-serif; }</style>
   ${bgDefs(dark)}
   <rect width="480" height="56" fill="${bgFill(dark)}"/>
-  <polygon points="14,12 23.6,12 27,40 10,40" fill="#DF561F" transform="scale(0.5) translate(24, 16)"/>
-  <text x="30" y="30" fill="${t.textPrimary}" font-size="14" font-weight="700">@${esc(username)}</text>
+  <g transform="translate(12, 16)">
+    <svg width="14" height="14" viewBox="0 0 24 24" fill="#DF561F"><path d="M13 2L3 14H12L11 22L21 10H12L13 2Z"/></svg>
+  </g>
+  <text x="32" y="30" fill="${t.textPrimary}" font-size="14" font-weight="700">@${esc(username)}</text>
   <text x="200" y="30" fill="${t.textMuted}" font-size="12" font-weight="500">Private profile</text>
 </svg>`;
   }
@@ -281,8 +287,10 @@ function renderPrivateCard(username: string, dark: boolean, compact: boolean): s
   <style>text { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Helvetica, Arial, sans-serif; }</style>
   ${bgDefs(dark)}
   <rect width="800" height="420" fill="${bgFill(dark)}"/>
-  <polygon points="6.4,0 25.6,0 32,32 0,32" fill="#DF561F" transform="translate(384, 150) scale(0.75)"/>
-  <text x="400" y="170" fill="${t.textPrimary}" font-size="14" font-weight="700" text-anchor="middle" letter-spacing="0.08em">STRAUDE</text>
+  <g transform="translate(390, 140)">
+    <svg width="20" height="20" viewBox="0 0 24 24" fill="#DF561F"><path d="M13 2L3 14H12L11 22L21 10H12L13 2Z"/></svg>
+  </g>
+  <text x="400" y="178" fill="${t.textPrimary}" font-size="14" font-weight="700" text-anchor="middle" letter-spacing="0.08em">STRAUDE</text>
   <text x="400" y="210" fill="${t.textPrimary}" font-size="22" font-weight="700" text-anchor="middle">@${esc(username)}</text>
   <text x="400" y="236" fill="${t.textMuted}" font-size="14" font-weight="500" text-anchor="middle">This profile is private</text>
 </svg>`;
