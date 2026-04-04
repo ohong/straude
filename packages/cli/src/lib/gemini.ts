@@ -16,7 +16,7 @@ export interface GeminiOutput {
 }
 
 // Pin to major version so bunx/npx can use the cached copy without a registry roundtrip.
-const GEMISTAT_PKG = "gemistat@1";
+const GEMISTAT_PKG = "gemistat@0";
 
 /**
  * Convert compact date (YYYYMMDD) to ISO date (YYYY-MM-DD).
