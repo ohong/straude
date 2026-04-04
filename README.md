@@ -29,37 +29,44 @@ Options: `--date YYYY-MM-DD` to push a specific date, `--days N` to backfill the
 - **Compete** — Global and regional leaderboards (daily/weekly/monthly/all-time).
 - **Streak** — Code with Claude every day. Your streak is your badge of honor.
 
-## Stats Card
+## Scorecard
 
-Display your Straude stats on your GitHub profile:
+Display your Straude scorecard on your GitHub profile:
 
 <a href="https://straude.com/u/ohong">
   <picture>
-    <source media="(prefers-color-scheme: dark)" srcset="https://straude.com/api/card/ohong?theme=dark" />
-    <source media="(prefers-color-scheme: light)" srcset="https://straude.com/api/card/ohong?theme=light" />
-    <img alt="Straude Stats" src="https://straude.com/api/card/ohong" />
+    <source media="(prefers-color-scheme: dark)" srcset="https://straude.com/api/embed/ohong/svg?theme=dark" />
+    <source media="(prefers-color-scheme: light)" srcset="https://straude.com/api/embed/ohong/svg" />
+    <img alt="Straude Scorecard" src="https://straude.com/api/embed/ohong/svg" />
   </picture>
 </a>
 
 Add this to your README (replace `YOUR_USERNAME` with your Straude username):
 
 ```markdown
-[![Straude Stats](https://straude.com/api/card/YOUR_USERNAME)](https://straude.com/u/YOUR_USERNAME)
+[![Straude Scorecard](https://straude.com/api/embed/YOUR_USERNAME/svg)](https://straude.com/u/YOUR_USERNAME)
 ```
 
-**Dark theme:** append `?theme=dark`. **Auto-match GitHub theme:**
+**Options:**
+
+| Param | Values | Default |
+|-------|--------|---------|
+| `theme` | `light`, `dark` | `light` |
+| `compact` | `1` | off |
+
+**Compact badge:** `https://straude.com/api/embed/YOUR_USERNAME/svg?compact=1`
+
+**Auto-match GitHub theme:**
 
 ```html
 <a href="https://straude.com/u/YOUR_USERNAME">
   <picture>
-    <source media="(prefers-color-scheme: dark)" srcset="https://straude.com/api/card/YOUR_USERNAME?theme=dark" />
-    <source media="(prefers-color-scheme: light)" srcset="https://straude.com/api/card/YOUR_USERNAME?theme=light" />
-    <img alt="Straude Stats" src="https://straude.com/api/card/YOUR_USERNAME" />
+    <source media="(prefers-color-scheme: dark)" srcset="https://straude.com/api/embed/YOUR_USERNAME/svg?theme=dark" />
+    <source media="(prefers-color-scheme: light)" srcset="https://straude.com/api/embed/YOUR_USERNAME/svg" />
+    <img alt="Straude Scorecard" src="https://straude.com/api/embed/YOUR_USERNAME/svg" />
   </picture>
 </a>
 ```
-
-Get your personalized embed code at [straude.com/card](https://straude.com/card).
 
 ## Privacy
 
