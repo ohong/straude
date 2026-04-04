@@ -5,7 +5,8 @@
 ### Added
 
 - **User Signups bar chart on admin dashboard.** Shows daily new user signups with 7D/30D/All time range selector. Reuses the existing `admin_growth_metrics` RPC — no new migration needed.
-- **GitHub README embed widget.** New SVG endpoint at `/api/embed/<username>/svg` renders a scorecard (name, spend, streak, rank, active days, model, 84-day heatmap). Supports `?theme=light|dark` and `?compact=1` query params. Usage: `[![Straude Scorecard](https://straude.com/api/embed/<username>/svg)](https://straude.com/u/<username>)`.
+- **GitHub README scorecard embed.** New SVG endpoint at `/api/embed/<username>/svg` renders a scorecard matching the `/stats` profile card design — warm gradient, 365-day heatmap with month/day labels and legend, streak, output tokens, active days, and model. Supports `?theme=light|dark` and `?compact=1`. Uses the bolt logo.
+- **Cmd+Enter to send DMs.** The message composer in `/messages` now supports `Cmd+Enter` (Mac) / `Ctrl+Enter` to send. The send button shows the shortcut hint ("Send ⌘↵") matching the prompt submission widget style.
 
 ### Removed
 

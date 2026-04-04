@@ -742,6 +742,12 @@ export function MessagesInbox({
                     id="dm-composer"
                     value={draft}
                     onChange={(event) => setDraft(event.target.value)}
+                    onKeyDown={(event) => {
+                      if (event.key === "Enter" && (event.metaKey || event.ctrlKey)) {
+                        event.preventDefault();
+                        event.currentTarget.form?.requestSubmit();
+                      }
+                    }}
                     rows={isPhone ? 3 : 4}
                     maxLength={1000}
                     placeholder="Ask about a build, trade notes, or start a collaboration."
@@ -781,7 +787,7 @@ export function MessagesInbox({
                       type="submit"
                       disabled={sending || (draft.trim().length === 0 && pendingAttachments.length === 0)}
                     >
-                      {sending ? "Sending..." : "Send message"}
+                      {sending ? "Sending..." : "Send \u2318\u21B5"}
                     </Button>
                   </div>
                 </form>
