@@ -9,13 +9,13 @@ import { InviteButton } from "@/components/app/profile/InviteButton";
 interface RightSidebarProps {
   userId: string;
   username: string | null;
-  totalTokens: number;
+  totalOutputTokens: number;
 }
 
 export async function RightSidebar({
   userId,
   username,
-  totalTokens,
+  totalOutputTokens,
 }: RightSidebarProps) {
   const supabase = await createClient();
   // Service client so suggestions can include all users.
@@ -92,7 +92,7 @@ export async function RightSidebar({
   const suggested = merged.slice(0, 5);
 
   const TARGET = 1_000_000_000;
-  const pct = Math.min((totalTokens / TARGET) * 100, 100);
+  const pct = Math.min((totalOutputTokens / TARGET) * 100, 100);
 
   return (
     <div className="flex flex-col">
@@ -131,7 +131,7 @@ export async function RightSidebar({
         <p className="text-sm font-semibold">The Three Comma Club</p>
         <p className="mb-3 text-xs text-muted">First to one billion output tokens</p>
         <div className="mb-1 flex items-center justify-between text-xs text-muted">
-          <span>{formatTokens(totalTokens)} ({pct < 0.01 ? '<0.01' : pct.toFixed(2)}%)</span>
+          <span>{formatTokens(totalOutputTokens)} ({pct < 0.01 ? '<0.01' : pct.toFixed(2)}%)</span>
           <span>1B</span>
         </div>
         <div className="h-1.5 w-full overflow-hidden rounded-full bg-subtle">

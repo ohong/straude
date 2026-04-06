@@ -17,10 +17,11 @@ type LatestPostRow = {
   daily_usage: Array<Pick<DailyUsage, "date">> | null;
 };
 
-type UsageFallbackRow = Pick<DailyUsage, "cost_usd" | "total_tokens">;
+type UsageFallbackRow = Pick<DailyUsage, "cost_usd" | "output_tokens">;
 type UsageTotalsRpcRow = {
   total_cost: number | string | null;
-  total_tokens: number | string | null;
+  total_output_tokens?: number | string | null;
+  total_tokens?: number | string | null;
 };
 
 export default async function AppLayout({
@@ -107,8 +108,25 @@ export default async function AppLayout({
   const hasPhotoAchievement = !!photoAchievementRes.data;
   const showPhotoNudge = postsCount > 0 && !hasPhotoAchievement && !onboardingIncomplete;
 
-  let totalTokens = 0;
+  let totalOutputTokens = 0;
   let totalCost = 0;
+
+  const loadFallbackUsageTotals = async (): Promise<{ totalOutputTokens: number; totalCost: number }> => {
+    const { data: fallbackRows, error: fallbackError } = await supabase
+      .from("daily_usage")
+      .select("cost_usd, output_tokens")
+      .eq("user_id", user.id);
+
+    if (fallbackError) {
+      throw new Error(`Unable to load usage totals from daily_usage fallback (${fallbackError.message})`);
+    }
+
+    const rows = (fallbackRows ?? []) as UsageFallbackRow[];
+    return {
+      totalOutputTokens: rows.reduce((sum, row) => sum + Number(row.output_tokens), 0),
+      totalCost: rows.reduce((sum, row) => sum + Number(row.cost_usd), 0),
+    };
+  };
 
   if (usageTotalsRes.error) {
     console.error("get_user_usage_totals RPC failed; using direct daily_usage fallback", {
@@ -117,24 +135,26 @@ export default async function AppLayout({
       message: usageTotalsRes.error.message,
     });
 
-    const { data: fallbackRows, error: fallbackError } = await supabase
-      .from("daily_usage")
-      .select("cost_usd, total_tokens")
-      .eq("user_id", user.id);
-
-    if (fallbackError) {
-      throw new Error(
-        `Unable to load usage totals: RPC error (${usageTotalsRes.error.message}); fallback error (${fallbackError.message})`
-      );
-    }
-
-    const rows = (fallbackRows ?? []) as UsageFallbackRow[];
-    totalTokens = rows.reduce((sum, row) => sum + Number(row.total_tokens), 0);
-    totalCost = rows.reduce((sum, row) => sum + Number(row.cost_usd), 0);
+    const fallback = await loadFallbackUsageTotals();
+    totalOutputTokens = fallback.totalOutputTokens;
+    totalCost = fallback.totalCost;
   } else {
     const usageTotals = usageTotalsRes.data as UsageTotalsRpcRow | null;
-    totalTokens = Number(usageTotals?.total_tokens ?? 0);
-    totalCost = Number(usageTotals?.total_cost ?? 0);
+    const rpcOutputTokens = usageTotals?.total_output_tokens;
+
+    if (rpcOutputTokens === null || rpcOutputTokens === undefined) {
+      console.error("get_user_usage_totals returned no total_output_tokens; using direct daily_usage fallback", {
+        userId: user.id,
+        rpcKeys: usageTotals ? Object.keys(usageTotals) : [],
+      });
+
+      const fallback = await loadFallbackUsageTotals();
+      totalOutputTokens = fallback.totalOutputTokens;
+      totalCost = fallback.totalCost;
+    } else {
+      totalOutputTokens = Number(rpcOutputTokens);
+      totalCost = Number(usageTotals?.total_cost ?? 0);
+    }
   }
 
   const latestPosts = ((latestPostRes.data ?? []) as LatestPostRow[])
@@ -160,7 +180,7 @@ export default async function AppLayout({
       streak={streak}
       streakFreezes={profile?.streak_freezes ?? 0}
       latestPosts={latestPosts}
-      totalTokens={totalTokens}
+      totalOutputTokens={totalOutputTokens}
       totalCost={totalCost}
     />
   );
@@ -176,7 +196,7 @@ export default async function AppLayout({
       <RightSidebar
         userId={user.id}
         username={profile?.username ?? null}
-        totalTokens={totalTokens}
+        totalOutputTokens={totalOutputTokens}
       />
     </Suspense>
   );
