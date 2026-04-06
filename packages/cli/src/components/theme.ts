@@ -18,7 +18,7 @@ export const theme = {
 
 export type Theme = typeof theme;
 
-// Model color map — Claude = orange, OpenAI = purple
+// Model color map — Claude = orange, OpenAI = purple, Gemini = Google brand colors
 export const modelColors: Record<string, string> = {
   'Claude Opus':   '#DF561F',  // brand orange
   'Claude Sonnet': '#F08A5D',  // lighter orange
@@ -27,6 +27,14 @@ export const modelColors: Record<string, string> = {
   'GPT-4o':        '#A78BFA',  // lighter purple
   'o3':            '#7C3AED',  // deeper purple
   'o4':            '#6D28D9',  // deep purple
+  'Gemini 3.1 Pro':        '#4285F4',  // Google blue
+  'Gemini 3.1 Flash Lite': '#00ACC1',  // cyan
+  'Gemini 3 Flash':        '#009688',  // teal
+  'Gemini 2.5 Pro':        '#3F51B5',  // indigo
+  'Gemini 2.5 Flash':      '#34A853',  // Google green
+  'Gemini 2.5 Flash Lite': '#8BC34A',  // light green
+  'Gemini 2.0 Flash':      '#FBBC05',  // Google yellow
+  'Gemini 2.0 Flash Lite': '#FF8F00',  // amber
 };
 
 // Fallback palette for unknown models (hash-indexed)

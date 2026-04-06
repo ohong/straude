@@ -134,13 +134,17 @@ function ccusageJson(dates: string[]) {
 
 /**
  * Wraps mockExecFileSync to return ccusage JSON for ccusage calls and throw
- * for @ccusage/codex calls (simulating codex not installed — the default).
+ * for @ccusage/codex and gemistat calls (simulating not installed — the default).
  */
 function mockCcusageOnly(json: string) {
   mockExecFileSync.mockImplementation(((cmd: string, args: string[]) => {
     // @ccusage/codex calls should fail silently
     if (args?.some?.((a: string) => typeof a === "string" && a.includes("@ccusage/codex"))) {
       throw new Error("@ccusage/codex not found");
+    }
+    // gemistat calls should fail silently
+    if (args?.some?.((a: string) => typeof a === "string" && a.includes("gemistat"))) {
+      throw new Error("gemistat not found");
     }
     return json;
   }) as typeof execFileSync);
@@ -253,8 +257,8 @@ describe("sync flow", () => {
 
     // Re-syncs today's data (1 API call)
     expect(mockFetch).toHaveBeenCalledTimes(2);
-    // 2 calls: ccusage daily + codex attempt (no more --version probe)
-    expect(mockExecFileSync).toHaveBeenCalledTimes(2);
+    // 3 calls: ccusage daily + codex attempt + gemini attempt
+    expect(mockExecFileSync).toHaveBeenCalledTimes(3);
     const saved = readPersistedConfig();
     expect(saved.last_push_date).toBe(today);
   });
@@ -269,8 +273,8 @@ describe("sync flow", () => {
 
     await pushCommand({});
 
-    // 2 calls: ccusage daily + codex attempt (no more --version probe)
-    expect(mockExecFileSync).toHaveBeenCalledTimes(2);
+    // 3 calls: ccusage daily + codex attempt + gemini attempt
+    expect(mockExecFileSync).toHaveBeenCalledTimes(3);
     expect(mockFetch).toHaveBeenCalledTimes(2);
 
     const saved = readPersistedConfig();
@@ -286,8 +290,8 @@ describe("sync flow", () => {
 
     await pushCommand({});
 
-    // 2 calls: ccusage daily + codex attempt (no more --version probe)
-    expect(mockExecFileSync).toHaveBeenCalledTimes(2);
+    // 3 calls: ccusage daily + codex attempt + gemini attempt
+    expect(mockExecFileSync).toHaveBeenCalledTimes(3);
     // calls[0] = actual ccusage daily
     const args = mockExecFileSync.mock.calls[0]!;
     // ccusage is called with: ["daily", "--json", "--since", ..., "--until", ...]
@@ -331,6 +335,10 @@ describe("Codex integration", () => {
     mockExecFileSync.mockImplementation(((cmd: string, args: string[]) => {
       if (args?.some?.((a: string) => typeof a === "string" && a.includes("@ccusage/codex"))) {
         return codexJsonStr;
+      }
+      // gemistat calls should fail silently
+      if (args?.some?.((a: string) => typeof a === "string" && a.includes("gemistat"))) {
+        throw new Error("gemistat not found");
       }
       return ccJson;
     }) as typeof execFileSync);
@@ -378,9 +386,9 @@ describe("Codex integration", () => {
     const [, options] = mockFetch.mock.calls[0]!;
     const body = JSON.parse(options.body);
 
-    // Hash should be SHA-256 of concatenated raw JSONs
+    // Hash should be SHA-256 of concatenated raw JSONs (gemini returns "" when not installed)
     const { createHash } = await import("node:crypto");
-    const expectedHash = createHash("sha256").update(ccRaw + codexRaw).digest("hex");
+    const expectedHash = createHash("sha256").update(ccRaw + codexRaw + "").digest("hex");
     expect(body.hash).toBe(expectedHash);
   });
 
@@ -388,10 +396,13 @@ describe("Codex integration", () => {
     seedConfig();
     const today = todayStr();
 
-    // ccusage returns empty, Codex has data
+    // ccusage returns empty, Codex has data, gemistat not installed
     mockExecFileSync.mockImplementation(((cmd: string, args: string[]) => {
       if (args?.some?.((a: string) => typeof a === "string" && a.includes("@ccusage/codex"))) {
         return codexJson([today]);
+      }
+      if (args?.some?.((a: string) => typeof a === "string" && a.includes("gemistat"))) {
+        throw new Error("gemistat not found");
       }
       return "[]"; // ccusage: no data
     }) as typeof execFileSync);
@@ -456,6 +467,9 @@ describe("Codex integration", () => {
       if (args?.some?.((a: string) => typeof a === "string" && a.includes("@ccusage/codex"))) {
         return codexJson([today]);
       }
+      if (args?.some?.((a: string) => typeof a === "string" && a.includes("gemistat"))) {
+        throw new Error("gemistat not found");
+      }
 
       throw new Error(`No valid Claude data directories found. Please ensure at least one of the following exists:
 - /Users/test/.config/claude/projects
@@ -468,7 +482,7 @@ describe("Codex integration", () => {
 
     expect(mockFetch).toHaveBeenCalledTimes(2);
     expect(console.log).toHaveBeenCalledWith(
-      "No Claude Code data found locally; syncing Codex usage only.",
+      "No Claude Code data found locally; syncing other sources only.",
     );
 
     const [, options] = mockFetch.mock.calls[0]!;

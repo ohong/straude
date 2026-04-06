@@ -22,6 +22,18 @@ function prettifyModel(model: string): string {
   }
   if (/^o4/i.test(normalized)) return 'o4';
   if (/^o3/i.test(normalized)) return 'o3';
+  // Gemini family: "gemini-3.1-pro-preview" → "Gemini 3.1 Pro"
+  if (/^gemini-/i.test(normalized)) {
+    return normalized
+      .replace(/^gemini-/i, 'Gemini ')
+      .replace(/-preview.*$/, '')
+      .replace(/-exp.*$/, '')
+      .replace(/-/g, ' ')
+      .replace(/\s+/g, ' ')
+      .split(' ')
+      .map((w) => w.charAt(0).toUpperCase() + w.slice(1))
+      .join(' ');
+  }
   // Legacy: broader Claude matching
   if (normalized.includes('opus')) return 'Claude Opus';
   if (normalized.includes('sonnet')) return 'Claude Sonnet';
@@ -45,6 +57,8 @@ function getModelColor(name: string): string {
   if (/Claude/i.test(name)) return modelColors['Claude Sonnet']!;
   // OpenAI family → purple shades
   if (/GPT/i.test(name)) return modelColors['GPT-5']!;
+  // Gemini family → blue/green shades
+  if (/Gemini/i.test(name)) return modelColors['Gemini 2.5 Pro'] ?? modelFallback[0]!;
   if (/^o[34]/i.test(name)) return modelColors['o3']!;
   // Fallback: hash into palette
   return modelFallback[hashString(name) % modelFallback.length]!;

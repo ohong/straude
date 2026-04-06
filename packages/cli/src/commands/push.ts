@@ -7,6 +7,7 @@ import { apiRequest } from "../lib/api.js";
 import { runCcusageRawAsync, parseCcusageOutput } from "../lib/ccusage.js";
 import type { CcusageDailyEntry, ModelBreakdownEntry } from "../lib/ccusage.js";
 import { runCodexRawAsync, parseCodexOutput } from "../lib/codex.js";
+import { runGeminiRawAsync, parseGeminiOutput } from "../lib/gemini.js";
 import { MAX_BACKFILL_DAYS, DEFAULT_SYNC_DAYS } from "../config.js";
 import { Spinner } from "../lib/spinner.js";
 import type { DashboardData as DashboardResponse } from "../components/PushSummary.js";
@@ -108,8 +109,9 @@ function buildBreakdown(entry: CcusageDailyEntry): ModelBreakdownEntry[] {
 export function mergeEntries(
   claudeEntries: CcusageDailyEntry[],
   codexEntries: CcusageDailyEntry[],
+  geminiEntries: CcusageDailyEntry[] = [],
 ): CcusageDailyEntry[] {
-  const byDate = new Map<string, { claude?: CcusageDailyEntry; codex?: CcusageDailyEntry }>();
+  const byDate = new Map<string, { claude?: CcusageDailyEntry; codex?: CcusageDailyEntry; gemini?: CcusageDailyEntry }>();
 
   for (const e of claudeEntries) {
     byDate.set(e.date, { ...byDate.get(e.date), claude: e });
@@ -117,26 +119,31 @@ export function mergeEntries(
   for (const e of codexEntries) {
     byDate.set(e.date, { ...byDate.get(e.date), codex: e });
   }
+  for (const e of geminiEntries) {
+    byDate.set(e.date, { ...byDate.get(e.date), gemini: e });
+  }
 
   const merged: CcusageDailyEntry[] = [];
 
-  for (const [date, { claude, codex }] of byDate) {
+  for (const [date, { claude, codex, gemini }] of byDate) {
     const claudeBreakdown = claude ? buildBreakdown(claude) : [];
     const codexBreakdown = codex ? buildBreakdown(codex) : [];
-    const modelBreakdown = [...claudeBreakdown, ...codexBreakdown];
+    const geminiBreakdown = gemini ? buildBreakdown(gemini) : [];
+    const modelBreakdown = [...claudeBreakdown, ...codexBreakdown, ...geminiBreakdown];
 
     merged.push({
       date,
       models: [
         ...(claude?.models ?? []),
         ...(codex?.models ?? []),
+        ...(gemini?.models ?? []),
       ],
-      inputTokens: (claude?.inputTokens ?? 0) + (codex?.inputTokens ?? 0),
-      outputTokens: (claude?.outputTokens ?? 0) + (codex?.outputTokens ?? 0),
-      cacheCreationTokens: (claude?.cacheCreationTokens ?? 0) + (codex?.cacheCreationTokens ?? 0),
-      cacheReadTokens: (claude?.cacheReadTokens ?? 0) + (codex?.cacheReadTokens ?? 0),
-      totalTokens: (claude?.totalTokens ?? 0) + (codex?.totalTokens ?? 0),
-      costUSD: (claude?.costUSD ?? 0) + (codex?.costUSD ?? 0),
+      inputTokens: (claude?.inputTokens ?? 0) + (codex?.inputTokens ?? 0) + (gemini?.inputTokens ?? 0),
+      outputTokens: (claude?.outputTokens ?? 0) + (codex?.outputTokens ?? 0) + (gemini?.outputTokens ?? 0),
+      cacheCreationTokens: (claude?.cacheCreationTokens ?? 0) + (codex?.cacheCreationTokens ?? 0) + (gemini?.cacheCreationTokens ?? 0),
+      cacheReadTokens: (claude?.cacheReadTokens ?? 0) + (codex?.cacheReadTokens ?? 0) + (gemini?.cacheReadTokens ?? 0),
+      totalTokens: (claude?.totalTokens ?? 0) + (codex?.totalTokens ?? 0) + (gemini?.totalTokens ?? 0),
+      costUSD: (claude?.costUSD ?? 0) + (codex?.costUSD ?? 0) + (gemini?.costUSD ?? 0),
       modelBreakdown: modelBreakdown.length > 0 ? modelBreakdown : undefined,
     });
   }
@@ -230,12 +237,13 @@ export async function pushCommand(options: PushOptions, apiUrlOverride?: string)
       : `Pushing usage for ${formatDate(sinceDate)} to ${formatDate(untilDate)}...`,
   );
 
-  // Run ccusage + codex in parallel — the single biggest perf win
+  // Run ccusage + codex + gemini in parallel — the single biggest perf win
   const scanSpinner = new Spinner("scan");
   scanSpinner.start();
-  const [claudeResult, codexRaw] = await Promise.all([
+  const [claudeResult, codexRaw, geminiRaw] = await Promise.all([
     runCcusageRawAsync(sinceStr, untilStr, options.timeoutMs).catch((err: Error) => err),
     runCodexRawAsync(sinceStr, untilStr, options.timeoutMs),
+    runGeminiRawAsync(sinceStr, untilStr, options.timeoutMs),
   ]);
   scanSpinner.stop();
 
@@ -246,7 +254,7 @@ export async function pushCommand(options: PushOptions, apiUrlOverride?: string)
   if (claudeResult instanceof Error) {
     // Codex-only users do not have local Claude data; keep other Claude failures fatal.
     if (isMissingClaudeDataError(claudeResult)) {
-      console.log("No Claude Code data found locally; syncing Codex usage only.");
+      console.log("No Claude Code data found locally; syncing other sources only.");
     } else {
       console.error(claudeResult.message);
       process.exit(1);
@@ -265,7 +273,11 @@ export async function pushCommand(options: PushOptions, apiUrlOverride?: string)
 
   // Codex data — silent on fetch failure (empty string), but surface parser anomalies.
   const codexParsed = codexRaw ? parseCodexOutput(codexRaw) : { data: [], anomalies: [], entryMeta: [] };
-  const allAnomalies = [...claudeAnomalies, ...(codexParsed.anomalies ?? [])];
+
+  // Gemini data — silent on fetch failure (empty string), but surface parser anomalies.
+  const geminiParsed = geminiRaw ? parseGeminiOutput(geminiRaw) : { data: [], anomalies: [], entryMeta: [] };
+
+  const allAnomalies = [...claudeAnomalies, ...(codexParsed.anomalies ?? []), ...(geminiParsed.anomalies ?? [])];
   const mediumLowCount = allAnomalies.filter((a) => a.confidence !== "high").length;
   if (mediumLowCount > 0) {
     const lowCount = allAnomalies.filter((a) => a.confidence === "low").length;
@@ -292,8 +304,25 @@ export async function pushCommand(options: PushOptions, apiUrlOverride?: string)
 
   const codexEntries = codexParsed.data.filter((entry) => !blockedDates.has(entry.date));
 
-  // Merge Claude + Codex entries by date
-  const entries = mergeEntries(claudeEntries, codexEntries);
+  const geminiMetaByDate = new Map((geminiParsed.entryMeta ?? []).map((row) => [row.date, row.meta]));
+  const geminiBlockedDates = new Set<string>();
+
+  for (const [date, meta] of geminiMetaByDate) {
+    if (meta.mode === "unresolved") {
+      geminiBlockedDates.add(date);
+    }
+  }
+
+  if (geminiBlockedDates.size > 0) {
+    const blocked = [...geminiBlockedDates].sort();
+    const reason = "unresolved gemini normalization";
+    console.log(`Warning: skipping Gemini rows for ${blocked.length} date(s) due to ${reason}: ${blocked.join(", ")}`);
+  }
+
+  const geminiEntries = geminiParsed.data.filter((entry) => !geminiBlockedDates.has(entry.date));
+
+  // Merge Claude + Codex + Gemini entries by date
+  const entries = mergeEntries(claudeEntries, codexEntries, geminiEntries);
 
   if (entries.length === 0) {
     console.log("No usage data found for the specified period.");
@@ -328,8 +357,7 @@ export async function pushCommand(options: PushOptions, apiUrlOverride?: string)
   }
 
   // Compute SHA-256 hash of concatenated raw JSONs
-  const hashInput = codexRaw ? claudeRaw + codexRaw : claudeRaw;
-  const hash = createHash("sha256").update(hashInput).digest("hex");
+  const hash = createHash("sha256").update(claudeRaw + codexRaw + geminiRaw).digest("hex");
 
   const body: UsageSubmitRequest = {
     entries: entries.map((entry) => ({

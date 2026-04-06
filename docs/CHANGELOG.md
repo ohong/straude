@@ -2,8 +2,14 @@
 
 ## Unreleased
 
+### Fixed
+
+- **Gemini model display across all prettifyModel copies.** Three copies of `prettifyModel` (in `post-share.ts`, `post-card-image.tsx`, `open-stats.ts`) were missing Gemini support entirely. Added the Gemini block to all three. Also improved suffix stripping in all 5 copies: `-preview` and `-exp` suffixes (including dated variants like `-preview-05-06` and `-exp-03-25`) are now stripped so model IDs like `gemini-2.5-pro-exp-03-25` display as "Gemini 2.5 Pro".
+- **Web modelColor() now includes Gemini colors.** Added 8 Gemini model color entries and a family fallback (#3F51B5 Google indigo) to the `modelColor()` function in `ActivityCard.tsx`, matching the CLI theme palette.
+
 ### Added
 
+- **Gemini CLI usage tracking via gemistat.** The CLI now collects Gemini CLI usage data alongside Claude Code and Codex. Runs `gemistat daily --json` in parallel with ccusage and @ccusage/codex, merges all three sources by date, and submits combined stats. Silent failure — users without Gemini CLI or gemistat are unaffected. Gemini models (Gemini 3.1 Pro, 2.5 Pro/Flash, etc.) get dedicated colors in the CLI scorecard palette and pretty names in feed cards.
 - **User Signups bar chart on admin dashboard.** Shows daily new user signups with 7D/30D/All time range selector. Reuses the existing `admin_growth_metrics` RPC — no new migration needed.
 - **GitHub README scorecard embed.** New SVG endpoint at `/api/embed/<username>/svg` renders a scorecard matching the `/stats` profile card design — warm gradient, 365-day heatmap with month/day labels and legend, streak, output tokens, active days, and model. Supports `?theme=light|dark` and `?compact=1`. Uses the bolt logo.
 - **Cmd+Enter to send DMs.** The message composer in `/messages` now supports `Cmd+Enter` (Mac) / `Ctrl+Enter` to send. The send button shows the shortcut hint ("Send ⌘↵") matching the prompt submission widget style.
