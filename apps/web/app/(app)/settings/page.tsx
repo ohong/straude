@@ -190,7 +190,7 @@ export default function SettingsPage() {
               type="button"
               onClick={() => avatarInputRef.current?.click()}
               disabled={avatarUploading}
-              className="absolute -right-1 -bottom-1 flex size-8 items-center justify-center rounded-full border-2 border-background bg-subtle text-muted hover:bg-accent hover:text-white disabled:opacity-60"
+              className="absolute -right-1 -bottom-1 flex size-8 items-center justify-center rounded-full border-2 border-background bg-subtle text-muted hover:bg-accent hover:text-accent-foreground disabled:opacity-60"
               aria-label="Upload profile picture"
             >
               {avatarUploading ? (

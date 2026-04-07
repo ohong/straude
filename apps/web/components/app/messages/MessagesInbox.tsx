@@ -443,7 +443,7 @@ export function MessagesInbox({
                           {threadPreview(thread)}
                         </p>
                         {thread.unread_count > 0 && (
-                          <span className="shrink-0 rounded-full bg-accent px-2 py-0.5 text-xs font-semibold text-white tabular-nums">
+                          <span className="shrink-0 rounded-full bg-accent px-2 py-0.5 text-xs font-semibold text-accent-foreground tabular-nums">
                             {thread.unread_count}
                           </span>
                         )}
@@ -570,7 +570,7 @@ export function MessagesInbox({
                           className={cn(
                             "rounded-2xl px-4 py-3",
                             mine
-                              ? "bg-accent text-white"
+                              ? "bg-accent text-accent-foreground"
                               : "border border-border bg-background"
                           )}
                           style={{ maxWidth: "var(--app-messages-bubble-max-width)" }}

@@ -207,7 +207,7 @@ export function ProfileSharePanel({
           type="button"
           onClick={downloadImage}
           disabled={busy !== null}
-          className="inline-flex shrink-0 items-center justify-center rounded-full bg-accent p-2.5 text-white hover:opacity-90 disabled:opacity-60"
+          className="inline-flex shrink-0 items-center justify-center rounded-full bg-accent p-2.5 text-accent-foreground hover:opacity-90 disabled:opacity-60"
           aria-label="Download PNG"
         >
           <Download size={14} aria-hidden />

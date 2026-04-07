@@ -308,7 +308,7 @@ export function ShareMenu({ post }: { post: Post }) {
                 type="button"
                 onClick={handleNativeShare}
                 disabled={busyAction !== null}
-                className="col-span-2 flex items-center justify-center gap-2 rounded-2xl bg-accent px-4 py-3 text-sm font-semibold text-white transition-opacity hover:opacity-90 disabled:opacity-60"
+                className="col-span-2 flex items-center justify-center gap-2 rounded-2xl bg-accent px-4 py-3 text-sm font-semibold text-accent-foreground transition-opacity hover:opacity-90 disabled:opacity-60"
               >
                 <Send size={16} aria-hidden="true" />
                 {busyAction === "share" ? "Preparing share..." : "Share to apps"}

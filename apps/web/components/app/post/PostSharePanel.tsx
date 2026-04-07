@@ -224,7 +224,7 @@ export function PostSharePanel({
               type="button"
               onClick={downloadImage}
               disabled={busy !== null}
-              className="inline-flex items-center gap-2 rounded-full bg-accent px-4 py-2 text-sm font-semibold text-white hover:opacity-90 disabled:opacity-60"
+              className="inline-flex items-center gap-2 rounded-full bg-accent px-4 py-2 text-sm font-semibold text-accent-foreground hover:opacity-90 disabled:opacity-60"
             >
               <Download size={16} aria-hidden />
               {busy === "download" ? "Preparing..." : "Download PNG"}

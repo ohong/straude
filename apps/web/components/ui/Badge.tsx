@@ -11,12 +11,12 @@ interface BadgeProps {
 
 const variantStyles: Record<BadgeVariant, string> = {
   default: "bg-subtle text-foreground",
-  accent: "bg-accent text-white",
+  accent: "bg-accent text-accent-foreground",
   verified: "text-accent",
   "rank-1": "text-white",
   "rank-2": "text-foreground",
   "rank-3": "text-white",
-  "rank-top10": "bg-accent text-white",
+  "rank-top10": "bg-accent text-accent-foreground",
 };
 
 export function Badge({ variant = "default", className, children, title }: BadgeProps) {

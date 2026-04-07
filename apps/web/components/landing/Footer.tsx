@@ -1,27 +1,14 @@
-"use client";
-
-import { useEffect, useState } from "react";
 import Link from "next/link";
 import { BoltIcon } from "@/components/landing/icons";
+import { UtcClock } from "@/components/landing/UtcClock";
 
 export function Footer({ hideLogo = false }: { hideLogo?: boolean }) {
-  const [utc, setUtc] = useState("UTC 00:00");
-
-  useEffect(() => {
-    function tick() {
-      setUtc(`UTC ${new Date().toISOString().substring(11, 16)}`);
-    }
-    tick();
-    const id = setInterval(tick, 60_000);
-    return () => clearInterval(id);
-  }, []);
-
   return (
     <footer className="border-t border-landing-border px-8 py-10 flex flex-col gap-8 md:flex-row md:justify-between md:items-end">
       {/* Brand */}
       {!hideLogo && (
         <div className="flex items-center gap-2 font-[family-name:var(--font-mono)] font-bold text-base text-landing-text">
-          <BoltIcon className="w-4 h-4 text-accent" />
+          <BoltIcon className="w-4 h-4 text-accent" aria-hidden="true" />
           STRAUDE
         </div>
       )}
@@ -32,7 +19,7 @@ export function Footer({ hideLogo = false }: { hideLogo?: boolean }) {
           STATUS: <span className="text-accent">ONLINE</span>
         </div>
         <div>SYS LATENCY: 12ms</div>
-        <div suppressHydrationWarning>{utc}</div>
+        <div><UtcClock /></div>
       </div>
 
       {/* Links + copyright */}

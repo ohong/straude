@@ -2,6 +2,18 @@
 
 ## Unreleased
 
+### Changed
+
+- **Landing page performance: Lighthouse 67 → ~85+ (mobile).** Lazy-load `HalftoneCanvas` (ssr: false via client wrapper) and `WallOfLove` (dynamic import). Convert `CTASection` from motion/react to CSS `animate-fade-in-up` (now a server component). Convert `Footer` to server component with tiny `UtcClock` client island. Removes motion/react from critical path.
+- **WCAG AA contrast for accent backgrounds.** Introduced `accent-foreground` design token (`#1a0500`) replacing hardcoded `text-white` on all `bg-accent` elements. Contrast ratio 5.15:1 vs previous 3.82:1. Updated Button, Badge, and 11 component files.
+
+### Fixed
+
+- **Skip link now targets landing page main content.** Added `id="main-content"` to the landing `<main>` and auth layout. Skip link was previously only focusable on the app shell.
+- **Missing `rel=canonical` on `/login`.** Added `alternates.canonical` to the auth layout metadata.
+- **Auth layout missing `<main>` landmark.** Changed wrapper `<div>` to `<main>` for screen readers.
+- **HalftoneCanvas respects `prefers-reduced-motion`.** WebGL animation loop now renders a single static frame when reduced motion is preferred, and resumes if the preference changes.
+
 ### Added
 
 - **User Signups bar chart on admin dashboard.** Shows daily new user signups with 7D/30D/All time range selector. Reuses the existing `admin_growth_metrics` RPC — no new migration needed.

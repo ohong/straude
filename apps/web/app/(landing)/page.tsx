@@ -8,7 +8,7 @@ import { GlobalFeed } from "@/components/landing/GlobalFeed";
 import { WallOfLove } from "@/components/landing/WallOfLove";
 import { CTASection } from "@/components/landing/CTASection";
 import { Footer } from "@/components/landing/Footer";
-import { HalftoneCanvas } from "@/components/landing/HalftoneCanvas";
+import { LazyHalftoneCanvas } from "@/components/landing/LazyHalftoneCanvas";
 import { wallOfLovePosts } from "@/content/wall-of-love";
 import { getServiceClient } from "@/lib/supabase/service";
 import { formatTokens } from "@/lib/utils/format";
@@ -136,10 +136,10 @@ export default function LandingPage() {
             }),
           }}
         />
-        <HalftoneCanvas />
+        <LazyHalftoneCanvas />
         <div className="relative z-10">
           <Navbar />
-          <main>
+          <main id="main-content">
             <Hero />
             <Suspense fallback={<Ticker items={TICKER_FALLBACK} />}>
               <TickerWithData />

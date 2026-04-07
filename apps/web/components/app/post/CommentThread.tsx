@@ -398,7 +398,7 @@ export function CommentThread({
             type="button"
             onClick={opts.onSubmit}
             disabled={!opts.value.trim() || opts.submitting}
-            className="shrink-0 rounded-sm bg-accent px-4 py-2 text-sm font-semibold text-white disabled:cursor-not-allowed disabled:opacity-50"
+            className="shrink-0 rounded-sm bg-accent px-4 py-2 text-sm font-semibold text-accent-foreground disabled:cursor-not-allowed disabled:opacity-50"
           >
             {opts.submitting ? `${opts.submitLabel}...` : opts.submitLabel}
           </button>

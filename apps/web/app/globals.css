@@ -13,6 +13,7 @@
   --app-background: #ffffff;
   --app-foreground: #111111;
   --app-accent: #df561f;
+  --app-accent-foreground: #1a0500;
   --app-secondary-blue: #7bd0e8;
   --app-secondary-yellow: #fdffa4;
   --app-border: #1b1b1b;
@@ -69,6 +70,7 @@ html[data-theme="dark"] {
   --app-background: #0a0a0a;
   --app-foreground: #e0e0e0;
   --app-accent: #df561f;
+  --app-accent-foreground: #1a0500;
   --app-secondary-blue: #7bd0e8;
   --app-secondary-yellow: #e0d97a;
   --app-border: rgba(255, 255, 255, 0.10);
@@ -86,6 +88,7 @@ html[data-theme="dark"] {
   --color-background: var(--app-background);
   --color-foreground: var(--app-foreground);
   --color-accent: var(--app-accent);
+  --color-accent-foreground: var(--app-accent-foreground);
   --color-secondary-blue: var(--app-secondary-blue);
   --color-secondary-yellow: var(--app-secondary-yellow);
   --color-border: var(--app-border);

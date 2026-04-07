@@ -223,7 +223,7 @@ export default async function JoinPage({
             <div className="mt-8 sm:mt-10">
               <Link
                 href="/signup"
-                className="inline-block rounded bg-accent px-8 py-3 text-sm font-semibold text-white transition-opacity hover:opacity-90 sm:px-10 sm:py-3.5"
+                className="inline-block rounded bg-accent px-8 py-3 text-sm font-semibold text-accent-foreground transition-opacity hover:opacity-90 sm:px-10 sm:py-3.5"
               >
                 Claim Your Profile
               </Link>

@@ -118,6 +118,15 @@ export function HalftoneCanvas() {
     });
     ro.observe(canvas);
 
+    // Respect prefers-reduced-motion: render a single static frame instead of animating
+    const motionQuery = window.matchMedia("(prefers-reduced-motion: reduce)");
+    let reducedMotion = motionQuery.matches;
+    function onMotionChange(e: MediaQueryListEvent) {
+      reducedMotion = e.matches;
+      if (!reducedMotion) raf = requestAnimationFrame(render);
+    }
+    motionQuery.addEventListener("change", onMotionChange);
+
     let raf: number;
 
     function render(now: number) {
@@ -136,12 +145,13 @@ export function HalftoneCanvas() {
       gl.uniform2f(uResolution, canvas.width, canvas.height);
       gl.uniform1f(uTime, t);
       gl.drawArrays(gl.TRIANGLE_STRIP, 0, 4);
-      raf = requestAnimationFrame(render);
+      if (!reducedMotion) raf = requestAnimationFrame(render);
     }
 
     raf = requestAnimationFrame(render);
     return () => {
       cancelAnimationFrame(raf);
+      motionQuery.removeEventListener("change", onMotionChange);
       ro.disconnect();
       gl.deleteBuffer(buf);
       gl.deleteProgram(program);

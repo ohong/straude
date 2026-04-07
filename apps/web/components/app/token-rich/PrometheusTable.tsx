@@ -398,7 +398,7 @@ export function PrometheusTable({
             </p>
             <Link
               href="/signup"
-              className="inline-flex items-center gap-2 rounded-[4px] bg-accent px-6 py-2.5 text-sm font-semibold text-white transition-[filter] duration-150 hover:brightness-110 active:brightness-90"
+              className="inline-flex items-center gap-2 rounded-[4px] bg-accent px-6 py-2.5 text-sm font-semibold text-accent-foreground transition-[filter] duration-150 hover:brightness-110 active:brightness-90"
             >
               Unlock Full List
             </Link>

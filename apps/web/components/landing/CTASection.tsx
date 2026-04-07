@@ -1,16 +1,8 @@
-"use client";
-
-import { motion } from "motion/react";
-
 export function CTASection() {
   return (
     <section className="border-t border-landing-border py-24 md:py-32">
-      <motion.div
-        className="flex flex-col items-center text-center gap-8 max-w-2xl mx-auto px-8"
-        initial={{ opacity: 0, y: 28 }}
-        whileInView={{ opacity: 1, y: 0 }}
-        viewport={{ once: true, amount: 0.3 }}
-        transition={{ duration: 0.6, ease: [0.25, 0.46, 0.45, 0.94] }}
+      <div
+        className="flex flex-col items-center text-center gap-8 max-w-2xl mx-auto px-8 animate-fade-in-up"
       >
         <h2 className="text-[clamp(2rem,5vw,4rem)] font-medium tracking-[-0.03em] leading-[1.1] text-landing-text text-balance">
           Ready to run?
@@ -28,7 +20,7 @@ export function CTASection() {
             npx straude push --days 7
           </span>
         </div>
-      </motion.div>
+      </div>
     </section>
   );
 }
