@@ -11,10 +11,11 @@ import { Footer } from "@/components/landing/Footer";
 import { LazyHalftoneCanvas } from "@/components/landing/LazyHalftoneCanvas";
 import { wallOfLovePosts } from "@/content/wall-of-love";
 import { getServiceClient } from "@/lib/supabase/service";
+import { getOpenStatsForPage } from "@/lib/open-stats";
 import { formatTokens } from "@/lib/utils/format";
 import type { Metadata } from "next";
 
-export const revalidate = 300; // cache for 5 minutes
+export const revalidate = 86400; // cache for 1 day
 
 export const metadata: Metadata = {
   title: "Straude — Code like an athlete.",
@@ -31,57 +32,15 @@ const TICKER_FALLBACK = [
 ];
 
 async function getTickerStats() {
-  const supabase = getServiceClient();
-
-  // Run independent queries in parallel
-  const [{ data: usageRows }, { data: topUser }] = await Promise.all([
-    supabase
-      .from("daily_usage")
-      .select("session_count, total_tokens, cost_usd, user_id, date")
-      .order("date", { ascending: false }),
-    supabase
+  const [stats, { data: topUser }] = await Promise.all([
+    getOpenStatsForPage(),
+    getServiceClient()
       .from("leaderboard_weekly")
       .select("username, total_output_tokens")
       .order("total_output_tokens", { ascending: false })
       .limit(1)
       .single(),
   ]);
-
-  let totalSessions = 0;
-  let totalTokens = 0;
-  let totalSpend = 0;
-  const datesByUser = new Map<string, string[]>();
-  for (const row of usageRows ?? []) {
-    totalSessions += row.session_count ?? 0;
-    totalTokens += row.total_tokens ?? 0;
-    totalSpend += row.cost_usd ?? 0;
-    if (row.user_id && row.date) {
-      const dates = datesByUser.get(row.user_id) ?? [];
-      dates.push(row.date);
-      datesByUser.set(row.user_id, dates);
-    }
-  }
-
-  // Sum of all current streaks (consecutive days ending at most recent entry per user)
-  const DAY_MS = 86_400_000;
-
-  let totalStreaks = 0;
-  for (const [, dates] of datesByUser) {
-    const sorted = [...new Set(dates)].sort(
-      (a, b) => new Date(b).getTime() - new Date(a).getTime()
-    );
-    let streak = 1;
-    for (let i = 1; i < sorted.length; i++) {
-      const prev = new Date(sorted[i - 1]).getTime();
-      const curr = new Date(sorted[i]).getTime();
-      if (prev - curr <= DAY_MS) {
-        streak++;
-      } else {
-        break;
-      }
-    }
-    totalStreaks += streak;
-  }
 
   const paceLeader = topUser
     ? `@${topUser.username} (${formatTokens(topUser.total_output_tokens)}/wk)`
@@ -91,14 +50,14 @@ async function getTickerStats() {
     { label: "Pace Leader", value: paceLeader },
     {
       label: "Sessions Logged",
-      value: totalSessions.toLocaleString("en-US"),
+      value: stats.totalSessions.toLocaleString("en-US"),
     },
-    { label: "Tokens Processed", value: formatTokens(totalTokens) },
+    { label: "Tokens Processed", value: formatTokens(stats.totalTokens) },
     {
       label: "Spend Tracked",
-      value: `$${Math.round(totalSpend).toLocaleString("en-US")}`,
+      value: `$${Math.round(stats.totalSpend).toLocaleString("en-US")}`,
     },
-    { label: "Active Streaks", value: totalStreaks.toLocaleString("en-US") },
+    { label: "Active Streaks", value: stats.totalStreaks.toLocaleString("en-US") },
   ];
 }
 

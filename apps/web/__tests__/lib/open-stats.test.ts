@@ -28,6 +28,7 @@ function makeSnapshotStats(overrides: Partial<OpenStats> = {}): OpenStats {
     totalTokens: 146_600_000_000,
     totalSessions: 1072,
     avgStreak: 7,
+    totalStreaks: 609,
     concentration: [
       {
         segment: "top_1",

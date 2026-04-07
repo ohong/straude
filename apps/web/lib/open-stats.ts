@@ -27,6 +27,7 @@ export interface OpenStats {
   totalTokens: number;
   totalSessions: number;
   avgStreak: number;
+  totalStreaks: number;
   concentration: ConcentrationRow[];
   cumulativePct: Record<string, number>;
   models: ModelEntry[];
@@ -137,6 +138,7 @@ function normalizeOpenStats(
     totalTokens: normalizeNumber(record.totalTokens),
     totalSessions: normalizeNumber(record.totalSessions),
     avgStreak: normalizeNumber(record.avgStreak),
+    totalStreaks: normalizeNumber(record.totalStreaks),
     concentration: normalizeConcentrationRows(record.concentration),
     cumulativePct:
       record.cumulativePct && typeof record.cumulativePct === "object"
@@ -296,6 +298,7 @@ function buildOpenStats(params: {
     totalTokens,
     totalSessions,
     avgStreak,
+    totalStreaks,
     concentration,
     cumulativePct,
     models,
@@ -428,6 +431,7 @@ export async function getOpenStatsForPage(
       totalTokens: 0,
       totalSessions: 0,
       avgStreak: 0,
+      totalStreaks: 0,
       concentration: [],
       cumulativePct: {},
       models: [],

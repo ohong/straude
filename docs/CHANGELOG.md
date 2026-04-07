@@ -9,6 +9,7 @@
 
 ### Fixed
 
+- **Landing page ticker showing incorrect totals.** The ticker fetched `daily_usage` without a row limit, so Supabase's default 1000-row cap truncated the sums. Now reuses `getOpenStatsForPage()` (same source as `/open` and `/admin`) which aggregates via server-side RPCs. Reduced landing page revalidation from 5 minutes to daily to match.
 - **Skip link now targets landing page main content.** Added `id="main-content"` to the landing `<main>` and auth layout. Skip link was previously only focusable on the app shell.
 - **Missing `rel=canonical` on `/login`.** Added `alternates.canonical` to the auth layout metadata.
 - **Auth layout missing `<main>` landmark.** Changed wrapper `<div>` to `<main>` for screen readers.
