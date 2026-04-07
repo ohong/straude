@@ -15,7 +15,7 @@ interface SidebarProps {
   streak: number;
   streakFreezes: number;
   latestPosts: { id: string; title: string; date: string }[];
-  totalTokens: number;
+  totalOutputTokens: number;
   totalCost: number;
 }
 
@@ -29,7 +29,7 @@ export function Sidebar({
   streak,
   streakFreezes,
   latestPosts,
-  totalTokens,
+  totalOutputTokens,
   totalCost,
 }: SidebarProps) {
   const profileHref = username ? `/u/${username}` : "/settings";
@@ -115,9 +115,9 @@ export function Sidebar({
           className="font-[family-name:var(--font-mono)] text-[2rem] leading-none tracking-tight tabular-nums"
           style={{ letterSpacing: "-0.03em" }}
         >
-          {formatTokens(totalTokens)}
+          {formatTokens(totalOutputTokens)}
         </p>
-        <p className="mt-1 text-xs text-muted">Total tokens</p>
+        <p className="mt-1 text-xs text-muted">Output tokens</p>
         <p className="mt-3 font-[family-name:var(--font-mono)] text-lg font-medium text-accent">
           ${totalCost.toFixed(2)}
         </p>
