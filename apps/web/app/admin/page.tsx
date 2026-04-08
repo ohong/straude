@@ -144,6 +144,11 @@ export default async function AdminPage() {
   const dau = uniqueReal((dauRes.data ?? []) as DailyUsageUserRow[]);
   const wau = uniqueReal((wauRes.data ?? []) as DailyUsageUserRow[]);
 
+  const activated =
+    funnelData.find((stage) => stage.stage === "first_usage")?.count ?? 0;
+  const unactivated = totalUsers - activated;
+  const inactive = activated - wau;
+
   // WoW spend growth: compare last 7 days vs prior 7 days
   const now = Date.now();
   const thisWeekSpend = spendData
@@ -212,6 +217,20 @@ export default async function AdminPage() {
         <StatCard
           label="Spend WoW"
           value={wowGrowth !== null ? `${wowGrowth >= 0 ? "+" : ""}${wowGrowth.toFixed(0)}%` : "\u2014"}
+        />
+      </div>
+
+      {/* Activation leaks */}
+      <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-4">
+        <StatCard label="Unactivated" value={String(unactivated)} />
+        <StatCard label="Inactive 7d" value={String(inactive)} />
+        <StatCard
+          label="Activation Rate"
+          value={totalUsers > 0 ? `${Math.round((activated / totalUsers) * 100)}%` : "\u2014"}
+        />
+        <StatCard
+          label="7d Retention"
+          value={activated > 0 ? `${Math.round((wau / activated) * 100)}%` : "\u2014"}
         />
       </div>
 
