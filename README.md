@@ -101,6 +101,38 @@ No. You choose your visibility during onboarding. Private profiles are only visi
 
 Straude is an entry in [**Built with Opus 4.6: a Claude Code hackathon**](https://cerebralvalley.ai/e/claude-code-hackathon) under **Problem Statement One: Build a Tool That Should Exist**. The entire project was built by Claude Opus 4.6, with special help from the experimental *Agent Teams* feature.
 
+## Local development
+
+### Prerequisites
+
+- [Bun](https://bun.sh/) (v1.3+)
+- [Supabase CLI](https://supabase.com/docs/guides/local-development/cli/getting-started) (v2.x)
+- [Docker](https://docs.docker.com/get-docker/) (required by Supabase local)
+
+### Setup
+
+```bash
+# 1. Install dependencies
+bun install
+
+# 2. Start local Supabase (Postgres, Auth, Storage via Docker)
+bun run local:up
+
+# 3. Generate .env.local with local Supabase credentials
+bun run local:env
+
+# 4. Seed demo data (optional)
+bun run local:seed
+
+# Or run steps 2–4 in one command:
+bun run local:setup
+
+# 5. Start the dev server
+bun run dev
+```
+
+The app will be available at `http://localhost:3000`.
+
 ## Docs
 
 | Document | Description |
