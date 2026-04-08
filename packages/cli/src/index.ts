@@ -6,6 +6,7 @@ import { statusCommand } from "./commands/status.js";
 import { autoCommand, enableAutoPush, disableAutoPush } from "./commands/auto.js";
 import { loadConfig } from "./lib/auth.js";
 import { CLI_VERSION } from "./config.js";
+import { posthog } from "./lib/posthog.js";
 
 const HELP = `
 straude v${CLI_VERSION} — Push your Claude Code usage to Straude
@@ -151,7 +152,9 @@ async function main(): Promise<void> {
   }
 }
 
-main().catch((err: unknown) => {
-  console.error(`Error: ${(err as Error).message}`);
-  process.exit(1);
-});
+main()
+  .catch((err: unknown) => {
+    posthog.captureException(err);
+    console.error(`Error: ${(err as Error).message}`);
+  })
+  .finally(() => posthog._shutdown().then(() => process.exit(0)));

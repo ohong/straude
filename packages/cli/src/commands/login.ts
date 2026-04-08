@@ -2,6 +2,7 @@ import { spawn } from "node:child_process";
 import { CONFIG_FILE, DEFAULT_API_URL, POLL_INTERVAL_MS, POLL_TIMEOUT_MS } from "../config.js";
 import { loadConfig, saveConfig } from "../lib/auth.js";
 import { apiRequestNoAuth } from "../lib/api.js";
+import { posthog } from "../lib/posthog.js";
 
 interface CliInitResponse {
   code: string;
@@ -110,6 +111,16 @@ export async function loginCommand(apiUrlOverride?: string): Promise<void> {
         last_push_date: sameIdentity ? existing.last_push_date : undefined,
         device_id: sameIdentity ? existing.device_id : undefined,
         device_name: sameIdentity ? existing.device_name : undefined,
+      });
+
+      const username = pollRes.username ?? "";
+      if (username) {
+        posthog.identify({ distinctId: username, properties: { username } });
+      }
+      posthog.capture({
+        distinctId: username || "anonymous",
+        event: "login_completed",
+        properties: { is_new_user: !sameIdentity },
       });
 
       const displayName = pollRes.username ? `@${pollRes.username}` : "successfully";

@@ -13,6 +13,7 @@ import {
 } from "../lib/hooks.js";
 import { readLog } from "../lib/auto-push-logger.js";
 import { AUTO_PUSH_DEFAULT_TIME, AUTO_PUSH_LOG_FILE, LAUNCHD_PLIST_PATH } from "../config.js";
+import { posthog } from "../lib/posthog.js";
 
 function schedulerDescription(scheduler: "launchd" | "cron"): string {
   if (scheduler === "launchd") {
@@ -52,6 +53,12 @@ export function enableAutoPush(
     };
     saveConfig(config);
 
+    posthog.capture({
+      distinctId: config.username || "anonymous",
+      event: "auto_push_enabled",
+      properties: { mechanism: "hooks" },
+    });
+
     console.log("\nAuto-push enabled — your stats will sync after each Claude Code session.");
     console.log("Mechanism: Claude Code SessionEnd hook (~/.claude/settings.json)");
     return;
@@ -75,6 +82,12 @@ export function enableAutoPush(
   config.auto_push = { enabled: true, time: resolvedTime, scheduler, mechanism: "scheduler" };
   saveConfig(config);
 
+  posthog.capture({
+    distinctId: config.username || "anonymous",
+    event: "auto_push_enabled",
+    properties: { mechanism: "scheduler", scheduler, time: resolvedTime },
+  });
+
   const logPath = AUTO_PUSH_LOG_FILE.replace(process.env.HOME ?? "", "~");
   console.log(`\nAuto-push enabled — your stats will sync daily at ${resolvedTime}.`);
   console.log(`Mechanism: ${schedulerDescription(scheduler)}`);
@@ -91,6 +104,12 @@ export function disableAutoPush(config: StraudeConfig): void {
 
   delete config.auto_push;
   saveConfig(config);
+
+  posthog.capture({
+    distinctId: config.username || "anonymous",
+    event: "auto_push_disabled",
+    properties: {},
+  });
 
   console.log("\nAuto-push disabled.");
 }
