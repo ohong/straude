@@ -13,7 +13,7 @@ type LeaderboardViewRow = Omit<LeaderboardEntry, "rank" | "streak"> & {
 };
 
 const LEADERBOARD_DESCRIPTION =
-  "Who's logging the most Claude Code hours? Daily, weekly, monthly, and all-time rankings by spend and output tokens. The Strava for Claude Code leaderboard.";
+  "Who's logging the most AI usage? Individual & team rankings by token spend from the Strava for Claude Code.";
 
 const SOCIAL_IMAGE = {
   url: "/og-image.png?v=2",
@@ -31,13 +31,13 @@ export const metadata: Metadata = {
   },
   openGraph: {
     url: "https://straude.com/leaderboard",
-    title: "Claude Code Global Leaderboard | Straude",
+    title: "Global Tokenmaxxing Leaderboard | Straude",
     description: LEADERBOARD_DESCRIPTION,
     images: [SOCIAL_IMAGE],
   },
   twitter: {
     card: "summary_large_image",
-    title: "Claude Code Global Leaderboard | Straude",
+    title: "Global Tokenmaxxing Leaderboard | Straude",
     description: LEADERBOARD_DESCRIPTION,
     images: [SOCIAL_IMAGE],
   },
