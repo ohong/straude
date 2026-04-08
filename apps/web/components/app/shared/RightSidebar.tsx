@@ -37,18 +37,14 @@ export async function RightSidebar({
   const followingIds = following?.map((f) => f.following_id) ?? [];
   const excludeIds = [userId, ...followingIds];
 
-  // Always pin the site owner as the first suggestion (if not already followed/self)
-  const PINNED_USERNAME = "ohong";
-
-  // Service client bypasses RLS so we can query users the current user
-  // Filter to is_public=true to only suggest public profiles.
-  const [{ data: pinnedUser }, { data: recentlyActive }, { data: newSignups }] =
+  // Service client bypasses RLS so we can query all users for suggestions.
+  const [{ data: pinnedUsers }, { data: recentlyActive }, { data: newSignups }] =
     await Promise.all([
       service
         .from("users")
         .select("id, username, avatar_url, bio")
-        .eq("username", PINNED_USERNAME)
-        .maybeSingle(),
+        .eq("is_pinned_suggestion", true)
+        .not("id", "in", `(${excludeIds.join(",")})`),
       // Users with recent activity (have pushed usage data)
       service
         .from("daily_usage")
@@ -68,28 +64,31 @@ export async function RightSidebar({
         .limit(10),
     ]);
 
-  // Deduplicate active users (may appear on multiple days), skip private users
+  const pinnedIds = new Set((pinnedUsers ?? []).map((u) => u.id));
+
+  // Deduplicate active users (may appear on multiple days), skip private and pinned
   const seenIds = new Set<string>();
   const activeUsers: Array<{ id: string; username: string; avatar_url: string | null; bio: string | null }> = [];
   for (const row of recentlyActive ?? []) {
     const u = row.users as unknown as { id: string; username: string; avatar_url: string | null; bio: string | null; is_public: boolean };
-    if (!seenIds.has(u.id) && u.username !== PINNED_USERNAME && u.is_public) {
+    if (!seenIds.has(u.id) && !pinnedIds.has(u.id) && u.is_public) {
       seenIds.add(u.id);
       activeUsers.push({ id: u.id, username: u.username, avatar_url: u.avatar_url, bio: u.bio });
     }
   }
 
-  // Merge: pinned first, then active users, then new signups (deduped)
-  const isPinnedExcluded = !pinnedUser || excludeIds.includes(pinnedUser.id);
+  // Merge: active users first, then new signups, then pinned last (all deduped)
   const merged: typeof activeUsers = [];
-  if (!isPinnedExcluded) merged.push(pinnedUser);
   for (const u of activeUsers) {
     if (!merged.some((m) => m.id === u.id)) merged.push(u);
   }
   for (const u of newSignups ?? []) {
-    if (!merged.some((m) => m.id === u.id) && u.username !== PINNED_USERNAME) merged.push(u);
+    if (!merged.some((m) => m.id === u.id) && !pinnedIds.has(u.id)) merged.push(u);
   }
-  const suggested = merged.slice(0, 5);
+  // Cap organic suggestions to leave room for pinned users at the end
+  const pinnedList = (pinnedUsers ?? []).filter((u) => u.username);
+  const organicLimit = Math.max(0, 5 - pinnedList.length);
+  const suggested = [...merged.slice(0, organicLimit), ...pinnedList].slice(0, 5);
 
   const TARGET = 1_000_000_000;
   const pct = Math.min((totalOutputTokens / TARGET) * 100, 100);
