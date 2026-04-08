@@ -5,6 +5,7 @@
     "": {
       "name": "straude-monorepo",
       "dependencies": {
+        "@21st-sdk/agent": "^0.0.15",
         "motion": "^12.34.3",
         "web": "^0.0.2",
       },
@@ -79,7 +80,14 @@
       },
     },
   },
+  "overrides": {
+    "@21st-sdk/node": "0.0.9",
+  },
   "packages": {
+    "@21st-sdk/agent": ["@21st-sdk/agent@0.0.15", "", { "dependencies": { "@21st-sdk/node": "workspace:^" }, "peerDependencies": { "zod": ">=3.24" } }, "sha512-GQDT00zxNYX+F3MJ06hqj65K/UmcVoKMf0TbFfWoFg5B2r2laqesyrJWERRqVsb8iU7dlvdBQx1fv0otVyQEAA=="],
+
+    "@21st-sdk/node": ["@21st-sdk/node@0.0.9", "", {}, "sha512-Q4NRKzxuLTGqZPrEYX7dTLaSq8VXewsZ55n4CjInq7NQhFw1NThJpQrB9eYVzNYfV+/udrK1gFYvUZ767y39CQ=="],
+
     "@acemir/cssom": ["@acemir/cssom@0.9.31", "", {}, "sha512-ZnR3GSaH+/vJ0YlHau21FjfLYjMpYVIzTD8M8vIEQvIGxeOXyXdzCI140rrCY862p/C/BbzWsjc1dgnM9mkoTA=="],
 
     "@adobe/css-tools": ["@adobe/css-tools@4.4.4", "", {}, "sha512-Elp+iwUx5rN5+Y8xLt5/GRoG20WGoDCQ/1Fb+1LiGtvwbDavuSk0jhD/eZdckHAuzcDzccnkv+rEjyWfRx18gg=="],

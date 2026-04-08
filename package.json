@@ -21,7 +21,11 @@
     "typescript": "^5"
   },
   "dependencies": {
+    "@21st-sdk/agent": "^0.0.15",
     "motion": "^12.34.3",
     "web": "^0.0.2"
+  },
+  "overrides": {
+    "@21st-sdk/node": "0.0.9"
   }
 }
