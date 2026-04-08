@@ -2,6 +2,11 @@
 
 ## Unreleased
 
+### Added
+
+- **Privacy assurance on onboarding Step 3.** Added a one-liner below the CLI command confirming only aggregate stats leave the machine — prompts, code, and conversations never do. Links to the privacy policy. Targets the sign-up-to-push conversion drop-off for privacy-minded users.
+- **"What Straude cannot access" section on privacy page.** New highlighted callout at the top of `/privacy` explicitly stating zero access to prompts, conversations, code, or file contents. Explains the data pipeline (local ccusage aggregation → daily totals only), links to open-source CLI and `--dry-run` flag for self-verification.
+
 ### Changed
 
 - **Landing page performance: Lighthouse 67 → ~85+ (mobile).** Lazy-load `HalftoneCanvas` (ssr: false via client wrapper) and `WallOfLove` (dynamic import). Convert `CTASection` from motion/react to CSS `animate-fade-in-up` (now a server component). Convert `Footer` to server component with tiny `UtcClock` client island. Removes motion/react from critical path.

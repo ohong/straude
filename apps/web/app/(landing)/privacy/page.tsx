@@ -18,10 +18,53 @@ export default function PrivacyPage() {
             Privacy Policy
           </h1>
           <p className="mt-2 text-sm text-muted">
-            Last updated: February 18, 2026
+            Last updated: April 8, 2026
           </p>
 
           <div className="mt-10 space-y-8 text-[0.9375rem] leading-relaxed text-foreground/80">
+            <section className="rounded-lg border border-border bg-subtle px-5 py-5">
+              <h2 className="text-lg font-bold text-foreground">
+                What Straude cannot access
+              </h2>
+              <p className="mt-2">
+                Straude has <strong>zero access</strong> to your prompts,
+                conversations, code, file contents, or anything you do inside
+                Claude Code or Codex. We cannot read them, store them, or
+                transmit them — the data simply never leaves your machine.
+              </p>
+              <p className="mt-2">
+                The CLI runs{" "}
+                <a
+                  href="https://github.com/ryoppippi/ccusage"
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="text-accent underline underline-offset-2 hover:no-underline"
+                >
+                  ccusage
+                </a>{" "}
+                locally to aggregate your session logs into daily totals — token
+                counts, cost, model names, and session count. Those totals are
+                all that ever get sent. The raw logs, your project files, and
+                every conversation stay on your device.
+              </p>
+              <p className="mt-2">
+                You can verify this yourself: the CLI is{" "}
+                <a
+                  href="https://github.com/ohong/straude"
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="text-accent underline underline-offset-2 hover:no-underline"
+                >
+                  open source
+                </a>
+                , and running{" "}
+                <code className="rounded bg-background px-1.5 py-0.5 text-xs font-medium">
+                  npx straude --dry-run
+                </code>{" "}
+                shows you the exact payload before anything is sent.
+              </p>
+            </section>
+
             <section>
               <h2 className="text-lg font-bold text-foreground">
                 1. Information We Collect
@@ -33,8 +76,9 @@ export default function PrivacyPage() {
                   and profile details provided during signup
                 </li>
                 <li>
-                  <strong>Usage data:</strong> Claude Code session statistics
-                  you submit (cost, token counts, models used)
+                  <strong>Usage data:</strong> aggregate Claude Code session
+                  statistics you submit (cost, token counts, models used,
+                  session count) — never prompts, code, or conversation content
                 </li>
                 <li>
                   <strong>Analytics:</strong> page views and basic interaction

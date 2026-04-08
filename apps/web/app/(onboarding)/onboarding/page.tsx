@@ -181,8 +181,17 @@ function Step3LogSession({ username }: { username: string }) {
         {copied ? "Copied to clipboard" : "Click to copy"}
       </p>
 
+      {/* Privacy assurance */}
+      <p className="mt-4 text-xs leading-relaxed text-muted">
+        Only aggregate stats leave your machine — token counts, cost, model
+        names. Your prompts, code, and conversations never do.{" "}
+        <Link href="/privacy" className="underline underline-offset-2 hover:text-foreground">
+          Privacy policy
+        </Link>
+      </p>
+
       {/* Listening indicator */}
-      <div className="mt-5 flex items-center justify-center gap-2 rounded border border-border bg-subtle px-4 py-4 font-[family-name:var(--font-mono)] text-sm text-muted">
+      <div className="mt-4 flex items-center justify-center gap-2 rounded border border-border bg-subtle px-4 py-4 font-[family-name:var(--font-mono)] text-sm text-muted">
         <span className="animate-pulse text-accent" aria-hidden="true">&#9679;&#9679;&#9679;</span>
         <span>Listening for your first session&hellip;</span>
       </div>
