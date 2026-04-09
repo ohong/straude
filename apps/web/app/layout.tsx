@@ -1,10 +1,9 @@
 import type { Metadata, Viewport } from "next";
 import { Inter, JetBrains_Mono } from "next/font/google";
-import { Suspense } from "react";
 import { Analytics } from "@vercel/analytics/next";
-import { PostHogProvider, PostHogPageView } from "@posthog/next";
 import { Agentation } from "agentation";
 import Script from "next/script";
+import { PostHogClientProvider } from "@/components/providers/PostHogProvider";
 import { ThemeProvider } from "@/components/providers/ThemeProvider";
 import { getThemeBootstrapScript } from "@/lib/theme";
 import "./globals.css";
@@ -126,12 +125,9 @@ export default function RootLayout({
         >
           Skip to content
         </a>
-        <PostHogProvider clientOptions={{ api_host: "/ingest" }}>
-          <Suspense fallback={null}>
-            <PostHogPageView />
-          </Suspense>
+        <PostHogClientProvider>
           <ThemeProvider>{children}</ThemeProvider>
-        </PostHogProvider>
+        </PostHogClientProvider>
         <Analytics />
         {process.env.NODE_ENV === "development" && <Agentation />}
       </body>

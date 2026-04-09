@@ -30,18 +30,12 @@ export function PrivacyPledge() {
           design.
         </h2>
         <p className="font-[family-name:var(--font-mono)] text-sm uppercase tracking-wider text-landing-muted">
-          DATA_WE_COLLECT
+          WHAT YOU SHARE
         </p>
       </div>
 
       {/* Content */}
       <div className="lg:col-span-8 border-b border-landing-border flex flex-col">
-        <div className="px-8 py-6 border-b border-landing-border bg-landing-bg">
-          <h3 className="font-[family-name:var(--font-mono)] text-sm uppercase tracking-wider text-landing-text">
-            ALL_WE_COLLECT
-          </h3>
-        </div>
-
         {ITEMS.map((item) => (
           <div
             key={item.label}
@@ -74,22 +68,6 @@ export function PrivacyPledge() {
             </a>{" "}
             locally to aggregate daily totals from Claude Code&apos;s log
             files — only those totals are sent.
-          </p>
-          <p className="text-sm text-landing-muted leading-relaxed">
-            Don&apos;t take our word for it — the CLI is{" "}
-            <a
-              href="https://github.com/ohong/straude"
-              target="_blank"
-              rel="noopener noreferrer"
-              className="text-accent underline underline-offset-2 hover:no-underline"
-            >
-              open source
-            </a>{" "}
-            and you can run{" "}
-            <code className="rounded bg-landing-border/50 px-1.5 py-0.5 text-xs font-[family-name:var(--font-mono)] text-landing-text">
-              npx straude --dry-run
-            </code>{" "}
-            to inspect the exact payload before anything is sent.
           </p>
           <div className="pt-1">
             <Link

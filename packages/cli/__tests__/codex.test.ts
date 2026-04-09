@@ -84,6 +84,45 @@ describe("parseCodexOutput", () => {
     // cachedInputTokens maps to cacheReadTokens in our canonical format
     expect(entry.cacheReadTokens).toBe(7428352);
     expect(entry.cacheCreationTokens).toBe(0);
+    // Single model gets 100% of cost
+    expect(entry.modelBreakdown).toEqual([
+      { model: "gpt-5.2-codex", cost_usd: 3.33 },
+    ]);
+  });
+
+  it("distributes cost proportionally across multiple models by token share", () => {
+    const raw = JSON.stringify({
+      daily: [
+        {
+          date: "2026-04-07",
+          inputTokens: 400000,
+          outputTokens: 20000,
+          totalTokens: 420000,
+          costUSD: 10.0,
+          models: {
+            "gpt-5.4": {
+              inputTokens: 300000,
+              outputTokens: 15000,
+              totalTokens: 315000,
+            },
+            "gpt-5.4-mini": {
+              inputTokens: 100000,
+              outputTokens: 5000,
+              totalTokens: 105000,
+            },
+          },
+        },
+      ],
+    });
+    const result = parseCodexOutput(raw);
+    expect(result.data).toHaveLength(1);
+    const entry = result.data[0]!;
+    // 315000/420000 = 75% → $7.50, 105000/420000 = 25% → $2.50
+    expect(entry.modelBreakdown).toHaveLength(2);
+    expect(entry.modelBreakdown![0]!.model).toBe("gpt-5.4");
+    expect(entry.modelBreakdown![0]!.cost_usd).toBeCloseTo(7.5);
+    expect(entry.modelBreakdown![1]!.model).toBe("gpt-5.4-mini");
+    expect(entry.modelBreakdown![1]!.cost_usd).toBeCloseTo(2.5);
   });
 
   it("parses valid Codex JSON and normalizes fields", () => {
@@ -94,6 +133,8 @@ describe("parseCodexOutput", () => {
     expect(result.data[0]!.models).toEqual(["gpt-5-codex"]);
     expect(result.data[0]!.cacheCreationTokens).toBe(0);
     expect(result.data[0]!.cacheReadTokens).toBe(0);
+    // Legacy format (modelsUsed string array) has no per-model tokens
+    expect(result.data[0]!.modelBreakdown).toBeUndefined();
   });
 
   it("returns empty data for invalid JSON", () => {

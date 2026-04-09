@@ -1,5 +1,5 @@
 import { execFileSync, execFile as execFileCb } from "node:child_process";
-import type { CcusageDailyEntry, NormalizationAnomaly } from "./ccusage.js";
+import type { CcusageDailyEntry, ModelBreakdownEntry, NormalizationAnomaly } from "./ccusage.js";
 import {
   normalizeTokenBuckets,
   summarizeNormalization,
@@ -132,6 +132,45 @@ function extractCost(entry: CodexRawEntry): number | undefined {
   return undefined;
 }
 
+/** Per-model usage shape from @ccusage/codex output. */
+interface CodexModelUsage {
+  inputTokens?: number;
+  cachedInputTokens?: number;
+  outputTokens?: number;
+  totalTokens?: number;
+}
+
+/**
+ * Build per-model cost breakdown by distributing total cost proportionally
+ * by each model's totalTokens. Much more accurate than even-split when
+ * models have different usage volumes.
+ */
+function buildModelBreakdown(
+  entry: CodexRawEntry,
+  totalCost: number,
+): ModelBreakdownEntry[] | undefined {
+  if (!entry.models || typeof entry.models !== "object" || Array.isArray(entry.models)) {
+    return undefined;
+  }
+
+  const perModel: Array<{ model: string; tokens: number }> = [];
+  let tokenSum = 0;
+
+  for (const [model, raw] of Object.entries(entry.models)) {
+    const usage = raw as CodexModelUsage | null;
+    const tokens = usage?.totalTokens ?? 0;
+    perModel.push({ model, tokens });
+    tokenSum += tokens;
+  }
+
+  if (perModel.length === 0 || tokenSum === 0) return undefined;
+
+  return perModel.map(({ model, tokens }) => ({
+    model,
+    cost_usd: totalCost * (tokens / tokenSum),
+  }));
+}
+
 export function parseCodexOutput(raw: string): CodexOutput {
   let parsed: unknown;
   try {
@@ -186,6 +225,7 @@ export function parseCodexOutput(raw: string): CodexOutput {
         { source: "codex", cacheSemantics: "auto" },
       );
 
+      const cost = extractCost(e)!;
       return {
         date: normalizedDate,
         meta: normalized.meta,
@@ -197,8 +237,9 @@ export function parseCodexOutput(raw: string): CodexOutput {
           cacheCreationTokens: normalized.normalized.cacheCreationTokens,
           cacheReadTokens: normalized.normalized.cacheReadTokens,
           totalTokens: normalized.normalized.totalTokens,
-          costUSD: extractCost(e)!,
+          costUSD: cost,
           reasoningOutputTokens: normalized.normalized.reasoningOutputTokens,
+          modelBreakdown: buildModelBreakdown(e, cost),
         } satisfies CcusageDailyEntry,
       };
     });

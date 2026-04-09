@@ -8,7 +8,10 @@ import type { Post } from "@/types";
 const STORAGE_KEY = "straude_nudge_dismissed";
 
 function formatDate(dateStr: string) {
-  return new Date(dateStr).toLocaleDateString("en-US", {
+  // Date-only strings (YYYY-MM-DD) are parsed as UTC midnight, which shifts
+  // back a day in western timezones. Appending T12:00:00 forces local-time parsing.
+  const d = dateStr.length === 10 ? new Date(dateStr + "T12:00:00") : new Date(dateStr);
+  return d.toLocaleDateString("en-US", {
     month: "short",
     day: "numeric",
   });
@@ -83,7 +86,7 @@ export function PendingPostsNudge({ posts }: { posts: Post[] }) {
               className="flex flex-1 items-center justify-between px-2 py-1.5 text-sm min-w-0"
             >
               <div className="flex items-center gap-3 text-muted">
-                <span>{formatDate(post.created_at)}</span>
+                <span>{formatDate(post.daily_usage?.date ?? post.created_at)}</span>
                 <span>{primaryModel(post.daily_usage?.models)}</span>
                 {post.daily_usage?.is_verified && post.daily_usage.cost_usd > 0 && (
                   <span>${post.daily_usage.cost_usd.toFixed(2)}</span>
@@ -104,7 +107,7 @@ export function PendingPostsNudge({ posts }: { posts: Post[] }) {
                 });
               }}
               className="shrink-0 p-1.5 text-muted/50 hover:text-foreground transition-colors"
-              aria-label={`Dismiss nudge for ${formatDate(post.created_at)} session`}
+              aria-label={`Dismiss nudge for ${formatDate(post.daily_usage?.date ?? post.created_at)} session`}
             >
               <X size={12} />
             </button>
