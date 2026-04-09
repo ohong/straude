@@ -4,7 +4,7 @@ import { Hero } from "@/components/landing/Hero";
 import { Ticker } from "@/components/landing/Ticker";
 import { FeaturesGrid } from "@/components/landing/FeaturesGrid";
 import { PrometheusPreview } from "@/components/landing/PrometheusPreview";
-import { GlobalFeed } from "@/components/landing/GlobalFeed";
+import { PrivacyPledge } from "@/components/landing/PrivacyPledge";
 import { WallOfLove } from "@/components/landing/WallOfLove";
 import { CTASection } from "@/components/landing/CTASection";
 import { Footer } from "@/components/landing/Footer";
@@ -105,10 +105,8 @@ export default function LandingPage() {
             </Suspense>
             <FeaturesGrid />
             <PrometheusPreview />
-            <Suspense fallback={null}>
-              <GlobalFeed />
-            </Suspense>
             <WallOfLove posts={wallOfLovePosts} />
+            <PrivacyPledge />
             <CTASection />
           </main>
           <Footer />

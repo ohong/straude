@@ -2,20 +2,15 @@ export function FeaturesGrid() {
   return (
     <section className="grid grid-cols-1 lg:grid-cols-12 border-t border-landing-border">
       {/* Section title block */}
-      <div className="lg:col-span-4 border-b border-r-0 lg:border-r border-landing-border p-8 lg:p-16 flex flex-col justify-between gap-12 bg-landing-bg">
-        <h2 className="text-accent font-medium text-[clamp(2rem,5vw,4rem)] leading-none tracking-[-0.03em] text-balance">
-          01
+      <div className="lg:col-span-4 border-b border-r-0 lg:border-r border-landing-border p-8 lg:p-16 flex flex-col justify-end bg-landing-bg">
+        <h2 className="text-landing-text text-xl font-medium tracking-[-0.03em] leading-tight text-balance mb-2">
+          Telemetry for
+          <br />
+          Claude Code.
         </h2>
-        <div>
-          <h3 className="text-landing-text text-xl font-medium tracking-[-0.03em] leading-tight text-balance mb-2">
-            Telemetry for
-            <br />
-            Claude Code.
-          </h3>
-          <p className="font-[family-name:var(--font-mono)] text-sm uppercase tracking-wider text-landing-muted">
-            Core Capabilities
-          </p>
-        </div>
+        <p className="font-[family-name:var(--font-mono)] text-sm uppercase tracking-wider text-landing-muted">
+          Core Capabilities
+        </p>
       </div>
 
       {/* Feature cards 2x2 */}

@@ -10,6 +10,7 @@ import { ActivationFunnel } from "./components/ActivationFunnel";
 import { GrowthMetrics } from "./components/GrowthMetrics";
 import { CohortRetention } from "./components/CohortRetention";
 import { ModelUsageChart } from "./components/ModelUsageChart";
+import { ModelShareChart } from "./components/ModelShareChart";
 import { CodexGrowthCharts } from "./components/CodexGrowthCharts";
 import { RevenueConcentration } from "./components/RevenueConcentration";
 import { TimeToFirstSync } from "./components/TimeToFirstSync";
@@ -240,6 +241,7 @@ export default async function AdminPage() {
       {/* Model usage section */}
       <div className="space-y-3">
         <ModelUsageChart />
+        <ModelShareChart />
         <CodexGrowthCharts />
       </div>
 

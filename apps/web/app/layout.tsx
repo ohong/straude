@@ -1,6 +1,8 @@
 import type { Metadata, Viewport } from "next";
 import { Inter, JetBrains_Mono } from "next/font/google";
+import { Suspense } from "react";
 import { Analytics } from "@vercel/analytics/next";
+import { PostHogProvider, PostHogPageView } from "@posthog/next";
 import { Agentation } from "agentation";
 import Script from "next/script";
 import { ThemeProvider } from "@/components/providers/ThemeProvider";
@@ -81,13 +83,7 @@ export default function RootLayout({
       data-theme="light"
       suppressHydrationWarning
     >
-      <body
-        className="bg-background font-[family-name:var(--font-main)] text-foreground antialiased"
-        style={{ isolation: "isolate", position: "relative" }}
-      >
-        <Script id="straude-theme" strategy="beforeInteractive">
-          {getThemeBootstrapScript()}
-        </Script>
+      <head>
         <script
           type="application/ld+json"
           dangerouslySetInnerHTML={{
@@ -116,13 +112,26 @@ export default function RootLayout({
             }),
           }}
         />
+      </head>
+      <body
+        className="bg-background font-[family-name:var(--font-main)] text-foreground antialiased"
+        style={{ isolation: "isolate", position: "relative" }}
+      >
+        <Script id="straude-theme" strategy="beforeInteractive">
+          {getThemeBootstrapScript()}
+        </Script>
         <a
           href="#main-content"
           className="sr-only focus:not-sr-only focus:fixed focus:left-4 focus:top-4 focus:z-[100] focus:rounded-[4px] focus:bg-accent focus:px-4 focus:py-2 focus:text-sm focus:font-semibold focus:text-accent-foreground"
         >
           Skip to content
         </a>
-        <ThemeProvider>{children}</ThemeProvider>
+        <PostHogProvider clientOptions={{ api_host: "/ingest" }}>
+          <Suspense fallback={null}>
+            <PostHogPageView />
+          </Suspense>
+          <ThemeProvider>{children}</ThemeProvider>
+        </PostHogProvider>
         <Analytics />
         {process.env.NODE_ENV === "development" && <Agentation />}
       </body>

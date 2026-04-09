@@ -6,9 +6,12 @@
 
 - **Privacy assurance on onboarding Step 3.** Added a one-liner below the CLI command confirming only aggregate stats leave the machine — prompts, code, and conversations never do. Links to the privacy policy. Targets the sign-up-to-push conversion drop-off for privacy-minded users.
 - **"What Straude cannot access" section on privacy page.** New highlighted callout at the top of `/privacy` explicitly stating zero access to prompts, conversations, code, or file contents. Explains the data pipeline (local ccusage aggregation → daily totals only), links to open-source CLI and `--dry-run` flag for self-verification.
+- **PostHog web analytics.** Integrated `@posthog/next` with automatic pageview tracking via `PostHogPageView`. Events are proxied through `/ingest` rewrites to avoid adblockers. Env var `NEXT_PUBLIC_POSTHOG_KEY` added to Vercel production and preview environments.
+- **Model Share chart on admin dashboard.** Stacked bar chart showing daily spend share (%) by model family (Opus, Sonnet, Haiku, GPT, OpenAI o-series, Other) with 14D/30D/All toggle. New `admin_model_share_by_day` RPC and `/api/admin/model-share` endpoint.
 
 ### Changed
 
+- **Replaced GLOBAL_FEED.LOG with Privacy Pledge on landing page.** New section 03 ("Privacy by architecture") lists what Straude cannot access (prompts, code, transcripts), explains the local ccusage pipeline, links to the open-source CLI and full privacy policy. Links to ccusage docs at deepwiki.com for auditability. Removed `GlobalFeed` component from the landing page.
 - **Landing page performance: Lighthouse 67 → ~85+ (mobile).** Lazy-load `HalftoneCanvas` (ssr: false via client wrapper) and `WallOfLove` (dynamic import). Convert `CTASection` from motion/react to CSS `animate-fade-in-up` (now a server component). Convert `Footer` to server component with tiny `UtcClock` client island. Removes motion/react from critical path.
 - **WCAG AA contrast for accent backgrounds.** Introduced `accent-foreground` design token (`#1a0500`) replacing hardcoded `text-white` on all `bg-accent` elements. Contrast ratio 5.15:1 vs previous 3.82:1. Updated Button, Badge, and 11 component files.
 
