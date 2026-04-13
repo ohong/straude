@@ -97,4 +97,23 @@ describe("Migration safety", () => {
       }
     }
   });
+
+  it("latest DM attachment hardening limits updates to read_at and validates paths", () => {
+    const dmAttachmentMigrations = migrations.filter((m) =>
+      /direct_messages/i.test(m.content)
+      && /dm-attachments/i.test(m.content)
+    );
+
+    expect(dmAttachmentMigrations.length).toBeGreaterThan(0);
+
+    const latest = dmAttachmentMigrations[dmAttachmentMigrations.length - 1];
+
+    expect(
+      /GRANT\s+UPDATE\s*\(\s*read_at\s*\)\s+ON\s+public\.direct_messages\s+TO\s+authenticated/i.test(
+        latest.content
+      )
+    ).toBe(true);
+    expect(/left\(attachment->>'path',\s*1\)\s*=\s*'\/'/i.test(latest.content)).toBe(true);
+    expect(/position\('\.\.'\s+IN\s+attachment->>'path'\)\s*>\s*0/i.test(latest.content)).toBe(true);
+  });
 });

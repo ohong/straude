@@ -1,6 +1,9 @@
 -- Prevent users from referencing another user's DM attachment path when
 -- inserting a direct message through PostgREST.
 
+REVOKE UPDATE ON public.direct_messages FROM authenticated;
+GRANT UPDATE (read_at) ON public.direct_messages TO authenticated;
+
 DROP POLICY IF EXISTS "Users can send direct messages" ON public.direct_messages;
 CREATE POLICY "Users can send direct messages"
   ON public.direct_messages FOR INSERT
@@ -33,6 +36,8 @@ CREATE POLICY "Users can send direct messages"
       WHERE jsonb_typeof(attachment) <> 'object'
         OR attachment->>'bucket' <> 'dm-attachments'
         OR NULLIF(attachment->>'path', '') IS NULL
+        OR left(attachment->>'path', 1) = '/'
+        OR position('..' IN attachment->>'path') > 0
         OR split_part(attachment->>'path', '/', 1) <> auth.uid()::text
     )
   );
