@@ -262,6 +262,42 @@ describe("POST /api/posts/[id]/kudos", () => {
     expect(json.kudosed).toBe(true);
     expect(json.count).toBe(5);
   });
+
+  it("returns 404 when the post is not visible", async () => {
+    const client: Record<string, any> = {
+      auth: {
+        getUser: vi.fn().mockResolvedValue({
+          data: { user: { id: "user-1" } },
+          error: null,
+        }),
+      },
+      from: vi.fn().mockImplementation((table: string) => {
+        if (table === "posts") {
+          return {
+            select: vi.fn().mockReturnValue({
+              eq: vi.fn().mockReturnValue({
+                single: vi.fn().mockResolvedValue({
+                  data: null,
+                  error: { code: "PGRST116" },
+                }),
+              }),
+            }),
+          };
+        }
+        return {};
+      }),
+    };
+    (createClient as any).mockResolvedValue(client);
+
+    const res = await kudosPOST(
+      makeRequest("POST", "/api/posts/post-1/kudos"),
+      makeContext("id", "post-1")
+    );
+    const json = await res.json();
+
+    expect(res.status).toBe(404);
+    expect(json.error).toBe("Post not found");
+  });
 });
 
 describe("DELETE /api/posts/[id]/kudos", () => {
@@ -413,6 +449,44 @@ describe("POST /api/posts/[id]/comments", () => {
     expect(json.content).toBe("Great work!");
   });
 
+  it("returns 404 when the post is not visible", async () => {
+    const client: Record<string, any> = {
+      auth: {
+        getUser: vi.fn().mockResolvedValue({
+          data: { user: { id: "user-1" } },
+          error: null,
+        }),
+      },
+      from: vi.fn().mockImplementation((table: string) => {
+        if (table === "posts") {
+          return {
+            select: vi.fn().mockReturnValue({
+              eq: vi.fn().mockReturnValue({
+                single: vi.fn().mockResolvedValue({
+                  data: null,
+                  error: { code: "PGRST116" },
+                }),
+              }),
+            }),
+          };
+        }
+        return {};
+      }),
+    };
+    (createClient as any).mockResolvedValue(client);
+
+    const res = await commentPOST(
+      makeRequest("POST", "/api/posts/post-1/comments", {
+        content: "Great work!",
+      }),
+      makeContext("id", "post-1")
+    );
+    const json = await res.json();
+
+    expect(res.status).toBe(404);
+    expect(json.error).toBe("Post not found");
+  });
+
   it("validates 500 char max", async () => {
     const client: Record<string, any> = {
       auth: {
@@ -539,6 +613,18 @@ describe("POST /api/comments/[id]/reactions", () => {
         }),
       },
       from: vi.fn().mockImplementation((table: string) => {
+        if (table === "comments") {
+          return {
+            select: vi.fn().mockReturnValue({
+              eq: vi.fn().mockReturnValue({
+                single: vi.fn().mockResolvedValue({
+                  data: { id: "c-1" },
+                  error: null,
+                }),
+              }),
+            }),
+          };
+        }
         if (table === "comment_reactions") {
           if (callCount++ === 0) {
             return {
@@ -565,6 +651,42 @@ describe("POST /api/comments/[id]/reactions", () => {
     expect(res.status).toBe(200);
     expect(json.reacted).toBe(true);
     expect(json.count).toBe(3);
+  });
+
+  it("returns 404 when the comment is not visible", async () => {
+    const client: Record<string, any> = {
+      auth: {
+        getUser: vi.fn().mockResolvedValue({
+          data: { user: { id: "user-1" } },
+          error: null,
+        }),
+      },
+      from: vi.fn().mockImplementation((table: string) => {
+        if (table === "comments") {
+          return {
+            select: vi.fn().mockReturnValue({
+              eq: vi.fn().mockReturnValue({
+                single: vi.fn().mockResolvedValue({
+                  data: null,
+                  error: { code: "PGRST116" },
+                }),
+              }),
+            }),
+          };
+        }
+        return {};
+      }),
+    };
+    (createClient as any).mockResolvedValue(client);
+
+    const res = await commentReactionPOST(
+      makeRequest("POST", "/api/comments/c-1/reactions"),
+      makeContext("id", "c-1")
+    );
+    const json = await res.json();
+
+    expect(res.status).toBe(404);
+    expect(json.error).toBe("Comment not found");
   });
 });
 
