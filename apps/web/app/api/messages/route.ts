@@ -2,7 +2,10 @@ import { NextResponse, type NextRequest } from "next/server";
 import { after } from "@/lib/utils/after";
 import { createClient } from "@/lib/supabase/server";
 import { getServiceClient } from "@/lib/supabase/service";
-import { normalizeMessageAttachmentInput } from "@/lib/storage";
+import {
+  isStoragePathOwnedByUser,
+  normalizeMessageAttachmentInput,
+} from "@/lib/storage";
 import { sendDirectMessageEmail } from "@/lib/email/send-direct-message-email";
 import { rateLimit } from "@/lib/rate-limit";
 import type { MessageAttachment, MessageAttachmentInput } from "@/types";
@@ -104,12 +107,18 @@ async function fireDirectMessageNotificationEmail(opts: {
 
 async function buildSignedAttachments(
   rawAttachments: unknown,
+  expectedOwnerId?: string,
 ): Promise<MessageAttachment[]> {
   const db = getServiceClient();
   const attachments = Array.isArray(rawAttachments)
     ? rawAttachments
         .map(normalizeMessageAttachmentInput)
-        .filter((attachment): attachment is MessageAttachmentInput => attachment !== null)
+        .filter((attachment): attachment is MessageAttachmentInput => {
+          if (attachment === null) return false;
+          return expectedOwnerId
+            ? isStoragePathOwnedByUser(attachment.path, expectedOwnerId)
+            : true;
+        })
     : [];
 
   if (attachments.length === 0) {
@@ -196,7 +205,10 @@ export async function GET(request: NextRequest) {
   const messages = await Promise.all(
     [...(messagesRes.data ?? [])].reverse().map(async (message) => ({
       ...message,
-      attachments: await buildSignedAttachments(message.attachments),
+      attachments: await buildSignedAttachments(
+        message.attachments,
+        message.sender_id,
+      ),
       sender: message.sender_id === user.id ? selfProfile : counterpart,
       recipient: message.sender_id === user.id ? counterpart : selfProfile,
     })),
@@ -246,6 +258,13 @@ export async function POST(request: NextRequest) {
   if (Array.isArray(rawAttachments) && attachments.length !== rawAttachments.length) {
     return NextResponse.json(
       { error: "Attachments must use Straude-managed DM storage uploads" },
+      { status: 400 },
+    );
+  }
+
+  if (attachments.some((attachment) => !isStoragePathOwnedByUser(attachment.path, user.id))) {
+    return NextResponse.json(
+      { error: "Attachments must belong to the sending user" },
       { status: 400 },
     );
   }
@@ -300,7 +319,10 @@ export async function POST(request: NextRequest) {
   }
 
   const sender = senderRes.data as ConversationUser;
-  const signedAttachments = await buildSignedAttachments(messageRes.data.attachments);
+  const signedAttachments = await buildSignedAttachments(
+    messageRes.data.attachments,
+    user.id,
+  );
   const message = {
     ...messageRes.data,
     attachments: signedAttachments,
