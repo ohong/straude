@@ -142,4 +142,37 @@ describe("Migration safety", () => {
       /ON\s+comment_reactions\s+FOR\s+SELECT[\s\S]*USING\s*\(\s*true\s*\)/i,
     );
   });
+
+  it("latest kudos INSERT policy requires visible parent posts", () => {
+    const latest = getLatestMigrationMatching(
+      /ON\s+public\.kudos\s+FOR\s+INSERT|ON\s+kudos\s+FOR\s+INSERT/i,
+    );
+
+    expect(latest.content).toMatch(/p\.id\s*=\s*kudos\.post_id/i);
+    expect(latest.content).not.toMatch(
+      /ON\s+public\.kudos\s+FOR\s+INSERT[\s\S]*WITH\s+CHECK\s*\(\s*user_id\s*=\s*auth\.uid\(\)\s*\)/i,
+    );
+  });
+
+  it("latest comments INSERT policy requires visible parent posts", () => {
+    const latest = getLatestMigrationMatching(
+      /ON\s+public\.comments\s+FOR\s+INSERT|ON\s+comments\s+FOR\s+INSERT/i,
+    );
+
+    expect(latest.content).toMatch(/p\.id\s*=\s*comments\.post_id/i);
+    expect(latest.content).not.toMatch(
+      /ON\s+public\.comments\s+FOR\s+INSERT[\s\S]*WITH\s+CHECK\s*\(\s*user_id\s*=\s*auth\.uid\(\)\s*\)/i,
+    );
+  });
+
+  it("latest comment_reactions INSERT policy requires visible parent comments", () => {
+    const latest = getLatestMigrationMatching(
+      /ON\s+public\.comment_reactions\s+FOR\s+INSERT|ON\s+comment_reactions\s+FOR\s+INSERT/i,
+    );
+
+    expect(latest.content).toMatch(/c\.id\s*=\s*comment_reactions\.comment_id/i);
+    expect(latest.content).not.toMatch(
+      /ON\s+public\.comment_reactions\s+FOR\s+INSERT[\s\S]*WITH\s+CHECK\s*\(\s*user_id\s*=\s*auth\.uid\(\)\s*\)/i,
+    );
+  });
 });
