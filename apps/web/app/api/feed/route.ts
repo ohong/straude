@@ -10,6 +10,9 @@ type KudosRow = {
   user: JoinedUserSummary;
 };
 
+const UUID_PATTERN =
+  /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
+
 export async function GET(request: NextRequest) {
   const supabase = await createClient();
   const {
@@ -44,12 +47,19 @@ export async function GET(request: NextRequest) {
   // pagination continues fetching that user's posts instead of the viewer's.
   const profileUserId = searchParams.get("user_id");
   const effectiveUserId =
-    type === "user" && profileUserId ? profileUserId : (user?.id ?? null);
+    type === "user" ? (profileUserId ?? user?.id ?? null) : (user?.id ?? null);
 
   if (type === "user") {
-    if (!profileUserId) {
+    if (!effectiveUserId) {
       return NextResponse.json(
         { error: "user_id is required for user feed" },
+        { status: 400 },
+      );
+    }
+
+    if (!UUID_PATTERN.test(effectiveUserId)) {
+      return NextResponse.json(
+        { error: "user_id must be a valid UUID" },
         { status: 400 },
       );
     }
@@ -58,18 +68,19 @@ export async function GET(request: NextRequest) {
     const { data: profile, error: profileError } = await db
       .from("users")
       .select("id, is_public")
-      .eq("id", profileUserId)
+      .eq("id", effectiveUserId)
       .maybeSingle();
 
     if (profileError) {
-      return NextResponse.json({ error: profileError.message }, { status: 500 });
+      console.error("[feed] profile lookup error:", profileError);
+      return NextResponse.json({ error: "Unable to load profile" }, { status: 500 });
     }
 
     if (!profile) {
       return NextResponse.json({ error: "User not found" }, { status: 404 });
     }
 
-    if (!profile.is_public && user?.id !== profileUserId) {
+    if (!profile.is_public && user?.id !== effectiveUserId) {
       if (!user) {
         return NextResponse.json({ error: "Forbidden" }, { status: 403 });
       }
@@ -78,11 +89,12 @@ export async function GET(request: NextRequest) {
         .from("follows")
         .select("id")
         .eq("follower_id", user.id)
-        .eq("following_id", profileUserId)
+        .eq("following_id", effectiveUserId)
         .maybeSingle();
 
       if (followError) {
-        return NextResponse.json({ error: followError.message }, { status: 500 });
+        console.error("[feed] follow lookup error:", followError);
+        return NextResponse.json({ error: "Unable to verify follow status" }, { status: 500 });
       }
 
       if (!follow) {

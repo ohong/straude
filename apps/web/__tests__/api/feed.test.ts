@@ -177,14 +177,43 @@ describe("GET /api/feed", () => {
     expect(json.error).toBe("user_id is required for user feed");
   });
 
+  it("falls back to the authenticated user's id for self user feed", async () => {
+    const client = mockSupabase({
+      user: { id: "550e8400-e29b-41d4-a716-446655440000" },
+      profile: { id: "550e8400-e29b-41d4-a716-446655440000", is_public: false },
+      posts: [],
+    });
+
+    const res = await GET(makeRequest({ type: "user" }));
+    const json = await res.json();
+
+    expect(res.status).toBe(200);
+    expect(json.posts).toEqual([]);
+    expect(client.rpc).toHaveBeenCalledWith("get_feed", expect.objectContaining({
+      p_type: "user",
+      p_user_id: "550e8400-e29b-41d4-a716-446655440000",
+    }));
+  });
+
+  it("rejects malformed user_id values", async () => {
+    mockSupabase({ user: { id: "user-1" } });
+
+    const res = await GET(makeRequest({ type: "user", user_id: "not-a-uuid" }));
+    const json = await res.json();
+
+    expect(res.status).toBe(400);
+    expect(json.error).toBe("user_id must be a valid UUID");
+  });
+
   it("rejects unauthenticated access to a private user feed", async () => {
+    const privateUserId = "550e8400-e29b-41d4-a716-446655440001";
     mockSupabase({
       user: null,
-      profile: { id: "private-user", is_public: false },
+      profile: { id: privateUserId, is_public: false },
     });
 
     const res = await GET(
-      makeRequest({ type: "user", user_id: "private-user" })
+      makeRequest({ type: "user", user_id: privateUserId })
     );
     const json = await res.json();
 
@@ -193,13 +222,14 @@ describe("GET /api/feed", () => {
   });
 
   it("allows follower access to a private user feed", async () => {
+    const privateUserId = "550e8400-e29b-41d4-a716-446655440001";
     mockSupabase({
-      profile: { id: "private-user", is_public: false },
+      profile: { id: privateUserId, is_public: false },
       follow: { id: "follow-1" },
     });
 
     const res = await GET(
-      makeRequest({ type: "user", user_id: "private-user" })
+      makeRequest({ type: "user", user_id: privateUserId })
     );
 
     expect(res.status).toBe(200);
