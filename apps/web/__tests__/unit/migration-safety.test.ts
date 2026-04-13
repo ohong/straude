@@ -14,6 +14,12 @@ function getAllMigrations(): { name: string; content: string }[] {
   }));
 }
 
+function getLatestMigrationMatching(pattern: RegExp) {
+  const matches = getAllMigrations().filter((m) => pattern.test(m.content));
+  expect(matches.length).toBeGreaterThan(0);
+  return matches[matches.length - 1]!;
+}
+
 describe("Migration safety", () => {
   const migrations = getAllMigrations();
 
@@ -96,5 +102,44 @@ describe("Migration safety", () => {
         ).toBe(true);
       }
     }
+  });
+
+  it("latest comments SELECT policy is not world-readable", () => {
+    const latest = getLatestMigrationMatching(
+      /ON\s+public\.comments\s+FOR\s+SELECT|ON\s+comments\s+FOR\s+SELECT/i,
+    );
+
+    expect(latest.content).not.toMatch(
+      /ON\s+public\.comments\s+FOR\s+SELECT[\s\S]*USING\s*\(\s*true\s*\)/i,
+    );
+    expect(latest.content).not.toMatch(
+      /ON\s+comments\s+FOR\s+SELECT[\s\S]*USING\s*\(\s*true\s*\)/i,
+    );
+  });
+
+  it("latest kudos SELECT policy is not world-readable", () => {
+    const latest = getLatestMigrationMatching(
+      /ON\s+public\.kudos\s+FOR\s+SELECT|ON\s+kudos\s+FOR\s+SELECT/i,
+    );
+
+    expect(latest.content).not.toMatch(
+      /ON\s+public\.kudos\s+FOR\s+SELECT[\s\S]*USING\s*\(\s*true\s*\)/i,
+    );
+    expect(latest.content).not.toMatch(
+      /ON\s+kudos\s+FOR\s+SELECT[\s\S]*USING\s*\(\s*true\s*\)/i,
+    );
+  });
+
+  it("latest comment_reactions SELECT policy is not world-readable", () => {
+    const latest = getLatestMigrationMatching(
+      /ON\s+public\.comment_reactions\s+FOR\s+SELECT|ON\s+comment_reactions\s+FOR\s+SELECT/i,
+    );
+
+    expect(latest.content).not.toMatch(
+      /ON\s+public\.comment_reactions\s+FOR\s+SELECT[\s\S]*USING\s*\(\s*true\s*\)/i,
+    );
+    expect(latest.content).not.toMatch(
+      /ON\s+comment_reactions\s+FOR\s+SELECT[\s\S]*USING\s*\(\s*true\s*\)/i,
+    );
   });
 });
