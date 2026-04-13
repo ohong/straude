@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import { createClient } from "@/lib/supabase/server";
+import { getServiceClient } from "@/lib/supabase/service";
 
 export async function GET(request: Request) {
   const { searchParams, origin: requestOrigin } = new URL(request.url);
@@ -19,7 +20,8 @@ export async function GET(request: Request) {
         data: { user },
       } = await supabase.auth.getUser();
       if (user) {
-        const { data: profile } = await supabase
+        const db = getServiceClient();
+        const { data: profile } = await db
           .from("users")
           .select("username, github_username, onboarding_completed")
           .eq("id", user.id)
@@ -33,7 +35,7 @@ export async function GET(request: Request) {
             .slice(0, 20);
           if (/^[a-zA-Z0-9_]{3,20}$/.test(sanitized)) {
             // Best-effort: if taken, onboarding will handle it
-            await supabase
+            await db
               .from("users")
               .update({ username: sanitized })
               .eq("id", user.id);

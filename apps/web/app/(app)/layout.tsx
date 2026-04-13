@@ -1,6 +1,7 @@
 import { Suspense } from "react";
 import Link from "next/link";
 import { createClient } from "@/lib/supabase/server";
+import { getServiceClient } from "@/lib/supabase/service";
 import { getAuthUser } from "@/lib/supabase/auth";
 import { Sidebar } from "@/components/app/shared/Sidebar";
 import { RightSidebar } from "@/components/app/shared/RightSidebar";
@@ -30,6 +31,7 @@ export default async function AppLayout({
 }) {
   const user = await getAuthUser();
   const supabase = await createClient();
+  const db = getServiceClient();
 
   // If not logged in: allow public pages, redirect others to login
   if (!user) {
@@ -60,7 +62,7 @@ export default async function AppLayout({
     usageTotalsRes,
     photoAchievementRes,
   ] = await Promise.all([
-    supabase
+    db
       .from("users")
       .select("*")
       .eq("id", user.id)

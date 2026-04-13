@@ -17,6 +17,7 @@ import { CountryPicker } from "@/components/ui/CountryPicker";
 export default function SettingsPage() {
   const router = useRouter();
   const [profile, setProfile] = useState<User | null>(null);
+  const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [saved, setSaved] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -45,18 +46,13 @@ export default function SettingsPage() {
 
   useEffect(() => {
     async function load() {
-      const supabase = createClient();
-      const {
-        data: { user },
-      } = await supabase.auth.getUser();
-      if (!user) return;
+      const res = await fetch("/api/users/me");
+      if (!res.ok) {
+        setLoading(false);
+        return;
+      }
 
-      const { data } = await supabase
-        .from("users")
-        .select("*")
-        .eq("id", user.id)
-        .single();
-
+      const data = await res.json();
       if (data) {
         setProfile(data);
         setUsername(data.username ?? "");
@@ -71,14 +67,9 @@ export default function SettingsPage() {
         setEmailMentionNotifications(data.email_mention_notifications ?? true);
         setEmailDmNotifications(data.email_dm_notifications ?? true);
         setTimezone(data.timezone ?? Intl.DateTimeFormat().resolvedOptions().timeZone);
-
-        // Fetch crew count
-        const { count } = await supabase
-          .from("users")
-          .select("id", { count: "exact", head: true })
-          .eq("referred_by", data.id);
-        setCrewCount(count ?? 0);
+        setCrewCount(data.crew_count ?? 0);
       }
+      setLoading(false);
     }
     load();
   }, []);
@@ -161,8 +152,12 @@ export default function SettingsPage() {
     setSaving(false);
   }
 
-  if (!profile) {
+  if (loading) {
     return <div className="px-[var(--app-page-padding-x)] py-6 text-sm text-muted">Loading&hellip;</div>;
+  }
+
+  if (!profile) {
+    return <div className="px-[var(--app-page-padding-x)] py-6 text-sm text-muted">Unable to load profile.</div>;
   }
 
   return (

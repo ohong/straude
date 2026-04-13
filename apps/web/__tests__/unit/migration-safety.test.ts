@@ -97,4 +97,44 @@ describe("Migration safety", () => {
       }
     }
   });
+
+  it("latest public.users grants only expose a sanitized select list", () => {
+    const usersGrantMigrations = migrations.filter((m) =>
+      /public\.users/i.test(m.content)
+      && (
+        /REVOKE\s+ALL\s+ON\s+public\.users/i.test(m.content)
+        || /GRANT\s+SELECT\s+ON\s+public\.users/i.test(m.content)
+        || /GRANT\s+SELECT\s*\(/i.test(m.content)
+      )
+    );
+
+    expect(usersGrantMigrations.length).toBeGreaterThan(0);
+
+    const latest = usersGrantMigrations[usersGrantMigrations.length - 1];
+
+    expect(
+      /GRANT\s+SELECT\s+ON\s+public\.users\s+TO\s+anon/i.test(latest.content)
+    ).toBe(false);
+    expect(
+      /GRANT\s+SELECT\s+ON\s+public\.users\s+TO\s+authenticated/i.test(latest.content)
+    ).toBe(false);
+    expect(
+      /GRANT\s+SELECT\s*\([^)]*github_username[^)]*\)\s+ON\s+public\.users\s+TO\s+anon/i.test(
+        latest.content
+      )
+    ).toBe(true);
+  });
+
+  it("latest get_feed() definition redacts joined user columns", () => {
+    const redefining = migrations.filter((m) =>
+      /CREATE\s+OR\s+REPLACE\s+FUNCTION\s+public\.get_feed/i.test(m.content)
+    );
+
+    expect(redefining.length).toBeGreaterThan(0);
+
+    const latest = redefining[redefining.length - 1];
+
+    expect(/to_jsonb\(u\.\*\)/i.test(latest.content)).toBe(false);
+    expect(/jsonb_build_object\s*\(/i.test(latest.content)).toBe(true);
+  });
 });

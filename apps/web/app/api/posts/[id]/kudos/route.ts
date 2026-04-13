@@ -99,7 +99,7 @@ export async function GET(request: NextRequest, context: RouteContext) {
 
   let query = supabase
     .from("kudos")
-    .select("*, user:users!kudos_user_id_fkey(*)")
+    .select("*, user:users!kudos_user_id_fkey(id, username, display_name, bio, avatar_url, is_public)")
     .eq("post_id", id)
     .order("created_at", { ascending: false })
     .limit(limit);

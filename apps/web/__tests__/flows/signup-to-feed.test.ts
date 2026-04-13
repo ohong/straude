@@ -127,7 +127,7 @@ describe("Flow: Signup to Feed", () => {
     (updateChain.select as ReturnType<typeof vi.fn>).mockReturnValue(updateChain);
     (updateChain.eq as ReturnType<typeof vi.fn>).mockReturnValue(updateChain);
 
-    mockSupabase.from.mockImplementation((table: string) => {
+    mockServiceSupabase.from.mockImplementation((table: string) => {
       if (table === "users") return updateChain;
       return chainBuilder();
     });
