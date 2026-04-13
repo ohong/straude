@@ -15,8 +15,6 @@ type PublicProfileRow = {
   github_username: string | null;
   is_public: boolean;
   streak_freezes: number | null;
-  referred_by: string | null;
-  created_at: string;
 };
 type TotalCostAggregateRow = {
   cost_usd: number | string | null;
@@ -26,7 +24,7 @@ export async function GET(_request: NextRequest, context: RouteContext) {
   const { username } = await context.params;
   const access = await getProfileAccessContext<PublicProfileRow>(
     username,
-    "id, username, display_name, avatar_url, bio, country, region, link, github_username, is_public, streak_freezes, referred_by, created_at",
+    "id, username, display_name, avatar_url, bio, country, region, link, github_username, is_public, streak_freezes",
   );
 
   if (!access) {
@@ -117,7 +115,16 @@ export async function GET(_request: NextRequest, context: RouteContext) {
   }
 
   return NextResponse.json({
-    ...profile,
+    id: profile.id,
+    username: profile.username,
+    display_name: profile.display_name,
+    avatar_url: profile.avatar_url,
+    bio: profile.bio,
+    country: profile.country,
+    region: profile.region,
+    link: profile.link,
+    github_username: profile.github_username,
+    is_public: profile.is_public,
     followers_count: followersRes.count ?? 0,
     following_count: followingRes.count ?? 0,
     posts_count: postsRes.count ?? 0,

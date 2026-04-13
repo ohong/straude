@@ -45,6 +45,7 @@ describe("GET /api/users/[username]", () => {
       username: "alice",
       is_public: true,
       region: "north_america",
+      streak_freezes: 2,
     };
 
     const client: Record<string, any> = {
@@ -169,6 +170,9 @@ describe("GET /api/users/[username]", () => {
     expect(json.streak).toBe(7);
     expect(json.total_cost).toBe(15);
     expect(json.level).toBe(4);
+    expect(json.streak_freezes).toBeUndefined();
+    expect(json.referred_by).toBeUndefined();
+    expect(json.created_at).toBeUndefined();
   });
 
   it("returns 404 for non-existent username", async () => {
