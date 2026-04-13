@@ -1,5 +1,6 @@
 import { NextResponse, type NextRequest } from "next/server";
 import { createClient } from "@/lib/supabase/server";
+import { getServiceClient } from "@/lib/supabase/service";
 import { normalizeCommentPreview, normalizeFeedPost, type JoinedUserSummary, type RawCommentPreviewRow } from "@/lib/feed-normalization";
 import { firstRelation } from "@/lib/utils/first-relation";
 import type { CommentPreviewItem, FeedPostRow, Post, UserSummary } from "@/types";
@@ -44,6 +45,51 @@ export async function GET(request: NextRequest) {
   const profileUserId = searchParams.get("user_id");
   const effectiveUserId =
     type === "user" && profileUserId ? profileUserId : (user?.id ?? null);
+
+  if (type === "user") {
+    if (!profileUserId) {
+      return NextResponse.json(
+        { error: "user_id is required for user feed" },
+        { status: 400 },
+      );
+    }
+
+    const db = getServiceClient();
+    const { data: profile, error: profileError } = await db
+      .from("users")
+      .select("id, is_public")
+      .eq("id", profileUserId)
+      .maybeSingle();
+
+    if (profileError) {
+      return NextResponse.json({ error: profileError.message }, { status: 500 });
+    }
+
+    if (!profile) {
+      return NextResponse.json({ error: "User not found" }, { status: 404 });
+    }
+
+    if (!profile.is_public && user?.id !== profileUserId) {
+      if (!user) {
+        return NextResponse.json({ error: "Forbidden" }, { status: 403 });
+      }
+
+      const { data: follow, error: followError } = await supabase
+        .from("follows")
+        .select("id")
+        .eq("follower_id", user.id)
+        .eq("following_id", profileUserId)
+        .maybeSingle();
+
+      if (followError) {
+        return NextResponse.json({ error: followError.message }, { status: 500 });
+      }
+
+      if (!follow) {
+        return NextResponse.json({ error: "Forbidden" }, { status: 403 });
+      }
+    }
+  }
 
   const { data: rpcPosts, error } = await supabase.rpc("get_feed", {
     p_type: type,

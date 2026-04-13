@@ -178,7 +178,7 @@ export default async function ProfilePage({
       .select("daily_usage:daily_usage!posts_daily_usage_id_fkey(date)")
       .eq("user_id", profile.id),
     computeRadarScores(profile.id).catch(() => null),
-    db.rpc("get_feed", {
+    supabase.rpc("get_feed", {
       p_type: "user",
       p_user_id: profile.id,
       p_limit: 20,
