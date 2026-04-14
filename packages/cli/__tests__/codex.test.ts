@@ -1,4 +1,4 @@
-import { describe, it, expect, vi, beforeEach } from "vitest";
+import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
 import { parseCodexOutput, runCodexRaw } from "../src/lib/codex.js";
 
 vi.mock("node:child_process", () => ({
@@ -227,9 +227,20 @@ describe("parseCodexOutput", () => {
 // ---------------------------------------------------------------------------
 
 describe("runCodexRaw", () => {
+  const originalCodexPkg = process.env.STRAUDE_CODEX_PKG;
+
   beforeEach(() => {
     vi.clearAllMocks();
+    delete process.env.STRAUDE_CODEX_PKG;
     mockExecFileSync.mockReturnValue(validOutput() as never);
+  });
+
+  afterEach(() => {
+    if (originalCodexPkg === undefined) {
+      delete process.env.STRAUDE_CODEX_PKG;
+    } else {
+      process.env.STRAUDE_CODEX_PKG = originalCodexPkg;
+    }
   });
 
   it("returns raw JSON string on success", () => {
@@ -241,5 +252,17 @@ describe("runCodexRaw", () => {
     mockExecFileSync.mockImplementation(() => { throw new Error("fail"); });
     const result = runCodexRaw("20250601", "20250601");
     expect(result).toBe("");
+  });
+
+  it("uses STRAUDE_CODEX_PKG when set", () => {
+    process.env.STRAUDE_CODEX_PKG = "@maxghenis/ccusage-codex@patched";
+
+    runCodexRaw("20250601", "20250601");
+
+    expect(mockExecFileSync).toHaveBeenCalledWith(
+      expect.any(String),
+      expect.arrayContaining(["@maxghenis/ccusage-codex@patched", "daily", "--json"]),
+      expect.any(Object),
+    );
   });
 });
