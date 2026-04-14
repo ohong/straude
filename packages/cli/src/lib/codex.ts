@@ -17,7 +17,12 @@ export interface CodexOutput {
 
 // Pin to major version so bunx/npx can use the cached copy without a registry roundtrip.
 // @latest forces a registry check on every invocation (~200-1000ms penalty).
-const CODEX_PKG = "@ccusage/codex@18";
+const DEFAULT_CODEX_PKG = "@ccusage/codex@18";
+
+function getCodexPackage(): string {
+  const override = process.env.STRAUDE_CODEX_PKG?.trim();
+  return override || DEFAULT_CODEX_PKG;
+}
 
 /** Returns the raw JSON string from @ccusage/codex (for hashing). Empty string on failure. */
 export function runCodexRaw(sinceDate: string, untilDate: string, timeoutMs?: number): string {
@@ -41,7 +46,7 @@ function execCodex(args: string[], timeoutMs?: number): string {
   const cmd = process.versions.bun !== undefined ? "bunx" : "npx";
   const prefix = process.versions.bun !== undefined ? ["--bun"] : ["--yes"];
 
-  return execFileSync(cmd, [...prefix, CODEX_PKG, ...args], {
+  return execFileSync(cmd, [...prefix, getCodexPackage(), ...args], {
     encoding: "utf-8",
     timeout: timeoutMs ?? DEFAULT_SUBPROCESS_TIMEOUT_MS,
     maxBuffer: 10 * 1024 * 1024,
@@ -54,7 +59,7 @@ function execCodexAsync(args: string[], timeoutMs?: number): Promise<string> {
   const prefix = process.versions.bun !== undefined ? ["--bun"] : ["--yes"];
 
   return new Promise((resolve, reject) => {
-    execFileCb(cmd, [...prefix, CODEX_PKG, ...args], {
+    execFileCb(cmd, [...prefix, getCodexPackage(), ...args], {
       encoding: "utf-8",
       timeout: timeoutMs ?? DEFAULT_SUBPROCESS_TIMEOUT_MS,
       maxBuffer: 10 * 1024 * 1024,
