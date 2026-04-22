@@ -5,14 +5,11 @@
 UPDATE storage.buckets
 SET public = false
 WHERE id = 'dm-attachments';
-
 -- Remove overly broad read policy.
 DROP POLICY IF EXISTS "Anyone can view dm attachments" ON storage.objects;
-
 -- Allow reads only to authenticated users who are participants in a DM
 -- that references the exact attachment path.
 DROP POLICY IF EXISTS "DM participants can view dm attachments" ON storage.objects;
-
 CREATE POLICY "DM participants can view dm attachments"
   ON storage.objects FOR SELECT
   USING (

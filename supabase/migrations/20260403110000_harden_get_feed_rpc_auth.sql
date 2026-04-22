@@ -81,6 +81,5 @@ BEGIN
   LIMIT p_limit;
 END;
 $$;
-
 GRANT EXECUTE ON FUNCTION public.get_feed(text, uuid, int, date, timestamptz) TO authenticated;
 GRANT EXECUTE ON FUNCTION public.get_feed(text, uuid, int, date, timestamptz) TO anon;

@@ -15,5 +15,4 @@ AS $$
       OR auth.role() = 'service_role'
     );
 $$;
-
 GRANT EXECUTE ON FUNCTION public.get_user_usage_totals(uuid) TO authenticated;

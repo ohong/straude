@@ -2,7 +2,6 @@
 -- Compatibility: expose total_tokens as an alias of total_output_tokens
 -- so older callers reading total_tokens still get output-token values.
 DROP FUNCTION IF EXISTS public.get_user_usage_totals(uuid);
-
 CREATE OR REPLACE FUNCTION public.get_user_usage_totals(p_user_id uuid)
 RETURNS TABLE (
   total_cost numeric,
@@ -25,7 +24,6 @@ AS $$
       OR auth.role() = 'service_role'
     );
 $$;
-
 REVOKE ALL ON FUNCTION public.get_user_usage_totals(uuid) FROM PUBLIC;
 REVOKE ALL ON FUNCTION public.get_user_usage_totals(uuid) FROM anon;
 GRANT EXECUTE ON FUNCTION public.get_user_usage_totals(uuid) TO authenticated;
