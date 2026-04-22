@@ -20,7 +20,6 @@ AS $$
       OR auth.role() = 'service_role'
     );
 $$;
-
 REVOKE ALL ON FUNCTION public.get_user_usage_totals(uuid) FROM PUBLIC;
 REVOKE ALL ON FUNCTION public.get_user_usage_totals(uuid) FROM anon;
 GRANT EXECUTE ON FUNCTION public.get_user_usage_totals(uuid) TO authenticated;
