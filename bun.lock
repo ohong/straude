@@ -34,6 +34,7 @@
         "lucide-react": "^0.474",
         "motion": "^12",
         "next": "16.1.6",
+        "posthog-js": "1.359.1",
         "react": "19.2.3",
         "react-dom": "19.2.3",
         "react-markdown": "^9",
