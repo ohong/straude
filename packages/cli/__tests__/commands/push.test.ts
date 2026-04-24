@@ -19,9 +19,10 @@ vi.mock("../../src/lib/ccusage.js", () => ({
   parseCcusageOutput: vi.fn(),
 }));
 
-vi.mock("../../src/lib/codex.js", () => ({
-  runCodexRawAsync: vi.fn(),
-  parseCodexOutput: vi.fn(),
+vi.mock("../../src/lib/codex-native.js", () => ({
+  CODEX_NATIVE_COLLECTOR: "straude-codex-native-v1",
+  collectCodexUsageAsync: vi.fn(),
+  hasCodexLogs: vi.fn(),
 }));
 
 import { pushCommand, mergeEntries } from "../../src/commands/push.js";
@@ -29,7 +30,7 @@ import { loadConfig, saveConfig } from "../../src/lib/auth.js";
 import { loginCommand } from "../../src/commands/login.js";
 import { apiRequest } from "../../src/lib/api.js";
 import { runCcusageRawAsync, parseCcusageOutput } from "../../src/lib/ccusage.js";
-import { runCodexRawAsync, parseCodexOutput } from "../../src/lib/codex.js";
+import { collectCodexUsageAsync, hasCodexLogs } from "../../src/lib/codex-native.js";
 
 const mockLoadConfig = vi.mocked(loadConfig);
 const mockLoginCommand = vi.mocked(loginCommand);
@@ -37,10 +38,36 @@ const mockSaveConfig = vi.mocked(saveConfig);
 const mockApiRequest = vi.mocked(apiRequest);
 const mockRunCcusageRawAsync = vi.mocked(runCcusageRawAsync);
 const mockParseCcusageOutput = vi.mocked(parseCcusageOutput);
-const mockRunCodexRawAsync = vi.mocked(runCodexRawAsync);
-const mockParseCodexOutput = vi.mocked(parseCodexOutput);
+const mockCollectCodexUsageAsync = vi.mocked(collectCodexUsageAsync);
+const mockHasCodexLogs = vi.mocked(hasCodexLogs);
 
 const fakeConfig = { token: "tok", username: "alice", api_url: "https://straude.com" };
+
+function codexOutput(data: any[] = [], extra: Record<string, any> = {}) {
+  return {
+    data,
+    anomalies: [],
+    entryMeta: [],
+    fingerprint: data.length > 0 ? "codex-native-fingerprint" : "",
+    scannedFiles: data.length > 0 ? 1 : 0,
+    parsedEvents: data.length,
+    ...extra,
+  };
+}
+
+function codexEntry(date: string, overrides: Record<string, any> = {}) {
+  return {
+    date,
+    models: ["gpt-5-codex"],
+    inputTokens: 2000,
+    outputTokens: 800,
+    cacheCreationTokens: 0,
+    cacheReadTokens: 0,
+    totalTokens: 2800,
+    costUSD: 3.0,
+    ...overrides,
+  };
+}
 
 class ExitError extends Error {
   code: number;
@@ -63,8 +90,8 @@ beforeEach(() => {
   vi.clearAllMocks();
   mockLoadConfig.mockReturnValue(fakeConfig);
   // Default: no Codex data
-  mockRunCodexRawAsync.mockResolvedValue("");
-  mockParseCodexOutput.mockReturnValue({ data: [] });
+  mockHasCodexLogs.mockResolvedValue(false);
+  mockCollectCodexUsageAsync.mockResolvedValue(codexOutput());
   vi.spyOn(console, "log").mockImplementation(() => {});
   vi.spyOn(console, "error").mockImplementation(() => {});
   vi.spyOn(process, "exit").mockImplementation((code) => {
@@ -208,7 +235,7 @@ describe("pushCommand", () => {
     expect(mockRunCcusageRawAsync).toHaveBeenCalledWith(compactStr, compactStr, undefined);
   });
 
-  it("forwards --timeout to subprocess calls", async () => {
+  it("forwards --timeout to ccusage and scans Codex natively", async () => {
     mockRunCcusageRawAsync.mockResolvedValue("[]");
     mockParseCcusageOutput.mockReturnValue({ data: [] });
 
@@ -217,8 +244,8 @@ describe("pushCommand", () => {
     expect(mockRunCcusageRawAsync).toHaveBeenCalledWith(
       expect.any(String), expect.any(String), 300_000,
     );
-    expect(mockRunCodexRawAsync).toHaveBeenCalledWith(
-      expect.any(String), expect.any(String), 300_000,
+    expect(mockCollectCodexUsageAsync).toHaveBeenCalledWith(
+      expect.any(String), expect.any(String),
     );
   });
 
@@ -252,6 +279,55 @@ describe("pushCommand", () => {
     expect(untilArg).toBe(fmt(today));
   });
 
+  it("runs one-time 30-day Codex repair before normal incremental sync", async () => {
+    const today = todayStr();
+    mockHasCodexLogs.mockResolvedValue(true);
+    mockLoadConfig.mockReturnValue({
+      ...fakeConfig,
+      device_id: "device-1",
+      device_name: "work-laptop",
+    });
+    mockRunCcusageRawAsync.mockResolvedValue("{}");
+    mockParseCcusageOutput.mockReturnValue({
+      data: [
+        {
+          date: today,
+          models: ["claude-sonnet-4-5-20250929"],
+          inputTokens: 1000,
+          outputTokens: 500,
+          cacheCreationTokens: 0,
+          cacheReadTokens: 0,
+          totalTokens: 1500,
+          costUSD: 0.05,
+        },
+      ],
+    });
+    mockCollectCodexUsageAsync.mockResolvedValue(codexOutput([codexEntry(today)]));
+    mockApiRequest.mockResolvedValue({
+      results: [
+        { date: today, usage_id: "u-1", post_id: "p-1", post_url: "https://straude.com/post/p-1", action: "updated" },
+      ],
+    });
+
+    await pushCommand({ days: 3 });
+
+    const [sinceArg, untilArg] = mockRunCcusageRawAsync.mock.calls[0]!;
+    const now = new Date();
+    const fmt = (d: Date) =>
+      `${d.getFullYear()}${String(d.getMonth() + 1).padStart(2, "0")}${String(d.getDate()).padStart(2, "0")}`;
+    const twentyNineDaysAgo = new Date(now);
+    twentyNineDaysAgo.setDate(now.getDate() - 29);
+    expect(sinceArg).toBe(fmt(twentyNineDaysAgo));
+    expect(untilArg).toBe(fmt(now));
+    expect(console.log).toHaveBeenCalledWith(
+      "Repairing Codex totals with a one-time 30-day resync...",
+    );
+    expect(mockSaveConfig).toHaveBeenCalledWith(expect.objectContaining({
+      codex_native_repair_completed_at: expect.any(String),
+      last_push_date: today,
+    }));
+  });
+
   it("merges Claude + Codex data for the same day", async () => {
     const today = todayStr();
 
@@ -271,21 +347,7 @@ describe("pushCommand", () => {
       ],
     });
 
-    mockRunCodexRawAsync.mockResolvedValue('{"daily":[]}');
-    mockParseCodexOutput.mockReturnValue({
-      data: [
-        {
-          date: today,
-          models: ["gpt-5-codex"],
-          inputTokens: 2000,
-          outputTokens: 800,
-          cacheCreationTokens: 0,
-          cacheReadTokens: 0,
-          totalTokens: 2800,
-          costUSD: 3.0,
-        },
-      ],
-    });
+    mockCollectCodexUsageAsync.mockResolvedValue(codexOutput([codexEntry(today)]));
 
     mockApiRequest.mockResolvedValue({
       results: [
@@ -309,6 +371,10 @@ describe("pushCommand", () => {
     expect(entry.modelBreakdown).toHaveLength(2);
     expect(entry.modelBreakdown[0]).toEqual({ model: "claude-opus-4-20250505", cost_usd: 10.0 });
     expect(entry.modelBreakdown[1]).toEqual({ model: "gpt-5-codex", cost_usd: 3.0 });
+    expect(body.collector).toEqual({
+      claude: "ccusage-v18",
+      codex: "straude-codex-native-v1",
+    });
   });
 
   it("generates device_id on first push and persists to config", async () => {
@@ -447,8 +513,7 @@ describe("pushCommand", () => {
     });
 
     // Codex fails silently
-    mockRunCodexRawAsync.mockResolvedValue("");
-    mockParseCodexOutput.mockReturnValue({ data: [] });
+    mockCollectCodexUsageAsync.mockResolvedValue(codexOutput());
 
     mockApiRequest.mockResolvedValue({
       results: [
@@ -468,21 +533,7 @@ describe("pushCommand", () => {
     mockRunCcusageRawAsync.mockRejectedValue(
       new Error("ccusage failed: No valid Claude data directories found"),
     );
-    mockRunCodexRawAsync.mockResolvedValue('{"daily":[]}');
-    mockParseCodexOutput.mockReturnValue({
-      data: [
-        {
-          date: today,
-          models: ["gpt-5-codex"],
-          inputTokens: 2000,
-          outputTokens: 800,
-          cacheCreationTokens: 0,
-          cacheReadTokens: 0,
-          totalTokens: 2800,
-          costUSD: 3.0,
-        },
-      ],
-    });
+    mockCollectCodexUsageAsync.mockResolvedValue(codexOutput([codexEntry(today)]));
 
     mockApiRequest.mockResolvedValue({
       results: [
@@ -502,13 +553,14 @@ describe("pushCommand", () => {
     expect(body.entries).toHaveLength(1);
     expect(body.entries[0]!.data.models).toEqual(["gpt-5-codex"]);
     expect(body.entries[0]!.data.costUSD).toBe(3.0);
+    expect(body.collector).toEqual({ codex: "straude-codex-native-v1" });
   });
 
   it("shows no usage when Claude local data is missing and Codex has no data", async () => {
     mockRunCcusageRawAsync.mockRejectedValue(
       new Error("ccusage failed: No valid Claude data directories found"),
     );
-    mockRunCodexRawAsync.mockResolvedValue("");
+    mockCollectCodexUsageAsync.mockResolvedValue(codexOutput());
 
     await pushCommand({});
 
@@ -527,21 +579,7 @@ describe("pushCommand", () => {
     mockRunCcusageRawAsync.mockRejectedValue(
       new Error("ccusage failed: unexpected runtime error"),
     );
-    mockRunCodexRawAsync.mockResolvedValue('{"daily":[]}');
-    mockParseCodexOutput.mockReturnValue({
-      data: [
-        {
-          date: today,
-          models: ["gpt-5-codex"],
-          inputTokens: 2000,
-          outputTokens: 800,
-          cacheCreationTokens: 0,
-          cacheReadTokens: 0,
-          totalTokens: 2800,
-          costUSD: 3.0,
-        },
-      ],
-    });
+    mockCollectCodexUsageAsync.mockResolvedValue(codexOutput([codexEntry(today)]));
 
     await expect(pushCommand({})).rejects.toThrow(ExitError);
     expect(process.exit).toHaveBeenCalledWith(1);
@@ -567,20 +605,9 @@ describe("pushCommand", () => {
       ],
     });
 
-    mockRunCodexRawAsync.mockResolvedValue('{"daily":[]}');
-    mockParseCodexOutput.mockReturnValue({
-      data: [
-        {
-          date: today,
-          models: ["gpt-5-codex"],
-          inputTokens: 2000,
-          outputTokens: 800,
-          cacheCreationTokens: 0,
-          cacheReadTokens: 0,
-          totalTokens: 2800,
-          costUSD: 3.0,
-        },
-      ],
+    mockCollectCodexUsageAsync.mockResolvedValue(codexOutput(
+      [codexEntry(today)],
+      {
       anomalies: [
         {
           date: today,
@@ -602,7 +629,8 @@ describe("pushCommand", () => {
           },
         },
       ],
-    });
+      },
+    ));
 
     mockApiRequest.mockResolvedValue({
       results: [

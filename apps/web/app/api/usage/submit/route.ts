@@ -7,6 +7,8 @@ import { rateLimit } from "@/lib/rate-limit";
 import type { UsageSubmitRequest, UsageSubmitResponse, CcusageDailyEntry, ModelBreakdownEntry } from "@/types";
 
 const MAX_BACKFILL_DAYS = 30;
+const TRUSTED_CODEX_COLLECTOR = "straude-codex-native-v1";
+const LEGACY_DEVICE_ID = "00000000-0000-0000-0000-000000000000";
 
 function isValidDate(dateStr: string): boolean {
   const match = dateStr.match(/^(\d{4})-(\d{2})-(\d{2})$/);
@@ -164,6 +166,7 @@ export async function POST(request: Request) {
 
   const deviceId = body.device_id;
   const deviceName = body.device_name;
+  const isTrustedCodexCorrection = body.collector?.codex === TRUSTED_CODEX_COLLECTOR;
 
   if (!deviceId) {
     return NextResponse.json(
@@ -189,7 +192,9 @@ export async function POST(request: Request) {
       let usage: { id: string } | null = null;
       let usageErrorMessage: string | null = null;
 
-      // Guard against decreasing values (e.g., ccusage log rotation)
+      // Guard against decreasing values (e.g., ccusage log rotation). The native
+      // Codex collector is allowed to lower totals because it repairs inflated
+      // rows produced by the older upstream Codex aggregation behavior.
       const { data: existingDevice } = await db
         .from("device_usage")
         .select("cost_usd")
@@ -198,8 +203,12 @@ export async function POST(request: Request) {
         .eq("device_id", deviceId)
         .maybeSingle();
 
-      // Only upsert if new data is >= existing (prevent overwrite with lower values)
-      if (!existingDevice || entry.data.costUSD >= Number(existingDevice.cost_usd)) {
+      const mayOverwriteDevice = !existingDevice
+        || entry.data.costUSD >= Number(existingDevice.cost_usd)
+        || isTrustedCodexCorrection;
+
+      // Only upsert if new data is >= existing, unless this is a trusted repair.
+      if (mayOverwriteDevice) {
         const { error: deviceError } = await db
           .from("device_usage")
           .upsert(
@@ -218,6 +227,7 @@ export async function POST(request: Request) {
               model_breakdown: entry.data.modelBreakdown ?? null,
               session_count: 1,
               raw_hash: body.hash ?? null,
+              collector_meta: body.collector ?? null,
               updated_at: new Date().toISOString(),
             },
             { onConflict: "user_id,date,device_id" },
@@ -230,10 +240,19 @@ export async function POST(request: Request) {
         }
       }
 
+      if (isTrustedCodexCorrection) {
+        await db
+          .from("device_usage")
+          .delete()
+          .eq("user_id", userId)
+          .eq("date", entry.date)
+          .eq("device_id", LEGACY_DEVICE_ID);
+      }
+
       // Backfill legacy data: if daily_usage exists but has no device_usage rows,
       // the data was written before device tracking. Insert it as a "legacy" device
       // so the aggregation doesn't discard it.
-      if (existing) {
+      if (existing && !isTrustedCodexCorrection) {
         const { count: deviceCount } = await db
           .from("device_usage")
           .select("id", { count: "exact", head: true })
@@ -250,7 +269,7 @@ export async function POST(request: Request) {
           if (legacyRow) {
             await db.from("device_usage").insert({
               user_id: userId,
-              device_id: "00000000-0000-0000-0000-000000000000",
+              device_id: LEGACY_DEVICE_ID,
               device_name: "legacy",
               date: entry.date,
               cost_usd: legacyRow.cost_usd,
@@ -263,6 +282,7 @@ export async function POST(request: Request) {
               model_breakdown: legacyRow.model_breakdown ?? null,
               session_count: 1,
               raw_hash: legacyRow.raw_hash ?? null,
+              collector_meta: null,
               updated_at: new Date().toISOString(),
             });
           }
@@ -299,6 +319,7 @@ export async function POST(request: Request) {
             session_count: agg.session_count,
             is_verified: isVerified,
             raw_hash: body.hash ?? null,
+            collector_meta: body.collector ?? null,
             updated_at: new Date().toISOString(),
           },
           { onConflict: "user_id,date" },

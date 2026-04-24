@@ -22,8 +22,8 @@ Commands:
   auto               Show auto-push status or logs
 
 Push options:
-  --date YYYY-MM-DD  Push a specific date (within last 7 days)
-  --days N           Push last N days (max 7)
+  --date YYYY-MM-DD  Push a specific date (within last 30 days)
+  --days N           Push last N days (max 30)
   --dry-run          Preview without posting
   --timeout N        Subprocess timeout in seconds (default: 240)
   --auto             Enable daily auto-push (OS scheduler)

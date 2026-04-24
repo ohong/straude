@@ -13,6 +13,7 @@ export interface StraudeConfig {
   username: string;
   api_url: string;
   last_push_date?: string;
+  codex_native_repair_completed_at?: string;
   device_id?: string;
   device_name?: string;
   auto_push?: AutoPushConfig;
@@ -29,6 +30,7 @@ export function loadConfig(): StraudeConfig | null {
       username: parsed.username ?? "",
       api_url: parsed.api_url ?? DEFAULT_API_URL,
       last_push_date: parsed.last_push_date ?? undefined,
+      codex_native_repair_completed_at: parsed.codex_native_repair_completed_at ?? undefined,
       device_id: parsed.device_id ?? undefined,
       device_name: parsed.device_name ?? undefined,
       auto_push: parsed.auto_push ?? undefined,
