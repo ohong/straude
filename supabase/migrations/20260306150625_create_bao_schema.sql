@@ -83,6 +83,15 @@ LANGUAGE plpgsql
 SECURITY DEFINER SET search_path = ''
 AS $$
 BEGIN
+  INSERT INTO public.users (id, github_username, avatar_url, timezone)
+  VALUES (
+    NEW.id,
+    NEW.raw_user_meta_data ->> 'user_name',
+    NEW.raw_user_meta_data ->> 'avatar_url',
+    COALESCE(NEW.raw_user_meta_data ->> 'timezone', 'UTC')
+  )
+  ON CONFLICT (id) DO NOTHING;
+
   INSERT INTO public.profiles (id, display_name, avatar_url)
   VALUES (
     NEW.id,
