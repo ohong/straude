@@ -6,7 +6,11 @@ import { loginCommand } from "./login.js";
 import { apiRequest } from "../lib/api.js";
 import { runCcusageRawAsync, parseCcusageOutput } from "../lib/ccusage.js";
 import type { CcusageDailyEntry, ModelBreakdownEntry } from "../lib/ccusage.js";
-import { runCodexRawAsync, parseCodexOutput } from "../lib/codex.js";
+import {
+  CODEX_NATIVE_COLLECTOR,
+  collectCodexUsageAsync,
+  hasCodexLogs,
+} from "../lib/codex-native.js";
 import { MAX_BACKFILL_DAYS, DEFAULT_SYNC_DAYS } from "../config.js";
 import { Spinner } from "../lib/spinner.js";
 import type { DashboardData as DashboardResponse } from "../components/PushSummary.js";
@@ -18,6 +22,10 @@ interface UsageSubmitRequest {
     data: CcusageDailyEntry;
   }>;
   hash?: string;
+  collector?: {
+    claude?: "ccusage-v18";
+    codex?: typeof CODEX_NATIVE_COLLECTOR;
+  };
   source: "cli" | "web";
   device_id?: string;
   device_name?: string;
@@ -174,6 +182,9 @@ export async function pushCommand(options: PushOptions, apiUrlOverride?: string)
 
   const today = new Date();
   const todayStr = formatDate(today);
+  const shouldRunCodexRepair = !options.date
+    && !config.codex_native_repair_completed_at
+    && await hasCodexLogs();
 
   let sinceDate: Date;
   let untilDate: Date;
@@ -190,6 +201,11 @@ export async function pushCommand(options: PushOptions, apiUrlOverride?: string)
     }
     sinceDate = target;
     untilDate = target;
+  } else if (shouldRunCodexRepair) {
+    sinceDate = new Date(today);
+    sinceDate.setDate(sinceDate.getDate() - MAX_BACKFILL_DAYS + 1);
+    untilDate = today;
+    console.log(`Repairing Codex totals with a one-time ${MAX_BACKFILL_DAYS}-day resync...`);
   } else if (options.days) {
     const days = Math.min(options.days, MAX_BACKFILL_DAYS);
     sinceDate = new Date(today);
@@ -234,9 +250,20 @@ export async function pushCommand(options: PushOptions, apiUrlOverride?: string)
   // Run ccusage + codex in parallel — the single biggest perf win
   const scanSpinner = new Spinner("scan");
   scanSpinner.start();
-  const [claudeResult, codexRaw] = await Promise.all([
+  let codexCollectFailed = false;
+  const [claudeResult, codexParsed] = await Promise.all([
     runCcusageRawAsync(sinceStr, untilStr, options.timeoutMs).catch((err: Error) => err),
-    runCodexRawAsync(sinceStr, untilStr, options.timeoutMs),
+    collectCodexUsageAsync(sinceStr, untilStr).catch(() => {
+      codexCollectFailed = true;
+      return {
+        data: [],
+        anomalies: [],
+        entryMeta: [],
+        fingerprint: "",
+        scannedFiles: 0,
+        parsedEvents: 0,
+      };
+    }),
   ]);
   scanSpinner.stop();
 
@@ -264,8 +291,7 @@ export async function pushCommand(options: PushOptions, apiUrlOverride?: string)
     }
   }
 
-  // Codex data — silent on fetch failure (empty string), but surface parser anomalies.
-  const codexParsed = codexRaw ? parseCodexOutput(codexRaw) : { data: [], anomalies: [], entryMeta: [] };
+  // Codex data — native collector failures are silent, but parser anomalies are surfaced.
   const allAnomalies = [...claudeAnomalies, ...(codexParsed.anomalies ?? [])];
   const mediumLowCount = allAnomalies.filter((a) => a.confidence !== "high").length;
   if (mediumLowCount > 0) {
@@ -328,9 +354,12 @@ export async function pushCommand(options: PushOptions, apiUrlOverride?: string)
     return;
   }
 
-  // Compute SHA-256 hash of concatenated raw JSONs
-  const hashInput = codexRaw ? claudeRaw + codexRaw : claudeRaw;
+  // Compute SHA-256 hash of Claude raw JSON plus native Codex aggregate fingerprint.
+  const hashInput = codexParsed.fingerprint ? claudeRaw + codexParsed.fingerprint : claudeRaw;
   const hash = createHash("sha256").update(hashInput).digest("hex");
+  const collector: UsageSubmitRequest["collector"] = {};
+  if (claudeEntries.length > 0) collector.claude = "ccusage-v18";
+  if (codexEntries.length > 0) collector.codex = CODEX_NATIVE_COLLECTOR;
 
   const body: UsageSubmitRequest = {
     entries: entries.map((entry) => ({
@@ -338,6 +367,7 @@ export async function pushCommand(options: PushOptions, apiUrlOverride?: string)
       data: entry,
     })),
     hash,
+    collector: Object.keys(collector).length > 0 ? collector : undefined,
     source: "cli",
     device_id: config.device_id,
     device_name: config.device_name,
@@ -386,7 +416,13 @@ export async function pushCommand(options: PushOptions, apiUrlOverride?: string)
     (latest, e) => (e.date > latest ? e.date : latest),
     entries[0]!.date,
   );
-  updateLastPushDate(latestDate);
+  if (shouldRunCodexRepair && !codexCollectFailed && blockedDates.size === 0) {
+    config.codex_native_repair_completed_at = new Date().toISOString();
+    config.last_push_date = latestDate;
+    saveConfig(config);
+  } else {
+    updateLastPushDate(latestDate);
+  }
 
   const totalCost = entries.reduce((sum, e) => sum + e.costUSD, 0);
   const totalTokens = entries.reduce((sum, e) => sum + e.totalTokens, 0);

@@ -39,6 +39,7 @@ export interface DailyUsage {
   session_count: number;
   is_verified: boolean;
   raw_hash: string | null;
+  collector_meta?: UsageCollectorMeta | null;
   created_at: string;
   updated_at: string;
 }
@@ -183,8 +184,14 @@ export interface DeviceUsage {
   model_breakdown: ModelBreakdownEntry[] | null;
   session_count: number;
   raw_hash: string | null;
+  collector_meta?: UsageCollectorMeta | null;
   created_at: string;
   updated_at: string;
+}
+
+export interface UsageCollectorMeta {
+  claude?: "ccusage-v18" | string;
+  codex?: "straude-codex-native-v1" | string;
 }
 
 // API request/response types
@@ -194,6 +201,7 @@ export interface UsageSubmitRequest {
     data: CcusageDailyEntry;
   }>;
   hash?: string;
+  collector?: UsageCollectorMeta;
   source: "cli" | "web";
   device_id?: string;
   device_name?: string;
