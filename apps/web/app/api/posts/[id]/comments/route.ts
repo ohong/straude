@@ -99,6 +99,19 @@ export async function POST(request: NextRequest, context: RouteContext) {
     );
   }
 
+  const { data: post, error: postError } = await supabase
+    .from("posts")
+    .select("id, user_id")
+    .eq("id", id)
+    .single();
+
+  if (postError || !post) {
+    return NextResponse.json(
+      { error: "Post not found" },
+      { status: 404 }
+    );
+  }
+
   if (parentCommentId) {
     const { data: parentComment, error: parentCommentError } = await supabase
       .from("comments")
@@ -132,11 +145,6 @@ export async function POST(request: NextRequest, context: RouteContext) {
   // Defer notifications and achievements after the response is sent
   after(async () => {
     // Insert comment notification (skip self-comment)
-    const { data: post } = await supabase
-      .from("posts")
-      .select("user_id")
-      .eq("id", id)
-      .single();
     if (post && post.user_id !== user.id) {
       await supabase.from("notifications").insert({
         user_id: post.user_id,
