@@ -5,6 +5,10 @@ on:
     branches: [main]
   pull_request:
 
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
 jobs:
   ci:
     runs-on: ubuntu-latest
@@ -27,6 +31,20 @@ jobs:
         run: bun install
         env:
           BUN_INSTALL_CACHE_DIR: ~/.bun/install/cache
+
+      - name: Phantom dependency check (apps/web)
+        run: |
+          set -euo pipefail
+          RESULT=$(bunx depcheck --json --skip-missing=false \
+            --ignores="@types/*,@tailwindcss/postcss,tailwindcss,eslint,eslint-config-next,@playwright/test,@testing-library/*,@vitejs/plugin-react,jsdom,typescript,vitest,@types/node")
+          MISSING=$(echo "$RESULT" | jq -r '.missing | keys | length')
+          if [ "$MISSING" -gt 0 ]; then
+            echo "::error::Phantom dependencies found (imported but not in package.json):"
+            echo "$RESULT" | jq '.missing'
+            exit 1
+          fi
+          echo "No phantom dependencies."
+        working-directory: apps/web
 
       - name: Typecheck
         run: bun run typecheck
