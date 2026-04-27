@@ -2,7 +2,8 @@
 
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
-import { useState, useEffect, useRef, useCallback } from "react";
+import { useState, useEffect, useRef } from "react";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
 import {
   Bell,
   Plus,
@@ -16,8 +17,10 @@ import { Avatar } from "@/components/ui/Avatar";
 import { cn } from "@/lib/utils/cn";
 import { BoltIcon } from "@/components/landing/icons";
 import { createClient } from "@/lib/supabase/client";
+import { fetchAppCounts } from "@/lib/query/app-counts";
+import { fetchNotifications } from "@/lib/query/notifications";
+import { queryKeys } from "@/lib/query/keys";
 import { timeAgo, notificationMessage, notificationHref } from "@/lib/utils/notifications";
-import type { Notification } from "@/types";
 
 interface TopHeaderProps {
   username: string | null;
@@ -47,9 +50,22 @@ export function TopHeader({
   const profileRef = useRef<HTMLDivElement>(null);
   const notifRef = useRef<HTMLDivElement>(null);
 
-  const [notifications, setNotifications] = useState<Notification[]>([]);
-  const [unreadCount, setUnreadCount] = useState(0);
-  const [messageUnreadCount, setMessageUnreadCount] = useState(0);
+  const queryClient = useQueryClient();
+  const notificationsQuery = useQuery({
+    queryKey: queryKeys.notifications(),
+    queryFn: fetchNotifications,
+  });
+  const appCountsQuery = useQuery({
+    queryKey: queryKeys.appCounts(),
+    queryFn: fetchAppCounts,
+  });
+
+  const notifications = notificationsQuery.data?.notifications ?? [];
+  const unreadCount =
+    appCountsQuery.data?.notification_unread_count ??
+    notificationsQuery.data?.unread_count ??
+    0;
+  const messageUnreadCount = appCountsQuery.data?.message_unread_count ?? 0;
 
   // Close dropdowns on outside click or Escape
   useEffect(() => {
@@ -78,29 +94,15 @@ export function TopHeader({
     };
   }, [profileOpen, notifOpen]);
 
-  const fetchNotifications = useCallback(async () => {
-    const res = await fetch("/api/notifications");
-    if (!res.ok) return;
-    const data = await res.json();
-    setNotifications(data.notifications ?? []);
-    setUnreadCount(data.unread_count ?? 0);
-  }, []);
-
-  const fetchMessageUnreadCount = useCallback(async () => {
-    const res = await fetch("/api/messages/threads?limit=1");
-    if (!res.ok) return;
-    const data = await res.json();
-    setMessageUnreadCount(data.unread_count ?? 0);
-  }, []);
-
   // Initial unread count fetch + mark as returning user + listen for external changes
   useEffect(() => {
     function refreshCounts() {
-      void fetchNotifications();
-      void fetchMessageUnreadCount();
+      void queryClient.invalidateQueries({ queryKey: queryKeys.appCounts() });
+      void queryClient.invalidateQueries({
+        queryKey: queryKeys.notifications(),
+      });
     }
 
-    const initialRefresh = window.setTimeout(refreshCounts, 0);
     try { localStorage.setItem("straude_returning", "1"); } catch {}
     function handleSync() {
       refreshCounts();
@@ -108,11 +110,10 @@ export function TopHeader({
     window.addEventListener("notifications-updated", handleSync);
     window.addEventListener("messages-updated", handleSync);
     return () => {
-      window.clearTimeout(initialRefresh);
       window.removeEventListener("notifications-updated", handleSync);
       window.removeEventListener("messages-updated", handleSync);
     };
-  }, [fetchMessageUnreadCount, fetchNotifications]);
+  }, [queryClient]);
 
   async function handleLogout() {
     const supabase = createClient();
@@ -126,8 +127,21 @@ export function TopHeader({
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ all: true }),
     });
-    setNotifications((prev) => prev.map((n) => ({ ...n, read: true })));
-    setUnreadCount(0);
+    queryClient.setQueryData<Awaited<ReturnType<typeof fetchNotifications>>>(
+      queryKeys.notifications(),
+      (previous) => ({
+        notifications:
+          previous?.notifications.map((n) => ({ ...n, read: true })) ?? [],
+        unread_count: 0,
+      }),
+    );
+    queryClient.setQueryData<Awaited<ReturnType<typeof fetchAppCounts>>>(
+      queryKeys.appCounts(),
+      (previous) => ({
+        notification_unread_count: 0,
+        message_unread_count: previous?.message_unread_count ?? 0,
+      }),
+    );
   }
 
   return (
@@ -195,7 +209,11 @@ export function TopHeader({
               type="button"
               onClick={() => {
                 setNotifOpen((v) => {
-                  if (!v) fetchNotifications();
+                  if (!v) {
+                    void queryClient.invalidateQueries({
+                      queryKey: queryKeys.notifications(),
+                    });
+                  }
                   return !v;
                 });
               }}
@@ -237,10 +255,31 @@ export function TopHeader({
                         onClick={() => {
                           setNotifOpen(false);
                           if (!n.read) {
-                            setNotifications((prev) =>
-                              prev.map((x) => x.id === n.id ? { ...x, read: true } : x),
+                            queryClient.setQueryData<
+                              Awaited<ReturnType<typeof fetchNotifications>>
+                            >(queryKeys.notifications(), (previous) => ({
+                              notifications:
+                                previous?.notifications.map((x) =>
+                                  x.id === n.id ? { ...x, read: true } : x,
+                                ) ?? [],
+                              unread_count: Math.max(
+                                0,
+                                (previous?.unread_count ?? unreadCount) - 1,
+                              ),
+                            }));
+                            queryClient.setQueryData<
+                              Awaited<ReturnType<typeof fetchAppCounts>>
+                            >(queryKeys.appCounts(), (previous) =>
+                              previous
+                                ? {
+                                    ...previous,
+                                    notification_unread_count: Math.max(
+                                      0,
+                                      previous.notification_unread_count - 1,
+                                    ),
+                                  }
+                                : previous,
                             );
-                            setUnreadCount((c) => Math.max(0, c - 1));
                             fetch("/api/notifications", {
                               method: "PATCH",
                               headers: { "Content-Type": "application/json" },
