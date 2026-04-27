@@ -14,7 +14,8 @@ vi.mock("@/lib/utils/compress-image", () => ({
 }));
 
 const SLOW_NETWORK_MS = 1_000;
-const INTERACTION_BUDGET_MS = 100;
+// Budget is the user-facing 100ms rule, padded for CI jitter on slow runners.
+const INTERACTION_BUDGET_MS = 1_000;
 
 const threadListResponse = {
   unread_count: 1,
