@@ -26,6 +26,10 @@ function isValidStoragePath(path: string) {
   return path.length > 0 && !path.startsWith("/") && !path.includes("..");
 }
 
+export function isStoragePathOwnedByUser(path: string, userId: string): boolean {
+  return isValidStoragePath(path) && path.startsWith(`${userId}/`);
+}
+
 export function extractPublicStoragePath(
   url: string,
   bucket: StorageBucket,

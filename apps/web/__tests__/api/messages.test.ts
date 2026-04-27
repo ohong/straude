@@ -389,6 +389,38 @@ describe("POST /api/messages", () => {
     expect(response.status).toBe(400);
     expect(json.error).toContain("Straude-managed DM storage uploads");
   });
+
+  it("rejects attachment paths owned by another user", async () => {
+    const authClient: Record<string, any> = {
+      auth: {
+        getUser: vi.fn().mockResolvedValue({
+          data: { user: { id: "user-1" } },
+          error: null,
+        }),
+      },
+    };
+
+    (createClient as any).mockResolvedValue(authClient);
+
+    const response = await messagePOST(
+      makeRequest("POST", "/api/messages", {
+        recipientUsername: "alice",
+        attachments: [
+          {
+            bucket: "dm-attachments",
+            path: "user-2/file.png",
+            name: "file.png",
+            type: "image/png",
+            size: 123,
+          },
+        ],
+      })
+    );
+    const json = await response.json();
+
+    expect(response.status).toBe(400);
+    expect(json.error).toBe("Attachments must belong to the sending user");
+  });
 });
 
 describe("message attachments", () => {
@@ -495,6 +527,113 @@ describe("message attachments", () => {
 
     expect(response.status).toBe(200);
     expect(json.messages[0].attachments[0].url).toContain("/storage/v1/object/sign/dm-attachments/");
+  });
+
+  it("does not sign attachments that do not belong to the message sender", async () => {
+    const authClient: Record<string, any> = {
+      auth: {
+        getUser: vi.fn().mockResolvedValue({
+          data: { user: { id: "user-1" } },
+          error: null,
+        }),
+      },
+    };
+    const createSignedUrl = vi.fn().mockResolvedValue({
+      data: { signedUrl: "https://example.supabase.co/storage/v1/object/sign/dm-attachments/user-2/file.png?token=abc" },
+      error: null,
+    });
+    const serviceClient: Record<string, any> = {
+      from: vi.fn().mockImplementation((table: string) => {
+        if (table === "users") {
+          return {
+            select: vi.fn().mockReturnValue({
+              eq: vi.fn().mockImplementation((field: string, value: string) => {
+                if (field === "username" && value === "alice") {
+                  return {
+                    maybeSingle: vi.fn().mockResolvedValue({
+                      data: {
+                        id: "user-2",
+                        username: "alice",
+                        avatar_url: null,
+                        display_name: "Alice",
+                        is_public: true,
+                      },
+                      error: null,
+                    }),
+                  };
+                }
+                if (field === "id" && value === "user-1") {
+                  return {
+                    single: vi.fn().mockResolvedValue({
+                      data: {
+                        id: "user-1",
+                        username: "bob",
+                        avatar_url: null,
+                        display_name: "Bob",
+                      },
+                      error: null,
+                    }),
+                  };
+                }
+                throw new Error(`Unexpected users lookup ${field}:${value}`);
+              }),
+            }),
+          };
+        }
+
+        if (table === "direct_messages") {
+          return {
+            select: vi.fn().mockReturnValue({
+              or: vi.fn().mockReturnValue({
+                order: vi.fn().mockReturnValue({
+                  limit: vi.fn().mockResolvedValue({
+                    data: [
+                      {
+                        id: "m-2",
+                        sender_id: "user-2",
+                        recipient_id: "user-1",
+                        content: null,
+                        attachments: [
+                          {
+                            bucket: "dm-attachments",
+                            path: "user-3/file.png",
+                            name: "file.png",
+                            type: "image/png",
+                            size: 123,
+                          },
+                        ],
+                        read_at: null,
+                        created_at: "2026-03-06T12:00:00.000Z",
+                      },
+                    ],
+                    error: null,
+                  }),
+                }),
+              }),
+            }),
+          };
+        }
+
+        throw new Error(`Unexpected table ${table}`);
+      }),
+      storage: {
+        from: vi.fn().mockReturnValue({
+          createSignedUrl,
+        }),
+      },
+    };
+
+    (createClient as any).mockResolvedValue(authClient);
+    (getServiceClient as any).mockReturnValue(serviceClient);
+
+    const response = await conversationGET(
+      makeRequest("GET", "/api/messages?with=alice")
+    );
+    const json = await response.json();
+
+    expect(response.status).toBe(200);
+    expect(json.messages[0].attachments).toEqual([]);
+    expect(createSignedUrl).not.toHaveBeenCalled();
   });
 });
 
