@@ -4,14 +4,15 @@ import {
 } from "./heatmap";
 import { getShareTheme } from "@/lib/share-themes";
 import type { GithubCardData } from "./github-card-data";
+import { formatCurrency } from "@/lib/utils/format";
 
 type ThemeId = "light" | "dark";
 
 function formatCost(cost: number): string {
   if (cost >= 100_000) return `$${(cost / 1_000).toFixed(0)}k`;
   if (cost >= 10_000) return `$${(cost / 1_000).toFixed(1)}k`;
-  if (cost >= 1_000) return `$${cost.toFixed(0)}`;
-  return `$${cost.toFixed(2)}`;
+  if (cost >= 1_000) return `$${Math.round(cost).toLocaleString("en-US")}`;
+  return `$${formatCurrency(cost)}`;
 }
 
 function StatBlock({

@@ -15,7 +15,7 @@ import { FeedList } from "@/components/app/feed/FeedList";
 import { FollowButton } from "@/components/app/profile/FollowButton";
 import { InviteButton } from "@/components/app/profile/InviteButton";
 import { CrewPopover, type CrewMember } from "@/components/app/profile/CrewPopover";
-import { formatTokens } from "@/lib/utils/format";
+import { formatCurrency, formatTokens } from "@/lib/utils/format";
 import { normalizeCommentPreview, type JoinedUserSummary, type RawCommentPreviewRow } from "@/lib/feed-normalization";
 import { firstRelation } from "@/lib/utils/first-relation";
 import type { CommentPreviewItem, FeedPostRow, Post, UserSummary } from "@/types";
@@ -393,7 +393,7 @@ export default async function ProfilePage({
           <div>
             <p className="text-[0.7rem] uppercase tracking-widest text-muted">Total Spend</p>
             <p className="font-[family-name:var(--font-mono)] text-lg font-medium tabular-nums text-accent">
-              ${totalSpend.toFixed(2)}
+              ${formatCurrency(totalSpend)}
             </p>
           </div>
           {(crewMembers ?? []).length > 0 && (

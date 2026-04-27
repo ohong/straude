@@ -1,6 +1,6 @@
 "use client";
 
-import { formatTokens, getCellColor } from "@/lib/utils/format";
+import { formatCurrency, formatTokens, getCellColor } from "@/lib/utils/format";
 import type { RecapData } from "@/lib/utils/recap";
 import { getBackgroundById, DEFAULT_BACKGROUND_ID } from "@/lib/recap-backgrounds";
 
@@ -82,7 +82,7 @@ export function RecapCard({
             className="font-[family-name:var(--font-mono)] text-5xl font-bold tabular-nums text-accent sm:text-6xl"
             style={{ letterSpacing: "-0.03em" }}
           >
-            ${data.total_cost.toFixed(2)}
+            ${formatCurrency(data.total_cost)}
           </p>
           <p
             className="mt-1 text-xs font-medium uppercase tracking-widest"

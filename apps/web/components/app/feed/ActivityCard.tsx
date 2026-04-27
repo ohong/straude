@@ -8,7 +8,7 @@ import { ImageGrid } from "@/components/app/shared/ImageGrid";
 import { ImageLightbox } from "@/components/app/shared/ImageLightbox";
 import { ShareMenu } from "./ShareMenu";
 import { cn } from "@/lib/utils/cn";
-import { formatTokens } from "@/lib/utils/format";
+import { formatCurrency, formatTokens } from "@/lib/utils/format";
 import { mentionsToMarkdownLinks } from "@/lib/utils/mentions";
 import type { Post, Comment, ModelBreakdownEntry } from "@/types";
 import dynamic from "next/dynamic";
@@ -384,7 +384,7 @@ export function ActivityCard({ post, userId, hideShareMenu }: { post: Post; user
               <div>
                 <p className="text-[0.7rem] uppercase tracking-widest text-muted">Cost</p>
                 <p className="font-[family-name:var(--font-mono)] text-[1.1rem] font-medium tabular-nums text-accent">
-                  ${Number(usage.cost_usd).toFixed(2)}
+                  ${formatCurrency(usage.cost_usd)}
                 </p>
               </div>
             ) : (

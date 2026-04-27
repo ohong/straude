@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { Flame } from "lucide-react";
-import { formatTokens } from "@/lib/utils/format";
+import { formatCurrency, formatTokens } from "@/lib/utils/format";
 import { Avatar } from "@/components/ui/Avatar";
 
 interface SidebarProps {
@@ -119,7 +119,7 @@ export function Sidebar({
         </p>
         <p className="mt-1 text-xs text-muted">Output tokens</p>
         <p className="mt-3 font-[family-name:var(--font-mono)] text-lg font-medium text-accent">
-          ${totalCost.toFixed(2)}
+          ${formatCurrency(totalCost)}
         </p>
         <p className="text-xs text-muted">Total spend</p>
       </div>

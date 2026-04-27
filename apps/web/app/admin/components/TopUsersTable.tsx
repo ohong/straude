@@ -1,6 +1,6 @@
 "use client";
 
-import { formatTokens } from "@/lib/utils/format";
+import { formatCurrency, formatTokens } from "@/lib/utils/format";
 import { useAdminTheme } from "./AdminShell";
 
 interface TopUser {
@@ -114,7 +114,7 @@ export function TopUsersTable({ users }: { users: TopUser[] }) {
                   className="px-5 py-3 text-right font-mono text-sm font-medium tabular-nums"
                   style={{ color: "var(--admin-accent)" }}
                 >
-                  ${user.total_spend.toFixed(2)}
+                  ${formatCurrency(user.total_spend)}
                 </td>
                 <td
                   className="hidden px-5 py-3 text-right font-mono text-sm tabular-nums sm:table-cell"

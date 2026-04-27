@@ -2,7 +2,7 @@ import Link from "next/link";
 import { Navbar } from "@/components/landing/Navbar";
 import { Footer } from "@/components/landing/Footer";
 import { getOpenStatsForPage } from "@/lib/open-stats";
-import { formatTokens } from "@/lib/utils/format";
+import { formatCurrency, formatTokens } from "@/lib/utils/format";
 import type { Metadata } from "next";
 
 export const revalidate = 86400; // refresh once per day
@@ -36,7 +36,7 @@ function fmtUsd(n: number): string {
 
 function fmtUsdDecimal(n: number): string {
   if (n >= 100) return `$${Math.round(n).toLocaleString("en-US")}`;
-  return `$${n.toFixed(2)}`;
+  return `$${formatCurrency(n)}`;
 }
 
 function segmentLabel(seg: string): string {

@@ -8,6 +8,7 @@ import { HalftoneCanvas } from "@/components/landing/HalftoneCanvas";
 import { RefCookie } from "./ref-cookie";
 import { Flame } from "lucide-react";
 import type { Metadata } from "next";
+import { formatCurrency } from "@/lib/utils/format";
 
 export const revalidate = 0;
 
@@ -58,7 +59,7 @@ export async function generateMetadata({
 
   const description =
     totalSpend > 0
-      ? `@${username} has spent $${totalSpend.toFixed(2)} on ${primaryTool}. Think you can keep up?`
+      ? `@${username} has spent $${formatCurrency(totalSpend)} on ${primaryTool}. Think you can keep up?`
       : `@${username} just joined Straude. Race them to the top.`;
 
   return {
@@ -152,7 +153,7 @@ export default async function JoinPage({
   let subline: string;
 
   if (totalSpend > 0) {
-    headline = `@${username} has spent $${totalSpend.toFixed(2)} on ${primaryTool}.`;
+    headline = `@${username} has spent $${formatCurrency(totalSpend)} on ${primaryTool}.`;
     subline = "Think you can keep up?";
   } else if (streak > 0) {
     headline = `@${username} has a ${streak}-day streak going.`;
@@ -206,7 +207,7 @@ export default async function JoinPage({
                   This Week
                 </p>
                 <p className="mt-1 font-mono text-base font-medium tabular-nums text-accent sm:text-lg">
-                  ${weeklySpend.toFixed(2)}
+                  ${formatCurrency(weeklySpend)}
                 </p>
               </div>
               <div>
@@ -214,7 +215,7 @@ export default async function JoinPage({
                   {monthName}
                 </p>
                 <p className="mt-1 font-mono text-base font-medium tabular-nums text-accent sm:text-lg">
-                  ${monthlySpend.toFixed(2)}
+                  ${formatCurrency(monthlySpend)}
                 </p>
               </div>
             </div>

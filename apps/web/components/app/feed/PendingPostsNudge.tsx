@@ -4,6 +4,7 @@ import { useState, useEffect } from "react";
 import Link from "next/link";
 import { X } from "lucide-react";
 import type { Post } from "@/types";
+import { formatCurrency } from "@/lib/utils/format";
 
 const STORAGE_KEY = "straude_nudge_dismissed";
 
@@ -89,7 +90,7 @@ export function PendingPostsNudge({ posts }: { posts: Post[] }) {
                 <span>{formatDate(post.daily_usage?.date ?? post.created_at)}</span>
                 <span>{primaryModel(post.daily_usage?.models)}</span>
                 {post.daily_usage?.is_verified && post.daily_usage.cost_usd > 0 && (
-                  <span>${post.daily_usage.cost_usd.toFixed(2)}</span>
+                  <span>${formatCurrency(post.daily_usage.cost_usd)}</span>
                 )}
               </div>
               <span className="text-accent text-xs font-medium">

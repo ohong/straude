@@ -1,5 +1,13 @@
 import { getHeatmapCellColor } from "@/lib/share-assets/heatmap";
 
+export function formatCurrency(n: number | null | undefined): string {
+  const value = Number(n ?? 0);
+  return value.toLocaleString("en-US", {
+    minimumFractionDigits: 2,
+    maximumFractionDigits: 2,
+  });
+}
+
 export function formatTokens(n: number): string {
   if (n >= 1_000_000_000) return `${(n / 1_000_000_000).toFixed(1)}B`;
   if (n >= 1_000_000) return `${(n / 1_000_000).toFixed(1)}M`;

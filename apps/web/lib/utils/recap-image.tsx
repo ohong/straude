@@ -1,5 +1,5 @@
 import type { RecapData } from "./recap";
-import { formatTokens, getCellColor } from "./format";
+import { formatCurrency, formatTokens, getCellColor } from "./format";
 
 /** Fill in missing days with $0 entries — only up to today (no future days) */
 function fillContributionDays(
@@ -164,7 +164,7 @@ export function RecapCardImage({
                 lineHeight: 1,
               }}
             >
-              {`$${data.total_cost.toFixed(2)}`}
+              {`$${formatCurrency(data.total_cost)}`}
             </div>
             <div
               style={{
@@ -337,7 +337,7 @@ export function RecapCardImage({
             marginTop: 20,
           }}
         >
-          {`$${data.total_cost.toFixed(2)}`}
+          {`$${formatCurrency(data.total_cost)}`}
         </div>
         <div
           style={{

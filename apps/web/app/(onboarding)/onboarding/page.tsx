@@ -9,6 +9,7 @@ import { Button } from "@/components/ui/Button";
 import { Input } from "@/components/ui/Input";
 import { Textarea } from "@/components/ui/Textarea";
 import { CountryPicker } from "@/components/ui/CountryPicker";
+import { formatCurrency } from "@/lib/utils/format";
 
 const SYNC_COMMAND = "npx straude@latest";
 
@@ -103,7 +104,7 @@ function Step3LogSession({ username }: { username: string }) {
           <div className="rounded border border-border bg-subtle px-4 py-3">
             <p className="text-xs text-muted uppercase tracking-widest">Cost</p>
             <p className="mt-1 text-lg font-semibold text-foreground">
-              ${data.cost_usd?.toFixed(2)}
+              ${formatCurrency(data.cost_usd)}
             </p>
           </div>
           <div className="rounded border border-border bg-subtle px-4 py-3">

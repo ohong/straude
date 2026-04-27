@@ -4,6 +4,7 @@ import { verifyCliToken } from "@/lib/api/cli-auth";
 import { getServiceClient } from "@/lib/supabase/service";
 import { checkAndAwardAchievements } from "@/lib/achievements";
 import { rateLimit } from "@/lib/rate-limit";
+import { formatCurrency } from "@/lib/utils/format";
 import type { UsageSubmitRequest, UsageSubmitResponse, CcusageDailyEntry, ModelBreakdownEntry } from "@/types";
 
 const MAX_BACKFILL_DAYS = 30;
@@ -351,7 +352,7 @@ export async function POST(request: Request) {
       const toolLabels = [claudeLabel, codexLabel].filter(Boolean);
       const modelLabel = toolLabels.length > 0 ? toolLabels.join(" + ") : (hasClaude ? "Claude" : null);
       const dateLabel = new Date(entry.date).toLocaleDateString("en-US", { month: "short", day: "numeric" });
-      const costLabel = agg.cost_usd > 0 ? `, $${agg.cost_usd.toFixed(2)}` : "";
+      const costLabel = agg.cost_usd > 0 ? `, $${formatCurrency(agg.cost_usd)}` : "";
       const autoTitle = modelLabel ? `${dateLabel} — ${modelLabel}${costLabel}` : `${dateLabel}${costLabel}`;
 
       // Create or update post linked to the daily_usage record

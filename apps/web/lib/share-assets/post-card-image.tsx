@@ -1,4 +1,4 @@
-import { formatTokens } from "@/lib/utils/format";
+import { formatCurrency, formatTokens } from "@/lib/utils/format";
 import { getShareModelLabel } from "@/lib/utils/post-share";
 import { getShareTheme, type ShareThemeId } from "@/lib/share-themes";
 
@@ -130,7 +130,7 @@ export function PostCardImage({
   const padding = 52;
   const cost =
     typeof post.cost_usd === "number" && Number.isFinite(post.cost_usd)
-      ? `$${post.cost_usd.toFixed(2)}`
+      ? `$${formatCurrency(post.cost_usd)}`
       : null;
   const input = post.input_tokens > 0 ? `${formatTokens(post.input_tokens)} tokens` : null;
   const output = post.output_tokens > 0 ? `${formatTokens(post.output_tokens)} tokens` : null;
