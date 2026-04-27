@@ -3,7 +3,7 @@
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { cn } from "@/lib/utils/cn";
-import { formatTokens } from "@/lib/utils/format";
+import { formatCurrency, formatTokens } from "@/lib/utils/format";
 import { Avatar } from "@/components/ui/Avatar";
 import { Badge } from "@/components/ui/Badge";
 import { LevelBadge } from "@/components/app/shared/LevelBadge";
@@ -139,7 +139,7 @@ export function LeaderboardTable({
                   </Link>
                 </td>
                 <td className="px-6 py-3 text-right font-mono font-medium tabular-nums text-accent">
-                  ${entry.total_cost.toFixed(2)}
+                  ${formatCurrency(entry.total_cost)}
                 </td>
                 <td className="px-6 py-3 text-right font-mono tabular-nums">
                   {formatTokens(entry.total_output_tokens)}
@@ -198,7 +198,7 @@ export function LeaderboardTable({
             </div>
             <div className="text-right">
               <p className="font-mono text-sm font-medium tabular-nums text-accent">
-                ${entry.total_cost.toFixed(2)}
+                ${formatCurrency(entry.total_cost)}
               </p>
               <p className="font-mono text-xs tabular-nums text-muted">
                 {formatTokens(entry.total_output_tokens)}

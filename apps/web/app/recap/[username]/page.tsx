@@ -1,7 +1,7 @@
 import { notFound } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
 import { getRecapData } from "@/lib/utils/recap";
-import { formatTokens, getCellColor } from "@/lib/utils/format";
+import { formatCurrency, formatTokens, getCellColor } from "@/lib/utils/format";
 import type { Metadata } from "next";
 import Link from "next/link";
 import { getBackgroundById, DEFAULT_BACKGROUND_ID } from "@/lib/recap-backgrounds";
@@ -86,7 +86,7 @@ export default async function PublicRecapPage({
               className="font-[family-name:var(--font-mono)] text-5xl font-bold tabular-nums text-accent"
               style={{ letterSpacing: "-0.03em" }}
             >
-              ${data.total_cost.toFixed(2)}
+              ${formatCurrency(data.total_cost)}
             </p>
             <p
               className="mt-1 text-xs font-medium uppercase tracking-widest"

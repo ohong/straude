@@ -4,6 +4,7 @@
 
 ### Added
 
+- **#6 Product of the Day badge in landing hero.** Small clickable badge at the top of the hero linking to the Straude Product Hunt page (`https://www.producthunt.com/products/straude`). Styled to match the Fastlane reference — bronze medallion, "PRODUCT HUNT" eyebrow, accent-colored headline.
 - **Privacy assurance on onboarding Step 3.** Added a one-liner below the CLI command confirming only aggregate stats leave the machine — prompts, code, and conversations never do. Links to the privacy policy. Targets the sign-up-to-push conversion drop-off for privacy-minded users.
 - **"What Straude cannot access" section on privacy page.** New highlighted callout at the top of `/privacy` explicitly stating zero access to prompts, conversations, code, or file contents. Explains the data pipeline (local ccusage aggregation → daily totals only), links to open-source CLI and `--dry-run` flag for self-verification.
 - **PostHog web analytics.** Integrated `@posthog/next` with automatic pageview tracking via `PostHogPageView`. Events are proxied through `/ingest` rewrites to avoid adblockers. Env var `NEXT_PUBLIC_POSTHOG_KEY` added to Vercel production and preview environments.
@@ -18,6 +19,8 @@
 
 ### Fixed
 
+- **"Most Used" model on share scorecards ignored ranking and always preferred Claude.** `resolvePrimaryModel` in `github-card-data.ts` and `profile-card-data.ts` correctly counted day-occurrences of each model, but then handed the sorted list to `getShareModelLabel`, which short-circuits to "Claude Opus" / "Claude Sonnet" / "Claude Haiku" when any matching model appears anywhere in the array. Result: a primarily-GPT user with even one Opus day was labeled "Claude Opus". Fixed by exporting `prettifyModel` from `lib/utils/post-share.ts` and prettifying the top-ranked model directly. Single-day post share text and post share cards still use `getShareModelLabel` (Claude-tier priority is correct there).
+- **Spend numbers now use thousands separators everywhere.** Added `formatCurrency` helper in `lib/utils/format.ts` and routed all spend displays (profile, leaderboard, feed, recap, sidebar, contribution graph, post pages, onboarding, join page, admin top users, OG/share images, post auto-titles) through it. `$10066.87` now renders as `$10,066.87`.
 - **"Add a company" on `/token-rich` hit RLS policy violation.** The `company_suggestions` INSERT policy was missing or stale on production, so authenticated users saw `new row violates row-level security policy for table "company_suggestions"`. New migration `20260416120000_fix_company_suggestions_rls.sql` recreates the INSERT policy idempotently and adds a SELECT-own-rows policy so `.insert().select().single()` can return the inserted row.
 - **Landing page ticker showing incorrect totals.** The ticker fetched `daily_usage` without a row limit, so Supabase's default 1000-row cap truncated the sums. Now reuses `getOpenStatsForPage()` (same source as `/open` and `/admin`) which aggregates via server-side RPCs. Reduced landing page revalidation from 5 minutes to daily to match.
 - **Skip link now targets landing page main content.** Added `id="main-content"` to the landing `<main>` and auth layout. Skip link was previously only focusable on the app shell.

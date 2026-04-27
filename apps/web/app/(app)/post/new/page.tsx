@@ -4,6 +4,7 @@ import type { Metadata } from "next";
 import { firstRelation } from "@/lib/utils/first-relation";
 import type { DailyUsage } from "@/types";
 import { CopyCommand } from "./CopyCommand";
+import { formatCurrency } from "@/lib/utils/format";
 
 type UneditedPostRow = {
   id: string;
@@ -66,7 +67,7 @@ export default async function NewPostPage() {
                         </p>
                         <p className="mt-0.5 text-xs text-muted">
                           {usage?.cost_usd != null
-                            ? `$${Number(usage.cost_usd).toFixed(2)}`
+                            ? `$${formatCurrency(usage.cost_usd)}`
                             : ""}
                           {usage?.models?.length
                             ? ` \u00b7 ${usage.models.join(", ")}`

@@ -2,6 +2,7 @@ import { ImageResponse } from "next/og";
 import { getServiceClient } from "@/lib/supabase/service";
 import { loadFonts } from "@/lib/og-fonts";
 import { isFirstPartyPublicStorageUrl } from "@/lib/storage";
+import { formatCurrency } from "@/lib/utils/format";
 
 export const alt = "Join Straude";
 export const size = { width: 1200, height: 630 };
@@ -80,7 +81,7 @@ export default async function Image({
   let headline: string;
   let subline: string;
   if (totalSpend > 0) {
-    headline = `@${username} has spent $${totalSpend.toFixed(2)} on ${primaryTool}.`;
+    headline = `@${username} has spent $${formatCurrency(totalSpend)} on ${primaryTool}.`;
     subline = "Think you can keep up?";
   } else if (streak > 0) {
     headline = `@${username} has a ${streak}-day streak going.`;
@@ -100,8 +101,8 @@ export default async function Image({
 
   const finalStats: { label: string; value: string }[] = [];
   if (streak > 0) finalStats.push({ label: "Streak", value: `${streak}d` });
-  finalStats.push({ label: "This Week", value: `$${weeklySpend.toFixed(2)}` });
-  finalStats.push({ label: monthName, value: `$${monthlySpend.toFixed(2)}` });
+  finalStats.push({ label: "This Week", value: `$${formatCurrency(weeklySpend)}` });
+  finalStats.push({ label: monthName, value: `$${formatCurrency(monthlySpend)}` });
 
   return new ImageResponse(
     (

@@ -2,7 +2,7 @@
 
 import { useState, useCallback } from "react";
 import { cn } from "@/lib/utils/cn";
-import { getCellColor } from "@/lib/utils/format";
+import { formatCurrency, getCellColor } from "@/lib/utils/format";
 import { getHeatmapLegend } from "@/lib/share-assets/heatmap";
 import type { ContributionDay } from "@/types";
 
@@ -189,7 +189,7 @@ export function ContributionGraph({ data, onCellClick, className }: Contribution
         >
           <p className="font-normal leading-snug">{tooltip.date}</p>
           <p className="font-mono tabular-nums">
-            ${tooltip.cost.toFixed(2)}
+            ${formatCurrency(tooltip.cost)}
           </p>
         </div>
       )}

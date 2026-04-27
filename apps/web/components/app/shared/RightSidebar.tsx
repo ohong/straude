@@ -161,7 +161,7 @@ export async function RightSidebar({
                   {u.username}
                 </span>
                 <span className="font-[family-name:var(--font-mono)] text-sm text-accent">
-                  ${Number(u.total_cost).toFixed(0)}
+                  ${Math.round(Number(u.total_cost)).toLocaleString("en-US")}
                 </span>
               </Link>
             </li>

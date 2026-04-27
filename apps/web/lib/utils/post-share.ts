@@ -1,5 +1,5 @@
 import type { DailyUsage, Post, User } from "@/types";
-import { formatTokens } from "./format";
+import { formatCurrency, formatTokens } from "./format";
 
 type ShareablePost = Pick<Post, "id" | "title" | "images"> & {
   user?: Pick<User, "username"> | null;
@@ -9,7 +9,7 @@ type ShareablePost = Pick<Post, "id" | "title" | "images"> & {
   > | null;
 };
 
-function prettifyModel(model: string): string {
+export function prettifyModel(model: string): string {
   const normalized = model.trim();
   if (/claude-opus-4/i.test(normalized)) return "Claude Opus";
   if (/claude-sonnet-4/i.test(normalized)) return "Claude Sonnet";
@@ -61,8 +61,8 @@ export function buildPostShareText(post: ShareablePost) {
   if (typeof spend === "number" && Number.isFinite(spend) && spend > 0) {
     details.push(
       post.daily_usage?.is_verified
-        ? `$${spend.toFixed(2)} verified spend`
-        : `$${spend.toFixed(2)} spend`
+        ? `$${formatCurrency(spend)} verified spend`
+        : `$${formatCurrency(spend)} spend`
     );
   }
 

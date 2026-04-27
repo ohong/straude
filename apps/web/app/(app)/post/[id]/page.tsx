@@ -6,6 +6,7 @@ import { PostEditor } from "@/components/app/post/PostEditor";
 import { PostSharePanel } from "@/components/app/post/PostSharePanel";
 import { loadPostComments } from "@/lib/comments";
 import { firstRelation } from "@/lib/utils/first-relation";
+import { formatCurrency } from "@/lib/utils/format";
 import type { AggregateCount, FeedPostRow, UserSummary } from "@/types";
 import type { Metadata } from "next";
 
@@ -67,7 +68,7 @@ export async function generateMetadata({
     post?.description?.trim() ||
     [
       typeof usageRow?.cost_usd === "number"
-        ? `$${usageRow.cost_usd.toFixed(2)} spend`
+        ? `$${formatCurrency(usageRow.cost_usd)} spend`
         : null,
       typeof usageRow?.output_tokens === "number"
         ? `${usageRow.output_tokens.toLocaleString()} output tokens`
