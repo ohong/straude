@@ -1,5 +1,5 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
-import { getShareModelLabel } from "@/lib/utils/post-share";
+import { prettifyModel } from "@/lib/utils/post-share";
 
 export interface GithubCardData {
   username: string;
@@ -41,11 +41,9 @@ function resolvePrimaryModel(
 
   if (counts.size === 0) return "—";
 
-  const topModels = [...counts.entries()]
-    .sort((a, b) => b[1] - a[1])
-    .map(([model]) => model);
+  const topModel = [...counts.entries()].sort((a, b) => b[1] - a[1])[0]?.[0];
 
-  return getShareModelLabel(topModels) ?? "—";
+  return topModel ? prettifyModel(topModel) : "—";
 }
 
 export async function getGithubCardData(

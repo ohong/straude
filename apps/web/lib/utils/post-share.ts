@@ -9,7 +9,7 @@ type ShareablePost = Pick<Post, "id" | "title" | "images"> & {
   > | null;
 };
 
-function prettifyModel(model: string): string {
+export function prettifyModel(model: string): string {
   const normalized = model.trim();
   if (/claude-opus-4/i.test(normalized)) return "Claude Opus";
   if (/claude-sonnet-4/i.test(normalized)) return "Claude Sonnet";
