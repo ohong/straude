@@ -4,6 +4,7 @@
 
 ### Added
 
+- **#6 Product of the Day badge in landing hero.** Small clickable badge at the top of the hero linking to the Straude Product Hunt page (`https://www.producthunt.com/products/straude`). Styled to match the Fastlane reference — bronze medallion, "PRODUCT HUNT" eyebrow, accent-colored headline.
 - **Privacy assurance on onboarding Step 3.** Added a one-liner below the CLI command confirming only aggregate stats leave the machine — prompts, code, and conversations never do. Links to the privacy policy. Targets the sign-up-to-push conversion drop-off for privacy-minded users.
 - **"What Straude cannot access" section on privacy page.** New highlighted callout at the top of `/privacy` explicitly stating zero access to prompts, conversations, code, or file contents. Explains the data pipeline (local ccusage aggregation → daily totals only), links to open-source CLI and `--dry-run` flag for self-verification.
 - **PostHog web analytics.** Integrated `@posthog/next` with automatic pageview tracking via `PostHogPageView`. Events are proxied through `/ingest` rewrites to avoid adblockers. Env var `NEXT_PUBLIC_POSTHOG_KEY` added to Vercel production and preview environments.
