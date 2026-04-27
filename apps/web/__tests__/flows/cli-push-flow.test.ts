@@ -450,18 +450,37 @@ describe("Flow: CLI Push", () => {
     const dailyUsageChain = chainBuilder({ data: { id: "usage-1" }, error: null });
     const postChain = chainBuilder({ data: { id: "post-1" }, error: null });
 
-    // Stateless device_usage mock — routes by method called, not call order:
-    // Guard:  .select().eq().eq().eq().maybeSingle() → { data: null }
-    // Upsert: .upsert({}, {}).select().single()     → { data: { id: "device-2" } }
-    // Fetch:  .select().eq().eq() (awaited)          → { data: rows }
+    // Stateless device_usage mock — routes by query shape, not call order:
+    // Guard:  .select("cost_usd,models").eq().eq().eq().maybeSingle()
+    // Count:  .select("id", { count, head }).eq().eq()
+    // Upsert: .upsert({}, {}).select().single()
+    // Fetch:  .select("cost_usd,...").eq().eq()
     const deviceChain: Record<string, any> = {};
-    const makeSecondEq = () => Object.assign(
-      Promise.resolve({ data: deviceRowsAfterSecondPush, error: null }),
-      { eq: vi.fn(() => ({ maybeSingle: vi.fn(() => Promise.resolve({ data: null, error: null })) })) },
-    );
-    deviceChain.select = vi.fn(() => ({
-      eq: vi.fn(() => ({ eq: vi.fn(makeSecondEq) })),
-    }));
+    deviceChain.select = vi.fn((columns?: string, options?: { count?: string; head?: boolean }) => {
+      if (options?.count === "exact" && options.head) {
+        return {
+          eq: vi.fn(() => ({
+            eq: vi.fn(() => Promise.resolve({ count: 1, data: null, error: null })),
+          })),
+        };
+      }
+      if (columns === "cost_usd,models") {
+        return {
+          eq: vi.fn(() => ({
+            eq: vi.fn(() => ({
+              eq: vi.fn(() => ({
+                maybeSingle: vi.fn(() => Promise.resolve({ data: null, error: null })),
+              })),
+            })),
+          })),
+        };
+      }
+      return {
+        eq: vi.fn(() => ({
+          eq: vi.fn(() => Promise.resolve({ data: deviceRowsAfterSecondPush, error: null })),
+        })),
+      };
+    });
     deviceChain.upsert = vi.fn(() => {
       const sub: Record<string, any> = {};
       sub.select = vi.fn(() => sub);

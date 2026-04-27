@@ -236,6 +236,10 @@ describe("POST /api/posts/[id]/kudos", () => {
           return {
             select: vi.fn().mockReturnValue({
               eq: vi.fn().mockReturnValue({
+                maybeSingle: vi.fn().mockResolvedValue({
+                  data: { id: "post-1", user_id: "post-owner" },
+                  error: null,
+                }),
                 single: vi.fn().mockResolvedValue({
                   data: { user_id: "post-owner" },
                   error: null,
@@ -261,6 +265,42 @@ describe("POST /api/posts/[id]/kudos", () => {
     expect(res.status).toBe(200);
     expect(json.kudosed).toBe(true);
     expect(json.count).toBe(5);
+  });
+
+  it("returns 404 when target post is not visible", async () => {
+    const client: Record<string, any> = {
+      auth: {
+        getUser: vi.fn().mockResolvedValue({
+          data: { user: { id: "user-1" } },
+          error: null,
+        }),
+      },
+      from: vi.fn().mockImplementation((table: string) => {
+        if (table === "posts") {
+          return {
+            select: vi.fn().mockReturnValue({
+              eq: vi.fn().mockReturnValue({
+                maybeSingle: vi.fn().mockResolvedValue({
+                  data: null,
+                  error: null,
+                }),
+              }),
+            }),
+          };
+        }
+        throw new Error(`Unexpected table ${table}`);
+      }),
+    };
+    (createClient as any).mockResolvedValue(client);
+
+    const res = await kudosPOST(
+      makeRequest("POST", "/api/posts/private-post/kudos"),
+      makeContext("id", "private-post")
+    );
+    const json = await res.json();
+
+    expect(res.status).toBe(404);
+    expect(json.error).toBe("Post not found");
   });
 });
 
@@ -385,6 +425,10 @@ describe("POST /api/posts/[id]/comments", () => {
           return {
             select: vi.fn().mockReturnValue({
               eq: vi.fn().mockReturnValue({
+                maybeSingle: vi.fn().mockResolvedValue({
+                  data: { id: "post-1", user_id: "post-owner" },
+                  error: null,
+                }),
                 single: vi.fn().mockResolvedValue({
                   data: { user_id: "post-owner" },
                   error: null,
@@ -411,6 +455,44 @@ describe("POST /api/posts/[id]/comments", () => {
 
     expect(res.status).toBe(201);
     expect(json.content).toBe("Great work!");
+  });
+
+  it("returns 404 when commenting on a post that is not visible", async () => {
+    const client: Record<string, any> = {
+      auth: {
+        getUser: vi.fn().mockResolvedValue({
+          data: { user: { id: "user-1" } },
+          error: null,
+        }),
+      },
+      from: vi.fn().mockImplementation((table: string) => {
+        if (table === "posts") {
+          return {
+            select: vi.fn().mockReturnValue({
+              eq: vi.fn().mockReturnValue({
+                maybeSingle: vi.fn().mockResolvedValue({
+                  data: null,
+                  error: null,
+                }),
+              }),
+            }),
+          };
+        }
+        throw new Error(`Unexpected table ${table}`);
+      }),
+    };
+    (createClient as any).mockResolvedValue(client);
+
+    const res = await commentPOST(
+      makeRequest("POST", "/api/posts/private-post/comments", {
+        content: "Hidden reply",
+      }),
+      makeContext("id", "private-post")
+    );
+    const json = await res.json();
+
+    expect(res.status).toBe(404);
+    expect(json.error).toBe("Post not found");
   });
 
   it("validates 500 char max", async () => {
@@ -551,6 +633,18 @@ describe("POST /api/comments/[id]/reactions", () => {
             }),
           };
         }
+        if (table === "comments") {
+          return {
+            select: vi.fn().mockReturnValue({
+              eq: vi.fn().mockReturnValue({
+                maybeSingle: vi.fn().mockResolvedValue({
+                  data: { id: "c-1" },
+                  error: null,
+                }),
+              }),
+            }),
+          };
+        }
         return {};
       }),
     };
@@ -565,6 +659,42 @@ describe("POST /api/comments/[id]/reactions", () => {
     expect(res.status).toBe(200);
     expect(json.reacted).toBe(true);
     expect(json.count).toBe(3);
+  });
+
+  it("returns 404 when reacting to a comment that is not visible", async () => {
+    const client: Record<string, any> = {
+      auth: {
+        getUser: vi.fn().mockResolvedValue({
+          data: { user: { id: "user-1" } },
+          error: null,
+        }),
+      },
+      from: vi.fn().mockImplementation((table: string) => {
+        if (table === "comments") {
+          return {
+            select: vi.fn().mockReturnValue({
+              eq: vi.fn().mockReturnValue({
+                maybeSingle: vi.fn().mockResolvedValue({
+                  data: null,
+                  error: null,
+                }),
+              }),
+            }),
+          };
+        }
+        throw new Error(`Unexpected table ${table}`);
+      }),
+    };
+    (createClient as any).mockResolvedValue(client);
+
+    const res = await commentReactionPOST(
+      makeRequest("POST", "/api/comments/private-comment/reactions"),
+      makeContext("id", "private-comment")
+    );
+    const json = await res.json();
+
+    expect(res.status).toBe(404);
+    expect(json.error).toBe("Comment not found");
   });
 });
 

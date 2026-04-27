@@ -14,6 +14,13 @@ function getAllMigrations(): { name: string; content: string }[] {
   }));
 }
 
+function getLatestMigrationMatching(
+  migrations: { name: string; content: string }[],
+  pattern: RegExp
+) {
+  return migrations.filter((m) => pattern.test(m.content)).at(-1);
+}
+
 describe("Migration safety", () => {
   const migrations = getAllMigrations();
 
@@ -117,6 +124,23 @@ describe("Migration safety", () => {
     expect(/position\('\.\.'\s+IN\s+attachment->>'path'\)\s*>\s*0/i.test(latest.content)).toBe(true);
   });
 
+  it("latest direct_messages insert policy scopes existing threads to the inserted pair", () => {
+    const latest = getLatestMigrationMatching(
+      migrations,
+      /CREATE\s+POLICY\s+"Users can send direct messages"[\s\S]*ON\s+public\.direct_messages\s+FOR\s+INSERT/i
+    );
+
+    expect(latest, "Expected a direct_messages insert policy migration").toBeTruthy();
+    const content = latest!.content;
+
+    expect(/auth\.uid\(\)\s*=\s*direct_messages\.sender_id/i.test(content)).toBe(true);
+    expect(/recipient\.id\s*=\s*direct_messages\.recipient_id/i.test(content)).toBe(true);
+    expect(/dm\.sender_id\s*=\s*sender_id/i.test(content)).toBe(false);
+    expect(/dm\.recipient_id\s*=\s*recipient_id/i.test(content)).toBe(false);
+    expect(/dm\.sender_id\s*=\s*direct_messages\.sender_id/i.test(content)).toBe(true);
+    expect(/dm\.recipient_id\s*=\s*direct_messages\.recipient_id/i.test(content)).toBe(true);
+  });
+
   it("latest public.users grants only expose a sanitized select list", () => {
     const usersGrantMigrations = migrations.filter((m) =>
       /public\.users/i.test(m.content)
@@ -155,5 +179,26 @@ describe("Migration safety", () => {
 
     expect(/to_jsonb\(u\.\*\)/i.test(latest.content)).toBe(false);
     expect(/jsonb_build_object\s*\(/i.test(latest.content)).toBe(true);
+  });
+
+  it("latest interaction RLS policies inherit parent post visibility", () => {
+    const latest = getLatestMigrationMatching(
+      migrations,
+      /public\.(kudos|comments|comment_reactions)/i
+    );
+
+    expect(latest, "Expected an interaction policy migration").toBeTruthy();
+    const content = latest!.content;
+
+    expect(/ON\s+public\.kudos\s+FOR\s+SELECT[\s\S]*USING\s*\(\s*true\s*\)/i.test(content)).toBe(false);
+    expect(/ON\s+public\.comments\s+FOR\s+SELECT[\s\S]*USING\s*\(\s*true\s*\)/i.test(content)).toBe(false);
+    expect(/ON\s+public\.comment_reactions\s+FOR\s+SELECT[\s\S]*USING\s*\(\s*true\s*\)/i.test(content)).toBe(false);
+
+    expect(/ON\s+public\.kudos\s+FOR\s+SELECT[\s\S]*public\.posts[\s\S]*kudos\.post_id/i.test(content)).toBe(true);
+    expect(/ON\s+public\.comments\s+FOR\s+SELECT[\s\S]*public\.posts[\s\S]*comments\.post_id/i.test(content)).toBe(true);
+    expect(/ON\s+public\.comment_reactions\s+FOR\s+SELECT[\s\S]*public\.comments[\s\S]*comment_reactions\.comment_id/i.test(content)).toBe(true);
+    expect(/ON\s+public\.kudos\s+FOR\s+INSERT[\s\S]*WITH\s+CHECK[\s\S]*public\.posts[\s\S]*kudos\.post_id/i.test(content)).toBe(true);
+    expect(/ON\s+public\.comments\s+FOR\s+INSERT[\s\S]*WITH\s+CHECK[\s\S]*public\.posts[\s\S]*comments\.post_id/i.test(content)).toBe(true);
+    expect(/ON\s+public\.comment_reactions\s+FOR\s+INSERT[\s\S]*WITH\s+CHECK[\s\S]*public\.comments[\s\S]*comment_reactions\.comment_id/i.test(content)).toBe(true);
   });
 });

@@ -130,6 +130,12 @@ describe("Flow: Social Interactions", () => {
 
     let callIdx = 0;
     mockSupabase.from.mockImplementation((table: string) => {
+      if (table === "posts") {
+        return chainBuilder({
+          data: { id: "post-b1", user_id: USER_B.id },
+          error: null,
+        });
+      }
       if (table === "kudos") {
         return callIdx++ === 0 ? kudosInsertChain : kudosCountChain;
       }
@@ -160,8 +166,13 @@ describe("Flow: Social Interactions", () => {
     };
 
     const commentChain = chainBuilder({ data: commentData, error: null });
+    const postChain = chainBuilder({
+      data: { id: "post-b1", user_id: USER_B.id },
+      error: null,
+    });
 
     mockSupabase.from.mockImplementation((table: string) => {
+      if (table === "posts") return postChain;
       if (table === "comments") return commentChain;
       return chainBuilder();
     });

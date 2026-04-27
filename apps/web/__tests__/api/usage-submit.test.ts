@@ -658,9 +658,9 @@ describe("POST /api/usage/submit", () => {
     const deviceCountChain: Record<string, any> = {
       select: vi.fn().mockReturnThis(),
       eq: vi.fn().mockImplementation(() => ({
-        eq: vi.fn().mockResolvedValue({ count: 2, data: null, error: null }),
+        eq: vi.fn().mockResolvedValue({ count: 1, data: null, error: null }),
       })),
-      count: 2,
+      count: 1,
     };
     const postChain: Record<string, any> = {
       select: vi.fn().mockReturnThis(),
@@ -675,8 +675,8 @@ describe("POST /api/usage/submit", () => {
       if (table === "device_usage") {
         deviceFromCallCount++;
         if (deviceFromCallCount === 1) return deviceGuardChain;
-        if (deviceFromCallCount === 2) return deviceUpsertChain;
-        if (deviceFromCallCount === 3) return deviceCountChain;
+        if (deviceFromCallCount === 2) return deviceCountChain;
+        if (deviceFromCallCount === 3) return deviceUpsertChain;
         return deviceFetchChain;
       }
       if (table === "daily_usage") return dailyChain;
@@ -731,7 +731,10 @@ describe("POST /api/usage/submit", () => {
     const deviceGuardChain: Record<string, any> = {
       select: vi.fn().mockReturnThis(),
       eq: vi.fn().mockReturnThis(),
-      maybeSingle: vi.fn().mockResolvedValue({ data: { cost_usd: 100 }, error: null }),
+      maybeSingle: vi.fn().mockResolvedValue({
+        data: { cost_usd: 100, models: ["gpt-5-codex"] },
+        error: null,
+      }),
     };
     const deviceCountChain: Record<string, any> = {
       select: vi.fn().mockReturnThis(),
@@ -810,12 +813,21 @@ describe("POST /api/usage/submit", () => {
     const deviceGuardChain: Record<string, any> = {
       select: vi.fn().mockReturnThis(),
       eq: vi.fn().mockReturnThis(),
-      maybeSingle: vi.fn().mockResolvedValue({ data: { cost_usd: 100 }, error: null }),
+      maybeSingle: vi.fn().mockResolvedValue({
+        data: { cost_usd: 100, models: ["gpt-5-codex"] },
+        error: null,
+      }),
     };
     const deviceUpsertChain: Record<string, any> = {
       upsert: vi.fn().mockReturnThis(),
       select: vi.fn().mockReturnThis(),
       single: vi.fn().mockResolvedValue({ data: { id: "dev-1" }, error: null }),
+    };
+    const deviceCountChain: Record<string, any> = {
+      select: vi.fn().mockReturnThis(),
+      eq: vi.fn().mockImplementation(() => ({
+        eq: vi.fn().mockResolvedValue({ count: 1, data: null, error: null }),
+      })),
     };
     const deviceDeleteChain: Record<string, any> = {
       delete: vi.fn().mockReturnThis(),
@@ -847,8 +859,9 @@ describe("POST /api/usage/submit", () => {
       if (table === "device_usage") {
         deviceFromCallCount++;
         if (deviceFromCallCount === 1) return deviceGuardChain;
-        if (deviceFromCallCount === 2) return deviceUpsertChain;
-        if (deviceFromCallCount === 3) return deviceDeleteChain;
+        if (deviceFromCallCount === 2) return deviceCountChain;
+        if (deviceFromCallCount === 3) return deviceUpsertChain;
+        if (deviceFromCallCount === 4) return deviceDeleteChain;
         return deviceFetchChain;
       }
       if (table === "daily_usage") return dailyChain;
@@ -881,6 +894,239 @@ describe("POST /api/usage/submit", () => {
     expect(dailyChain.upsert.mock.calls[0][0].collector_meta).toEqual({ codex: "straude-codex-native-v1" });
     expect(json.results[0].previous_cost).toBe(100);
     expect(json.results[0].daily_total).toBe(10);
+  });
+
+  it("does not drop mixed legacy usage on a Codex-only repair", async () => {
+    (verifyCliToken as any).mockReturnValue("user-1");
+
+    const legacyDeviceRow = {
+      cost_usd: 100,
+      input_tokens: 100000,
+      output_tokens: 1000,
+      cache_creation_tokens: 0,
+      cache_read_tokens: 0,
+      total_tokens: 101000,
+      models: ["claude-opus-4-20250505", "gpt-5-codex"],
+      model_breakdown: [
+        { model: "claude-opus-4-20250505", cost_usd: 90 },
+        { model: "gpt-5-codex", cost_usd: 10 },
+      ],
+      raw_hash: "legacy-hash",
+    };
+    const correctedDeviceRow = {
+      cost_usd: 10,
+      input_tokens: 10000,
+      output_tokens: 100,
+      cache_creation_tokens: 0,
+      cache_read_tokens: 0,
+      total_tokens: 10100,
+      models: ["gpt-5-codex"],
+      model_breakdown: [{ model: "gpt-5-codex", cost_usd: 10 }],
+    };
+
+    const deviceGuardChain: Record<string, any> = {
+      select: vi.fn().mockReturnThis(),
+      eq: vi.fn().mockReturnThis(),
+      maybeSingle: vi.fn().mockResolvedValue({ data: null, error: null }),
+    };
+    const deviceCountChain: Record<string, any> = {
+      select: vi.fn().mockReturnThis(),
+      eq: vi.fn().mockImplementation(() => ({
+        eq: vi.fn().mockResolvedValue({ count: 0, data: null, error: null }),
+      })),
+    };
+    const deviceUpsertChain: Record<string, any> = {
+      upsert: vi.fn().mockReturnThis(),
+      select: vi.fn().mockReturnThis(),
+      single: vi.fn().mockResolvedValue({ data: { id: "dev-1" }, error: null }),
+    };
+    const deviceInsertChain: Record<string, any> = {
+      insert: vi.fn().mockResolvedValue({ error: null }),
+    };
+    const deviceDeleteChain: Record<string, any> = {
+      delete: vi.fn().mockReturnThis(),
+      eq: vi.fn().mockReturnThis(),
+    };
+    const deviceFetchChain: Record<string, any> = {
+      select: vi.fn().mockReturnThis(),
+      eq: vi.fn().mockImplementation(() => ({
+        eq: vi.fn().mockResolvedValue({
+          data: [legacyDeviceRow, correctedDeviceRow],
+          error: null,
+        }),
+      })),
+    };
+    const dailyChain: Record<string, any> = {
+      select: vi.fn().mockReturnThis(),
+      upsert: vi.fn().mockReturnThis(),
+      eq: vi.fn().mockReturnThis(),
+      maybeSingle: vi.fn().mockResolvedValue({
+        data: {
+          id: "usage-1",
+          cost_usd: 100,
+          models: ["claude-opus-4-20250505", "gpt-5-codex"],
+        },
+        error: null,
+      }),
+      single: vi.fn()
+        .mockResolvedValueOnce({ data: legacyDeviceRow, error: null })
+        .mockResolvedValueOnce({ data: { id: "usage-1" }, error: null }),
+    };
+    const postChain: Record<string, any> = {
+      select: vi.fn().mockReturnThis(),
+      update: vi.fn().mockReturnThis(),
+      eq: vi.fn().mockReturnThis(),
+      maybeSingle: vi.fn().mockResolvedValue({ data: { id: "post-1", title: "Apr 24" }, error: null }),
+      single: vi.fn().mockResolvedValue({ data: { id: "post-1" }, error: null }),
+    };
+
+    let deviceFromCallCount = 0;
+    const fromFn = vi.fn((table: string) => {
+      if (table === "device_usage") {
+        deviceFromCallCount++;
+        if (deviceFromCallCount === 1) return deviceGuardChain;
+        if (deviceFromCallCount === 2) return deviceCountChain;
+        if (deviceFromCallCount === 3) return deviceUpsertChain;
+        if (deviceFromCallCount === 4) return deviceInsertChain;
+        return deviceFetchChain;
+      }
+      if (table === "daily_usage") return dailyChain;
+      if (table === "posts") return postChain;
+      return dailyChain;
+    });
+    (getServiceClient as any).mockReturnValue({ from: fromFn, rpc: vi.fn().mockResolvedValue({ data: null, error: null }) });
+
+    const res = await POST(
+      mockRequest({
+        entries: [makeEntry(todayStr(), {
+          models: ["gpt-5-codex"],
+          costUSD: 10,
+          inputTokens: 10000,
+          outputTokens: 100,
+          totalTokens: 10100,
+          modelBreakdown: [{ model: "gpt-5-codex", cost_usd: 10 }],
+        })],
+        source: "cli",
+        collector: { codex: "straude-codex-native-v1" },
+      })
+    );
+    const json = await res.json();
+
+    expect(res.status).toBe(200);
+    expect(deviceDeleteChain.delete).not.toHaveBeenCalled();
+    expect(deviceInsertChain.insert).toHaveBeenCalledWith(
+      expect.objectContaining({
+        device_id: "00000000-0000-0000-0000-000000000000",
+        cost_usd: 100,
+      })
+    );
+    expect(dailyChain.upsert.mock.calls[0][0].cost_usd).toBe(110);
+    expect(json.results[0].daily_total).toBe(110);
+  });
+
+  it("does not overwrite a mixed same-device row with a Codex-only repair", async () => {
+    (verifyCliToken as any).mockReturnValue("user-1");
+
+    const mixedDeviceRow = {
+      cost_usd: 100,
+      input_tokens: 100000,
+      output_tokens: 1000,
+      cache_creation_tokens: 0,
+      cache_read_tokens: 0,
+      total_tokens: 101000,
+      models: ["claude-opus-4-20250505", "gpt-5-codex"],
+      model_breakdown: [
+        { model: "claude-opus-4-20250505", cost_usd: 90 },
+        { model: "gpt-5-codex", cost_usd: 10 },
+      ],
+    };
+
+    const deviceGuardChain: Record<string, any> = {
+      select: vi.fn().mockReturnThis(),
+      eq: vi.fn().mockReturnThis(),
+      maybeSingle: vi.fn().mockResolvedValue({
+        data: { cost_usd: 100, models: mixedDeviceRow.models },
+        error: null,
+      }),
+    };
+    const deviceCountChain: Record<string, any> = {
+      select: vi.fn().mockReturnThis(),
+      eq: vi.fn().mockImplementation(() => ({
+        eq: vi.fn().mockResolvedValue({ count: 1, data: null, error: null }),
+      })),
+    };
+    const deviceUpsertChain: Record<string, any> = {
+      upsert: vi.fn().mockReturnThis(),
+      select: vi.fn().mockReturnThis(),
+      single: vi.fn().mockResolvedValue({ data: { id: "dev-1" }, error: null }),
+    };
+    const deviceDeleteChain: Record<string, any> = {
+      delete: vi.fn().mockReturnThis(),
+      eq: vi.fn().mockReturnThis(),
+    };
+    const deviceFetchChain: Record<string, any> = {
+      select: vi.fn().mockReturnThis(),
+      eq: vi.fn().mockImplementation(() => ({
+        eq: vi.fn().mockResolvedValue({ data: [mixedDeviceRow], error: null }),
+      })),
+    };
+    const dailyChain: Record<string, any> = {
+      select: vi.fn().mockReturnThis(),
+      upsert: vi.fn().mockReturnThis(),
+      eq: vi.fn().mockReturnThis(),
+      maybeSingle: vi.fn().mockResolvedValue({
+        data: {
+          id: "usage-1",
+          cost_usd: 100,
+          models: mixedDeviceRow.models,
+        },
+        error: null,
+      }),
+      single: vi.fn().mockResolvedValue({ data: { id: "usage-1" }, error: null }),
+    };
+    const postChain: Record<string, any> = {
+      select: vi.fn().mockReturnThis(),
+      update: vi.fn().mockReturnThis(),
+      eq: vi.fn().mockReturnThis(),
+      maybeSingle: vi.fn().mockResolvedValue({ data: { id: "post-1", title: "Apr 24" }, error: null }),
+      single: vi.fn().mockResolvedValue({ data: { id: "post-1" }, error: null }),
+    };
+
+    let deviceFromCallCount = 0;
+    const fromFn = vi.fn((table: string) => {
+      if (table === "device_usage") {
+        deviceFromCallCount++;
+        if (deviceFromCallCount === 1) return deviceGuardChain;
+        if (deviceFromCallCount === 2) return deviceCountChain;
+        return deviceFetchChain;
+      }
+      if (table === "daily_usage") return dailyChain;
+      if (table === "posts") return postChain;
+      return dailyChain;
+    });
+    (getServiceClient as any).mockReturnValue({ from: fromFn, rpc: vi.fn().mockResolvedValue({ data: null, error: null }) });
+
+    const res = await POST(
+      mockRequest({
+        entries: [makeEntry(todayStr(), {
+          models: ["gpt-5-codex"],
+          costUSD: 10,
+          inputTokens: 10000,
+          outputTokens: 100,
+          totalTokens: 10100,
+          modelBreakdown: [{ model: "gpt-5-codex", cost_usd: 10 }],
+        })],
+        source: "cli",
+        collector: { codex: "straude-codex-native-v1" },
+      })
+    );
+    const json = await res.json();
+
+    expect(res.status).toBe(200);
+    expect(deviceUpsertChain.upsert).not.toHaveBeenCalled();
+    expect(deviceDeleteChain.delete).not.toHaveBeenCalled();
+    expect(dailyChain.upsert.mock.calls[0][0].cost_usd).toBe(100);
+    expect(json.results[0].daily_total).toBe(100);
   });
 
   it("rejects requests without device_id", async () => {

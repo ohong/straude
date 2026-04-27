@@ -67,6 +67,10 @@ function makeSessionClient(commenterId: string, postOwnerId: string) {
         return {
           select: vi.fn().mockReturnValue({
             eq: vi.fn().mockReturnValue({
+              maybeSingle: vi.fn().mockResolvedValue({
+                data: { id: "post-1", user_id: postOwnerId },
+                error: null,
+              }),
               single: vi.fn().mockResolvedValue({
                 data: { user_id: postOwnerId },
                 error: null,

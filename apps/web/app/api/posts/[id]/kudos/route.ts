@@ -20,6 +20,20 @@ export async function POST(_request: NextRequest, context: RouteContext) {
   const limited = rateLimit("social", user.id, { limit: 30 });
   if (limited) return limited;
 
+  const { data: post, error: postError } = await supabase
+    .from("posts")
+    .select("id, user_id")
+    .eq("id", id)
+    .maybeSingle();
+
+  if (postError) {
+    return NextResponse.json({ error: postError.message }, { status: 500 });
+  }
+
+  if (!post) {
+    return NextResponse.json({ error: "Post not found" }, { status: 404 });
+  }
+
   const { error } = await supabase.from("kudos").insert({
     user_id: user.id,
     post_id: id,
@@ -32,12 +46,6 @@ export async function POST(_request: NextRequest, context: RouteContext) {
   // Fetch post owner for notifications and achievements (deferred after response)
   if (!error) {
     after(async () => {
-      const { data: post } = await supabase
-        .from("posts")
-        .select("user_id")
-        .eq("id", id)
-        .single();
-
       // Insert kudos notification (skip self-kudos)
       if (post && post.user_id !== user.id) {
         await supabase.from("notifications").insert({

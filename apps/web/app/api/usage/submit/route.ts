@@ -10,6 +10,7 @@ import type { UsageSubmitRequest, UsageSubmitResponse, CcusageDailyEntry, ModelB
 const MAX_BACKFILL_DAYS = 30;
 const TRUSTED_CODEX_COLLECTOR = "straude-codex-native-v1";
 const LEGACY_DEVICE_ID = "00000000-0000-0000-0000-000000000000";
+const CODEX_MODEL_RE = /^(gpt-|o3|o4)/i;
 
 function isValidDate(dateStr: string): boolean {
   const match = dateStr.match(/^(\d{4})-(\d{2})-(\d{2})$/);
@@ -32,6 +33,19 @@ function validateEntry(entry: CcusageDailyEntry): string | null {
   if (entry.outputTokens < 0) return `Negative output tokens for ${entry.date}`;
   if (entry.totalTokens < 0) return `Negative total tokens for ${entry.date}`;
   return null;
+}
+
+function isCodexModel(model: unknown): boolean {
+  return typeof model === "string" && CODEX_MODEL_RE.test(model);
+}
+
+function containsNonCodexModel(models: unknown): boolean {
+  return Array.isArray(models) && models.some((model) => !isCodexModel(model));
+}
+
+function hasNonCodexModels(models: unknown): boolean {
+  if (!Array.isArray(models) || models.length === 0) return true;
+  return containsNonCodexModel(models);
 }
 
 interface AuthContext {
@@ -192,21 +206,41 @@ export async function POST(request: Request) {
 
       let usage: { id: string } | null = null;
       let usageErrorMessage: string | null = null;
+      const entryHasNonCodexModels = containsNonCodexModel(entry.data.models);
 
       // Guard against decreasing values (e.g., ccusage log rotation). The native
       // Codex collector is allowed to lower totals because it repairs inflated
       // rows produced by the older upstream Codex aggregation behavior.
       const { data: existingDevice } = await db
         .from("device_usage")
-        .select("cost_usd")
+        .select("cost_usd,models")
         .eq("user_id", userId)
         .eq("date", entry.date)
         .eq("device_id", deviceId)
         .maybeSingle();
 
-      const mayOverwriteDevice = !existingDevice
+      let preexistingDeviceCount = 0;
+      if (existing) {
+        const { count } = await db
+          .from("device_usage")
+          .select("id", { count: "exact", head: true })
+          .eq("user_id", userId)
+          .eq("date", entry.date);
+        preexistingDeviceCount = count ?? 0;
+      }
+
+      const existingDeviceHasNonCodexModels = existingDevice
+        ? hasNonCodexModels((existingDevice as { models?: unknown }).models)
+        : false;
+      const codexOnlyRepairWouldDropMixedDevice = isTrustedCodexCorrection
+        && !entryHasNonCodexModels
+        && existingDeviceHasNonCodexModels;
+
+      const mayOverwriteDevice = (
+        !existingDevice
         || entry.data.costUSD >= Number(existingDevice.cost_usd)
-        || isTrustedCodexCorrection;
+        || isTrustedCodexCorrection
+      ) && !codexOnlyRepairWouldDropMixedDevice;
 
       // Only upsert if new data is >= existing, unless this is a trusted repair.
       if (mayOverwriteDevice) {
@@ -241,7 +275,13 @@ export async function POST(request: Request) {
         }
       }
 
-      if (isTrustedCodexCorrection) {
+      const existingHasNonCodexModels = existing
+        ? hasNonCodexModels((existing as { models?: unknown }).models)
+        : false;
+      const canDropLegacyDevice = isTrustedCodexCorrection
+        && (!existingHasNonCodexModels || entryHasNonCodexModels);
+
+      if (canDropLegacyDevice) {
         await db
           .from("device_usage")
           .delete()
@@ -253,14 +293,8 @@ export async function POST(request: Request) {
       // Backfill legacy data: if daily_usage exists but has no device_usage rows,
       // the data was written before device tracking. Insert it as a "legacy" device
       // so the aggregation doesn't discard it.
-      if (existing && !isTrustedCodexCorrection) {
-        const { count: deviceCount } = await db
-          .from("device_usage")
-          .select("id", { count: "exact", head: true })
-          .eq("user_id", userId)
-          .eq("date", entry.date);
-
-        if (deviceCount === 0) {
+      if (existing && !canDropLegacyDevice) {
+        if (preexistingDeviceCount === 0) {
           const { data: legacyRow } = await db
             .from("daily_usage")
             .select("cost_usd,input_tokens,output_tokens,cache_creation_tokens,cache_read_tokens,total_tokens,models,model_breakdown,raw_hash")

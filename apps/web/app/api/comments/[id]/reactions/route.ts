@@ -18,6 +18,20 @@ export async function POST(_request: NextRequest, context: RouteContext) {
   const limited = rateLimit("social", user.id, { limit: 30 });
   if (limited) return limited;
 
+  const { data: comment, error: commentError } = await supabase
+    .from("comments")
+    .select("id")
+    .eq("id", id)
+    .maybeSingle();
+
+  if (commentError) {
+    return NextResponse.json({ error: commentError.message }, { status: 500 });
+  }
+
+  if (!comment) {
+    return NextResponse.json({ error: "Comment not found" }, { status: 404 });
+  }
+
   const { error } = await supabase.from("comment_reactions").insert({
     user_id: user.id,
     comment_id: id,
