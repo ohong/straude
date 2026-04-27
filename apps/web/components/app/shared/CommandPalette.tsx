@@ -10,9 +10,20 @@ import {
   useMatches,
   type Action,
 } from "kbar";
+import { useEffect } from "react";
 import { useRouter } from "next/navigation";
 import { useTheme } from "@/components/providers/ThemeProvider";
 import { createClient } from "@/lib/supabase/client";
+
+const STATIC_PREFETCH_HREFS = [
+  "/feed",
+  "/leaderboard",
+  "/search",
+  "/settings",
+  "/post/new",
+  "/recap",
+  "/prompts",
+] as const;
 
 function RenderResults() {
   const { results } = useMatches();
@@ -58,6 +69,14 @@ export function CommandPalette({
 }) {
   const router = useRouter();
   const { setTheme } = useTheme();
+  const profileHref = username ? `/u/${username}` : "/feed";
+
+  useEffect(() => {
+    for (const href of STATIC_PREFETCH_HREFS) {
+      router.prefetch(href);
+    }
+    router.prefetch(profileHref);
+  }, [profileHref, router]);
 
   const actions: Action[] = [
     {
@@ -106,7 +125,7 @@ export function CommandPalette({
       id: "profile",
       name: "Profile",
       shortcut: ["g", "m"],
-      perform: () => router.push(username ? `/u/${username}` : "/feed"),
+      perform: () => router.push(profileHref),
     },
     {
       id: "logout",
