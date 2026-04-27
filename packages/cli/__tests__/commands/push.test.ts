@@ -319,9 +319,6 @@ describe("pushCommand", () => {
     twentyNineDaysAgo.setDate(now.getDate() - 29);
     expect(sinceArg).toBe(fmt(twentyNineDaysAgo));
     expect(untilArg).toBe(fmt(now));
-    expect(console.log).toHaveBeenCalledWith(
-      "Repairing Codex totals with a one-time 30-day resync...",
-    );
     expect(mockSaveConfig).toHaveBeenCalledWith(expect.objectContaining({
       codex_native_repair_completed_at: expect.any(String),
       last_push_date: today,

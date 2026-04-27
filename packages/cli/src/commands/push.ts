@@ -205,7 +205,6 @@ export async function pushCommand(options: PushOptions, apiUrlOverride?: string)
     sinceDate = new Date(today);
     sinceDate.setDate(sinceDate.getDate() - MAX_BACKFILL_DAYS + 1);
     untilDate = today;
-    console.log(`Repairing Codex totals with a one-time ${MAX_BACKFILL_DAYS}-day resync...`);
   } else if (options.days) {
     const days = Math.min(options.days, MAX_BACKFILL_DAYS);
     sinceDate = new Date(today);
