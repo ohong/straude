@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useSyncExternalStore } from "react";
 
 export type ResponsiveShellMode = "full" | "compact" | "focus" | "phone";
 
@@ -18,18 +18,24 @@ export function getResponsiveShellMode(width: number): ResponsiveShellMode {
   return "phone";
 }
 
+function getSnapshot() {
+  return getResponsiveShellMode(window.innerWidth);
+}
+
+function getServerSnapshot(): ResponsiveShellMode {
+  return "phone";
+}
+
+function subscribe(onStoreChange: () => void) {
+  window.addEventListener("resize", onStoreChange);
+  window.visualViewport?.addEventListener("resize", onStoreChange);
+
+  return () => {
+    window.removeEventListener("resize", onStoreChange);
+    window.visualViewport?.removeEventListener("resize", onStoreChange);
+  };
+}
+
 export function useResponsiveShell() {
-  const [mode, setMode] = useState<ResponsiveShellMode>("full");
-
-  useEffect(() => {
-    function updateMode() {
-      setMode(getResponsiveShellMode(window.innerWidth));
-    }
-
-    updateMode();
-    window.addEventListener("resize", updateMode);
-    return () => window.removeEventListener("resize", updateMode);
-  }, []);
-
-  return mode;
+  return useSyncExternalStore(subscribe, getSnapshot, getServerSnapshot);
 }
