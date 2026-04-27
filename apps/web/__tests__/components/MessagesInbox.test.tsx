@@ -1,6 +1,8 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { render, screen, waitFor } from "@testing-library/react";
+import type { ReactElement } from "react";
+import { fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import { MessagesInbox } from "@/components/app/messages/MessagesInbox";
+import { QueryProvider } from "@/components/providers/QueryProvider";
 
 vi.mock("@/lib/utils/compress-image", () => ({
   compressImage: vi.fn(async (file: File) => file),
@@ -44,6 +46,26 @@ const conversationResponse = {
   ],
 };
 
+const unreadThreadListResponse = {
+  unread_count: 1,
+  threads: [
+    {
+      ...threadListResponse.threads[0],
+      unread_count: 1,
+    },
+  ],
+};
+
+const unreadConversationResponse = {
+  ...conversationResponse,
+  messages: [
+    {
+      ...conversationResponse.messages[0],
+      read_at: null,
+    },
+  ],
+};
+
 function setViewport(width: number) {
   Object.defineProperty(window, "innerWidth", {
     configurable: true,
@@ -53,10 +75,16 @@ function setViewport(width: number) {
   window.dispatchEvent(new Event("resize"));
 }
 
+function renderInbox(ui: ReactElement) {
+  return render(<QueryProvider>{ui}</QueryProvider>);
+}
+
 describe("MessagesInbox", () => {
+  let fetchMock: ReturnType<typeof vi.fn>;
+
   beforeEach(() => {
     setViewport(390);
-    vi.stubGlobal("fetch", vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
+    fetchMock = vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
       const url = String(input);
 
       if (url.includes("/api/messages/threads")) {
@@ -80,11 +108,27 @@ describe("MessagesInbox", () => {
         });
       }
 
+      if (url === "/api/messages" && init?.method === "POST") {
+        return new Response(JSON.stringify({
+          id: "message-2",
+          content: "Pending hello",
+          created_at: "2026-03-30T10:06:00.000Z",
+          sender_id: "user-me",
+          recipient_id: "user-alice",
+          read_at: null,
+          attachments: [],
+        }), {
+          status: 201,
+          headers: { "Content-Type": "application/json" },
+        });
+      }
+
       return new Response(JSON.stringify({}), {
         status: 200,
         headers: { "Content-Type": "application/json" },
       });
-    }));
+    });
+    vi.stubGlobal("fetch", fetchMock);
 
     Element.prototype.scrollIntoView = vi.fn();
   });
@@ -94,7 +138,7 @@ describe("MessagesInbox", () => {
   });
 
   it("keeps the inbox list visible on phone when no thread is selected", async () => {
-    render(<MessagesInbox initialUsername={null} />);
+    renderInbox(<MessagesInbox initialUsername={null} />);
 
     const listPane = await screen.findByTestId("messages-thread-list");
     const threadPane = await screen.findByTestId("messages-thread-panel");
@@ -105,8 +149,23 @@ describe("MessagesInbox", () => {
     });
   });
 
+  it("renders initial thread data without a thread-list skeleton fetch", async () => {
+    renderInbox(
+      <MessagesInbox
+        initialUsername={null}
+        initialThreads={threadListResponse}
+      />
+    );
+
+    expect(await screen.findByText("See you in the inbox")).toBeInTheDocument();
+    expect(fetchMock).not.toHaveBeenCalledWith(
+      "/api/messages/threads",
+      expect.anything(),
+    );
+  });
+
   it("shows the thread view on phone when a username is present", async () => {
-    render(<MessagesInbox initialUsername="alice" />);
+    renderInbox(<MessagesInbox initialUsername="alice" />);
 
     const listPane = await screen.findByTestId("messages-thread-list");
     const threadPane = await screen.findByTestId("messages-thread-panel");
@@ -121,7 +180,13 @@ describe("MessagesInbox", () => {
 
   it("shows split view at the tablet breakpoint", async () => {
     setViewport(900);
-    render(<MessagesInbox initialUsername={null} />);
+    renderInbox(
+      <MessagesInbox
+        initialUsername={null}
+        initialThreads={threadListResponse}
+        initialConversation={conversationResponse}
+      />
+    );
 
     const listPane = await screen.findByTestId("messages-thread-list");
     const threadPane = await screen.findByTestId("messages-thread-panel");
@@ -132,5 +197,165 @@ describe("MessagesInbox", () => {
       expect(listPane.className).not.toContain("hidden");
       expect(threadPane.className).not.toContain("hidden");
     });
+  });
+
+  it("keeps the thread list visible while a background refetch runs", async () => {
+    setViewport(900);
+    let resolveThreads: (response: Response) => void = () => {};
+    let resolvePost: (response: Response) => void = () => {};
+    fetchMock.mockImplementation(async (input: RequestInfo | URL, init?: RequestInit) => {
+      const url = String(input);
+
+      if (url.includes("/api/messages/threads")) {
+        return new Promise<Response>((resolve) => {
+          resolveThreads = resolve;
+        });
+      }
+
+      if (url === "/api/messages" && init?.method === "POST") {
+        return new Promise<Response>((resolve) => {
+          resolvePost = resolve;
+        });
+      }
+
+      if (url.includes("/api/messages?with=alice")) {
+        return new Response(JSON.stringify(conversationResponse), {
+          status: 200,
+          headers: { "Content-Type": "application/json" },
+        });
+      }
+
+      return new Response(JSON.stringify({}), {
+        status: 200,
+        headers: { "Content-Type": "application/json" },
+      });
+    });
+
+    renderInbox(
+      <MessagesInbox
+        initialUsername="alice"
+        initialThreads={threadListResponse}
+        initialConversation={conversationResponse}
+      />
+    );
+
+    fireEvent.change(await screen.findByLabelText("Message @alice"), {
+      target: { value: "Pending hello" },
+    });
+    fireEvent.click(screen.getByRole("button", { name: /send/i }));
+
+    expect(await screen.findByText("Pending hello")).toBeInTheDocument();
+    expect(
+      within(screen.getByTestId("messages-thread-list")).getByText("Alice"),
+    ).toBeInTheDocument();
+
+    resolvePost(new Response(JSON.stringify({
+      id: "message-2",
+      content: "Pending hello",
+      created_at: "2026-03-30T10:06:00.000Z",
+      sender_id: "user-me",
+      recipient_id: "user-alice",
+      read_at: null,
+      attachments: [],
+    }), {
+      status: 201,
+      headers: { "Content-Type": "application/json" },
+    }));
+
+    await waitFor(() => {
+      expect(
+        screen
+          .getByTestId("messages-thread-list")
+          .querySelector("[aria-busy='true']"),
+      ).toBeInTheDocument();
+    });
+    expect(
+      within(screen.getByTestId("messages-thread-list")).getByText("Alice"),
+    ).toBeInTheDocument();
+
+    resolveThreads(new Response(JSON.stringify(threadListResponse), {
+      status: 200,
+      headers: { "Content-Type": "application/json" },
+    }));
+  });
+
+  it("renders a sending bubble optimistically before send completes", async () => {
+    let resolvePost: (response: Response) => void = () => {};
+    fetchMock.mockImplementation(async (input: RequestInfo | URL, init?: RequestInit) => {
+      const url = String(input);
+
+      if (url === "/api/messages" && init?.method === "POST") {
+        return new Promise<Response>((resolve) => {
+          resolvePost = resolve;
+        });
+      }
+
+      if (url.includes("/api/messages?with=alice")) {
+        return new Response(JSON.stringify(conversationResponse), {
+          status: 200,
+          headers: { "Content-Type": "application/json" },
+        });
+      }
+
+      if (url.includes("/api/messages/threads")) {
+        return new Response(JSON.stringify(threadListResponse), {
+          status: 200,
+          headers: { "Content-Type": "application/json" },
+        });
+      }
+
+      return new Response(JSON.stringify({}), {
+        status: 200,
+        headers: { "Content-Type": "application/json" },
+      });
+    });
+
+    renderInbox(
+      <MessagesInbox
+        initialUsername="alice"
+        initialThreads={threadListResponse}
+        initialConversation={conversationResponse}
+      />
+    );
+
+    fireEvent.change(await screen.findByLabelText("Message @alice"), {
+      target: { value: "Pending hello" },
+    });
+    fireEvent.click(screen.getByRole("button", { name: /send/i }));
+
+    expect(await screen.findByText("Pending hello")).toBeInTheDocument();
+    expect(screen.getAllByText(/sending/i).length).toBeGreaterThan(0);
+
+    resolvePost(new Response(JSON.stringify({
+      id: "message-2",
+      content: "Pending hello",
+      created_at: "2026-03-30T10:06:00.000Z",
+      sender_id: "user-me",
+      recipient_id: "user-alice",
+      read_at: null,
+      attachments: [],
+    }), {
+      status: 201,
+      headers: { "Content-Type": "application/json" },
+    }));
+  });
+
+  it("marks the active conversation read optimistically", async () => {
+    renderInbox(
+      <MessagesInbox
+        initialUsername="alice"
+        initialThreads={unreadThreadListResponse}
+        initialConversation={unreadConversationResponse}
+      />
+    );
+
+    const listPane = await screen.findByTestId("messages-thread-list");
+    await waitFor(() => {
+      expect(within(listPane).queryByText("1")).not.toBeInTheDocument();
+    });
+    expect(fetchMock).toHaveBeenCalledWith(
+      "/api/messages",
+      expect.objectContaining({ method: "PATCH" }),
+    );
   });
 });

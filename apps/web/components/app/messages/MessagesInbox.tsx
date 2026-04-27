@@ -3,7 +3,12 @@
 import Image from "next/image";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
+import {
+  useMutation,
+  useQuery,
+  useQueryClient,
+} from "@tanstack/react-query";
 import { ArrowLeft, FileText, Loader2, MessageSquare, Paperclip, X } from "lucide-react";
 import { Avatar } from "@/components/ui/Avatar";
 import { Button } from "@/components/ui/Button";
@@ -12,6 +17,7 @@ import { cn } from "@/lib/utils/cn";
 import { compressImage } from "@/lib/utils/compress-image";
 import { useResponsiveShell } from "@/components/app/shared/useResponsiveShell";
 import { timeAgo } from "@/lib/utils/format";
+import { queryKeys } from "@/lib/query/keys";
 import type {
   DirectMessage,
   DirectMessageThread,
@@ -29,6 +35,82 @@ interface PendingAttachment {
   file: File;
   preview?: string;
   uploading: boolean;
+}
+
+interface ThreadsResponse {
+  threads: DirectMessageThread[];
+  unread_count: number;
+}
+
+interface ConversationResponse {
+  counterpart: ConversationUser | null;
+  current_user_id: string | null;
+  messages: LocalDirectMessage[];
+}
+
+type DeliveryStatus = "sending" | "sent" | "failed";
+
+type LocalDirectMessage = DirectMessage & {
+  delivery_status?: DeliveryStatus;
+};
+
+interface SendMessageVariables {
+  username: string;
+  content: string;
+  pending: PendingAttachment[];
+  optimisticId: string;
+  previousConversation?: ConversationResponse;
+  previousThreads?: ThreadsResponse;
+}
+
+const EMPTY_THREADS: DirectMessageThread[] = [];
+const EMPTY_MESSAGES: LocalDirectMessage[] = [];
+
+async function fetchThreads(): Promise<ThreadsResponse> {
+  const res = await fetch("/api/messages/threads", { cache: "no-store" });
+  if (!res.ok) {
+    throw new Error("Failed to load messages");
+  }
+  const data = await res.json();
+  return {
+    threads: data.threads ?? [],
+    unread_count: data.unread_count ?? 0,
+  };
+}
+
+async function fetchConversation(username: string): Promise<ConversationResponse> {
+  const res = await fetch(
+    `/api/messages?with=${encodeURIComponent(username)}`,
+    { cache: "no-store" }
+  );
+
+  if (!res.ok) {
+    const data = await res.json().catch(() => ({ error: "Failed to load conversation" }));
+    throw new Error(data.error ?? "Failed to load conversation");
+  }
+
+  const data = await res.json();
+  return {
+    counterpart: data.counterpart ?? null,
+    current_user_id: data.current_user_id ?? null,
+    messages: data.messages ?? [],
+  };
+}
+
+function updateThreadAfterSend(
+  thread: DirectMessageThread,
+  content: string,
+  createdAt: string,
+  hasAttachment: boolean,
+): DirectMessageThread {
+  return {
+    ...thread,
+    last_message_content: content || null,
+    last_message_created_at: createdAt,
+    last_message_is_from_me: true,
+    last_message_has_attachment: hasAttachment,
+    unread_count: 0,
+  };
 }
 
 function formatFileSize(bytes: number): string {
@@ -59,22 +141,23 @@ function threadPreview(thread: DirectMessageThread): string {
 
 export function MessagesInbox({
   initialUsername,
+  initialThreads,
+  initialConversation,
 }: {
   initialUsername: string | null;
+  initialThreads?: ThreadsResponse;
+  initialConversation?: ConversationResponse | null;
 }) {
   const router = useRouter();
+  const queryClient = useQueryClient();
   const shellMode = useResponsiveShell();
-  const [threads, setThreads] = useState<DirectMessageThread[]>([]);
-  const [threadsLoading, setThreadsLoading] = useState(true);
-  const [conversationLoading, setConversationLoading] = useState(false);
   const [activeUsername, setActiveUsername] = useState(initialUsername);
-  const [currentUserId, setCurrentUserId] = useState<string | null>(null);
-  const [counterpart, setCounterpart] = useState<ConversationUser | null>(null);
-  const [messages, setMessages] = useState<DirectMessage[]>([]);
   const [draft, setDraft] = useState("");
-  const [sending, setSending] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [pendingAttachments, setPendingAttachments] = useState<PendingAttachment[]>([]);
+  const [optimisticMessages, setOptimisticMessages] = useState<
+    Record<string, LocalDirectMessage[]>
+  >({});
   const [lightboxImage, setLightboxImage] = useState<string | null>(null);
   const fileRef = useRef<HTMLInputElement>(null);
   const messagesEndRef = useRef<HTMLDivElement>(null);
@@ -83,92 +166,165 @@ export function MessagesInbox({
   const showThreadList = !isPhone || !activeUsername;
   const showConversation = !isPhone || Boolean(activeUsername);
 
-  const fetchThreads = useCallback(async () => {
-    setThreadsLoading(true);
-    const res = await fetch("/api/messages/threads", { cache: "no-store" });
-    if (!res.ok) {
-      setThreadsLoading(false);
-      return;
-    }
+  const threadsQuery = useQuery({
+    queryKey: queryKeys.messageThreads(),
+    queryFn: fetchThreads,
+    initialData: initialThreads,
+    placeholderData: (previousData) => previousData,
+    staleTime: 10_000,
+  });
 
-    const data = await res.json();
-    setThreads(data.threads ?? []);
-    setThreadsLoading(false);
-  }, []);
-
-  const fetchConversation = useCallback(
-    async (username: string) => {
-      setConversationLoading(true);
-      setError(null);
-
-      const res = await fetch(
-        `/api/messages?with=${encodeURIComponent(username)}`,
-        { cache: "no-store" }
-      );
-
-      if (!res.ok) {
-        const data = await res.json().catch(() => ({ error: "Failed to load conversation" }));
-        setCounterpart(null);
-        setMessages([]);
-        setConversationLoading(false);
-        setError(data.error ?? "Failed to load conversation");
-        return;
-      }
-
-      const data = await res.json();
-      setCounterpart(data.counterpart ?? null);
-      setMessages(data.messages ?? []);
-      setCurrentUserId(data.current_user_id ?? null);
-      setConversationLoading(false);
-
-      const hasUnread = (data.messages ?? []).some(
-        (message: DirectMessage) =>
-          message.recipient_id === data.current_user_id && !message.read_at
-      );
-
-      if (hasUnread) {
-        await fetch("/api/messages", {
-          method: "PATCH",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ with: username }),
-        });
-        window.dispatchEvent(new Event("notifications-updated"));
-        window.dispatchEvent(new Event("messages-updated"));
-        fetchThreads();
-      }
-    },
-    [fetchThreads]
-  );
-
-  useEffect(() => {
-    fetchThreads();
-    function handleRefresh() {
-      fetchThreads();
-    }
-    window.addEventListener("messages-updated", handleRefresh);
-    return () => window.removeEventListener("messages-updated", handleRefresh);
-  }, [fetchThreads]);
+  const threads = threadsQuery.data?.threads ?? EMPTY_THREADS;
+  const threadsLoading = threadsQuery.isPending && threads.length === 0;
 
   useEffect(() => {
     if (threadsLoading) return;
     if (isPhone) return;
     if (!activeUsername && threads[0]?.counterpart_username) {
-      const username = threads[0].counterpart_username;
-      setActiveUsername(username);
-      router.replace(`/messages?with=${encodeURIComponent(username)}`);
+      setActiveUsername(threads[0].counterpart_username);
     }
-  }, [activeUsername, isPhone, router, threads, threadsLoading]);
+  }, [activeUsername, isPhone, threads, threadsLoading]);
+
+  const conversationQuery = useQuery({
+    queryKey: activeUsername
+      ? queryKeys.messageConversation(activeUsername)
+      : queryKeys.messageConversation(null),
+    queryFn: () => fetchConversation(activeUsername as string),
+    enabled: Boolean(activeUsername),
+    initialData: () => {
+      if (
+        activeUsername &&
+        initialConversation?.counterpart?.username === activeUsername
+      ) {
+        return initialConversation;
+      }
+      return undefined;
+    },
+    placeholderData: (previousData) => previousData,
+    staleTime: 10_000,
+  });
+
+  const conversation = conversationQuery.data;
+  const counterpart = conversation?.counterpart ?? null;
+  const currentUserId = conversation?.current_user_id ?? null;
+  const cachedMessages = conversation?.messages ?? EMPTY_MESSAGES;
+  const messages = useMemo(
+    () =>
+      activeUsername
+        ? [...cachedMessages, ...(optimisticMessages[activeUsername] ?? EMPTY_MESSAGES)]
+        : cachedMessages,
+    [activeUsername, cachedMessages, optimisticMessages],
+  );
+  const conversationLoading = conversationQuery.isPending && !conversation;
+  const conversationIsCurrent = counterpart?.username === activeUsername;
 
   useEffect(() => {
-    if (!activeUsername) {
-      setCounterpart(null);
-      setMessages([]);
+    if (conversationQuery.error) {
+      setError((conversationQuery.error as Error).message);
+    } else if (conversationIsCurrent) {
       setError(null);
-      return;
     }
+  }, [conversationIsCurrent, conversationQuery.error]);
 
-    fetchConversation(activeUsername);
-  }, [activeUsername, fetchConversation]);
+  useEffect(() => {
+    for (const thread of threads.slice(0, 3)) {
+      if (!thread.counterpart_username) continue;
+      queryClient.prefetchQuery({
+        queryKey: queryKeys.messageConversation(thread.counterpart_username),
+        queryFn: () => fetchConversation(thread.counterpart_username as string),
+        staleTime: 10_000,
+      });
+    }
+  }, [queryClient, threads]);
+
+  const markReadMutation = useMutation({
+    mutationFn: async (username: string) => {
+      const res = await fetch("/api/messages", {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ with: username }),
+      });
+      if (!res.ok) {
+        const data = await res.json().catch(() => ({ error: "Failed to mark messages read" }));
+        throw new Error(data.error ?? "Failed to mark messages read");
+      }
+      return username;
+    },
+    onMutate: async (username) => {
+      await queryClient.cancelQueries({ queryKey: queryKeys.messageThreads() });
+      const previousThreads = queryClient.getQueryData<ThreadsResponse>(queryKeys.messageThreads());
+      const previousConversation = queryClient.getQueryData<ConversationResponse>(
+        queryKeys.messageConversation(username),
+      );
+      const now = new Date().toISOString();
+
+      queryClient.setQueryData<ThreadsResponse>(queryKeys.messageThreads(), (prev) => {
+        if (!prev) return prev;
+        const markedThread = prev.threads.find(
+          (thread) => thread.counterpart_username === username,
+        );
+        const clearedCount = markedThread?.unread_count ?? 0;
+        return {
+          ...prev,
+          unread_count: Math.max(0, prev.unread_count - clearedCount),
+          threads: prev.threads.map((thread) =>
+            thread.counterpart_username === username
+              ? { ...thread, unread_count: 0 }
+              : thread,
+          ),
+        };
+      });
+
+      queryClient.setQueryData<ConversationResponse>(
+        queryKeys.messageConversation(username),
+        (prev) => {
+          if (!prev?.current_user_id) return prev;
+          return {
+            ...prev,
+            messages: prev.messages.map((message) =>
+              message.recipient_id === prev.current_user_id && !message.read_at
+                ? { ...message, read_at: now }
+                : message,
+            ),
+          };
+        },
+      );
+
+      return { previousThreads, previousConversation };
+    },
+    onError: (_err, username, context) => {
+      if (context?.previousThreads) {
+        queryClient.setQueryData(queryKeys.messageThreads(), context.previousThreads);
+      }
+      if (context?.previousConversation) {
+        queryClient.setQueryData(
+          queryKeys.messageConversation(username),
+          context.previousConversation,
+        );
+      }
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: queryKeys.messageThreads() });
+      queryClient.invalidateQueries({ queryKey: queryKeys.appCounts() });
+      window.dispatchEvent(new Event("notifications-updated"));
+    },
+  });
+
+  useEffect(() => {
+    if (!activeUsername || !conversationIsCurrent || !currentUserId) return;
+    const hasUnread = messages.some(
+      (message) => message.recipient_id === currentUserId && !message.read_at
+    );
+    if (hasUnread && !markReadMutation.isPending) {
+      markReadMutation.mutate(activeUsername);
+    }
+  }, [
+    activeUsername,
+    conversationIsCurrent,
+    currentUserId,
+    markReadMutation,
+    messages,
+  ]);
 
   useEffect(() => {
     if (!counterpart || conversationLoading) return;
@@ -182,8 +338,6 @@ export function MessagesInbox({
 
   function clearConversation() {
     setActiveUsername(null);
-    setCounterpart(null);
-    setMessages([]);
     setError(null);
     setPendingAttachments([]);
     router.replace("/messages");
@@ -259,9 +413,96 @@ export function MessagesInbox({
     }
   }
 
+  const sendMessageMutation = useMutation({
+    mutationFn: async (variables: SendMessageVariables) => {
+      let attachments: MessageAttachmentInput[] = [];
+      if (variables.pending.length > 0) {
+        const results = await Promise.all(
+          variables.pending.map(uploadAttachment)
+        );
+        attachments = results.filter(
+          (r): r is MessageAttachmentInput => r !== null
+        );
+        if (attachments.length !== variables.pending.length) {
+          throw new Error("Upload failed");
+        }
+      }
+
+      const res = await fetch("/api/messages", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          recipientUsername: variables.username,
+          content: variables.content || undefined,
+          attachments: attachments.length > 0 ? attachments : undefined,
+        }),
+      });
+
+      const data = await res.json().catch(() => ({ error: "Failed to send message" }));
+
+      if (!res.ok) {
+        throw new Error(data.error ?? "Failed to send message");
+      }
+
+      return data as DirectMessage;
+    },
+    onError: (err, variables) => {
+      setError((err as Error).message || "Failed to send message");
+      setDraft((prev) => prev || variables.content);
+      setPendingAttachments((prev) =>
+        prev.length > 0
+          ? prev
+          : variables.pending.map((attachment) => ({
+              ...attachment,
+              uploading: false,
+            })),
+      );
+
+      setOptimisticMessages((previous) => ({
+        ...previous,
+        [variables.username]: (previous[variables.username] ?? []).map((message) =>
+          message.id === variables.optimisticId
+            ? { ...message, delivery_status: "failed" }
+            : message,
+        ),
+      }));
+
+      if (variables.previousThreads) {
+        queryClient.setQueryData(queryKeys.messageThreads(), variables.previousThreads);
+      }
+    },
+    onSuccess: (message, variables) => {
+      for (const attachment of variables.pending) {
+        if (attachment.preview) URL.revokeObjectURL(attachment.preview);
+      }
+
+      setOptimisticMessages((previous) => ({
+        ...previous,
+        [variables.username]: (previous[variables.username] ?? []).filter(
+          (item) => item.id !== variables.optimisticId,
+        ),
+      }));
+      queryClient.setQueryData<ConversationResponse>(
+        queryKeys.messageConversation(variables.username),
+        (prev) =>
+          prev
+            ? {
+                ...prev,
+                messages: [...prev.messages, { ...message, delivery_status: "sent" }],
+              }
+            : prev,
+      );
+
+      queryClient.invalidateQueries({ queryKey: queryKeys.messageThreads() });
+      queryClient.invalidateQueries({
+        queryKey: queryKeys.messageConversation(variables.username),
+      });
+    },
+  });
+
   async function handleSendMessage(event: React.FormEvent<HTMLFormElement>) {
     event.preventDefault();
-    if (!counterpart?.username) {
+    if (!activeUsername || !counterpart?.username || !conversationIsCurrent) {
       setError("Choose someone to message first.");
       return;
     }
@@ -272,62 +513,57 @@ export function MessagesInbox({
       return;
     }
 
-    setSending(true);
     setError(null);
+    const optimisticId = `optimistic-${Date.now()}`;
+    const createdAt = new Date().toISOString();
+    const conversationKey = queryKeys.messageConversation(activeUsername);
+    const previousConversation =
+      queryClient.getQueryData<ConversationResponse>(conversationKey);
+    const previousThreads =
+      queryClient.getQueryData<ThreadsResponse>(queryKeys.messageThreads());
+    const optimisticMessage: LocalDirectMessage = {
+      id: optimisticId,
+      sender_id: currentUserId ?? "current-user",
+      recipient_id: counterpart.id,
+      content: content || null,
+      attachments: [],
+      read_at: null,
+      created_at: createdAt,
+      sender: currentUserId
+        ? { id: currentUserId, username: null, avatar_url: null, display_name: null }
+        : undefined,
+      recipient: counterpart,
+      delivery_status: "sending",
+    };
 
-    // Upload all pending attachments
-    let attachments: MessageAttachmentInput[] = [];
-    if (pendingAttachments.length > 0) {
-      setPendingAttachments((prev) =>
-        prev.map((a) => ({ ...a, uploading: true }))
-      );
-      const results = await Promise.all(
-        pendingAttachments.map(uploadAttachment)
-      );
-      attachments = results.filter(
-        (r): r is MessageAttachmentInput => r !== null
-      );
-      if (attachments.length !== pendingAttachments.length) {
-        setSending(false);
-        setPendingAttachments((prev) =>
-          prev.map((a) => ({ ...a, uploading: false }))
-        );
-        return;
-      }
-    }
-
-    const res = await fetch("/api/messages", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        recipientUsername: counterpart.username,
-        content: content || undefined,
-        attachments: attachments.length > 0 ? attachments : undefined,
-      }),
-    });
-
-    const data = await res.json().catch(() => ({ error: "Failed to send message" }));
-
-    if (!res.ok) {
-      setSending(false);
-      setError(data.error ?? "Failed to send message");
-      setPendingAttachments((prev) =>
-        prev.map((a) => ({ ...a, uploading: false }))
-      );
-      return;
-    }
-
-    // Clean up previews
-    for (const a of pendingAttachments) {
-      if (a.preview) URL.revokeObjectURL(a.preview);
-    }
-
-    setMessages((prev) => [...prev, data]);
     setDraft("");
     setPendingAttachments([]);
-    setSending(false);
-    fetchThreads();
-    window.dispatchEvent(new Event("messages-updated"));
+    setOptimisticMessages((previous) => ({
+      ...previous,
+      [activeUsername]: [...(previous[activeUsername] ?? []), optimisticMessage],
+    }));
+    window.setTimeout(() => {
+      queryClient.setQueryData<ThreadsResponse>(queryKeys.messageThreads(), (prev) => {
+        if (!prev) return prev;
+        const hasAttachment = pendingAttachments.length > 0;
+        return {
+          ...prev,
+          threads: prev.threads.map((thread) =>
+            thread.counterpart_username === activeUsername
+              ? updateThreadAfterSend(thread, content, createdAt, hasAttachment)
+              : thread,
+          ),
+        };
+      });
+    }, 0);
+    sendMessageMutation.mutate({
+      username: activeUsername,
+      content,
+      pending: pendingAttachments,
+      optimisticId,
+      previousConversation,
+      previousThreads,
+    });
   }
 
   return (
@@ -361,7 +597,7 @@ export function MessagesInbox({
           </p>
         </div>
 
-        <div aria-busy={threadsLoading} className="min-h-0 flex-1 overflow-y-auto overscroll-contain">
+        <div aria-busy={threadsQuery.isFetching} className="min-h-0 flex-1 overflow-y-auto overscroll-contain">
           {threadsLoading ? (
             <div className="p-[var(--app-page-padding-x)]">
               <div className="space-y-3">
@@ -642,15 +878,21 @@ export function MessagesInbox({
                             </p>
                           )}
 
-                          <p
-                            suppressHydrationWarning
+                          <div
                             className={cn(
-                              "mt-2 text-xs",
+                              "mt-2 flex items-center gap-2 text-xs",
                               mine ? "text-white/70" : "text-muted"
                             )}
                           >
-                            {timeAgo(message.created_at)}
-                          </p>
+                            <span suppressHydrationWarning>
+                              {timeAgo(message.created_at)}
+                            </span>
+                            {mine && message.delivery_status && (
+                              <span className="capitalize">
+                                {message.delivery_status}
+                              </span>
+                            )}
+                          </div>
                         </div>
                       </div>
                     );
@@ -768,7 +1010,7 @@ export function MessagesInbox({
                       <button
                         type="button"
                         onClick={() => fileRef.current?.click()}
-                        disabled={sending || pendingAttachments.length >= 10}
+                        disabled={sendMessageMutation.isPending || pendingAttachments.length >= 10}
                         className="inline-flex items-center gap-1.5 text-sm text-muted hover:text-foreground disabled:opacity-50"
                         aria-label="Attach a file or image"
                       >
@@ -785,9 +1027,13 @@ export function MessagesInbox({
                     </div>
                     <Button
                       type="submit"
-                      disabled={sending || (draft.trim().length === 0 && pendingAttachments.length === 0)}
+                      disabled={
+                        sendMessageMutation.isPending ||
+                        !conversationIsCurrent ||
+                        (draft.trim().length === 0 && pendingAttachments.length === 0)
+                      }
                     >
-                      {sending ? "Sending..." : "Send \u2318\u21B5"}
+                      {sendMessageMutation.isPending ? "Sending..." : "Send \u2318\u21B5"}
                     </Button>
                   </div>
                 </form>
