@@ -1,7 +1,6 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { createClient } from "@/lib/supabase/client";
 import { Button } from "@/components/ui/Button";
 import { Copy, Check, ExternalLink } from "lucide-react";
 import Link from "next/link";
@@ -55,17 +54,13 @@ export default function CardPage() {
 
   useEffect(() => {
     async function load() {
-      const supabase = createClient();
-      const {
-        data: { user },
-      } = await supabase.auth.getUser();
-      if (!user) return;
+      const res = await fetch("/api/users/me");
+      if (!res.ok) {
+        setLoading(false);
+        return;
+      }
 
-      const { data: profile } = await supabase
-        .from("users")
-        .select("username, is_public")
-        .eq("id", user.id)
-        .single();
+      const profile = await res.json();
 
       if (profile?.username) {
         setUsername(profile.username);

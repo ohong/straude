@@ -118,7 +118,7 @@ export default async function PostDetailPage({
     .select(
       `
       *,
-      user:users!posts_user_id_fkey(*),
+      user:users!posts_user_id_fkey(id, username, display_name, bio, avatar_url, country, region, link, github_username, is_public),
       daily_usage:daily_usage!posts_daily_usage_id_fkey(*),
       kudos_count:kudos(count),
       comment_count:comments(count)

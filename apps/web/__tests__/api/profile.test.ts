@@ -16,8 +16,8 @@ vi.mock("@/lib/constants/regions", () => ({
   },
 }));
 
-import { GET } from "@/app/api/users/[username]/route";
-import { PATCH } from "@/app/api/users/me/route";
+import { GET as getPublicProfile } from "@/app/api/users/[username]/route";
+import { GET as getOwnProfile, PATCH } from "@/app/api/users/me/route";
 import { createClient } from "@/lib/supabase/server";
 import { getServiceClient } from "@/lib/supabase/service";
 import { NextRequest } from "next/server";
@@ -45,6 +45,7 @@ describe("GET /api/users/[username]", () => {
       username: "alice",
       is_public: true,
       region: "north_america",
+      streak_freezes: 2,
     };
 
     const client: Record<string, any> = {
@@ -158,7 +159,7 @@ describe("GET /api/users/[username]", () => {
     });
     (getServiceClient as any).mockReturnValue(client);
 
-    const res = await GET(
+    const res = await getPublicProfile(
       makeRequest("GET", "/api/users/alice"),
       makeContext("alice")
     );
@@ -169,6 +170,9 @@ describe("GET /api/users/[username]", () => {
     expect(json.streak).toBe(7);
     expect(json.total_cost).toBe(15);
     expect(json.level).toBe(4);
+    expect(json.streak_freezes).toBeUndefined();
+    expect(json.referred_by).toBeUndefined();
+    expect(json.created_at).toBeUndefined();
   });
 
   it("returns 404 for non-existent username", async () => {
@@ -213,7 +217,7 @@ describe("GET /api/users/[username]", () => {
       }),
     });
 
-    const res = await GET(
+    const res = await getPublicProfile(
       makeRequest("GET", "/api/users/nobody"),
       makeContext("nobody")
     );
@@ -221,6 +225,52 @@ describe("GET /api/users/[username]", () => {
 
     expect(res.status).toBe(404);
     expect(json.error).toBe("User not found");
+  });
+});
+
+describe("GET /api/users/me", () => {
+  it("returns the authenticated profile with crew count", async () => {
+    const authClient: Record<string, any> = {
+      auth: {
+        getUser: vi.fn().mockResolvedValue({
+          data: { user: { id: "u-1" } },
+          error: null,
+        }),
+      },
+    };
+
+    const db = {
+      from: vi
+        .fn()
+        .mockImplementationOnce(() => ({
+          select: vi.fn().mockReturnValue({
+            eq: vi.fn().mockReturnValue({
+              single: vi.fn().mockResolvedValue({
+                data: { id: "u-1", username: "alice", github_username: "alicegh" },
+                error: null,
+              }),
+            }),
+          }),
+        }))
+        .mockImplementationOnce(() => ({
+          select: vi.fn().mockReturnValue({
+            eq: vi.fn().mockResolvedValue({
+              count: 3,
+              error: null,
+            }),
+          }),
+        })),
+    };
+
+    (createClient as any).mockResolvedValue(authClient);
+    (getServiceClient as any).mockReturnValue(db);
+
+    const res = await getOwnProfile();
+    const json = await res.json();
+
+    expect(res.status).toBe(200);
+    expect(json.username).toBe("alice");
+    expect(json.crew_count).toBe(3);
   });
 });
 
@@ -233,13 +283,15 @@ describe("PATCH /api/users/me", () => {
       heard_about: "A friend mentioned it",
     };
 
-    const client: Record<string, any> = {
+    const authClient: Record<string, any> = {
       auth: {
         getUser: vi.fn().mockResolvedValue({
           data: { user: { id: "u-1" } },
           error: null,
         }),
       },
+    };
+    const db = {
       from: vi.fn().mockReturnValue({
         update: vi.fn().mockReturnValue({
           eq: vi.fn().mockReturnValue({
@@ -253,7 +305,8 @@ describe("PATCH /api/users/me", () => {
         }),
       }),
     };
-    (createClient as any).mockResolvedValue(client);
+    (createClient as any).mockResolvedValue(authClient);
+    (getServiceClient as any).mockReturnValue(db);
 
     const res = await PATCH(
       makeRequest("PATCH", "/api/users/me", {
@@ -360,16 +413,19 @@ describe("PATCH /api/users/me", () => {
       }),
     });
 
-    const client: Record<string, any> = {
+    const authClient: Record<string, any> = {
       auth: {
         getUser: vi.fn().mockResolvedValue({
           data: { user: { id: "u-1" } },
           error: null,
         }),
       },
+    };
+    const db = {
       from: vi.fn().mockReturnValue({ update: updateMock }),
     };
-    (createClient as any).mockResolvedValue(client);
+    (createClient as any).mockResolvedValue(authClient);
+    (getServiceClient as any).mockReturnValue(db);
 
     await PATCH(
       makeRequest("PATCH", "/api/users/me", { country: "US" })
@@ -384,13 +440,15 @@ describe("PATCH /api/users/me", () => {
   });
 
   it("rejects duplicate username (409)", async () => {
-    const client: Record<string, any> = {
+    const authClient: Record<string, any> = {
       auth: {
         getUser: vi.fn().mockResolvedValue({
           data: { user: { id: "u-1" } },
           error: null,
         }),
       },
+    };
+    const db = {
       from: vi.fn().mockReturnValue({
         update: vi.fn().mockReturnValue({
           eq: vi.fn().mockReturnValue({
@@ -404,7 +462,8 @@ describe("PATCH /api/users/me", () => {
         }),
       }),
     };
-    (createClient as any).mockResolvedValue(client);
+    (createClient as any).mockResolvedValue(authClient);
+    (getServiceClient as any).mockReturnValue(db);
 
     const res = await PATCH(
       makeRequest("PATCH", "/api/users/me", { username: "taken_name" })

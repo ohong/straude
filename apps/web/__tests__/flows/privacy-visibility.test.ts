@@ -233,7 +233,7 @@ describe("Flow: Privacy and Visibility", () => {
     (updateChain.select as ReturnType<typeof vi.fn>).mockReturnValue(updateChain);
     (updateChain.eq as ReturnType<typeof vi.fn>).mockReturnValue(updateChain);
 
-    mockSupabase.from.mockImplementation(() => updateChain);
+    mockServiceClient.from.mockImplementation(() => updateChain);
 
     const { PATCH } = await import("@/app/api/users/me/route");
     const req = makeRequest("http://localhost:3000/api/users/me", {

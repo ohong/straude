@@ -122,7 +122,7 @@ export async function POST(request: NextRequest, context: RouteContext) {
       content,
       parent_comment_id: parentCommentId,
     })
-    .select("*, user:users!comments_user_id_fkey(*)")
+    .select("*, user:users!comments_user_id_fkey(id, username, display_name, bio, avatar_url, is_public)")
     .single();
 
   if (error) {

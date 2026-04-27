@@ -35,17 +35,27 @@ export async function GET() {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
 
-  const { data: profile, error } = await supabase
-    .from("users")
-    .select("*")
-    .eq("id", user.id)
-    .single();
+  const db = getServiceClient();
+  const [{ data: profile, error }, { count: crewCount }] = await Promise.all([
+    db
+      .from("users")
+      .select("*")
+      .eq("id", user.id)
+      .single(),
+    db
+      .from("users")
+      .select("id", { count: "exact", head: true })
+      .eq("referred_by", user.id),
+  ]);
 
   if (error || !profile) {
     return NextResponse.json({ error: "Profile not found" }, { status: 404 });
   }
 
-  return NextResponse.json(profile);
+  return NextResponse.json({
+    ...profile,
+    crew_count: crewCount ?? 0,
+  });
 }
 
 export async function PATCH(request: NextRequest) {
@@ -131,7 +141,8 @@ export async function PATCH(request: NextRequest) {
 
   const isOnboardingUpdate = updates.onboarding_completed === true;
 
-  const { data: profile, error } = await supabase
+  const db = getServiceClient();
+  const { data: profile, error } = await db
     .from("users")
     .update(updates)
     .eq("id", user.id)

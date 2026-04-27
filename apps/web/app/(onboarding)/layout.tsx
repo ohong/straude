@@ -1,4 +1,5 @@
 import { createClient } from "@/lib/supabase/server";
+import { getServiceClient } from "@/lib/supabase/service";
 import { redirect } from "next/navigation";
 import type { Metadata } from "next";
 
@@ -20,8 +21,10 @@ export default async function OnboardingLayout({
     redirect("/login");
   }
 
+  const db = getServiceClient();
+
   // Already onboarded — send to feed
-  const { data: profile } = await supabase
+  const { data: profile } = await db
     .from("users")
     .select("username, onboarding_completed")
     .eq("id", user.id)
