@@ -4,8 +4,13 @@ vi.mock("@/lib/supabase/server", () => ({
   createClient: vi.fn(),
 }));
 
+vi.mock("@/lib/supabase/service", () => ({
+  getServiceClient: vi.fn(),
+}));
+
 import { GET } from "@/app/api/feed/route";
 import { createClient } from "@/lib/supabase/server";
+import { getServiceClient } from "@/lib/supabase/service";
 import { NextRequest } from "next/server";
 
 function buildChain(terminal: Record<string, any> = {}) {
@@ -29,6 +34,8 @@ function mockSupabase(opts: {
   kudos?: any[];
   userKudos?: any[];
   comments?: any[];
+  profile?: { id: string; is_public: boolean } | null;
+  follow?: { id: string } | null;
 }) {
   const {
     user = { id: "user-1" },
@@ -37,6 +44,8 @@ function mockSupabase(opts: {
     kudos = [],
     userKudos,
     comments = [],
+    profile = null,
+    follow = null,
   } = opts;
 
   const client: Record<string, any> = {
@@ -84,11 +93,44 @@ function mockSupabase(opts: {
           }),
         });
       }
+      if (table === "follows") {
+        return buildChain({
+          select: vi.fn().mockReturnValue({
+            eq: vi.fn().mockReturnValue({
+              eq: vi.fn().mockReturnValue({
+                maybeSingle: vi.fn().mockResolvedValue({
+                  data: follow,
+                  error: null,
+                }),
+              }),
+            }),
+          }),
+        });
+      }
+      return buildChain();
+    }),
+  };
+
+  const serviceClient: Record<string, any> = {
+    from: vi.fn().mockImplementation((table: string) => {
+      if (table === "users") {
+        return buildChain({
+          select: vi.fn().mockReturnValue({
+            eq: vi.fn().mockReturnValue({
+              maybeSingle: vi.fn().mockResolvedValue({
+                data: profile,
+                error: null,
+              }),
+            }),
+          }),
+        });
+      }
       return buildChain();
     }),
   };
 
   (createClient as any).mockResolvedValue(client);
+  (getServiceClient as any).mockReturnValue(serviceClient);
   return client;
 }
 
@@ -123,6 +165,74 @@ describe("GET /api/feed", () => {
 
     expect(res.status).toBe(401);
     expect(json.error).toBe("Unauthorized");
+  });
+
+  it("rejects user feed without user_id", async () => {
+    mockSupabase({ user: null });
+
+    const res = await GET(makeRequest({ type: "user" }));
+    const json = await res.json();
+
+    expect(res.status).toBe(400);
+    expect(json.error).toBe("user_id is required for user feed");
+  });
+
+  it("falls back to the authenticated user's id for self user feed", async () => {
+    const client = mockSupabase({
+      user: { id: "550e8400-e29b-41d4-a716-446655440000" },
+      profile: { id: "550e8400-e29b-41d4-a716-446655440000", is_public: false },
+      posts: [],
+    });
+
+    const res = await GET(makeRequest({ type: "user" }));
+    const json = await res.json();
+
+    expect(res.status).toBe(200);
+    expect(json.posts).toEqual([]);
+    expect(client.rpc).toHaveBeenCalledWith("get_feed", expect.objectContaining({
+      p_type: "user",
+      p_user_id: "550e8400-e29b-41d4-a716-446655440000",
+    }));
+  });
+
+  it("rejects malformed user_id values", async () => {
+    mockSupabase({ user: { id: "user-1" } });
+
+    const res = await GET(makeRequest({ type: "user", user_id: "not-a-uuid" }));
+    const json = await res.json();
+
+    expect(res.status).toBe(400);
+    expect(json.error).toBe("user_id must be a valid UUID");
+  });
+
+  it("rejects unauthenticated access to a private user feed", async () => {
+    const privateUserId = "550e8400-e29b-41d4-a716-446655440001";
+    mockSupabase({
+      user: null,
+      profile: { id: privateUserId, is_public: false },
+    });
+
+    const res = await GET(
+      makeRequest({ type: "user", user_id: privateUserId })
+    );
+    const json = await res.json();
+
+    expect(res.status).toBe(403);
+    expect(json.error).toBe("Forbidden");
+  });
+
+  it("allows follower access to a private user feed", async () => {
+    const privateUserId = "550e8400-e29b-41d4-a716-446655440001";
+    mockSupabase({
+      profile: { id: privateUserId, is_public: false },
+      follow: { id: "follow-1" },
+    });
+
+    const res = await GET(
+      makeRequest({ type: "user", user_id: privateUserId })
+    );
+
+    expect(res.status).toBe(200);
   });
 
   it("returns empty array when user follows nobody", async () => {
