@@ -155,4 +155,20 @@ describe("native Codex collector", () => {
     expect(entry.costUSD).toBeCloseTo((200 * 0.00000075) + (800 * 0.000000075) + (200 * 0.0000045));
     expect(entry.modelBreakdown).toEqual([{ model: "gpt-5.4-mini", cost_usd: entry.costUSD }]);
   });
+
+  it("prices GPT-5.5 before falling back to GPT-5 pricing", async () => {
+    await writeSession("2026-04-24", "session.jsonl", [
+      meta("s1"),
+      turn("gpt-5.5"),
+      token("2026-04-24T14:00:01.000Z", {
+        total_token_usage: usage(1000, 200, 800),
+      }),
+    ]);
+
+    const result = await collectCodexUsageAsync("20260424", "20260424");
+    const entry = result.data[0]!;
+    expect(entry.models).toEqual(["gpt-5.5"]);
+    expect(entry.costUSD).toBeCloseTo((200 * 0.000005) + (800 * 0.0000005) + (200 * 0.00003));
+    expect(entry.modelBreakdown).toEqual([{ model: "gpt-5.5", cost_usd: entry.costUSD }]);
+  });
 });

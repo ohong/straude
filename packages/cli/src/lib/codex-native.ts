@@ -85,6 +85,8 @@ const CODEX_PRICING: Record<string, Pricing> = {
   "gpt-5.1-codex-mini": { input: 0.00000025, output: 0.000002, cacheRead: 0.000000025 },
   "gpt-5.2": { input: 0.00000175, output: 0.000014, cacheRead: 0.000000175 },
   "gpt-5.2-codex": { input: 0.00000175, output: 0.000014, cacheRead: 0.000000175 },
+  "gpt-5.5": { input: 0.000005, output: 0.00003, cacheRead: 0.0000005 },
+  "gpt-5.5-pro": { input: 0.00003, output: 0.00018, cacheRead: 0.00003 },
   "gpt-5.4": { input: 0.0000025, output: 0.000015, cacheRead: 0.00000025 },
   "gpt-5.4-2026-03-05": { input: 0.0000025, output: 0.000015, cacheRead: 0.00000025 },
   "gpt-5.4-mini": { input: 0.00000075, output: 0.0000045, cacheRead: 0.000000075 },
@@ -396,6 +398,8 @@ function resolvePricing(model: string): Pricing | undefined {
   const normalized = model.trim().toLowerCase();
   const aliased = CODEX_MODEL_ALIASES[normalized] ?? normalized;
   if (CODEX_PRICING[aliased]) return CODEX_PRICING[aliased];
+  if (aliased.startsWith("gpt-5.5-pro")) return CODEX_PRICING["gpt-5.5-pro"];
+  if (aliased.startsWith("gpt-5.5")) return CODEX_PRICING["gpt-5.5"];
   if (aliased.startsWith("gpt-5.4-mini")) return CODEX_PRICING["gpt-5.4-mini"];
   if (aliased.startsWith("gpt-5.4-nano")) return CODEX_PRICING["gpt-5.4-nano"];
   if (aliased.startsWith("gpt-5.4")) return CODEX_PRICING["gpt-5.4"];
