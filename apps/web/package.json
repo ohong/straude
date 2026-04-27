@@ -22,6 +22,7 @@
     "@react-email/components": "^1.0.8",
     "@supabase/ssr": "^0.6",
     "@supabase/supabase-js": "^2",
+    "@tanstack/react-query": "^5.100.5",
     "@vercel/analytics": "^1.6.1",
     "agentation": "^2.2.1",
     "clsx": "^2",

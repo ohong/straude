@@ -4,6 +4,7 @@ import { Analytics } from "@vercel/analytics/next";
 import { Agentation } from "agentation";
 import Script from "next/script";
 import { PostHogClientProvider } from "@/components/providers/PostHogProvider";
+import { QueryProvider } from "@/components/providers/QueryProvider";
 import { ThemeProvider } from "@/components/providers/ThemeProvider";
 import { getThemeBootstrapScript } from "@/lib/theme";
 import "./globals.css";
@@ -126,7 +127,9 @@ export default function RootLayout({
           Skip to content
         </a>
         <PostHogClientProvider>
-          <ThemeProvider>{children}</ThemeProvider>
+          <QueryProvider>
+            <ThemeProvider>{children}</ThemeProvider>
+          </QueryProvider>
         </PostHogClientProvider>
         <Analytics />
         {process.env.NODE_ENV === "development" && <Agentation />}
