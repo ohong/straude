@@ -1,7 +1,7 @@
 import { ImageResponse } from "next/og";
 import { getServiceClient } from "@/lib/supabase/service";
 import { loadFonts } from "@/lib/og-fonts";
-import { isFirstPartyPublicStorageUrl } from "@/lib/storage";
+import { isAllowedAvatarUrl } from "@/lib/storage";
 import { formatCurrency } from "@/lib/utils/format";
 
 export const alt = "Join Straude";
@@ -28,7 +28,7 @@ export default async function Image({
   }
   const avatarUrl = referrer.avatar_url;
   const safeAvatarUrl =
-    typeof avatarUrl === "string" && isFirstPartyPublicStorageUrl(avatarUrl, "avatars")
+    typeof avatarUrl === "string" && isAllowedAvatarUrl(avatarUrl)
       ? avatarUrl
       : null;
 

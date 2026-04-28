@@ -59,6 +59,25 @@ export function isFirstPartyPublicStorageUrl(
   return extractPublicStoragePath(url, bucket) !== null;
 }
 
+const ALLOWED_AVATAR_HOSTS = new Set([
+  "avatars.githubusercontent.com",
+  "unavatar.io",
+  "api.dicebear.com",
+]);
+
+export function isAllowedAvatarUrl(url: string): boolean {
+  if (isFirstPartyPublicStorageUrl(url, "avatars")) {
+    return true;
+  }
+  try {
+    const parsed = new URL(url);
+    if (parsed.protocol !== "https:") return false;
+    return ALLOWED_AVATAR_HOSTS.has(parsed.hostname);
+  } catch {
+    return false;
+  }
+}
+
 export function normalizeMessageAttachmentInput(
   value: unknown,
 ): MessageAttachmentInput | null {
