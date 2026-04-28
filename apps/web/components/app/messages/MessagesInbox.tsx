@@ -556,14 +556,16 @@ export function MessagesInbox({
         };
       });
     }, 0);
-    sendMessageMutation.mutate({
-      username: activeUsername,
-      content,
-      pending: pendingAttachments,
-      optimisticId,
-      previousConversation,
-      previousThreads,
-    });
+    window.setTimeout(() => {
+      sendMessageMutation.mutate({
+        username: activeUsername,
+        content,
+        pending: pendingAttachments,
+        optimisticId,
+        previousConversation,
+        previousThreads,
+      });
+    }, 0);
   }
 
   return (
