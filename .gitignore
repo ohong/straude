@@ -56,6 +56,9 @@ next-env.d.ts
 .claude/worktrees/
 .claude/review-loop.log
 
+# supabase cli runtime cache (machine-local)
+supabase/.temp/
+
 # OG image variants (local experiments)
 og-variants/
 .firecrawl/
@@ -86,3 +89,4 @@ AGENTS.md
 .waypoint/docs/README.md
 .waypoint/docs/code-guide.md
 .env
+.env.local
