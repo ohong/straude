@@ -84,3 +84,15 @@ straude status
 ## Config
 
 Credentials are stored in `~/.straude/config.json` (mode `0600`, owner-only).
+
+## Telemetry
+
+The CLI sends anonymous usage events (command name, CLI version, success/failure outcomes, aggregate counts like `days_pushed` and `total_cost_usd`) to Straude's PostHog project so we can prioritise features and catch regressions. We never send prompts, code, conversation content, file paths, or ccusage rows — home directory paths are scrubbed from any free-form payload before transmission.
+
+To opt out, set either env var:
+
+```sh
+export STRAUDE_TELEMETRY_DISABLED=1
+# or the unix-standard:
+export DO_NOT_TRACK=1
+```

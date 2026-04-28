@@ -15,6 +15,7 @@ import { MAX_BACKFILL_DAYS, DEFAULT_SYNC_DAYS } from "../config.js";
 import { Spinner } from "../lib/spinner.js";
 import type { DashboardData as DashboardResponse } from "../components/PushSummary.js";
 import { posthog } from "../lib/posthog.js";
+import { getDistinctId } from "../lib/machine-id.js";
 
 interface UsageSubmitRequest {
   entries: Array<{
@@ -383,11 +384,11 @@ export async function pushCommand(options: PushOptions, apiUrlOverride?: string)
     syncSpinner.stop();
   } catch (err) {
     syncSpinner.stop();
-    posthog.captureException(err, config.username || undefined, { command: "push" });
+    posthog.captureException(err, getDistinctId(config), { command: "push" });
     posthog.capture({
-      distinctId: config.username || "anonymous",
+      distinctId: getDistinctId(config),
       event: "usage_push_failed",
-      properties: { error: (err as Error).message },
+      properties: { error: truncate((err as Error).message, 200) },
     });
     await posthog._shutdown();
     console.error(`\nFailed to submit: ${(err as Error).message}`);
@@ -428,7 +429,7 @@ export async function pushCommand(options: PushOptions, apiUrlOverride?: string)
   const datesCreated = response.results.filter((r) => r.action === "created").length;
   const datesUpdated = response.results.filter((r) => r.action === "updated").length;
   posthog.capture({
-    distinctId: config.username || "anonymous",
+    distinctId: getDistinctId(config),
     event: "usage_pushed",
     properties: {
       days_pushed: entries.length,
@@ -462,4 +463,8 @@ export async function pushCommand(options: PushOptions, apiUrlOverride?: string)
       console.log(`${verb} ${result.date}: ${result.post_url}?edit=1`);
     }
   }
+}
+
+function truncate(value: string, max: number): string {
+  return value.length > max ? `${value.slice(0, max)}…` : value;
 }

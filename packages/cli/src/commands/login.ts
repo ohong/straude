@@ -3,6 +3,7 @@ import { CONFIG_FILE, DEFAULT_API_URL, POLL_INTERVAL_MS, POLL_TIMEOUT_MS } from 
 import { loadConfig, saveConfig } from "../lib/auth.js";
 import { apiRequestNoAuth } from "../lib/api.js";
 import { posthog } from "../lib/posthog.js";
+import { getDistinctId, getMachineId } from "../lib/machine-id.js";
 
 interface CliInitResponse {
   code: string;
@@ -115,10 +116,13 @@ export async function loginCommand(apiUrlOverride?: string): Promise<void> {
 
       const username = pollRes.username ?? "";
       if (username) {
+        // Alias the pre-login machine UUID to the username so the user's
+        // anonymous CLI events get attributed to their account.
+        posthog.alias({ distinctId: username, alias: getMachineId() });
         posthog.identify({ distinctId: username, properties: { username } });
       }
       posthog.capture({
-        distinctId: username || "anonymous",
+        distinctId: getDistinctId({ username }),
         event: "login_completed",
         properties: { is_new_user: !sameIdentity },
       });

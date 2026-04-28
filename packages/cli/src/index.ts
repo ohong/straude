@@ -7,6 +7,7 @@ import { autoCommand, enableAutoPush, disableAutoPush } from "./commands/auto.js
 import { loadConfig } from "./lib/auth.js";
 import { CLI_VERSION } from "./config.js";
 import { posthog } from "./lib/posthog.js";
+import { getDistinctId } from "./lib/machine-id.js";
 
 const HELP = `
 straude v${CLI_VERSION} — Push your Claude Code usage to Straude
@@ -154,7 +155,7 @@ async function main(): Promise<void> {
 
 main()
   .catch((err: unknown) => {
-    posthog.captureException(err);
+    posthog.captureException(err, getDistinctId(loadConfig()));
     console.error(`Error: ${(err as Error).message}`);
   })
   .finally(() => posthog._shutdown().then(() => process.exit(0)));

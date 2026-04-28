@@ -14,6 +14,7 @@ import {
 import { readLog } from "../lib/auto-push-logger.js";
 import { AUTO_PUSH_DEFAULT_TIME, AUTO_PUSH_LOG_FILE, LAUNCHD_PLIST_PATH } from "../config.js";
 import { posthog } from "../lib/posthog.js";
+import { getDistinctId } from "../lib/machine-id.js";
 
 function schedulerDescription(scheduler: "launchd" | "cron"): string {
   if (scheduler === "launchd") {
@@ -54,7 +55,7 @@ export function enableAutoPush(
     saveConfig(config);
 
     posthog.capture({
-      distinctId: config.username || "anonymous",
+      distinctId: getDistinctId(config),
       event: "auto_push_enabled",
       properties: { mechanism: "hooks" },
     });
@@ -83,7 +84,7 @@ export function enableAutoPush(
   saveConfig(config);
 
   posthog.capture({
-    distinctId: config.username || "anonymous",
+    distinctId: getDistinctId(config),
     event: "auto_push_enabled",
     properties: { mechanism: "scheduler", scheduler, time: resolvedTime },
   });
@@ -106,7 +107,7 @@ export function disableAutoPush(config: StraudeConfig): void {
   saveConfig(config);
 
   posthog.capture({
-    distinctId: config.username || "anonymous",
+    distinctId: getDistinctId(config),
     event: "auto_push_disabled",
     properties: {},
   });
