@@ -2,6 +2,7 @@
 
 import { useState } from "react";
 import { Check, Copy } from "lucide-react";
+import { usePostHog } from "posthog-js/react";
 import { Textarea } from "@/components/ui/Textarea";
 import { Button } from "@/components/ui/Button";
 
@@ -13,6 +14,7 @@ interface ImportResult {
 }
 
 export default function ImportPage() {
+  const posthog = usePostHog();
   const [json, setJson] = useState("");
   const [loading, setLoading] = useState(false);
   const [results, setResults] = useState<ImportResult[] | null>(null);
@@ -80,6 +82,10 @@ export default function ImportPage() {
     } else {
       const body = await res.json();
       setResults(body.results);
+      posthog.capture("usage_imported", {
+        days_imported: (body.results as ImportResult[]).length,
+        source: "web",
+      });
     }
     setLoading(false);
   }

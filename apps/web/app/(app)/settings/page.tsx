@@ -11,11 +11,13 @@ import { Textarea } from "@/components/ui/Textarea";
 import { Button } from "@/components/ui/Button";
 import { Avatar } from "@/components/ui/Avatar";
 import { LogOut, Copy, Check, Camera, Loader2 } from "lucide-react";
+import { usePostHog } from "posthog-js/react";
 import { compressImage } from "@/lib/utils/compress-image";
 import { CountryPicker } from "@/components/ui/CountryPicker";
 
 export default function SettingsPage() {
   const router = useRouter();
+  const posthog = usePostHog();
   const [profile, setProfile] = useState<User | null>(null);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
@@ -148,6 +150,7 @@ export default function SettingsPage() {
       setError(data.error ?? "Failed to save");
     } else {
       setSaved(true);
+      posthog.capture("profile_saved", { is_public: isPublic });
     }
     setSaving(false);
   }
@@ -349,6 +352,7 @@ export default function SettingsPage() {
                     navigator.clipboard.writeText(`https://straude.com/join/${username}`);
                     setRefCopied(true);
                     setTimeout(() => setRefCopied(false), 2000);
+                    posthog.capture("referral_link_copied", { username });
                   }}
                   className="inline-flex items-center gap-1.5 border border-border px-3 py-2 text-sm font-semibold hover:bg-subtle"
                   style={{ borderRadius: 4 }}

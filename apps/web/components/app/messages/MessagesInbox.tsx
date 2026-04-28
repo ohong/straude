@@ -15,6 +15,7 @@ import { Button } from "@/components/ui/Button";
 import { Textarea } from "@/components/ui/Textarea";
 import { cn } from "@/lib/utils/cn";
 import { compressImage } from "@/lib/utils/compress-image";
+import { usePostHog } from "posthog-js/react";
 import { useResponsiveShell } from "@/components/app/shared/useResponsiveShell";
 import { timeAgo } from "@/lib/utils/format";
 import { queryKeys } from "@/lib/query/keys";
@@ -149,6 +150,7 @@ export function MessagesInbox({
   initialConversation?: ConversationResponse | null;
 }) {
   const router = useRouter();
+  const posthog = usePostHog();
   const queryClient = useQueryClient();
   const shellMode = useResponsiveShell();
   const [activeUsername, setActiveUsername] = useState(initialUsername);
@@ -472,6 +474,11 @@ export function MessagesInbox({
       }
     },
     onSuccess: (message, variables) => {
+      posthog.capture("message_sent", {
+        recipient_username: variables.username,
+        has_attachment: variables.pending.length > 0,
+      });
+
       for (const attachment of variables.pending) {
         if (attachment.preview) URL.revokeObjectURL(attachment.preview);
       }

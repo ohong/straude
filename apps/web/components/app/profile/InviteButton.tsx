@@ -2,14 +2,17 @@
 
 import { useState } from "react";
 import { UserPlus, Check } from "lucide-react";
+import { usePostHog } from "posthog-js/react";
 
 export function InviteButton({ username }: { username: string }) {
+  const posthog = usePostHog();
   const [copied, setCopied] = useState(false);
 
   function handleCopy() {
     navigator.clipboard.writeText(`https://straude.com/join/${username}`);
     setCopied(true);
     setTimeout(() => setCopied(false), 2000);
+    posthog.capture("invite_link_copied", { inviter_username: username });
   }
 
   return (

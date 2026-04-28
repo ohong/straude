@@ -5,6 +5,7 @@ import { useRouter } from "next/navigation";
 import Image from "next/image";
 import { Pencil, X, Sparkles, Upload, Loader2, Trash2, ChevronLeft, ChevronRight } from "lucide-react";
 import { AlertDialog } from "@base-ui-components/react/alert-dialog";
+import { usePostHog } from "posthog-js/react";
 import { Button } from "@/components/ui/Button";
 import { Input } from "@/components/ui/Input";
 import { MentionInput } from "@/components/app/shared/MentionInput";
@@ -13,6 +14,7 @@ import type { Post } from "@/types";
 
 export function PostEditor({ post, autoEdit = false }: { post: Post; autoEdit?: boolean }) {
   const router = useRouter();
+  const posthog = usePostHog();
   const [editing, setEditing] = useState(autoEdit);
   const [title, setTitle] = useState(post.title ?? "");
   const [description, setDescription] = useState(post.description ?? "");
@@ -66,6 +68,7 @@ export function PostEditor({ post, autoEdit = false }: { post: Post; autoEdit?: 
     setError(null);
     const res = await fetch(`/api/posts/${post.id}`, { method: "DELETE" });
     if (res.ok) {
+      posthog.capture("post_deleted", { post_id: post.id });
       localStorage.removeItem(`straude_draft_${post.id}`);
       router.push("/feed");
     } else {
@@ -88,6 +91,12 @@ export function PostEditor({ post, autoEdit = false }: { post: Post; autoEdit?: 
       }),
     });
     if (res.ok) {
+      posthog.capture("post_saved", {
+        post_id: post.id,
+        has_title: Boolean(title),
+        has_description: Boolean(description),
+        image_count: images.length,
+      });
       localStorage.removeItem(`straude_draft_${post.id}`);
       setEditing(false);
       router.refresh();
@@ -121,6 +130,7 @@ export function PostEditor({ post, autoEdit = false }: { post: Post; autoEdit?: 
       const data = await res.json();
       setTitle(data.title);
       setDescription(data.description);
+      posthog.capture("caption_generated", { post_id: post.id, image_count: images.length });
     }
     setGenerating(false);
   }

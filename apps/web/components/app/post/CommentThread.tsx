@@ -8,6 +8,7 @@ import { ChevronDown, ChevronRight, Heart, Reply } from "lucide-react";
 import remarkBreaks from "remark-breaks";
 import { Avatar } from "@/components/ui/Avatar";
 import { MentionInput } from "@/components/app/shared/MentionInput";
+import { usePostHog } from "posthog-js/react";
 import { buildCommentTree } from "@/lib/comments";
 import { cn } from "@/lib/utils/cn";
 import { mentionsToMarkdownLinks } from "@/lib/utils/mentions";
@@ -80,6 +81,7 @@ export function CommentThread({
   userId: string | null;
   currentUser?: { username: string; avatar_url: string | null };
 }) {
+  const posthog = usePostHog();
   const [comments, setComments] = useState<Comment[]>(initialComments);
   const [content, setContent] = useState("");
   const [replyingTo, setReplyingTo] = useState<{
@@ -166,6 +168,10 @@ export function CommentThread({
     if (res.ok) {
       const comment = await res.json();
       setComments((prev) => prev.map((current) => (current.id === tempId ? comment : current)));
+      posthog.capture("comment_posted", {
+        post_id: postId,
+        is_reply: Boolean(opts.parentCommentId),
+      });
       opts.onSuccess?.();
     } else {
       setComments((prev) => prev.filter((comment) => comment.id !== tempId));
@@ -344,6 +350,11 @@ export function CommentThread({
             : current
         )
       );
+      posthog.capture("comment_liked", {
+        post_id: postId,
+        comment_id: comment.id,
+        liked: nextReacted,
+      });
     } else {
       const errorMessage = await readErrorMessage(res, "Couldn't update reaction.");
       setComments((prev) =>

@@ -9,6 +9,7 @@ import {
   Check,
   Send,
 } from "lucide-react";
+import { usePostHog } from "posthog-js/react";
 import { cn } from "@/lib/utils/cn";
 import { ShareCardImage } from "@/lib/utils/share-image";
 import {
@@ -32,6 +33,7 @@ const THEME_SWATCH: Record<ShareThemeId, string> = {
 type BusyAction = "share" | "copy-image" | "download" | null;
 
 export function ShareMenu({ post }: { post: Post }) {
+  const posthog = usePostHog();
   const [open, setOpen] = useState(false);
   const [theme, setTheme] = useState<ShareThemeId>("accent");
   const [busyAction, setBusyAction] = useState<BusyAction>(null);
@@ -123,6 +125,7 @@ export function ShareMenu({ post }: { post: Post }) {
       const url = buildPostShareUrl(window.location.origin, post.id);
       await navigator.clipboard.writeText(url);
       flashCopied("link");
+      posthog.capture("post_shared", { post_id: post.id, method: "copy_link", theme });
     } catch (error) {
       console.error("Copy link failed:", error);
       setFeedback({
@@ -142,6 +145,7 @@ export function ShareMenu({ post }: { post: Post }) {
         new ClipboardItem({ "image/png": blob }),
       ]);
       flashCopied("image");
+      posthog.capture("post_shared", { post_id: post.id, method: "copy_image", theme });
     } catch (error) {
       console.error("Copy image failed:", error);
       setFeedback({
@@ -169,6 +173,7 @@ export function ShareMenu({ post }: { post: Post }) {
       anchor.remove();
 
       window.setTimeout(() => URL.revokeObjectURL(objectUrl), 1000);
+      posthog.capture("post_shared", { post_id: post.id, method: "download_png", theme });
     } catch (error) {
       console.error("Download failed:", error);
       setFeedback({
@@ -209,6 +214,7 @@ export function ShareMenu({ post }: { post: Post }) {
       }
 
       await navigator.share({ title, text: shareText, url });
+      posthog.capture("post_shared", { post_id: post.id, method: "native", theme });
     } catch (error) {
       if (error instanceof DOMException && error.name === "AbortError") {
         return;
@@ -227,6 +233,7 @@ export function ShareMenu({ post }: { post: Post }) {
   function handleShareToX() {
     const intentUrl = buildPostIntentUrl(post, window.location.origin);
     window.open(intentUrl, "_blank", "noopener,noreferrer");
+    posthog.capture("post_shared", { post_id: post.id, method: "x", theme });
   }
 
   const panelId = `share-panel-${post.id}`;

@@ -1,6 +1,7 @@
 "use client";
 
 import { useState } from "react";
+import { usePostHog } from "posthog-js/react";
 
 export function FollowButton({
   username,
@@ -9,6 +10,7 @@ export function FollowButton({
   username: string;
   initialFollowing: boolean;
 }) {
+  const posthog = usePostHog();
   const [following, setFollowing] = useState(initialFollowing);
   const [loading, setLoading] = useState(false);
 
@@ -18,7 +20,11 @@ export function FollowButton({
     setLoading(true);
     const method = prevFollowing ? "DELETE" : "POST";
     const res = await fetch(`/api/follow/${username}`, { method });
-    if (!res.ok) {
+    if (res.ok) {
+      posthog.capture(prevFollowing ? "user_unfollowed" : "user_followed", {
+        followed_username: username,
+      });
+    } else {
       setFollowing(prevFollowing);
     }
     setLoading(false);
