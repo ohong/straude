@@ -70,10 +70,11 @@ export default async function FeedPage({
     user
       ? supabase
           .from("posts")
-          .select("*, daily_usage:daily_usage!posts_daily_usage_id_fkey(*)")
+          .select("*, daily_usage:daily_usage!posts_daily_usage_id_fkey!inner(*)")
           .eq("user_id", user.id)
           .is("description", null)
           .eq("images", "[]")
+          .order("date", { ascending: false, referencedTable: "daily_usage" })
           .order("created_at", { ascending: false })
           .limit(5)
       : Promise.resolve({ data: null }),

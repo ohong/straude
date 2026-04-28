@@ -103,10 +103,14 @@ function formatLatestPosts(rows: LatestPostRow[]) {
 }
 
 async function loadLatestPosts(supabase: SupabaseServerClient, userId: string) {
+  // Order by daily_usage.date so backfills (which insert many posts in the same
+  // second) still surface the most recent activity. !inner is required for
+  // referencedTable ordering to apply to the parent rows.
   const { data } = await supabase
     .from("posts")
-    .select("id, title, created_at, daily_usage:daily_usage!posts_daily_usage_id_fkey(date)")
+    .select("id, title, created_at, daily_usage:daily_usage!posts_daily_usage_id_fkey!inner(date)")
     .eq("user_id", userId)
+    .order("date", { ascending: false, referencedTable: "daily_usage" })
     .order("created_at", { ascending: false })
     .limit(3);
 

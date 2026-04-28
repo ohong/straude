@@ -195,15 +195,19 @@ export async function GET(request: NextRequest) {
     }
   }
 
-  // Include pending posts (sessions without details) for any tab
+  // Include pending posts (sessions without details) for any tab.
+  // Order by daily_usage.date — created_at clusters for backfilled posts so
+  // sub-second tiebreakers would surface a near-random subset. !inner is
+  // required for referencedTable ordering to apply to the parent rows.
   let pending_posts: Post[] = [];
   if (user && !cursor) {
     const { data } = await supabase
       .from("posts")
-      .select("*, daily_usage:daily_usage!posts_daily_usage_id_fkey(*)")
+      .select("*, daily_usage:daily_usage!posts_daily_usage_id_fkey!inner(*)")
       .eq("user_id", user.id)
       .is("description", null)
       .eq("images", "[]")
+      .order("date", { ascending: false, referencedTable: "daily_usage" })
       .order("created_at", { ascending: false })
       .limit(5);
     pending_posts = ((data ?? []) as FeedPostRow[]).map(normalizeFeedPost);
