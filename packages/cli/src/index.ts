@@ -8,6 +8,7 @@ import { loadConfig } from "./lib/auth.js";
 import { CLI_VERSION } from "./config.js";
 import { posthog } from "./lib/posthog.js";
 import { getDistinctId } from "./lib/machine-id.js";
+import { setDebug } from "./lib/debug.js";
 
 const HELP = `
 straude v${CLI_VERSION} — Push your Claude Code usage to Straude
@@ -31,6 +32,7 @@ Push options:
   --auto hooks       Enable auto-push via Claude Code hook
   --auto --time HH:MM  Set auto-push time (default: 21:00)
   --no-auto          Disable auto-push
+  --debug            Print extra diagnostic detail (also: STRAUDE_DEBUG=1)
 
 Examples:
   npx straude@latest
@@ -75,6 +77,8 @@ function parseArgs(args: string[]): { command: string | null; subcommand: string
       options.help = true;
     } else if (arg === "--version" || arg === "-v") {
       options.version = true;
+    } else if (arg === "--debug") {
+      options.debug = true;
     } else if (!arg.startsWith("-") && !command) {
       command = arg;
     } else if (!arg.startsWith("-") && command && !subcommand) {
@@ -97,6 +101,10 @@ function parseTimeout(value: string): number {
 async function main(): Promise<void> {
   const args = process.argv.slice(2);
   const { command, subcommand, options } = parseArgs(args);
+
+  if (options.debug) {
+    setDebug(true);
+  }
 
   if (options.version) {
     console.log(`straude v${CLI_VERSION}`);

@@ -16,6 +16,8 @@ import { Spinner } from "../lib/spinner.js";
 import type { DashboardData as DashboardResponse } from "../components/PushSummary.js";
 import { posthog } from "../lib/posthog.js";
 import { getDistinctId } from "../lib/machine-id.js";
+import { isDebug, debugLog } from "../lib/debug.js";
+import type { NormalizationAnomaly } from "../lib/ccusage.js";
 
 interface UsageSubmitRequest {
   entries: Array<{
@@ -269,7 +271,7 @@ export async function pushCommand(options: PushOptions, apiUrlOverride?: string)
 
   let claudeRaw = "";
   let claudeEntries: CcusageDailyEntry[] = [];
-  let claudeAnomalies: Array<{ confidence: "high" | "medium" | "low"; mode: string }> = [];
+  let claudeAnomalies: NormalizationAnomaly[] = [];
 
   if (claudeResult instanceof Error) {
     // Codex-only users do not have local Claude data; keep other Claude failures fatal.
@@ -284,22 +286,38 @@ export async function pushCommand(options: PushOptions, apiUrlOverride?: string)
     try {
       const parsed = parseCcusageOutput(claudeRaw);
       claudeEntries = parsed.data;
-      claudeAnomalies = (parsed.anomalies ?? []).map((a) => ({ confidence: a.confidence, mode: a.mode }));
+      claudeAnomalies = parsed.anomalies ?? [];
     } catch (err) {
       console.error((err as Error).message);
       process.exit(1);
     }
   }
 
-  // Codex data — native collector failures are silent, but parser anomalies are surfaced.
-  const allAnomalies = [...claudeAnomalies, ...(codexParsed.anomalies ?? [])];
-  const mediumLowCount = allAnomalies.filter((a) => a.confidence !== "high").length;
-  if (mediumLowCount > 0) {
-    const lowCount = allAnomalies.filter((a) => a.confidence === "low").length;
-    const unresolvedCount = allAnomalies.filter((a) => a.mode === "unresolved").length;
-    console.log(
-      `Warning: normalization anomalies detected (${mediumLowCount} medium/low rows, low confidence: ${lowCount}, unresolved: ${unresolvedCount}).`,
+  // Token-normalization anomalies are diagnostic, not user-actionable: rows
+  // tagged medium/low confidence still get pushed (we just had to infer
+  // cache semantics). Only `mode === "unresolved"` rows are dropped, and
+  // those have their own warning below. So keep these counts quiet by
+  // default and surface them only under --debug; ship the counts to PostHog
+  // either way so we can monitor normalization quality across users.
+  const allAnomalies: NormalizationAnomaly[] = [
+    ...claudeAnomalies,
+    ...(codexParsed.anomalies ?? []),
+  ];
+  const anomalyCounts = countAnomalies(allAnomalies);
+
+  if (isDebug() && anomalyCounts.mediumLow > 0) {
+    debugLog(
+      `normalization anomalies: ${anomalyCounts.mediumLow} medium/low,`,
+      `low=${anomalyCounts.low}, unresolved=${anomalyCounts.unresolved}`,
     );
+    for (const a of allAnomalies) {
+      if (a.confidence === "high") continue;
+      const warningStr = a.warnings.length > 0 ? ` warnings=${a.warnings.join("; ")}` : "";
+      debugLog(
+        `  ${a.date} ${a.source} mode=${a.mode} confidence=${a.confidence}`,
+        `consistency_error=${a.consistencyError}${warningStr}`,
+      );
+    }
   }
 
   const codexMetaByDate = new Map((codexParsed.entryMeta ?? []).map((row) => [row.date, row.meta]));
@@ -438,6 +456,9 @@ export async function pushCommand(options: PushOptions, apiUrlOverride?: string)
       total_cost_usd: Math.round(totalCost * 100) / 100,
       total_tokens: totalTokens,
       dry_run: false,
+      anomalies_medium_low: anomalyCounts.mediumLow,
+      anomalies_low_confidence: anomalyCounts.low,
+      anomalies_unresolved: anomalyCounts.unresolved,
     },
   });
 
@@ -467,4 +488,14 @@ export async function pushCommand(options: PushOptions, apiUrlOverride?: string)
 
 function truncate(value: string, max: number): string {
   return value.length > max ? `${value.slice(0, max)}…` : value;
+}
+
+function countAnomalies(
+  anomalies: NormalizationAnomaly[],
+): { mediumLow: number; low: number; unresolved: number } {
+  return {
+    mediumLow: anomalies.filter((a) => a.confidence !== "high").length,
+    low: anomalies.filter((a) => a.confidence === "low").length,
+    unresolved: anomalies.filter((a) => a.mode === "unresolved").length,
+  };
 }

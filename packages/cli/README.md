@@ -85,6 +85,23 @@ straude status
 
 Credentials are stored in `~/.straude/config.json` (mode `0600`, owner-only).
 
+## Debug mode
+
+Pass `--debug` (or export `STRAUDE_DEBUG=1`) to surface diagnostic detail
+that's hidden by default — for example, per-row token-normalization
+anomalies. Most of the time you don't need it; reach for it when something
+in the output looks off and you want to know why.
+
+```sh
+straude push --debug
+# or, persistent across invocations:
+export STRAUDE_DEBUG=1
+straude
+```
+
+Debug output is written to `stderr` so it doesn't interfere with piping the
+normal output.
+
 ## Telemetry
 
 The CLI sends anonymous usage events (command name, CLI version, success/failure outcomes, aggregate counts like `days_pushed` and `total_cost_usd`) to Straude's PostHog project so we can prioritise features and catch regressions. We never send prompts, code, conversation content, file paths, or ccusage rows — home directory paths are scrubbed from any free-form payload before transmission.

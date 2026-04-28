@@ -4,6 +4,7 @@
 
 ### Added
 
+- **CLI `--debug` flag (and `STRAUDE_DEBUG=1` env var).** Developer-facing diagnostics like the per-row token-normalization anomaly dump are now hidden by default — `straude push` only prints them when debug mode is on. Debug output goes to `stderr` so it doesn't interfere with piping. The previous unconditional `Warning: normalization anomalies detected …` line surprised users who had no way to act on it; we still surface aggregate anomaly counts (`anomalies_medium_low`, `anomalies_low_confidence`, `anomalies_unresolved`) in the `usage_pushed` PostHog event so we can monitor data quality without noisy CLI output. Shipped as `straude@0.1.23`.
 - **Comment thread pagination.** Root comments limited to 20 initially with a "Load more comments" button to prevent large DOM renders.
 - **ContributionGraph keyboard access.** Interactive heatmap cells (those with posts) now have `tabIndex`, `role="button"`, `aria-label`, Enter/Space key handlers, and focus-triggered tooltips.
 - **DM `before` cursor for `/api/messages`.** GET accepts an optional `before` ISO timestamp and returns `has_more` so future UI work can paginate older messages without breaking the existing react-query inbox.
