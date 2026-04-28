@@ -35,9 +35,16 @@ jobs:
       - name: Phantom dependency check (apps/web)
         run: |
           set -euo pipefail
+          # depcheck exits 255 on any finding (unused or missing); we only
+          # want to fail on missing, so tolerate the non-zero exit and
+          # gate on .missing length ourselves.
           RESULT=$(bunx depcheck --json --skip-missing=false \
-            --ignores="@types/*,@tailwindcss/postcss,tailwindcss,eslint,eslint-config-next,@playwright/test,@testing-library/*,@vitejs/plugin-react,jsdom,typescript,vitest,@types/node")
+            --ignores="@types/*,@tailwindcss/postcss,tailwindcss,eslint,eslint-config-next,@playwright/test,@testing-library/*,@vitejs/plugin-react,jsdom,typescript,vitest,@types/node" || true)
           MISSING=$(echo "$RESULT" | jq -r '.missing | keys | length')
+          UNUSED=$(echo "$RESULT" | jq -r '.dependencies | length')
+          if [ "$UNUSED" -gt 0 ]; then
+            echo "::warning::Unused dependencies in apps/web/package.json: $(echo "$RESULT" | jq -rc '.dependencies')"
+          fi
           if [ "$MISSING" -gt 0 ]; then
             echo "::error::Phantom dependencies found (imported but not in package.json):"
             echo "$RESULT" | jq '.missing'
