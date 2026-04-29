@@ -78,16 +78,21 @@ function formatModels(
   models: string[] | undefined,
   breakdown: ModelBreakdownEntry[] | null | undefined,
 ): string | null {
-  // With model_breakdown data: show cost percentages
+  // With model_breakdown data: show cost percentages when costs are known
   if (breakdown && breakdown.length > 0) {
     const totalCost = breakdown.reduce((sum, e) => sum + e.cost_usd, 0);
-    if (totalCost <= 0) return null;
 
     // Deduplicate by pretty name, summing costs
     const byCostMap = new Map<string, number>();
     for (const entry of breakdown) {
       const name = prettifyModel(entry.model);
       byCostMap.set(name, (byCostMap.get(name) ?? 0) + entry.cost_usd);
+    }
+
+    // No pricing data (e.g. non-Claude/GPT models ccusage doesn't price yet) —
+    // fall back to listing model names so the user still sees what they ran.
+    if (totalCost <= 0) {
+      return [...byCostMap.keys()].join(", ") || null;
     }
 
     // Sort by cost descending
@@ -111,6 +116,19 @@ function formatModels(
   if (models.some((m) => m.includes("sonnet"))) return "Claude Sonnet";
   if (models.some((m) => m.includes("haiku"))) return "Claude Haiku";
   return prettifyModel(models[0]!);
+}
+
+/**
+ * True when a session reports real token usage but ccusage couldn't price it
+ * (non-Claude/GPT models route through Claude Code without pricing data yet).
+ * We surface "Pricing soon" instead of a misleading $0.00.
+ */
+function isUnpricedSession(usage: {
+  is_verified: boolean;
+  cost_usd: number;
+  total_tokens: number;
+}): boolean {
+  return usage.is_verified && usage.cost_usd === 0 && usage.total_tokens > 0;
 }
 
 interface ModelUsageSegment {
@@ -381,12 +399,27 @@ export function ActivityCard({ post, userId, hideShareMenu }: { post: Post; user
         {usage && (
           <div className={cn("mt-4 grid gap-4", usage.is_verified ? "grid-cols-3" : "grid-cols-2")}>
             {usage.is_verified ? (
-              <div>
-                <p className="text-[0.7rem] uppercase tracking-widest text-muted">Cost</p>
-                <p className="font-[family-name:var(--font-mono)] text-[1.1rem] font-medium tabular-nums text-accent">
-                  ${formatCurrency(usage.cost_usd)}
-                </p>
-              </div>
+              isUnpricedSession(usage) ? (
+                <div>
+                  <p className="text-[0.7rem] uppercase tracking-widest text-muted">Cost</p>
+                  <p
+                    className="font-[family-name:var(--font-mono)] text-[1.1rem] font-medium tabular-nums text-muted"
+                    title="Cost tracking for non-Claude/GPT models is coming soon."
+                  >
+                    &mdash;
+                  </p>
+                  <p className="mt-0.5 text-[0.65rem] uppercase tracking-wider text-muted">
+                    Pricing soon
+                  </p>
+                </div>
+              ) : (
+                <div>
+                  <p className="text-[0.7rem] uppercase tracking-widest text-muted">Cost</p>
+                  <p className="font-[family-name:var(--font-mono)] text-[1.1rem] font-medium tabular-nums text-accent">
+                    ${formatCurrency(usage.cost_usd)}
+                  </p>
+                </div>
+              )
             ) : (
               <p className="col-span-2 text-xs text-muted">
                 Uploaded by the user via JSON
