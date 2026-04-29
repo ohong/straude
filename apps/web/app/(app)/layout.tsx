@@ -28,7 +28,7 @@ type LatestPostRow = {
   daily_usage: Array<Pick<DailyUsage, "date">> | null;
 };
 
-type UsageFallbackRow = Pick<DailyUsage, "cost_usd" | "total_tokens">;
+type UsageFallbackRow = Pick<DailyUsage, "cost_usd" | "output_tokens">;
 type UsageTotalsRpcRow = {
   total_cost: number | string | null;
   total_tokens: number | string | null;
@@ -46,7 +46,7 @@ async function loadUsageTotals(
   const loadFallbackUsageTotals = async (): Promise<{ totalTokens: number; totalCost: number }> => {
     const { data: fallbackRows, error: fallbackError } = await supabase
       .from("daily_usage")
-      .select("cost_usd, total_tokens")
+      .select("cost_usd, output_tokens")
       .eq("user_id", userId);
 
     if (fallbackError) {
@@ -55,7 +55,7 @@ async function loadUsageTotals(
 
     const rows = (fallbackRows ?? []) as UsageFallbackRow[];
     return {
-      totalTokens: rows.reduce((sum, row) => sum + Number(row.total_tokens), 0),
+      totalTokens: rows.reduce((sum, row) => sum + Number(row.output_tokens), 0),
       totalCost: rows.reduce((sum, row) => sum + Number(row.cost_usd), 0),
     };
   };
