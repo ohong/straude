@@ -1,21 +1,31 @@
 "use client";
 
-import { useState, useEffect, useRef, useCallback } from "react";
+import { useState, useEffect, useRef, useSyncExternalStore } from "react";
 import Link from "next/link";
 import { Menu, X } from "lucide-react";
 import { AnimatePresence, motion } from "motion/react";
 import { BoltIcon } from "@/components/landing/icons";
 
+function subscribeToAuthHrefChange() {
+  return () => {};
+}
+
+function getAuthHrefSnapshot() {
+  try {
+    return localStorage.getItem("straude_returning") ? "/login" : "/signup";
+  } catch {
+    return "/signup";
+  }
+}
+
 export function Navbar({ variant = "dark" }: { variant?: "dark" | "light" }) {
   const [mobileOpen, setMobileOpen] = useState(false);
-  const [authHref, setAuthHref] = useState("/signup");
+  const authHref = useSyncExternalStore(
+    subscribeToAuthHrefChange,
+    getAuthHrefSnapshot,
+    () => "/signup",
+  );
   const menuRef = useRef<HTMLDivElement>(null);
-
-  useEffect(() => {
-    try {
-      if (localStorage.getItem("straude_returning")) setAuthHref("/login");
-    } catch {}
-  }, []);
 
   // Focus trap, Escape handler, and body scroll lock when mobile menu is open
   useEffect(() => {

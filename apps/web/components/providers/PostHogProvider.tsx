@@ -31,6 +31,7 @@ export function PostHogClientProvider({
 
   useEffect(() => {
     if (!POSTHOG_KEY || initialized.current) return;
+    let readyTimer: number | null = null;
     posthog.init(POSTHOG_KEY, {
       api_host: "/ingest",
       ui_host: "https://us.posthog.com",
@@ -39,7 +40,7 @@ export function PostHogClientProvider({
       person_profiles: "identified_only",
     });
     initialized.current = true;
-    setReady(true);
+    readyTimer = window.setTimeout(() => setReady(true), 0);
 
     const supabase = createClient();
     const {
@@ -57,7 +58,10 @@ export function PostHogClientProvider({
       }
     });
 
-    return () => subscription.unsubscribe();
+    return () => {
+      if (readyTimer !== null) window.clearTimeout(readyTimer);
+      subscription.unsubscribe();
+    };
   }, []);
 
   return (

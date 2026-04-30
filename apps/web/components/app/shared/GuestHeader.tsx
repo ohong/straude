@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useSyncExternalStore } from "react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { Home, Trophy, Flame } from "lucide-react";
@@ -13,15 +13,25 @@ const navLinks = [
   { href: "/token-rich", label: "Prometheus List" },
 ] as const;
 
+function subscribeToAuthHrefChange() {
+  return () => {};
+}
+
+function getAuthHrefSnapshot() {
+  try {
+    return localStorage.getItem("straude_returning") ? "/login" : "/signup";
+  } catch {
+    return "/signup";
+  }
+}
+
 export function GuestHeader() {
   const pathname = usePathname();
-  const [authHref, setAuthHref] = useState("/signup");
-
-  useEffect(() => {
-    try {
-      if (localStorage.getItem("straude_returning")) setAuthHref("/login");
-    } catch {}
-  }, []);
+  const authHref = useSyncExternalStore(
+    subscribeToAuthHrefChange,
+    getAuthHrefSnapshot,
+    () => "/signup",
+  );
 
   return (
     <header className="safe-top flex h-14 shrink-0 items-center justify-between border-b border-border bg-background px-4 sm:px-6">

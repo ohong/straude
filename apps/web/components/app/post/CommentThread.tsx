@@ -133,7 +133,7 @@ export function CommentThread({
     opts.setSubmittingState(true);
     opts.setError(null);
 
-    const tempId = `temp-${Date.now()}`;
+    const tempId = `temp-${globalThis.crypto?.randomUUID?.() ?? new Date().getTime()}`;
     const optimisticComment: Comment = {
       id: tempId,
       post_id: postId,

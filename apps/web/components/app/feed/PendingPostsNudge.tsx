@@ -46,8 +46,11 @@ export function PendingPostsNudge({ posts }: { posts: Post[] }) {
 
   // Load persisted dismissed IDs from localStorage on mount
   useEffect(() => {
-    setDismissedPostIds(loadDismissed());
-    setLoaded(true);
+    const timer = window.setTimeout(() => {
+      setDismissedPostIds(loadDismissed());
+      setLoaded(true);
+    }, 0);
+    return () => window.clearTimeout(timer);
   }, []);
 
   const visiblePosts = posts.filter((post) => !dismissedPostIds.has(post.id));
