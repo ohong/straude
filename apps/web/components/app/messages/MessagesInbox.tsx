@@ -47,6 +47,7 @@ interface ConversationResponse {
   counterpart: ConversationUser | null;
   current_user_id: string | null;
   messages: LocalDirectMessage[];
+  has_more?: boolean;
 }
 
 type DeliveryStatus = "sending" | "sent" | "failed";
@@ -79,9 +80,14 @@ async function fetchThreads(): Promise<ThreadsResponse> {
   };
 }
 
-async function fetchConversation(username: string): Promise<ConversationResponse> {
+async function fetchConversation(
+  username: string,
+  before?: string,
+): Promise<ConversationResponse> {
+  const params = new URLSearchParams({ with: username });
+  if (before) params.set("before", before);
   const res = await fetch(
-    `/api/messages?with=${encodeURIComponent(username)}`,
+    `/api/messages?${params.toString()}`,
     { cache: "no-store" }
   );
 
@@ -95,6 +101,7 @@ async function fetchConversation(username: string): Promise<ConversationResponse
     counterpart: data.counterpart ?? null,
     current_user_id: data.current_user_id ?? null,
     messages: data.messages ?? [],
+    has_more: Boolean(data.has_more),
   };
 }
 
@@ -161,8 +168,10 @@ export function MessagesInbox({
     Record<string, LocalDirectMessage[]>
   >({});
   const [lightboxImage, setLightboxImage] = useState<string | null>(null);
+  const [loadingEarlier, setLoadingEarlier] = useState(false);
   const fileRef = useRef<HTMLInputElement>(null);
   const messagesEndRef = useRef<HTMLDivElement>(null);
+  const suppressNextScrollRef = useRef(false);
 
   const isPhone = shellMode === "phone";
   const showThreadList = !isPhone || !activeUsername;
@@ -210,6 +219,7 @@ export function MessagesInbox({
   const counterpart = conversation?.counterpart ?? null;
   const currentUserId = conversation?.current_user_id ?? null;
   const cachedMessages = conversation?.messages ?? EMPTY_MESSAGES;
+  const hasEarlierMessages = Boolean(conversation?.has_more);
   const messages = useMemo(
     () =>
       activeUsername
@@ -330,8 +340,62 @@ export function MessagesInbox({
 
   useEffect(() => {
     if (!counterpart || conversationLoading) return;
+    if (suppressNextScrollRef.current) {
+      suppressNextScrollRef.current = false;
+      return;
+    }
     messagesEndRef.current?.scrollIntoView({ block: "end" });
   }, [conversationLoading, counterpart, messages]);
+
+  async function loadEarlierMessages() {
+    if (
+      !activeUsername ||
+      !conversation ||
+      !hasEarlierMessages ||
+      loadingEarlier ||
+      cachedMessages.length === 0
+    ) {
+      return;
+    }
+
+    const oldestMessage = cachedMessages[0];
+    if (!oldestMessage) return;
+
+    setLoadingEarlier(true);
+    setError(null);
+
+    try {
+      const earlierConversation = await fetchConversation(
+        activeUsername,
+        oldestMessage.created_at,
+      );
+      suppressNextScrollRef.current = true;
+      queryClient.setQueryData<ConversationResponse>(
+        queryKeys.messageConversation(activeUsername),
+        (prev) => {
+          if (!prev) return earlierConversation;
+
+          const existingIds = new Set(prev.messages.map((message) => message.id));
+          const earlierMessages = earlierConversation.messages.filter(
+            (message) => !existingIds.has(message.id),
+          );
+
+          return {
+            ...prev,
+            counterpart: prev.counterpart ?? earlierConversation.counterpart,
+            current_user_id:
+              prev.current_user_id ?? earlierConversation.current_user_id,
+            messages: [...earlierMessages, ...prev.messages],
+            has_more: earlierConversation.has_more,
+          };
+        },
+      );
+    } catch (err) {
+      setError((err as Error).message || "Failed to load earlier messages");
+    } finally {
+      setLoadingEarlier(false);
+    }
+  }
 
   function selectConversation(username: string) {
     setActiveUsername(username);
@@ -800,7 +864,23 @@ export function MessagesInbox({
                     No messages yet. Send the first note to @{counterpart.username}.
                   </div>
                 ) : (
-                  messages.map((message) => {
+                  <>
+                    {hasEarlierMessages && (
+                      <div className="flex justify-center">
+                        <button
+                          type="button"
+                          onClick={loadEarlierMessages}
+                          disabled={loadingEarlier}
+                          className="inline-flex items-center gap-2 rounded-full border border-border bg-background px-3 py-1.5 text-xs font-medium text-muted hover:text-foreground disabled:opacity-50"
+                        >
+                          {loadingEarlier && (
+                            <Loader2 size={14} className="animate-spin" aria-hidden="true" />
+                          )}
+                          Load earlier messages
+                        </button>
+                      </div>
+                    )}
+                    {messages.map((message) => {
                     const mine = message.sender_id === currentUserId;
                     const attachments = message.attachments ?? [];
                     const imageAttachments = attachments.filter((a) => isImageMime(a.type, a.name));
@@ -905,7 +985,8 @@ export function MessagesInbox({
                         </div>
                       </div>
                     );
-                  })
+                  })}
+                  </>
                 )}
                   <div ref={messagesEndRef} />
                 </div>

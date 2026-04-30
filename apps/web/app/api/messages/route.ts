@@ -193,7 +193,7 @@ export async function GET(request: NextRequest) {
         .select("id, sender_id, recipient_id, content, attachments, read_at, created_at")
         .or(buildPairFilter(user.id, counterpart.id));
       if (before) q = q.lt("created_at", before);
-      return q.order("created_at", { ascending: false }).limit(limit);
+      return q.order("created_at", { ascending: false }).limit(limit + 1);
     })(),
   ]);
 
@@ -206,7 +206,7 @@ export async function GET(request: NextRequest) {
 
   const selfProfile = selfRes.data as ConversationUser;
   const messages = await Promise.all(
-    [...(messagesRes.data ?? [])].reverse().map(async (message) => ({
+    [...(messagesRes.data ?? [])].slice(0, limit).reverse().map(async (message) => ({
       ...message,
       attachments: await buildSignedAttachments(
         message.attachments,
@@ -217,7 +217,7 @@ export async function GET(request: NextRequest) {
     })),
   );
 
-  const hasMore = (messagesRes.data?.length ?? 0) >= limit;
+  const hasMore = (messagesRes.data?.length ?? 0) > limit;
 
   return NextResponse.json({
     counterpart,

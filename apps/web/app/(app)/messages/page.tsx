@@ -93,14 +93,14 @@ async function preloadConversation(viewerId: string, username: string) {
       .select("id, sender_id, recipient_id, content, attachments, read_at, created_at")
       .or(buildPairFilter(viewerId, counterpart.id))
       .order("created_at", { ascending: false })
-      .limit(100),
+      .limit(51),
   ]);
 
   if (selfRes.error || messagesRes.error) return null;
 
   const selfProfile = selfRes.data as ConversationUser;
   const messages = await Promise.all(
-    [...(messagesRes.data ?? [])].reverse().map(async (message) => ({
+    [...(messagesRes.data ?? [])].slice(0, 50).reverse().map(async (message) => ({
       ...message,
       attachments: await buildSignedAttachments(message.attachments),
       sender: message.sender_id === viewerId ? selfProfile : counterpart,
@@ -112,6 +112,7 @@ async function preloadConversation(viewerId: string, username: string) {
     counterpart: counterpart as ConversationUser,
     current_user_id: viewerId,
     messages,
+    has_more: (messagesRes.data?.length ?? 0) > 50,
   };
 }
 

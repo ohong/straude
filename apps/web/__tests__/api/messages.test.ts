@@ -183,6 +183,7 @@ describe("GET /api/messages", () => {
     expect(response.status).toBe(200);
     expect(json.counterpart.username).toBe("alice");
     expect(json.current_user_id).toBe("user-1");
+    expect(json.has_more).toBe(false);
     expect(json.messages[0].sender.username).toBe("alice");
   });
 });

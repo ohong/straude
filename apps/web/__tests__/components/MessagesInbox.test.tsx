@@ -33,6 +33,7 @@ const conversationResponse = {
     display_name: "Alice",
   },
   current_user_id: "user-me",
+  has_more: false,
   messages: [
     {
       id: "message-1",
@@ -41,6 +42,27 @@ const conversationResponse = {
       sender_id: "user-alice",
       recipient_id: "user-me",
       read_at: "2026-03-30T10:05:00.000Z",
+      attachments: [],
+    },
+  ],
+};
+
+const paginatedConversationResponse = {
+  ...conversationResponse,
+  has_more: true,
+};
+
+const earlierConversationResponse = {
+  ...conversationResponse,
+  has_more: false,
+  messages: [
+    {
+      id: "message-older",
+      content: "Older message",
+      created_at: "2026-03-29T10:00:00.000Z",
+      sender_id: "user-alice",
+      recipient_id: "user-me",
+      read_at: "2026-03-29T10:05:00.000Z",
       attachments: [],
     },
   ],
@@ -176,6 +198,67 @@ describe("MessagesInbox", () => {
       expect(listPane.className).toContain("hidden");
       expect(threadPane.className).not.toContain("hidden");
     });
+  });
+
+  it("loads earlier messages when the first page has more history", async () => {
+    fetchMock.mockImplementation(async (input: RequestInfo | URL, init?: RequestInit) => {
+      const url = String(input);
+
+      if (url.includes("/api/messages/threads")) {
+        return new Response(JSON.stringify(threadListResponse), {
+          status: 200,
+          headers: { "Content-Type": "application/json" },
+        });
+      }
+
+      if (url.includes("/api/messages?with=alice&before=")) {
+        return new Response(JSON.stringify(earlierConversationResponse), {
+          status: 200,
+          headers: { "Content-Type": "application/json" },
+        });
+      }
+
+      if (url.includes("/api/messages?with=alice")) {
+        return new Response(JSON.stringify(paginatedConversationResponse), {
+          status: 200,
+          headers: { "Content-Type": "application/json" },
+        });
+      }
+
+      if (url === "/api/messages" && init?.method === "PATCH") {
+        return new Response(JSON.stringify({ ok: true }), {
+          status: 200,
+          headers: { "Content-Type": "application/json" },
+        });
+      }
+
+      return new Response(JSON.stringify({}), {
+        status: 200,
+        headers: { "Content-Type": "application/json" },
+      });
+    });
+
+    renderInbox(
+      <MessagesInbox
+        initialUsername="alice"
+        initialThreads={threadListResponse}
+        initialConversation={paginatedConversationResponse}
+      />
+    );
+
+    fireEvent.click(await screen.findByRole("button", { name: /load earlier messages/i }));
+
+    expect(await screen.findByText("Older message")).toBeInTheDocument();
+    await waitFor(() => {
+      expect(
+        screen.queryByRole("button", { name: /load earlier messages/i }),
+      ).not.toBeInTheDocument();
+    });
+    expect(
+      fetchMock.mock.calls.some(([input]) =>
+        String(input).includes("before=2026-03-30T10%3A00%3A00.000Z"),
+      ),
+    ).toBe(true);
   });
 
   it("shows split view at the tablet breakpoint", async () => {
