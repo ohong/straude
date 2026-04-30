@@ -1,5 +1,6 @@
 import { notFound } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
+import { getServiceClient } from "@/lib/supabase/service";
 import { getRecapData } from "@/lib/utils/recap";
 import { formatCurrency, formatTokens, getCellColor } from "@/lib/utils/format";
 import type { Metadata } from "next";
@@ -31,9 +32,14 @@ export default async function PublicRecapPage({
   const bg = getBackgroundById(bgParam ?? DEFAULT_BACKGROUND_ID);
 
   const supabase = await createClient();
-  const { data: profile } = await supabase
+  // Use the service client to read streak_freezes — the column-level grants
+  // on public.users (see harden_users_public_columns) hide it from the
+  // authenticated/anon roles, but the recap streak must use the same freeze
+  // count as the profile page to stay consistent.
+  const db = getServiceClient();
+  const { data: profile } = await db
     .from("users")
-    .select("id, username, is_public")
+    .select("id, username, is_public, streak_freezes")
     .eq("username", username)
     .single();
 
@@ -46,7 +52,8 @@ export default async function PublicRecapPage({
     profile.id,
     profile.username!,
     profile.is_public,
-    period
+    period,
+    profile.streak_freezes ?? 0
   );
 
   const allDays = fillDays(data.contribution_data, data.total_days, data.period);
