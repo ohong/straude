@@ -65,13 +65,9 @@ const ALLOWED_AVATAR_HOSTS = new Set([
   "api.dicebear.com",
 ]);
 
-export function isAllowedAvatarUrl(url: string): boolean {
-  if (
-    isFirstPartyPublicStorageUrl(url, "avatars") ||
-    isFirstPartyPublicStorageUrl(url, "post-images")
-  ) {
-    return true;
-  }
+const AVATAR_STORAGE_BUCKETS: StorageBucket[] = ["avatars", "post-images"];
+
+function isAllowedExternalAvatarUrl(url: string): boolean {
   try {
     const parsed = new URL(url);
     if (parsed.protocol !== "https:") return false;
@@ -79,6 +75,22 @@ export function isAllowedAvatarUrl(url: string): boolean {
   } catch {
     return false;
   }
+}
+
+export function isAllowedAvatarUrl(url: string): boolean {
+  if (AVATAR_STORAGE_BUCKETS.some((bucket) => isFirstPartyPublicStorageUrl(url, bucket))) {
+    return true;
+  }
+  return isAllowedExternalAvatarUrl(url);
+}
+
+export function isAllowedUserAvatarUrl(url: string, userId: string): boolean {
+  const isOwnedStorageUrl = AVATAR_STORAGE_BUCKETS.some((bucket) => {
+    const path = extractPublicStoragePath(url, bucket);
+    return path !== null && isStoragePathOwnedByUser(path, userId);
+  });
+
+  return isOwnedStorageUrl || isAllowedExternalAvatarUrl(url);
 }
 
 export function normalizeMessageAttachmentInput(

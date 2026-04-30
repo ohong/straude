@@ -1,5 +1,5 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
-import { isAllowedAvatarUrl } from "@/lib/storage";
+import { isAllowedAvatarUrl, isAllowedUserAvatarUrl } from "@/lib/storage";
 
 describe("storage avatar URL safety", () => {
   beforeEach(() => {
@@ -26,6 +26,27 @@ describe("storage avatar URL safety", () => {
     expect(
       isAllowedAvatarUrl(
         "https://test.supabase.co/storage/v1/object/public/dm-attachments/user-1/file.jpg"
+      )
+    ).toBe(false);
+  });
+
+  it("requires first-party avatar storage URLs to be owned by the user", () => {
+    expect(
+      isAllowedUserAvatarUrl(
+        "https://test.supabase.co/storage/v1/object/public/avatars/user-1/avatar.jpg",
+        "user-1"
+      )
+    ).toBe(true);
+    expect(
+      isAllowedUserAvatarUrl(
+        "https://test.supabase.co/storage/v1/object/public/post-images/user-1/avatar.jpg",
+        "user-1"
+      )
+    ).toBe(true);
+    expect(
+      isAllowedUserAvatarUrl(
+        "https://test.supabase.co/storage/v1/object/public/avatars/user-2/avatar.jpg",
+        "user-1"
       )
     ).toBe(false);
   });

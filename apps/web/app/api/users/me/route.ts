@@ -4,6 +4,7 @@ import { getServiceClient } from "@/lib/supabase/service";
 import { COUNTRY_TO_REGION } from "@/lib/constants/regions";
 import { sendWelcomeEmail } from "@/lib/email/send-welcome-email";
 import { attributeReferral } from "@/lib/referral";
+import { isAllowedUserAvatarUrl } from "@/lib/storage";
 
 const ALLOWED_FIELDS = [
   "username",
@@ -120,6 +121,29 @@ export async function PATCH(request: NextRequest) {
     } else {
       return NextResponse.json(
         { error: "How you heard about Straude must be text" },
+        { status: 400 }
+      );
+    }
+  }
+
+  if (updates.avatar_url !== undefined) {
+    if (updates.avatar_url === null) {
+      // Allow callers to clear the field explicitly.
+    } else if (typeof updates.avatar_url === "string") {
+      const avatarUrl = updates.avatar_url.trim();
+      if (!avatarUrl) {
+        updates.avatar_url = null;
+      } else if (isAllowedUserAvatarUrl(avatarUrl, user.id)) {
+        updates.avatar_url = avatarUrl;
+      } else {
+        return NextResponse.json(
+          { error: "Avatar URL is not allowed" },
+          { status: 400 }
+        );
+      }
+    } else {
+      return NextResponse.json(
+        { error: "Avatar URL must be a URL" },
         { status: 400 }
       );
     }
