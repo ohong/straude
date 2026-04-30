@@ -95,7 +95,8 @@ export async function getRecapData(
   userId: string,
   username: string,
   isPublic: boolean,
-  period: "week" | "month"
+  period: "week" | "month",
+  streakFreezes: number = 0
 ): Promise<RecapData> {
   const { start, end, totalDays, label } = getPeriodRange(period);
 
@@ -107,7 +108,10 @@ export async function getRecapData(
       .gte("date", start)
       .lte("date", end)
       .order("date"),
-    supabase.rpc("calculate_user_streak", { p_user_id: userId }),
+    supabase.rpc("calculate_user_streak", {
+      p_user_id: userId,
+      p_freeze_days: streakFreezes,
+    }),
   ]);
 
   const rows = usageRows ?? [];

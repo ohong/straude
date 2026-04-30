@@ -1,5 +1,20 @@
 # Architecture & Design Decisions
 
+## `calculate_user_streak` runs as SECURITY DEFINER (2026-04-30)
+
+**Decision:** Promote `public.calculate_user_streak(uuid, integer)` to `SECURITY DEFINER` with a fixed `search_path = public` and grant `EXECUTE` to both `authenticated` and `anon`.
+
+**Why:** The function reads `users.timezone` to compute "today" in the user's local zone. After migration `20260413034500_harden_users_public_columns.sql` replaced the table-wide `GRANT SELECT ON public.users` with a column-level allow-list (which does not include `timezone`, by design — it's not a public profile field), the function began failing with `42501: permission denied for table users` for any caller other than `service_role`/`postgres`. The profile page hid the regression because it uses the service-role client, but the sidebar and the public `/recap/[username]` card silently fell back to 0 / "No active streak". This is the same failure mode that took down `/leaderboard` (see CHANGELOG entry on `20260428120000`).
+
+**Alternatives considered:**
+1. **Grant `authenticated`/`anon` SELECT on `users.timezone` directly.** Would partially undo the harden migration's intent of keeping non-public profile columns private. Streak callers don't need the column value — they just need a streak number — so exposing the raw column to API roles is a wider change than the function needs.
+2. **Have every caller fetch the timezone via the service client and pass it in as a parameter.** Forces every call site to know an internal implementation detail of the streak calculation, and adds an extra round-trip on the sidebar/recap hot paths. Also doesn't help anyone else who might call the RPC in the future.
+3. **Make the function read the timezone via an inline `SECURITY DEFINER` helper while keeping the outer function `INVOKER`.** Adds a second function for no real benefit — the outer function is a pure read, with no caller-supplied data going to mutations, and any user_id is already public via the profile page. The minimal blast radius from making the whole thing definer-rights matched the change.
+
+**Why definer is safe here:** The function takes only `(p_user_id uuid, p_freeze_days int)` and returns an integer streak. Every existing caller already accepts an arbitrary `p_user_id` against a public RPC, so there is no privilege escalation — the same numbers were already returnable via the profile page (which uses service-role). The function performs no writes and no `EXECUTE` on user-supplied SQL, and `SET search_path = public` blocks search-path injection.
+
+**Secondary fix:** The recap page also wasn't passing `p_freeze_days` to the RPC (it just sent `p_user_id`), so users with non-zero `streak_freezes` would see a different streak on `/recap/...` than on `/u/...` even after the SECURITY DEFINER fix. Routed `/recap/[username]/page.tsx` through the service client to read `streak_freezes` (column-level grants hide it from the API roles for the same reason as `timezone`) and threaded the value through `getRecapData`.
+
 ## Legacy-to-Device Usage Backfill Strategy (2026-03-28)
 
 **Decision:** When the multi-device push path encounters a `daily_usage` row with zero `device_usage` backing rows, automatically insert a sentinel `device_usage` row (device_id `00000000-...`, device_name "legacy") before aggregation.
