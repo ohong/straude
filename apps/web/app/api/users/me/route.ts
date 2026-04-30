@@ -25,6 +25,29 @@ const ALLOWED_FIELDS = [
 const BIO_MAX_LENGTH = 160;
 const HEARD_ABOUT_MAX_LENGTH = 500;
 
+function normalizeProfileLink(value: unknown): string | null {
+  if (value === null) return null;
+  if (typeof value !== "string") {
+    throw new Error("Profile link must be a URL");
+  }
+
+  const link = value.trim();
+  if (!link) return null;
+
+  let parsed: URL;
+  try {
+    parsed = new URL(link);
+  } catch {
+    throw new Error("Profile link must be a valid URL");
+  }
+
+  if (parsed.protocol !== "http:" && parsed.protocol !== "https:") {
+    throw new Error("Profile link must use http or https");
+  }
+
+  return link;
+}
+
 export async function GET() {
   const supabase = await createClient();
   const {
@@ -120,6 +143,17 @@ export async function PATCH(request: NextRequest) {
     } else {
       return NextResponse.json(
         { error: "How you heard about Straude must be text" },
+        { status: 400 }
+      );
+    }
+  }
+
+  if (updates.link !== undefined) {
+    try {
+      updates.link = normalizeProfileLink(updates.link);
+    } catch (error) {
+      return NextResponse.json(
+        { error: (error as Error).message },
         { status: 400 }
       );
     }

@@ -275,6 +275,35 @@ describe("GET /api/users/me", () => {
 });
 
 describe("PATCH /api/users/me", () => {
+  function mockAuthenticatedProfileUpdate(resultData: Record<string, unknown> = { id: "u-1" }) {
+    const updateMock = vi.fn().mockReturnValue({
+      eq: vi.fn().mockReturnValue({
+        select: vi.fn().mockReturnValue({
+          single: vi.fn().mockResolvedValue({
+            data: resultData,
+            error: null,
+          }),
+        }),
+      }),
+    });
+
+    const authClient: Record<string, any> = {
+      auth: {
+        getUser: vi.fn().mockResolvedValue({
+          data: { user: { id: "u-1" } },
+          error: null,
+        }),
+      },
+    };
+    const db = {
+      from: vi.fn().mockReturnValue({ update: updateMock }),
+    };
+    (createClient as any).mockResolvedValue(authClient);
+    (getServiceClient as any).mockReturnValue(db);
+
+    return { updateMock };
+  }
+
   it("updates profile fields", async () => {
     const updatedProfile = {
       id: "u-1",
@@ -399,6 +428,60 @@ describe("PATCH /api/users/me", () => {
 
     expect(res.status).toBe(400);
     expect(json.error).toContain("500 characters");
+  });
+
+  it("accepts valid http and https profile links", async () => {
+    const { updateMock } = mockAuthenticatedProfileUpdate();
+
+    let res = await PATCH(
+      makeRequest("PATCH", "/api/users/me", { link: " https://example.com/me " })
+    );
+    expect(res.status).toBe(200);
+    expect(updateMock).toHaveBeenLastCalledWith({ link: "https://example.com/me" });
+
+    res = await PATCH(
+      makeRequest("PATCH", "/api/users/me", { link: "http://example.com/me" })
+    );
+    expect(res.status).toBe(200);
+    expect(updateMock).toHaveBeenLastCalledWith({ link: "http://example.com/me" });
+  });
+
+  it("clears blank or null profile links", async () => {
+    const { updateMock } = mockAuthenticatedProfileUpdate();
+
+    let res = await PATCH(
+      makeRequest("PATCH", "/api/users/me", { link: "" })
+    );
+    expect(res.status).toBe(200);
+    expect(updateMock).toHaveBeenLastCalledWith({ link: null });
+
+    res = await PATCH(
+      makeRequest("PATCH", "/api/users/me", { link: null })
+    );
+    expect(res.status).toBe(200);
+    expect(updateMock).toHaveBeenLastCalledWith({ link: null });
+  });
+
+  it("rejects unsafe or malformed profile links", async () => {
+    const client: Record<string, any> = {
+      auth: {
+        getUser: vi.fn().mockResolvedValue({
+          data: { user: { id: "u-1" } },
+          error: null,
+        }),
+      },
+    };
+    (createClient as any).mockResolvedValue(client);
+
+    for (const link of ["javascript:alert(1)", "data:text/html,<p>x</p>", "not a url"]) {
+      const res = await PATCH(
+        makeRequest("PATCH", "/api/users/me", { link })
+      );
+      const json = await res.json();
+
+      expect(res.status).toBe(400);
+      expect(json.error).toContain("Profile link");
+    }
   });
 
   it("auto-derives region from country", async () => {
