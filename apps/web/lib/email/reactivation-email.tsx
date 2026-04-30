@@ -48,7 +48,7 @@ export default function ReactivationEmail({
                 been unable to complete onboarding.
               </Text>
               <Text className="text-base text-gray-900 leading-relaxed m-0 mb-4">
-                This was entirely our fault, and we're sorry for the frustrating
+                This was entirely our fault, and we are sorry for the frustrating
                 experience. The issue has been fixed.
               </Text>
               <Text className="text-base text-gray-900 leading-relaxed m-0 mb-6">
@@ -64,7 +64,7 @@ export default function ReactivationEmail({
               </Button>
 
               <Text className="text-sm text-gray-500 leading-relaxed m-0 mt-6">
-                Once you're set up, run this in your terminal to log your first
+                Once you are set up, run this in your terminal to log your first
                 session:
               </Text>
               <Section className="bg-gray-50 border border-solid border-gray-200 rounded px-4 py-3 mt-2">

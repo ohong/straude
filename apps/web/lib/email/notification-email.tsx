@@ -55,21 +55,6 @@ function previewText(
   }
 }
 
-function headline(
-  type: NotificationType,
-  actor: string,
-  postLabel: string,
-): string {
-  switch (type) {
-    case "comment":
-      return `${actor} commented on ${postLabel}:`;
-    case "mention":
-      return `${actor} mentioned you in ${postLabel}:`;
-    case "post_mention":
-      return `${actor} tagged you in ${postLabel}:`;
-  }
-}
-
 export function buildSubject(type: NotificationType, actor: string): string {
   return subjectLine(type, actor);
 }
@@ -85,7 +70,6 @@ export default function NotificationEmail({
   const postLabel = postTitle ?? "a post";
   const truncated = truncate(content, 200);
   const preview = previewText(type, actorUsername, content);
-  const heading = headline(type, actorUsername, postLabel);
 
   return (
     <Html lang="en">

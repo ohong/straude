@@ -17,6 +17,20 @@ interface CountryRow {
   percentage: number;
 }
 
+type TooltipPayload = {
+  name?: string;
+  value?: number | string;
+};
+
+type PieLabelProps = {
+  cx?: number | string;
+  cy?: number | string;
+  midAngle?: number | string;
+  innerRadius?: number | string;
+  outerRadius?: number | string;
+  percent?: number;
+};
+
 const COLORS = [
   "#DF561F", // accent
   "#3B82F6", // blue
@@ -90,7 +104,13 @@ function Skeleton() {
   );
 }
 
-function CustomTooltip({ active, payload }: any) {
+function CustomTooltip({
+  active,
+  payload,
+}: {
+  active?: boolean;
+  payload?: TooltipPayload[];
+}) {
   if (!active || !payload?.length) return null;
   const { name, value } = payload[0];
   return (
@@ -114,12 +134,20 @@ function renderLabel({
   innerRadius,
   outerRadius,
   percent,
-}: any) {
-  if (percent < 0.03) return null;
+}: PieLabelProps) {
+  if (!percent || percent < 0.03) return null;
+  const centerX = Number(cx);
+  const centerY = Number(cy);
+  const angle = Number(midAngle);
+  const inner = Number(innerRadius);
+  const outer = Number(outerRadius);
+  if (![centerX, centerY, angle, inner, outer].every(Number.isFinite)) {
+    return null;
+  }
   const RADIAN = Math.PI / 180;
-  const radius = innerRadius + (outerRadius - innerRadius) * 0.5;
-  const x = cx + radius * Math.cos(-midAngle * RADIAN);
-  const y = cy + radius * Math.sin(-midAngle * RADIAN);
+  const radius = inner + (outer - inner) * 0.5;
+  const x = centerX + radius * Math.cos(-angle * RADIAN);
+  const y = centerY + radius * Math.sin(-angle * RADIAN);
   return (
     <text
       x={x}

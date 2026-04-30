@@ -31,7 +31,7 @@ export async function GET(request: NextRequest) {
     query = query.eq("type", typeFilter);
   }
 
-  let countQuery = supabase
+  const countQuery = supabase
     .from("notifications")
     .select("id", { count: "exact", head: true })
     .eq("user_id", user.id)

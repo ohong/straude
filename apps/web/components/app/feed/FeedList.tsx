@@ -161,7 +161,7 @@ export function FeedList({
       loadingRef.current = false;
       setLoading(false);
     }
-  }, []);
+  }, [profileUserId]);
 
   useEffect(() => {
     if (!sentinel.current) return;

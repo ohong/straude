@@ -88,8 +88,8 @@ export default function WinbackEmail({ unsubscribeUrl }: WinbackEmailProps) {
 
             <Section className="px-6 py-4">
               <Text className="text-xs text-gray-400 m-0">
-                You're getting this because you signed up for Straude but
-                haven't completed onboarding. Reply to this email if you have
+                You are getting this because you signed up for Straude but
+                have not completed onboarding. Reply to this email if you have
                 any questions.
               </Text>
               <Text className="text-xs text-gray-400 m-0 mt-2">

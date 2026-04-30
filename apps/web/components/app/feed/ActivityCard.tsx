@@ -10,7 +10,7 @@ import { ShareMenu } from "./ShareMenu";
 import { cn } from "@/lib/utils/cn";
 import { formatCurrency, formatTokens } from "@/lib/utils/format";
 import { mentionsToMarkdownLinks } from "@/lib/utils/mentions";
-import type { Post, Comment, ModelBreakdownEntry } from "@/types";
+import type { Post, ModelBreakdownEntry } from "@/types";
 import dynamic from "next/dynamic";
 import { useState } from "react";
 import remarkBreaks from "remark-breaks";

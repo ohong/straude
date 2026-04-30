@@ -341,7 +341,7 @@ async function main() {
     const batch = batches[i];
     console.log(`Sending batch ${i + 1}/${batches.length} (${batch.length} emails)...`);
 
-    const { data, error } = await resend.batch.send(
+    const { error } = await resend.batch.send(
       batch.map((to) => ({
         from: FROM,
         replyTo: REPLY_TO,

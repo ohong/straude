@@ -58,9 +58,25 @@ type SupabaseErrorLike = {
   details?: string | null;
 } | null;
 
+type SupabaseResult<T = unknown> = {
+  data: T | null;
+  error: SupabaseErrorLike;
+};
+
+type OpenStatsQueryResult = PromiseLike<SupabaseResult> & {
+  order: (...args: unknown[]) => OpenStatsQueryResult;
+  range: (...args: unknown[]) => OpenStatsQueryResult;
+  limit: (...args: unknown[]) => OpenStatsQueryResult;
+};
+
+type OpenStatsTable = {
+  select: (...args: unknown[]) => OpenStatsQueryResult;
+  upsert: (...args: unknown[]) => PromiseLike<SupabaseResult>;
+};
+
 export type OpenStatsDb = {
-  from: (table: string) => any;
-  rpc: (fn: string, args?: Record<string, unknown>) => any;
+  from: (table: string) => OpenStatsTable;
+  rpc: (fn: string, args?: Record<string, unknown>) => PromiseLike<SupabaseResult>;
 };
 
 function snapshotDateFromIso(iso: string) {
@@ -399,7 +415,7 @@ async function persistOpenStatsSnapshot(db: OpenStatsDb, stats: OpenStats) {
 }
 
 export async function getOpenStatsForPage(
-  db: OpenStatsDb = getServiceClient(),
+  db: OpenStatsDb = getServiceClient() as unknown as OpenStatsDb,
 ): Promise<OpenStats> {
   try {
     const liveStats = await fetchLiveOpenStats(db);

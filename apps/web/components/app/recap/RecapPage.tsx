@@ -221,7 +221,7 @@ export function RecapPage() {
 
             {!data.is_public && (
               <p className="mt-3 text-xs text-muted">
-                Your profile is private. The shareable link won't work for
+                Your profile is private. The shareable link will not work for
                 others until you{" "}
                 <a href="/settings" className="text-accent hover:underline">
                   make your profile public

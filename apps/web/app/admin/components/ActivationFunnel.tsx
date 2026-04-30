@@ -1,7 +1,5 @@
 "use client";
 
-import { useAdminTheme } from "./AdminShell";
-
 interface FunnelStage {
   stage: string;
   count: number;
@@ -24,7 +22,6 @@ const STAGE_ORDER = [
 ];
 
 export function ActivationFunnel({ data }: { data: FunnelStage[] }) {
-  const { theme } = useAdminTheme();
   const stageMap = new Map(data.map((d) => [d.stage, d.count]));
   const ordered = STAGE_ORDER.map((stage) => ({
     stage,

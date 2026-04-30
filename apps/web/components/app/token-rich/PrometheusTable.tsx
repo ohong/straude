@@ -123,7 +123,6 @@ export function PrometheusTable({
 
   const isGated = !isLoggedIn && filtered.length > FREE_LIMIT;
   const visible = isGated ? filtered.slice(0, FREE_LIMIT) : filtered;
-  const hiddenCount = isGated ? filtered.length - FREE_LIMIT : 0;
 
   return (
     <div>

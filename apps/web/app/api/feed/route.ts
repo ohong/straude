@@ -3,7 +3,7 @@ import { createClient } from "@/lib/supabase/server";
 import { getServiceClient } from "@/lib/supabase/service";
 import { normalizeCommentPreview, normalizeFeedPost, type JoinedUserSummary, type RawCommentPreviewRow } from "@/lib/feed-normalization";
 import { firstRelation } from "@/lib/utils/first-relation";
-import type { CommentPreviewItem, FeedPostRow, Post, UserSummary } from "@/types";
+import type { CommentPreviewItem, FeedPostRow, Post } from "@/types";
 
 type KudosRow = {
   post_id: string;

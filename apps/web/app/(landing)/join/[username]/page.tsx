@@ -100,7 +100,7 @@ export default async function JoinPage({
   const monthStart = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}-01`;
   const monthName = now.toLocaleString("en-US", { month: "long" });
 
-  const sevenDaysAgo = new Date(Date.now() - 7 * 86400000)
+  const sevenDaysAgo = new Date(now.getTime() - 7 * 86400000)
     .toISOString()
     .slice(0, 10);
 

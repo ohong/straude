@@ -219,7 +219,6 @@ function Step3LogSession({ username }: { username: string }) {
 type UsernameStatus = "idle" | "checking" | "available" | "taken" | "invalid";
 
 export default function OnboardingPage() {
-  const router = useRouter();
   const [step, setStep] = useState(1);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);

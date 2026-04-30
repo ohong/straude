@@ -33,10 +33,6 @@ export function GrowthMetrics({ data }: { data: GrowthRow[] }) {
   const tooltipBorder = isDark
     ? "rgba(255,255,255,0.08)"
     : "rgba(0,0,0,0.12)";
-  const fillStart = isDark
-    ? "rgba(255,255,255,0.06)"
-    : "rgba(0,0,0,0.08)";
-
   return (
     <div className="admin-card">
       <div className="px-5 pt-4 pb-2">

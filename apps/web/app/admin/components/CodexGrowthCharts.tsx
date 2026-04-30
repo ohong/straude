@@ -306,14 +306,19 @@ function IndexedGrowthChart({ data }: { data: ModelUsageRow[] }) {
   const indexed = useMemo(() => {
     if (data.length === 0) return [];
 
-    // Use 7-day rolling cumulative to smooth, then index to 100
-    let claudeCum = 0;
-    let codexCum = 0;
-    const cumRows = data.map((row) => {
-      claudeCum += row.claude_spend;
-      codexCum += row.codex_spend;
-      return { date: row.date, claude: claudeCum, codex: codexCum };
-    });
+    // Use cumulative spend to smooth, then index to 100
+    const cumRows = data.reduce<Array<{ date: string; claude: number; codex: number }>>(
+      (rows, row) => {
+        const previous = rows[rows.length - 1] ?? { claude: 0, codex: 0 };
+        rows.push({
+          date: row.date,
+          claude: previous.claude + row.claude_spend,
+          codex: previous.codex + row.codex_spend,
+        });
+        return rows;
+      },
+      [],
+    );
 
     // Find first row where both have non-zero values for the base
     const baseRow = cumRows.find((r) => r.claude > 0 && r.codex > 0);

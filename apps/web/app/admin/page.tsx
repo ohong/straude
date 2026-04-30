@@ -70,8 +70,9 @@ export default async function AdminPage() {
 
   const supabase = getServiceClient();
 
-  const today = new Date().toISOString().slice(0, 10);
-  const weekAgo = new Date(Date.now() - 7 * 86400000)
+  const nowDate = new Date();
+  const today = nowDate.toISOString().slice(0, 10);
+  const weekAgo = new Date(nowDate.getTime() - 7 * 86400000)
     .toISOString()
     .slice(0, 10);
 
@@ -151,7 +152,7 @@ export default async function AdminPage() {
   const inactive = activated - wau;
 
   // WoW spend growth: compare last 7 days vs prior 7 days
-  const now = Date.now();
+  const now = nowDate.getTime();
   const thisWeekSpend = spendData
     .filter((r: { date: string; daily_total: number }) => {
       const t = new Date(r.date).getTime();

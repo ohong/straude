@@ -41,7 +41,7 @@ export default function WelcomeEmail({
         }}
       >
         <Head />
-        <Preview>You're in. Your streak starts at zero.</Preview>
+        <Preview>You are in. Your streak starts at zero.</Preview>
         <Body className="bg-gray-100 font-sans py-10">
           <Container className="max-w-lg mx-auto bg-white rounded border border-solid border-gray-200">
             <Section className="px-6 pt-8 pb-6">

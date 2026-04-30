@@ -1,7 +1,6 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { useAdminTheme } from "./AdminShell";
 
 interface Segment {
   segment: string;
@@ -59,8 +58,6 @@ function Skeleton() {
 }
 
 export function RevenueConcentration() {
-  const { theme } = useAdminTheme();
-  const isDark = theme === "dark";
   const [data, setData] = useState<Segment[] | null>(null);
   const [error, setError] = useState<string | null>(null);
 

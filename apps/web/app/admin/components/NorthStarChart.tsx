@@ -49,10 +49,6 @@ export function NorthStarChart({ data }: { data: SpendRow[] }) {
   const axisColor = isDark ? "#555" : "#999";
   const tooltipBg = isDark ? "#1A1A1A" : "#FFF";
   const tooltipBorder = isDark ? "rgba(255,255,255,0.08)" : "rgba(0,0,0,0.12)";
-  const gradientStart = isDark
-    ? "rgba(223,86,31,0.25)"
-    : "rgba(223,86,31,0.2)";
-
   return (
     <div className="admin-card">
       <div className="flex items-center justify-between px-5 pt-4 pb-2">

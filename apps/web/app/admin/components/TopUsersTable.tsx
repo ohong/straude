@@ -1,7 +1,6 @@
 "use client";
 
 import { formatCurrency, formatTokens } from "@/lib/utils/format";
-import { useAdminTheme } from "./AdminShell";
 
 interface TopUser {
   user_id: string;
@@ -22,8 +21,6 @@ function formatDate(dateStr: string) {
 }
 
 export function TopUsersTable({ users }: { users: TopUser[] }) {
-  const { theme } = useAdminTheme();
-
   return (
     <div className="admin-card">
       <div className="px-5 pt-4 pb-2">
@@ -89,6 +86,7 @@ export function TopUsersTable({ users }: { users: TopUser[] }) {
                 <td className="px-5 py-3">
                   <div className="flex items-center gap-2.5">
                     {user.avatar_url ? (
+                      // eslint-disable-next-line @next/next/no-img-element
                       <img
                         src={user.avatar_url}
                         alt=""
