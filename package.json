@@ -17,7 +17,7 @@
     "local:setup": "bun run local:up && bun run local:env && bun run local:seed"
   },
   "devDependencies": {
-    "turbo": "^2.9.3",
+    "turbo": "^2.9.6",
     "typescript": "^5"
   },
   "dependencies": {
