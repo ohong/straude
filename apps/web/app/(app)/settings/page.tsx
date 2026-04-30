@@ -15,6 +15,38 @@ import { usePostHog } from "posthog-js/react";
 import { compressImage } from "@/lib/utils/compress-image";
 import { CountryPicker } from "@/components/ui/CountryPicker";
 
+type ProfileUpdatePayloadInput = {
+  username: string;
+  displayName: string;
+  bio: string;
+  heardAbout: string;
+  link: string;
+  country: string;
+  githubUsername: string;
+  isPublic: boolean;
+  emailNotifications: boolean;
+  emailMentionNotifications: boolean;
+  emailDmNotifications: boolean;
+  timezone: string;
+};
+
+export function buildProfileUpdatePayload(input: ProfileUpdatePayloadInput) {
+  return {
+    username: input.username.trim() || undefined,
+    display_name: input.displayName.trim() || null,
+    bio: input.bio.trim() || null,
+    heard_about: input.heardAbout.trim() || null,
+    link: input.link.trim() || null,
+    country: input.country || null,
+    github_username: input.githubUsername.trim() || null,
+    is_public: input.isPublic,
+    email_notifications: input.emailNotifications,
+    email_mention_notifications: input.emailMentionNotifications,
+    email_dm_notifications: input.emailDmNotifications,
+    timezone: input.timezone,
+  };
+}
+
 export default function SettingsPage() {
   const router = useRouter();
   const posthog = usePostHog();
@@ -129,20 +161,20 @@ export default function SettingsPage() {
     const res = await fetch("/api/users/me", {
       method: "PATCH",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        username: username || undefined,
-        display_name: displayName || undefined,
-        bio: bio || undefined,
-        heard_about: heardAbout.trim() || null,
-        link: link || undefined,
-        country: country || undefined,
-        github_username: githubUsername || undefined,
-        is_public: isPublic,
-        email_notifications: emailNotifications,
-        email_mention_notifications: emailMentionNotifications,
-        email_dm_notifications: emailDmNotifications,
+      body: JSON.stringify(buildProfileUpdatePayload({
+        username,
+        displayName,
+        bio,
+        heardAbout,
+        link,
+        country,
+        githubUsername,
+        isPublic,
+        emailNotifications,
+        emailMentionNotifications,
+        emailDmNotifications,
         timezone,
-      }),
+      })),
     });
 
     if (!res.ok) {
