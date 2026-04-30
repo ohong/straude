@@ -25,10 +25,14 @@ const DM_FILE_TYPES = [
   "application/zip",
 ];
 
-const VALID_BUCKETS = ["post-images", "dm-attachments"] as const;
+const VALID_BUCKETS = ["avatars", "post-images", "dm-attachments"] as const;
 type BucketId = (typeof VALID_BUCKETS)[number];
 
 const BUCKET_CONFIG: Record<BucketId, { maxSize: number; allowedTypes: string[] }> = {
+  avatars: {
+    maxSize: 5 * 1024 * 1024,
+    allowedTypes: IMAGE_TYPES,
+  },
   "post-images": {
     maxSize: 20 * 1024 * 1024,
     allowedTypes: IMAGE_TYPES,

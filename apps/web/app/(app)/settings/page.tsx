@@ -89,7 +89,7 @@ export default function SettingsPage() {
       const form = new FormData();
       form.append("file", compressed);
 
-      const uploadRes = await fetch("/api/upload?bucket=post-images", {
+      const uploadRes = await fetch("/api/upload?bucket=avatars", {
         method: "POST",
         body: form,
       });

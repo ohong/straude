@@ -66,7 +66,10 @@ const ALLOWED_AVATAR_HOSTS = new Set([
 ]);
 
 export function isAllowedAvatarUrl(url: string): boolean {
-  if (isFirstPartyPublicStorageUrl(url, "avatars")) {
+  if (
+    isFirstPartyPublicStorageUrl(url, "avatars") ||
+    isFirstPartyPublicStorageUrl(url, "post-images")
+  ) {
     return true;
   }
   try {
