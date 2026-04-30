@@ -8,13 +8,19 @@ vi.mock("@/lib/supabase/service", () => ({
   getServiceClient: vi.fn(() => mockServiceClient),
 }));
 
+vi.mock("@/lib/supabase/server", () => ({
+  createClient: vi.fn(),
+}));
+
 vi.mock("@/lib/api/cli-auth", () => ({
   createCliToken: vi.fn(),
 }));
 
 import { POST as initPOST } from "@/app/api/auth/cli/init/route";
 import { POST as pollPOST } from "@/app/api/auth/cli/poll/route";
+import { POST as verifyPOST } from "@/app/api/auth/cli/verify/route";
 import { createCliToken } from "@/lib/api/cli-auth";
+import { createClient } from "@/lib/supabase/server";
 import { NextRequest } from "next/server";
 
 function mockChain(overrides = {}) {
@@ -23,6 +29,7 @@ function mockChain(overrides = {}) {
     select: vi.fn().mockReturnThis(),
     update: vi.fn().mockReturnThis(),
     eq: vi.fn().mockReturnThis(),
+    gt: vi.fn().mockReturnThis(),
     neq: vi.fn().mockReturnThis(),
     single: vi.fn().mockResolvedValue({ data: null, error: null }),
     ...overrides,
@@ -44,6 +51,17 @@ beforeEach(() => {
   vi.stubEnv("NEXT_PUBLIC_SUPABASE_URL", "https://test.supabase.co");
   vi.stubEnv("SUPABASE_SECRET_KEY", "test-secret");
 });
+
+function mockAuthenticatedUser(user: { id: string } | null = { id: "user-abc" }) {
+  (createClient as any).mockResolvedValue({
+    auth: {
+      getUser: vi.fn().mockResolvedValue({
+        data: { user },
+        error: null,
+      }),
+    },
+  });
+}
 
 describe("POST /api/auth/cli/init", () => {
   it("creates a code and returns code + verify_url", async () => {
@@ -191,5 +209,84 @@ describe("POST /api/auth/cli/poll", () => {
     expect(json.token).toBe("jwt-token-123");
     expect(json.username).toBe("testuser");
     expect(createCliToken).toHaveBeenCalledWith("user-abc", "testuser");
+  });
+});
+
+describe("POST /api/auth/cli/verify", () => {
+  it("rejects unauthenticated requests", async () => {
+    mockAuthenticatedUser(null);
+
+    const res = await verifyPOST(mockRequest({ code: "AAAA-BBBB" }));
+    const json = await res.json();
+
+    expect(res.status).toBe(401);
+    expect(json.error).toBe("Unauthorized");
+  });
+
+  it("returns error when code is missing", async () => {
+    mockAuthenticatedUser();
+
+    const res = await verifyPOST(mockRequest({}));
+    const json = await res.json();
+
+    expect(res.status).toBe(400);
+    expect(json.error).toBe("Missing code");
+  });
+
+  it("returns error for invalid JSON", async () => {
+    mockAuthenticatedUser();
+
+    const req = new Request("http://localhost/api/auth/cli/verify", {
+      method: "POST",
+      body: "not json",
+    });
+    const res = await verifyPOST(req);
+    const json = await res.json();
+
+    expect(res.status).toBe(400);
+    expect(json.error).toBe("Invalid JSON");
+  });
+
+  it("rejects expired or already-completed zero-row updates", async () => {
+    mockAuthenticatedUser();
+    const chain = mockChain({
+      single: vi.fn().mockResolvedValue({
+        data: null,
+        error: { code: "PGRST116", message: "No rows" },
+      }),
+    });
+    mockServiceClient.from.mockReturnValue(chain);
+
+    const res = await verifyPOST(mockRequest({ code: "AAAA-BBBB" }));
+    const json = await res.json();
+
+    expect(res.status).toBe(400);
+    expect(json.error).toBe("Authorization code is invalid or expired");
+  });
+
+  it("authorizes a pending unexpired code", async () => {
+    mockAuthenticatedUser({ id: "user-abc" });
+    const chain = mockChain({
+      single: vi.fn().mockResolvedValue({
+        data: { id: "code-1" },
+        error: null,
+      }),
+    });
+    mockServiceClient.from.mockReturnValue(chain);
+
+    const res = await verifyPOST(mockRequest({ code: " AAAA-BBBB " }));
+    const json = await res.json();
+
+    expect(res.status).toBe(200);
+    expect(json.ok).toBe(true);
+    expect(chain.update).toHaveBeenCalledWith({
+      user_id: "user-abc",
+      status: "completed",
+    });
+    expect(chain.eq).toHaveBeenCalledWith("code", "AAAA-BBBB");
+    expect(chain.eq).toHaveBeenCalledWith("status", "pending");
+    expect(chain.gt).toHaveBeenCalledWith("expires_at", expect.any(String));
+    expect(chain.select).toHaveBeenCalledWith("id");
+    expect(chain.single).toHaveBeenCalled();
   });
 });

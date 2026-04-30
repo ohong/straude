@@ -49,14 +49,20 @@ function VerifyContent() {
         return;
       }
 
-      const { error: updateError } = await supabase
-        .from("cli_auth_codes")
-        .update({ user_id: user.id, status: "completed" })
-        .eq("code", code)
-        .eq("status", "pending");
+      const verifyRes = await fetch("/api/auth/cli/verify", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ code }),
+      });
 
-      if (updateError) {
-        setErrorMsg("Failed to authorize. The code may have expired.");
+      if (verifyRes.status === 401) {
+        router.push(`/login?next=${encodeURIComponent(`/cli/verify?code=${code}`)}`);
+        return;
+      }
+
+      if (!verifyRes.ok) {
+        const data = await verifyRes.json().catch(() => ({}));
+        setErrorMsg(data.error ?? "Failed to authorize. The code may have expired.");
         setState("error");
         return;
       }
