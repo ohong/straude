@@ -81,7 +81,12 @@ export default async function Image({
   );
 
   return new ImageResponse(
-    <RecapCardImage data={data} format="landscape" backgroundCss={bg.css} />,
+    <RecapCardImage
+      data={data}
+      format="landscape"
+      backgroundCss={bg.css}
+      dark={bg.dark}
+    />,
     { ...size, fonts }
   );
 }

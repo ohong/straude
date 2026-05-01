@@ -2,7 +2,11 @@
 
 import { formatCurrency, formatTokens, getCellColor } from "@/lib/utils/format";
 import type { RecapData } from "@/lib/utils/recap";
-import { getBackgroundById, DEFAULT_BACKGROUND_ID } from "@/lib/recap-backgrounds";
+import {
+  getBackgroundById,
+  getPalette,
+  DEFAULT_BACKGROUND_ID,
+} from "@/lib/recap-backgrounds";
 
 function fillDays(
   data: { date: string; cost_usd: number }[],
@@ -47,6 +51,7 @@ export function RecapCard({
 }) {
   const allDays = fillDays(data.contribution_data, data.total_days, data.period);
   const bg = getBackgroundById(backgroundId ?? DEFAULT_BACKGROUND_ID);
+  const palette = getPalette(bg);
 
   return (
     <div
@@ -58,10 +63,10 @@ export function RecapCard({
         className="absolute inset-0"
         style={{ background: bg.css }}
       />
-      {/* White overlay for legibility */}
+      {/* Overlay for legibility */}
       <div
         className="absolute inset-0"
-        style={{ backgroundColor: "rgba(255,255,255,0.78)" }}
+        style={{ backgroundColor: palette.overlay }}
       />
 
       {/* Content */}
@@ -71,7 +76,7 @@ export function RecapCard({
           <svg width="24" height="24" viewBox="0 0 32 32">
             <polygon points="6.4,0 25.6,0 32,32 0,32" fill="#DF561F" />
           </svg>
-          <p className="text-xs font-medium" style={{ color: "#666" }}>
+          <p className="text-xs font-medium" style={{ color: palette.textMuted }}>
             {data.period_label}
           </p>
         </div>
@@ -86,7 +91,7 @@ export function RecapCard({
           </p>
           <p
             className="mt-1 text-xs font-medium uppercase tracking-widest"
-            style={{ color: "#999" }}
+            style={{ color: palette.textSubtle }}
           >
             total spend
           </p>
@@ -97,13 +102,13 @@ export function RecapCard({
           <div>
             <p
               className="text-[0.65rem] font-medium uppercase tracking-widest"
-              style={{ color: "#999" }}
+              style={{ color: palette.textSubtle }}
             >
               Output
             </p>
             <p
               className="font-[family-name:var(--font-mono)] text-xl font-bold tabular-nums"
-              style={{ color: "#000" }}
+              style={{ color: palette.text }}
             >
               {formatTokens(data.output_tokens)}
             </p>
@@ -111,16 +116,19 @@ export function RecapCard({
           <div>
             <p
               className="text-[0.65rem] font-medium uppercase tracking-widest"
-              style={{ color: "#999" }}
+              style={{ color: palette.textSubtle }}
             >
               Active
             </p>
             <p
               className="font-[family-name:var(--font-mono)] text-xl font-bold tabular-nums"
-              style={{ color: "#000" }}
+              style={{ color: palette.text }}
             >
               {data.active_days}/{data.total_days}{" "}
-              <span className="text-sm font-medium" style={{ color: "#999" }}>
+              <span
+                className="text-sm font-medium"
+                style={{ color: palette.textSubtle }}
+              >
                 days
               </span>
             </p>
@@ -128,13 +136,13 @@ export function RecapCard({
           <div>
             <p
               className="text-[0.65rem] font-medium uppercase tracking-widest"
-              style={{ color: "#999" }}
+              style={{ color: palette.textSubtle }}
             >
               Sessions
             </p>
             <p
               className="font-[family-name:var(--font-mono)] text-xl font-bold tabular-nums"
-              style={{ color: "#000" }}
+              style={{ color: palette.text }}
             >
               {data.session_count}
             </p>
@@ -142,13 +150,16 @@ export function RecapCard({
           <div>
             <p
               className="text-[0.65rem] font-medium uppercase tracking-widest"
-              style={{ color: "#999" }}
+              style={{ color: palette.textSubtle }}
             >
               Streak
             </p>
             <p className="font-[family-name:var(--font-mono)] text-xl font-bold tabular-nums text-accent">
               🔥 {data.streak}{" "}
-              <span className="text-sm font-medium" style={{ color: "#999" }}>
+              <span
+                className="text-sm font-medium"
+                style={{ color: palette.textSubtle }}
+              >
                 days
               </span>
             </p>
@@ -156,7 +167,10 @@ export function RecapCard({
         </div>
 
         {/* Model */}
-        <p className="mt-6 text-xs font-medium" style={{ color: "#999" }}>
+        <p
+          className="mt-6 text-xs font-medium"
+          style={{ color: palette.textSubtle }}
+        >
           Powered by {data.primary_model}
         </p>
 
@@ -177,8 +191,8 @@ export function RecapCard({
 
         {/* Footer */}
         <div className="mt-6 flex items-center justify-between text-xs font-medium">
-          <span style={{ color: "#666" }}>@{data.username}</span>
-          <span style={{ color: "#999" }}>straude.com</span>
+          <span style={{ color: palette.textMuted }}>@{data.username}</span>
+          <span style={{ color: palette.textSubtle }}>straude.com</span>
         </div>
       </div>
     </div>

@@ -39,7 +39,12 @@ export async function GET(request: NextRequest) {
     ]);
 
     const response = new ImageResponse(
-      <RecapCardImage data={data} format="landscape" backgroundCss={bg.css} />,
+      <RecapCardImage
+        data={data}
+        format="landscape"
+        backgroundCss={bg.css}
+        dark={bg.dark}
+      />,
       { width: 1200, height: 630, fonts }
     );
 

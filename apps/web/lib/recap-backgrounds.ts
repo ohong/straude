@@ -1,3 +1,10 @@
+export type RecapBackground = {
+  id: string;
+  label: string;
+  css: string;
+  dark?: boolean;
+};
+
 export const RECAP_BACKGROUNDS = [
   {
     id: "01",
@@ -49,14 +56,46 @@ export const RECAP_BACKGROUNDS = [
     label: "Geometric",
     css: "linear-gradient(135deg, #F093FB 0%, #F5576C 50%, #FDB99B 100%)",
   },
-] as const;
+  {
+    id: "11",
+    label: "Midnight",
+    css: "linear-gradient(135deg, #0B0D12 0%, #1B1F2A 50%, #2A1A12 100%)",
+    dark: true,
+  },
+] as const satisfies readonly RecapBackground[];
 
 export type RecapBackgroundId = (typeof RECAP_BACKGROUNDS)[number]["id"];
 
 export const DEFAULT_BACKGROUND_ID: RecapBackgroundId = "01";
 
-export function getBackgroundById(id: string) {
+export function getBackgroundById(id: string): RecapBackground {
   return (
     RECAP_BACKGROUNDS.find((bg) => bg.id === id) ?? RECAP_BACKGROUNDS[0]
   );
+}
+
+/** Color tokens for the recap card, swapped based on whether the background is dark. */
+export type RecapPalette = {
+  overlay: string;
+  text: string;
+  textMuted: string;
+  textSubtle: string;
+};
+
+export const LIGHT_PALETTE: RecapPalette = {
+  overlay: "rgba(255,255,255,0.78)",
+  text: "#000",
+  textMuted: "#666",
+  textSubtle: "#999",
+};
+
+export const DARK_PALETTE: RecapPalette = {
+  overlay: "rgba(0,0,0,0.55)",
+  text: "#FFF",
+  textMuted: "#CFCFCF",
+  textSubtle: "#9A9A9A",
+};
+
+export function getPalette(bg: RecapBackground): RecapPalette {
+  return bg.dark ? DARK_PALETTE : LIGHT_PALETTE;
 }
