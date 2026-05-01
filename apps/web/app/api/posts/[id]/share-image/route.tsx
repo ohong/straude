@@ -4,7 +4,7 @@ import { createClient } from "@/lib/supabase/server";
 import { ShareCardImage } from "@/lib/utils/share-image";
 import { DEFAULT_SHARE_THEME, type ShareThemeId } from "@/lib/share-themes";
 import { loadFonts } from "@/lib/og-fonts";
-import { isAllowedAvatarUrl, isFirstPartyPublicStorageUrl } from "@/lib/storage";
+import { isFirstPartyPublicStorageUrl } from "@/lib/storage";
 
 type RouteContext = { params: Promise<{ id: string }> };
 
@@ -53,7 +53,8 @@ export async function GET(request: NextRequest, context: RouteContext) {
   } | null;
   const safeAvatarUrl =
     typeof u?.avatar_url === "string" &&
-      isAllowedAvatarUrl(u.avatar_url)
+    (isFirstPartyPublicStorageUrl(u.avatar_url, "avatars") ||
+      isFirstPartyPublicStorageUrl(u.avatar_url, "post-images"))
       ? u.avatar_url
       : null;
   const safeImages = Array.isArray(post.images)
