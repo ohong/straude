@@ -52,6 +52,7 @@ const TAB_LABELS: Partial<Record<FeedType, string>> = {
 
 export function FeedList({
   initialPosts,
+  initialNextCursor,
   userId,
   feedType: initialFeedType = "global",
   showTabs = true,
@@ -59,6 +60,7 @@ export function FeedList({
   profileUserId,
 }: {
   initialPosts: Post[];
+  initialNextCursor?: string | null;
   userId: string | null;
   feedType?: FeedType;
   showTabs?: boolean;
@@ -72,12 +74,7 @@ export function FeedList({
   const dropdownRef = useRef<HTMLDivElement>(null);
   const [posts, setPosts] = useState<Post[]>(initialPosts);
   const [pending, setPending] = useState<Post[]>(pendingPosts);
-  const [cursor, setCursor] = useState<string | null>(() => {
-    if (initialPosts.length < 20) return null;
-    const last = initialPosts[initialPosts.length - 1];
-    const date = last.daily_usage?.date;
-    return date ? `${date}|${last.created_at}` : null;
-  });
+  const [cursor, setCursor] = useState<string | null>(initialNextCursor ?? null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [switching, setSwitching] = useState(false);
@@ -85,6 +82,7 @@ export function FeedList({
   const loadingRef = useRef(false);
   const feedTypeRef = useRef(feedType);
   const sentinel = useRef<HTMLDivElement>(null);
+  const activeRequestRef = useRef<AbortController | null>(null);
 
   cursorRef.current = cursor;
   feedTypeRef.current = feedType;
@@ -135,6 +133,9 @@ export function FeedList({
 
   const loadMore = useCallback(async () => {
     if (!cursorRef.current || loadingRef.current) return;
+    const controller = new AbortController();
+    activeRequestRef.current?.abort();
+    activeRequestRef.current = controller;
     loadingRef.current = true;
     setLoading(true);
     setError(null);
@@ -145,9 +146,11 @@ export function FeedList({
       feedUrl.searchParams.set("cursor", cursorRef.current);
       feedUrl.searchParams.set("limit", "20");
       if (profileUserId) feedUrl.searchParams.set("user_id", profileUserId);
-      const res = await fetch(feedUrl);
+      const res = await fetch(feedUrl, { signal: controller.signal });
       if (!res.ok) throw new Error("Failed to load posts");
       const data = await res.json();
+
+      if (controller.signal.aborted) return;
 
       if (data.posts?.length) {
         setPosts((prev) => [...prev, ...data.posts]);
@@ -155,11 +158,15 @@ export function FeedList({
       } else {
         setCursor(null);
       }
-    } catch {
+    } catch (err) {
+      if (err instanceof DOMException && err.name === "AbortError") return;
       setError("Couldn\u2019t load more posts.");
     } finally {
-      loadingRef.current = false;
-      setLoading(false);
+      if (activeRequestRef.current === controller) {
+        activeRequestRef.current = null;
+        loadingRef.current = false;
+        setLoading(false);
+      }
     }
   }, [profileUserId]);
 
@@ -178,6 +185,10 @@ export function FeedList({
   const switchTab = useCallback(
     async (newType: FeedType) => {
       if (newType === feedType) return;
+      const controller = new AbortController();
+      activeRequestRef.current?.abort();
+      activeRequestRef.current = controller;
+      loadingRef.current = false;
       setFeedType(newType);
       setSwitching(true);
       setPosts([]);
@@ -189,17 +200,25 @@ export function FeedList({
       router.replace(url);
 
       try {
-        const res = await fetch(`/api/feed?type=${newType}&limit=20`);
+        const res = await fetch(`/api/feed?type=${newType}&limit=20`, {
+          signal: controller.signal,
+        });
         if (!res.ok) throw new Error("Failed to load feed");
         const data = await res.json();
+
+        if (controller.signal.aborted) return;
 
         setPosts(data.posts ?? []);
         setCursor(data.next_cursor ?? null);
         setPending(data.pending_posts ?? []);
-      } catch {
+      } catch (err) {
+        if (err instanceof DOMException && err.name === "AbortError") return;
         setError("Couldn\u2019t load feed. Please try again.");
       } finally {
-        setSwitching(false);
+        if (activeRequestRef.current === controller) {
+          activeRequestRef.current = null;
+          setSwitching(false);
+        }
       }
     },
     [feedType, router]

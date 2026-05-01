@@ -16,18 +16,13 @@ import { FollowButton } from "@/components/app/profile/FollowButton";
 import { InviteButton } from "@/components/app/profile/InviteButton";
 import { CrewPopover, type CrewMember } from "@/components/app/profile/CrewPopover";
 import { formatCurrency, formatTokens } from "@/lib/utils/format";
-import { normalizeCommentPreview, type JoinedUserSummary, type RawCommentPreviewRow } from "@/lib/feed-normalization";
+import { enrichFeedPosts, getFeedCursor } from "@/lib/feed-enrichment";
 import { firstRelation } from "@/lib/utils/first-relation";
-import type { CommentPreviewItem, FeedPostRow, Post, UserSummary } from "@/types";
+import type { FeedPostRow, Post } from "@/types";
 import type { Metadata } from "next";
 
 type PostDateRow = {
   daily_usage: Array<{ date: string }> | null;
-};
-
-type KudosRow = {
-  post_id: string;
-  user: JoinedUserSummary;
 };
 
 type ProfileRow = {
@@ -212,65 +207,14 @@ export default async function ProfilePage({
       kudos_count: (row.kudos_count as number) ?? 0,
       comment_count: (row.comment_count as number) ?? 0,
     })) as FeedPostRow[];
-    const postIds = feedPosts.map((post) => post.id);
-
-    const [{ data: userKudos }, { data: recentKudos }, { data: recentComments }] =
-      await Promise.all([
-        authUserId
-          ? supabase
-              .from("kudos")
-              .select("post_id")
-              .eq("user_id", authUserId)
-              .in("post_id", postIds)
-          : Promise.resolve({ data: [] as { post_id: string }[] }),
-        db
-          .from("kudos")
-          .select("post_id, user:users!kudos_user_id_fkey(avatar_url, username)")
-          .in("post_id", postIds)
-          .order("created_at", { ascending: false })
-          .limit(postIds.length * 3),
-        db
-          .from("comments")
-          .select("id, post_id, content, created_at, user:users!comments_user_id_fkey(username, avatar_url)")
-          .is("parent_comment_id", null)
-          .in("post_id", postIds)
-          .order("created_at", { ascending: false })
-          .limit(postIds.length * 2),
-      ]);
-
-    const kudosedSet = new Set(userKudos?.map((k) => k.post_id));
-
-    const kudosUsersMap = new Map<string, UserSummary[]>();
-    for (const kudos of (recentKudos ?? []) as KudosRow[]) {
-      const list = kudosUsersMap.get(kudos.post_id) ?? [];
-      const userSummary = firstRelation(kudos.user);
-      if (list.length < 3 && userSummary) {
-        list.push(userSummary);
-        kudosUsersMap.set(kudos.post_id, list);
-      }
-    }
-
-    const commentsMap = new Map<string, CommentPreviewItem[]>();
-    for (const comment of (recentComments ?? []) as RawCommentPreviewRow[]) {
-      const list = commentsMap.get(comment.post_id) ?? [];
-      if (list.length < 2) {
-        list.push(normalizeCommentPreview(comment));
-        commentsMap.set(comment.post_id, list);
-      }
-    }
-    for (const [, list] of commentsMap) {
-      list.reverse();
-    }
-
-    normalizedPosts = feedPosts.map((post) => ({
-      ...post,
-      kudos_count: typeof post.kudos_count === "number" ? post.kudos_count : post.kudos_count?.[0]?.count ?? 0,
-      kudos_users: kudosUsersMap.get(post.id) ?? [],
-      comment_count: typeof post.comment_count === "number" ? post.comment_count : post.comment_count?.[0]?.count ?? 0,
-      recent_comments: commentsMap.get(post.id) ?? [],
-      has_kudosed: kudosedSet.has(post.id),
-    }));
+    normalizedPosts = await enrichFeedPosts({
+      posts: feedPosts,
+      userId: authUserId,
+      userScopedClient: supabase,
+      publicReadClient: db,
+    });
   }
+  const nextCursor = getFeedCursor(normalizedPosts, 20);
 
   return (
     <>
@@ -446,7 +390,14 @@ export default async function ProfilePage({
           </p>
         </div>
         {normalizedPosts.length > 0 ? (
-          <FeedList initialPosts={normalizedPosts} userId={authUserId} feedType="user" profileUserId={profile.id} showTabs={false} />
+          <FeedList
+            initialPosts={normalizedPosts}
+            initialNextCursor={nextCursor}
+            userId={authUserId}
+            feedType="user"
+            profileUserId={profile.id}
+            showTabs={false}
+          />
         ) : (
           <div className="px-4 py-12 text-center text-sm text-muted sm:px-6">
             No activities yet.

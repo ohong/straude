@@ -34,6 +34,7 @@ function mockSupabase(opts: {
   kudos?: any[];
   userKudos?: any[];
   comments?: any[];
+  pendingPosts?: any[];
   profile?: { id: string; is_public: boolean } | null;
   follow?: { id: string } | null;
 }) {
@@ -44,6 +45,7 @@ function mockSupabase(opts: {
     kudos = [],
     userKudos,
     comments = [],
+    pendingPosts = [],
     profile = null,
     follow = null,
   } = opts;
@@ -104,6 +106,14 @@ function mockSupabase(opts: {
                 }),
               }),
             }),
+          }),
+        });
+      }
+      if (table === "posts") {
+        return buildChain({
+          limit: vi.fn().mockResolvedValue({
+            data: pendingPosts,
+            error: null,
           }),
         });
       }
@@ -333,5 +343,38 @@ describe("GET /api/feed", () => {
     expect(json.next_cursor).toBeDefined();
     const last = mockPosts[19];
     expect(json.next_cursor).toBe(`${last.daily_usage.date}|${last.created_at}`);
+  });
+
+  it("includes pending posts on the first authenticated page only", async () => {
+    const pendingPost = {
+      id: "pending-1",
+      user_id: "user-1",
+      created_at: "2026-01-02T12:00:00Z",
+      daily_usage: { date: "2026-01-02" },
+      kudos_count: 0,
+      comment_count: 0,
+    };
+
+    const client = mockSupabase({
+      user: { id: "user-1" },
+      posts: [],
+      pendingPosts: [pendingPost],
+    });
+
+    const firstPage = await GET(makeRequest());
+    const firstJson = await firstPage.json();
+
+    expect(firstPage.status).toBe(200);
+    expect(firstJson.pending_posts).toEqual([pendingPost]);
+
+    client.from.mockClear();
+    const nextPage = await GET(
+      makeRequest({ cursor: "2026-01-02|2026-01-02T12:00:00Z" }),
+    );
+    const nextJson = await nextPage.json();
+
+    expect(nextPage.status).toBe(200);
+    expect(nextJson.pending_posts).toEqual([]);
+    expect(client.from).not.toHaveBeenCalledWith("posts");
   });
 });
