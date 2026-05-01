@@ -1,5 +1,6 @@
 import type { DailyUsage, Post, User } from "@/types";
 import { formatCurrency, formatTokens } from "./format";
+import { buildShareMoment } from "@/lib/share-moments";
 
 type ShareablePost = Pick<Post, "id" | "title" | "images"> & {
   user?: Pick<User, "username"> | null;
@@ -48,12 +49,13 @@ export function getPostShareFilename(postId: string) {
 
 export function buildPostShareText(post: ShareablePost) {
   const title = post.title?.trim();
+  const moment = buildShareMoment(post);
   const lines: string[] = [];
 
   if (title) {
     lines.push(title);
   } else {
-    lines.push("Tracked a Claude Code session");
+    lines.push(moment.headline);
   }
 
   const details: string[] = [];
@@ -84,6 +86,8 @@ export function buildPostShareText(post: ShareablePost) {
   if (details.length > 0) {
     lines.push(details.join(" · "));
   }
+
+  lines.push(moment.inviteText);
 
   const username = post.user?.username;
   lines.push(username ? `Tracked on Straude by @${username}` : "Tracked on Straude");

@@ -75,6 +75,27 @@ describe("ShareMenu", () => {
     expect(openedUrl.origin).toBe("https://twitter.com");
     expect(openedUrl.pathname).toBe("/intent/tweet");
     expect(openedUrl.searchParams.get("url")).toContain("/post/post-1");
+    expect(openedUrl.searchParams.get("text")).toContain("Share the receipts with a friend.");
+  });
+
+  it("shows a Strava-style share angle and copies the invite link", async () => {
+    const writeText = vi.fn().mockResolvedValue(undefined);
+    Object.defineProperty(window.navigator, "clipboard", {
+      value: { writeText },
+      configurable: true,
+    });
+
+    render(<ShareMenu post={makePost() as any} />);
+    fireEvent.click(screen.getByRole("button", { name: /share/i }));
+
+    expect(screen.getByText("Receipts Attached")).toBeInTheDocument();
+    expect(screen.getByText(/1 screenshot on the build log/i)).toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole("button", { name: /share the receipts with a friend/i }));
+
+    await waitFor(() => {
+      expect(writeText).toHaveBeenCalledWith("http://localhost:3000/join/alice");
+    });
   });
 
   it("shows an inline error when PNG generation fails", async () => {

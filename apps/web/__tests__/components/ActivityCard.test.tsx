@@ -67,6 +67,8 @@ describe("ActivityCard", () => {
     expect(
       screen.getByLabelText("Model usage: 77% Claude Opus, 23% GPT-5-Codex")
     ).toBeInTheDocument();
+    expect(screen.getByText("Build Log")).toBeInTheDocument();
+    expect(screen.getByText("1.3k output tracked")).toBeInTheDocument();
   });
 
   it("renders Codex-only model with full model name in session summary", () => {
