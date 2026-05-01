@@ -11,6 +11,7 @@ import {
 } from "lucide-react";
 import { usePostHog } from "posthog-js/react";
 import { cn } from "@/lib/utils/cn";
+import { buildInviteUrl, buildShareMoment } from "@/lib/share-moments";
 import { ShareCardImage } from "@/lib/utils/share-image";
 import {
   buildPostIntentUrl,
@@ -37,7 +38,7 @@ export function ShareMenu({ post }: { post: Post }) {
   const [open, setOpen] = useState(false);
   const [theme, setTheme] = useState<ShareThemeId>("accent");
   const [busyAction, setBusyAction] = useState<BusyAction>(null);
-  const [copiedAction, setCopiedAction] = useState<"link" | "image" | null>(null);
+  const [copiedAction, setCopiedAction] = useState<"link" | "image" | "invite" | null>(null);
   const [feedback, setFeedback] = useState<{
     tone: "success" | "error";
     message: string;
@@ -90,7 +91,9 @@ export function ShareMenu({ post }: { post: Post }) {
   const supportsNativeShare =
     typeof window !== "undefined" && typeof navigator.share === "function";
 
-  function flashCopied(action: "link" | "image") {
+  const shareMoment = buildShareMoment(post);
+
+  function flashCopied(action: "link" | "image" | "invite") {
     setCopiedAction(action);
     window.setTimeout(() => {
       setCopiedAction((current) => (current === action ? null : current));
@@ -131,6 +134,26 @@ export function ShareMenu({ post }: { post: Post }) {
       setFeedback({
         tone: "error",
         message: "Could not copy the link on this browser.",
+      });
+    }
+  }
+
+  async function handleCopyInvite() {
+    setFeedback(null);
+    try {
+      if (!supportsClipboardText) {
+        throw new Error("Clipboard text unsupported");
+      }
+
+      const url = buildInviteUrl(window.location.origin, post.user?.username);
+      await navigator.clipboard.writeText(url);
+      flashCopied("invite");
+      posthog.capture("post_shared", { post_id: post.id, method: "copy_invite", theme });
+    } catch (error) {
+      console.error("Copy invite failed:", error);
+      setFeedback({
+        tone: "error",
+        message: "Could not copy the invite link on this browser.",
       });
     }
   }
@@ -254,16 +277,33 @@ export function ShareMenu({ post }: { post: Post }) {
       {open && (
         <div
           id={panelId}
-          className="absolute bottom-full right-0 z-20 mb-3 w-[22rem] rounded-[28px] border border-border bg-background p-3 shadow-xl"
+          className="absolute bottom-full right-0 z-20 mb-3 w-[22rem] rounded-md border border-border bg-background p-3 shadow-xl"
           aria-label="Share this post"
         >
-          <div className="rounded-[24px] border border-border bg-subtle/30 p-3">
+          <div className="mb-3 rounded-md border border-accent/30 bg-accent/5 p-3">
+            <div className="flex items-center justify-between gap-3">
+              <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-accent">
+                {shareMoment.label}
+              </p>
+              <span className="rounded-sm border border-accent/25 px-1.5 py-0.5 font-[family-name:var(--font-mono)] text-[10px] uppercase tracking-wider text-muted">
+                Share angle
+              </span>
+            </div>
+            <p className="mt-2 text-sm font-semibold text-foreground">
+              {shareMoment.headline}
+            </p>
+            <p className="mt-1 text-xs leading-relaxed text-muted">
+              {shareMoment.detail}
+            </p>
+          </div>
+
+          <div className="rounded-md border border-border bg-subtle/30 p-3">
             <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-muted">
               Share Card
             </p>
 
             <div
-              className="mx-auto mt-3 overflow-hidden rounded-[22px] border border-border bg-background"
+              className="mx-auto mt-3 overflow-hidden rounded-md border border-border bg-background"
               style={{ width: PREVIEW_SIZE, height: PREVIEW_SIZE }}
             >
               <div
@@ -289,7 +329,7 @@ export function ShareMenu({ post }: { post: Post }) {
                     setFeedback(null);
                   }}
                   className={cn(
-                    "rounded-2xl border px-2 py-2 text-left transition-colors",
+                    "rounded-md border px-2 py-2 text-left transition-colors",
                     theme === shareTheme.id
                       ? "border-accent bg-accent/5"
                       : "border-border bg-background hover:border-accent/40"
@@ -298,7 +338,7 @@ export function ShareMenu({ post }: { post: Post }) {
                   aria-label={`${shareTheme.label} theme`}
                 >
                   <span
-                    className="block h-8 rounded-xl border border-border/60"
+                    className="block h-8 rounded-sm border border-border/60"
                     style={{ background: THEME_SWATCH[shareTheme.id] }}
                   />
                   <span className="mt-2 block text-xs font-medium">
@@ -315,7 +355,7 @@ export function ShareMenu({ post }: { post: Post }) {
                 type="button"
                 onClick={handleNativeShare}
                 disabled={busyAction !== null}
-                className="col-span-2 flex items-center justify-center gap-2 rounded-2xl bg-accent px-4 py-3 text-sm font-semibold text-accent-foreground transition-opacity hover:opacity-90 disabled:opacity-60"
+                className="col-span-2 flex items-center justify-center gap-2 rounded-md bg-accent px-4 py-3 text-sm font-semibold text-accent-foreground transition-opacity hover:opacity-90 disabled:opacity-60"
               >
                 <Send size={16} aria-hidden="true" />
                 {busyAction === "share" ? "Preparing share..." : "Share to apps"}
@@ -325,7 +365,7 @@ export function ShareMenu({ post }: { post: Post }) {
             <button
               type="button"
               onClick={handleShareToX}
-              className="flex items-center gap-2 rounded-2xl border border-border bg-background px-4 py-3 text-sm font-medium hover:border-accent/40 hover:text-accent"
+              className="flex items-center gap-2 rounded-md border border-border bg-background px-4 py-3 text-sm font-medium hover:border-accent/40 hover:text-accent"
               aria-label="Post to X"
             >
               <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 1200 1227" fill="currentColor" aria-hidden="true">
@@ -337,7 +377,7 @@ export function ShareMenu({ post }: { post: Post }) {
             <button
               type="button"
               onClick={handleCopyLink}
-              className="flex items-center gap-2 rounded-2xl border border-border bg-background px-4 py-3 text-sm font-medium hover:border-accent/40 hover:text-accent"
+              className="flex items-center gap-2 rounded-md border border-border bg-background px-4 py-3 text-sm font-medium hover:border-accent/40 hover:text-accent"
             >
               {copiedAction === "link" ? (
                 <Check size={16} className="text-accent" aria-hidden="true" />
@@ -350,9 +390,9 @@ export function ShareMenu({ post }: { post: Post }) {
             {supportsClipboardImage && (
               <button
                 type="button"
-                onClick={handleCopyImage}
-                disabled={busyAction !== null}
-                className="flex items-center gap-2 rounded-2xl border border-border bg-background px-4 py-3 text-sm font-medium hover:border-accent/40 hover:text-accent disabled:opacity-60"
+              onClick={handleCopyImage}
+              disabled={busyAction !== null}
+                className="flex items-center gap-2 rounded-md border border-border bg-background px-4 py-3 text-sm font-medium hover:border-accent/40 hover:text-accent disabled:opacity-60"
               >
                 {copiedAction === "image" ? (
                   <Check size={16} className="text-accent" aria-hidden="true" />
@@ -372,19 +412,32 @@ export function ShareMenu({ post }: { post: Post }) {
               onClick={handleDownload}
               disabled={busyAction !== null}
               className={cn(
-                "flex items-center gap-2 rounded-2xl border border-border bg-background px-4 py-3 text-sm font-medium hover:border-accent/40 hover:text-accent disabled:opacity-60",
+                "flex items-center gap-2 rounded-md border border-border bg-background px-4 py-3 text-sm font-medium hover:border-accent/40 hover:text-accent disabled:opacity-60",
                 !supportsClipboardImage && "col-span-2"
               )}
             >
               <Download size={16} aria-hidden="true" />
               {busyAction === "download" ? "Preparing..." : "Download PNG"}
             </button>
+
+            <button
+              type="button"
+              onClick={handleCopyInvite}
+              className="col-span-2 flex items-center justify-center gap-2 rounded-md border border-accent/30 bg-accent/5 px-4 py-3 text-sm font-semibold text-foreground hover:border-accent/60"
+            >
+              {copiedAction === "invite" ? (
+                <Check size={16} className="text-accent" aria-hidden="true" />
+              ) : (
+                <Link2 size={16} aria-hidden="true" />
+              )}
+              {copiedAction === "invite" ? "Invite copied" : shareMoment.inviteText}
+            </button>
           </div>
 
           {feedback && (
             <div
               className={cn(
-                "mt-3 rounded-2xl border px-3 py-2 text-sm",
+                "mt-3 rounded-md border px-3 py-2 text-sm",
                 feedback.tone === "error"
                   ? "border-red-200 bg-red-50 text-red-700"
                   : "border-accent/20 bg-accent/5 text-foreground"

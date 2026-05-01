@@ -8,6 +8,7 @@ import { ImageGrid } from "@/components/app/shared/ImageGrid";
 import { ImageLightbox } from "@/components/app/shared/ImageLightbox";
 import { ShareMenu } from "./ShareMenu";
 import { cn } from "@/lib/utils/cn";
+import { buildShareMoment } from "@/lib/share-moments";
 import { formatCurrency, formatTokens } from "@/lib/utils/format";
 import { mentionsToMarkdownLinks } from "@/lib/utils/mentions";
 import type { Post, ModelBreakdownEntry } from "@/types";
@@ -269,6 +270,7 @@ export function ActivityCard({ post, userId, hideShareMenu }: { post: Post; user
   const usage = post.daily_usage;
   const modelSegments = buildModelUsageSegments(usage?.model_breakdown);
   const modelSummary = formatModels(usage?.models, usage?.model_breakdown);
+  const shareMoment = buildShareMoment(post);
 
   async function toggleKudos() {
     const prevKudosed = kudosed;
@@ -397,50 +399,65 @@ export function ActivityCard({ post, userId, hideShareMenu }: { post: Post; user
 
         {/* Stats grid */}
         {usage && (
-          <div className={cn("mt-4 grid gap-4", usage.is_verified ? "grid-cols-3" : "grid-cols-2")}>
-            {usage.is_verified ? (
-              isUnpricedSession(usage) ? (
-                <div>
-                  <p className="text-[0.7rem] uppercase tracking-widest text-muted">Cost</p>
-                  <p
-                    className="font-[family-name:var(--font-mono)] text-[1.1rem] font-medium tabular-nums text-muted"
-                    title="Cost tracking for non-Claude/GPT models is coming soon."
-                  >
-                    &mdash;
-                  </p>
-                  <p className="mt-0.5 text-[0.65rem] uppercase tracking-wider text-muted">
-                    Pricing soon
-                  </p>
-                </div>
+          <>
+            <div className={cn("mt-4 grid gap-4", usage.is_verified ? "grid-cols-3" : "grid-cols-2")}>
+              {usage.is_verified ? (
+                isUnpricedSession(usage) ? (
+                  <div>
+                    <p className="text-[0.7rem] uppercase tracking-widest text-muted">Cost</p>
+                    <p
+                      className="font-[family-name:var(--font-mono)] text-[1.1rem] font-medium tabular-nums text-muted"
+                      title="Cost tracking for non-Claude/GPT models is coming soon."
+                    >
+                      &mdash;
+                    </p>
+                    <p className="mt-0.5 text-[0.65rem] uppercase tracking-wider text-muted">
+                      Pricing soon
+                    </p>
+                  </div>
+                ) : (
+                  <div>
+                    <p className="text-[0.7rem] uppercase tracking-widest text-muted">Cost</p>
+                    <p className="font-[family-name:var(--font-mono)] text-[1.1rem] font-medium tabular-nums text-accent">
+                      ${formatCurrency(usage.cost_usd)}
+                    </p>
+                  </div>
+                )
               ) : (
-                <div>
-                  <p className="text-[0.7rem] uppercase tracking-widest text-muted">Cost</p>
-                  <p className="font-[family-name:var(--font-mono)] text-[1.1rem] font-medium tabular-nums text-accent">
-                    ${formatCurrency(usage.cost_usd)}
-                  </p>
-                </div>
-              )
-            ) : (
-              <p className="col-span-2 text-xs text-muted">
-                Uploaded by the user via JSON
-                {modelSummary && (
-                  <> &middot; {modelSummary}</>
-                )}
-              </p>
-            )}
-            <div>
-              <p className="text-[0.7rem] uppercase tracking-widest text-muted">Input</p>
-              <p className="font-[family-name:var(--font-mono)] text-[1.1rem] font-medium tabular-nums">
-                {formatTokens(Number(usage.input_tokens))}
+                <p className="col-span-2 text-xs text-muted">
+                  Uploaded by the user via JSON
+                  {modelSummary && (
+                    <> &middot; {modelSummary}</>
+                  )}
+                </p>
+              )}
+              <div>
+                <p className="text-[0.7rem] uppercase tracking-widest text-muted">Input</p>
+                <p className="font-[family-name:var(--font-mono)] text-[1.1rem] font-medium tabular-nums">
+                  {formatTokens(Number(usage.input_tokens))}
+                </p>
+              </div>
+              <div>
+                <p className="text-[0.7rem] uppercase tracking-widest text-muted">Output</p>
+                <p className="font-[family-name:var(--font-mono)] text-[1.1rem] font-medium tabular-nums">
+                  {formatTokens(Number(usage.output_tokens))}
+                </p>
+              </div>
+            </div>
+            <div className="mt-4 flex flex-col gap-1 rounded-md border border-accent/25 bg-accent/5 px-3 py-2 sm:flex-row sm:items-center sm:justify-between">
+              <div className="min-w-0">
+                <p className="text-[11px] font-semibold uppercase tracking-[0.16em] text-accent">
+                  {shareMoment.label}
+                </p>
+                <p className="truncate text-sm font-medium text-foreground">
+                  {shareMoment.headline}
+                </p>
+              </div>
+              <p className="text-xs text-muted sm:max-w-[13rem] sm:text-right">
+                {shareMoment.inviteText}
               </p>
             </div>
-            <div>
-              <p className="text-[0.7rem] uppercase tracking-widest text-muted">Output</p>
-              <p className="font-[family-name:var(--font-mono)] text-[1.1rem] font-medium tabular-nums">
-                {formatTokens(Number(usage.output_tokens))}
-              </p>
-            </div>
-          </div>
+          </>
         )}
       </div>
 
