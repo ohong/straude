@@ -36,6 +36,7 @@ function makeRequest(method: string, url: string, body?: any) {
 
 beforeEach(() => {
   vi.clearAllMocks();
+  vi.stubEnv("NEXT_PUBLIC_SUPABASE_URL", "https://test.supabase.co");
 });
 
 describe("GET /api/users/[username]", () => {
@@ -275,6 +276,35 @@ describe("GET /api/users/me", () => {
 });
 
 describe("PATCH /api/users/me", () => {
+  function mockAuthenticatedProfileUpdate(resultData: Record<string, unknown> = { id: "u-1" }) {
+    const updateMock = vi.fn().mockReturnValue({
+      eq: vi.fn().mockReturnValue({
+        select: vi.fn().mockReturnValue({
+          single: vi.fn().mockResolvedValue({
+            data: resultData,
+            error: null,
+          }),
+        }),
+      }),
+    });
+
+    const authClient: Record<string, any> = {
+      auth: {
+        getUser: vi.fn().mockResolvedValue({
+          data: { user: { id: "u-1" } },
+          error: null,
+        }),
+      },
+    };
+    const db = {
+      from: vi.fn().mockReturnValue({ update: updateMock }),
+    };
+    (createClient as any).mockResolvedValue(authClient);
+    (getServiceClient as any).mockReturnValue(db);
+
+    return { updateMock };
+  }
+
   it("updates profile fields", async () => {
     const updatedProfile = {
       id: "u-1",
@@ -399,6 +429,78 @@ describe("PATCH /api/users/me", () => {
 
     expect(res.status).toBe(400);
     expect(json.error).toContain("500 characters");
+  });
+
+  it("accepts owned uploaded avatar URLs", async () => {
+    const { updateMock } = mockAuthenticatedProfileUpdate();
+    const avatarUrl =
+      "https://test.supabase.co/storage/v1/object/public/avatars/u-1/avatar.jpg";
+
+    const res = await PATCH(
+      makeRequest("PATCH", "/api/users/me", { avatar_url: ` ${avatarUrl} ` })
+    );
+
+    expect(res.status).toBe(200);
+    expect(updateMock).toHaveBeenCalledWith({ avatar_url: avatarUrl });
+  });
+
+  it("accepts allowed external avatar URLs", async () => {
+    const { updateMock } = mockAuthenticatedProfileUpdate();
+    const avatarUrl = "https://avatars.githubusercontent.com/u/123";
+
+    const res = await PATCH(
+      makeRequest("PATCH", "/api/users/me", { avatar_url: avatarUrl })
+    );
+
+    expect(res.status).toBe(200);
+    expect(updateMock).toHaveBeenCalledWith({ avatar_url: avatarUrl });
+  });
+
+  it("clears blank or null avatar URLs", async () => {
+    const { updateMock } = mockAuthenticatedProfileUpdate();
+
+    let res = await PATCH(
+      makeRequest("PATCH", "/api/users/me", { avatar_url: "" })
+    );
+    expect(res.status).toBe(200);
+    expect(updateMock).toHaveBeenLastCalledWith({ avatar_url: null });
+
+    res = await PATCH(
+      makeRequest("PATCH", "/api/users/me", { avatar_url: null })
+    );
+    expect(res.status).toBe(200);
+    expect(updateMock).toHaveBeenLastCalledWith({ avatar_url: null });
+  });
+
+  it("rejects arbitrary avatar hosts", async () => {
+    const { updateMock } = mockAuthenticatedProfileUpdate();
+
+    const res = await PATCH(
+      makeRequest("PATCH", "/api/users/me", {
+        avatar_url: "https://example.com/avatar.jpg",
+      })
+    );
+    const json = await res.json();
+
+    expect(res.status).toBe(400);
+    expect(json.error).toBe("Avatar URL is not allowed");
+    expect(updateMock).not.toHaveBeenCalled();
+  });
+
+  it("rejects first-party avatar storage paths owned by another user", async () => {
+    const { updateMock } = mockAuthenticatedProfileUpdate();
+
+    const res = await PATCH(
+      makeRequest("PATCH", "/api/users/me", {
+        avatar_url:
+          "https://test.supabase.co/storage/v1/object/public/avatars/u-2/avatar.jpg",
+      })
+    );
+    const json = await res.json();
+
+    expect(res.status).toBe(400);
+    expect(json.error).toBe("Avatar URL is not allowed");
+    expect(updateMock).not.toHaveBeenCalled();
   });
 
   it("auto-derives region from country", async () => {
