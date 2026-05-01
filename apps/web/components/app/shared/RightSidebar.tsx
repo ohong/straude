@@ -4,17 +4,14 @@ import { formatTokens } from "@/lib/utils/format";
 import Link from "next/link";
 import { Avatar } from "@/components/ui/Avatar";
 import { FollowButton } from "@/components/app/profile/FollowButton";
-import { InviteButton } from "@/components/app/profile/InviteButton";
 
 interface RightSidebarProps {
   userId: string;
-  username: string | null;
   totalOutputTokens: number;
 }
 
 export async function RightSidebar({
   userId,
-  username,
   totalOutputTokens,
 }: RightSidebarProps) {
   const supabase = await createClient();
@@ -178,19 +175,6 @@ export async function RightSidebar({
           <span className="text-base font-light">&rarr;</span>
         </Link>
       </div>
-
-      {/* Referral CTA */}
-      {username && (
-        <div className="border-b border-border p-6">
-          <p className="mb-1 text-xs font-semibold uppercase tracking-widest text-muted">
-            Grow Your Crew
-          </p>
-          <p className="mb-3 text-sm text-muted">
-            Invite a training partner. See who racks up more.
-          </p>
-          <InviteButton username={username} />
-        </div>
-      )}
 
     </div>
   );

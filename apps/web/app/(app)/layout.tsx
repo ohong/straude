@@ -5,6 +5,7 @@ import { getServiceClient } from "@/lib/supabase/service";
 import { getAuthUser } from "@/lib/supabase/auth";
 import { Sidebar } from "@/components/app/shared/Sidebar";
 import { RightSidebar } from "@/components/app/shared/RightSidebar";
+import { InviteButton } from "@/components/app/profile/InviteButton";
 import { ResponsiveShellFrame } from "@/components/app/shared/ResponsiveShellFrame";
 import { GuestHeader, GuestMobileNav } from "@/components/app/shared/GuestHeader";
 import { CommandPalette } from "@/components/app/shared/CommandPalette";
@@ -156,6 +157,17 @@ function SidebarFallback({ profile }: { profile: ShellProfile | null }) {
           <Skeleton className="h-4 w-3/4" />
         </div>
       </div>
+      {username && (
+        <div className="border-b border-border p-6">
+          <p className="mb-1 text-xs font-semibold uppercase tracking-widest text-muted">
+            Grow Your Crew
+          </p>
+          <p className="mb-3 text-sm text-muted">
+            Invite a training partner. See who racks up more.
+          </p>
+          <InviteButton username={username} />
+        </div>
+      )}
       <div className="mt-auto border-t border-border p-6">
         <Skeleton className="mb-3 h-3 w-20" />
         <Skeleton className="h-8 w-28" />
@@ -238,10 +250,8 @@ async function DeferredSidebar({
 
 async function DeferredRightSidebar({
   userId,
-  username,
 }: {
   userId: string;
-  username: string | null;
 }) {
   const supabase = await createClient();
   const usageTotals = await loadUsageTotals(supabase, userId);
@@ -249,7 +259,6 @@ async function DeferredRightSidebar({
   return (
     <RightSidebar
       userId={userId}
-      username={username}
       totalOutputTokens={usageTotals.totalTokens}
     />
   );
@@ -330,10 +339,7 @@ export default async function AppLayout({
 
   const rightPanel = (
     <Suspense fallback={<RightSidebarFallback />}>
-      <DeferredRightSidebar
-        userId={user.id}
-        username={profile?.username ?? null}
-      />
+      <DeferredRightSidebar userId={user.id} />
     </Suspense>
   );
 
