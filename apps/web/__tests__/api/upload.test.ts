@@ -335,6 +335,24 @@ describe("POST /api/upload", () => {
     expect(json.url).toBe("https://cdn.example.com/user-1/uuid.jpg");
   });
 
+  it("uploads avatars to the avatars bucket", async () => {
+    const client = mockSupabase({
+      publicUrl: "https://cdn.example.com/user-1/avatar.jpg",
+    });
+
+    const res = await POST(
+      makeUploadRequest(
+        { name: "avatar.jpg", type: "image/jpeg", size: 100 },
+        "avatars",
+      )
+    );
+    const json = await res.json();
+
+    expect(res.status).toBe(200);
+    expect(json.url).toBe("https://cdn.example.com/user-1/avatar.jpg");
+    expect(client.storage.from).toHaveBeenCalledWith("avatars");
+  });
+
   it("returns storage metadata instead of a public URL for DM attachments", async () => {
     mockSupabase({ publicUrl: "https://cdn.example.com/user-1/private.pdf" });
 
