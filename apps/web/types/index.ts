@@ -20,6 +20,8 @@ export interface User {
   email_dm_notifications?: boolean;
   streak_freezes: number;
   referred_by?: string | null;
+  team_url: string | null;
+  team_favicon_url: string | null;
   created_at: string;
   updated_at: string;
 }
