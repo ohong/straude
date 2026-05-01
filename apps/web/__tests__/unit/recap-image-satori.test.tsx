@@ -87,4 +87,24 @@ describe("RecapCardImage Satori compatibility", () => {
     });
     assertSatoriDisplayFlex(element as SatoriNode);
   });
+
+  it("dark mode: all multi-child divs have display flex (square)", () => {
+    const element = RecapCardImage({
+      data: SAMPLE_DATA,
+      format: "square",
+      backgroundCss: "linear-gradient(135deg, #0B0D12 0%, #1B1F2A 50%, #2A1A12 100%)",
+      dark: true,
+    });
+    assertSatoriDisplayFlex(element as SatoriNode);
+  });
+
+  it("dark mode: all multi-child divs have display flex (landscape)", () => {
+    const element = RecapCardImage({
+      data: SAMPLE_DATA,
+      format: "landscape",
+      backgroundCss: "linear-gradient(135deg, #0B0D12 0%, #1B1F2A 50%, #2A1A12 100%)",
+      dark: true,
+    });
+    assertSatoriDisplayFlex(element as SatoriNode);
+  });
 });

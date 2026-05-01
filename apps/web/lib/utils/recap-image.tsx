@@ -1,5 +1,10 @@
 import type { RecapData } from "./recap";
 import { formatCurrency, formatTokens, getCellColor } from "./format";
+import {
+  LIGHT_PALETTE,
+  DARK_PALETTE,
+  type RecapPalette,
+} from "@/lib/recap-backgrounds";
 
 /** Fill in missing days with $0 entries — only up to today (no future days) */
 function fillContributionDays(
@@ -46,15 +51,19 @@ export function RecapCardImage({
   data,
   format = "landscape",
   backgroundCss,
+  dark = false,
 }: {
   data: RecapData;
   format?: "landscape" | "square";
   backgroundCss?: string;
+  dark?: boolean;
 }) {
   const isSquare = format === "square";
   const width = isSquare ? 1080 : 1200;
   const height = isSquare ? 1080 : 630;
   const padding = isSquare ? 64 : 48;
+  const palette: RecapPalette = dark ? DARK_PALETTE : LIGHT_PALETTE;
+  const overlayColor = backgroundCss ? palette.overlay : "#fff";
 
   const allDays = fillContributionDays(
     data.contribution_data,
@@ -92,7 +101,7 @@ export function RecapCardImage({
             background: backgroundCss ?? "#fff",
           }}
         />
-        {/* White overlay */}
+        {/* Overlay */}
         <div
           style={{
             position: "absolute",
@@ -100,9 +109,7 @@ export function RecapCardImage({
             left: 0,
             width,
             height,
-            backgroundColor: backgroundCss
-              ? "rgba(255,255,255,0.78)"
-              : "#fff",
+            backgroundColor: overlayColor,
           }}
         />
 
@@ -138,7 +145,7 @@ export function RecapCardImage({
               style={{
                 fontSize: 18,
                 fontWeight: 500,
-                color: "#666",
+                color: palette.textMuted,
                 textAlign: "center",
               }}
             >
@@ -170,7 +177,7 @@ export function RecapCardImage({
               style={{
                 fontSize: 18,
                 fontWeight: 500,
-                color: "#999",
+                color: palette.textSubtle,
                 marginTop: 8,
                 textTransform: "uppercase" as const,
                 letterSpacing: "0.1em",
@@ -189,18 +196,28 @@ export function RecapCardImage({
               marginBottom: 48,
             }}
           >
-            <StatBox label="Output" value={formatTokens(data.output_tokens)} />
+            <StatBox
+              label="Output"
+              value={formatTokens(data.output_tokens)}
+              palette={palette}
+            />
             <StatBox
               label="Active"
               value={`${data.active_days}/${data.total_days}`}
               suffix="days"
+              palette={palette}
             />
-            <StatBox label="Sessions" value={String(data.session_count)} />
+            <StatBox
+              label="Sessions"
+              value={String(data.session_count)}
+              palette={palette}
+            />
             <StatBox
               label="Streak"
               value={String(data.streak)}
               suffix="days"
               accent
+              palette={palette}
             />
           </div>
 
@@ -212,7 +229,7 @@ export function RecapCardImage({
               marginBottom: 40,
               fontSize: 16,
               fontWeight: 500,
-              color: "#999",
+              color: palette.textSubtle,
             }}
           >
             Powered by {data.primary_model}
@@ -249,8 +266,8 @@ export function RecapCardImage({
               fontWeight: 500,
             }}
           >
-            <div style={{ color: "#666" }}>{`@${data.username}`}</div>
-            <div style={{ color: "#999" }}>straude.com</div>
+            <div style={{ color: palette.textMuted }}>{`@${data.username}`}</div>
+            <div style={{ color: palette.textSubtle }}>straude.com</div>
           </div>
         </div>
       </div>
@@ -280,7 +297,7 @@ export function RecapCardImage({
           background: backgroundCss ?? "#fff",
         }}
       />
-      {/* White overlay */}
+      {/* Overlay */}
       <div
         style={{
           position: "absolute",
@@ -288,9 +305,7 @@ export function RecapCardImage({
           left: 0,
           width,
           height,
-          backgroundColor: backgroundCss
-            ? "rgba(255,255,255,0.78)"
-            : "#fff",
+          backgroundColor: overlayColor,
         }}
       />
 
@@ -319,7 +334,7 @@ export function RecapCardImage({
             style={{
               fontSize: 22,
               fontWeight: 500,
-              color: "#666",
+              color: palette.textMuted,
             }}
           >
             {data.period_label}
@@ -343,7 +358,7 @@ export function RecapCardImage({
           style={{
             fontSize: 22,
             fontWeight: 500,
-            color: "#999",
+            color: palette.textSubtle,
             marginTop: 4,
             textTransform: "uppercase" as const,
             letterSpacing: "0.1em",
@@ -364,20 +379,28 @@ export function RecapCardImage({
             label="Output"
             value={formatTokens(data.output_tokens)}
             large
+            palette={palette}
           />
           <StatBox
             label="Active"
             value={`${data.active_days}/${data.total_days}`}
             suffix="days"
             large
+            palette={palette}
           />
-          <StatBox label="Sessions" value={String(data.session_count)} large />
+          <StatBox
+            label="Sessions"
+            value={String(data.session_count)}
+            large
+            palette={palette}
+          />
           <StatBox
             label="Streak"
             value={String(data.streak)}
             suffix="days"
             accent
             large
+            palette={palette}
           />
         </div>
 
@@ -386,7 +409,7 @@ export function RecapCardImage({
           style={{
             fontSize: 20,
             fontWeight: 500,
-            color: "#999",
+            color: palette.textSubtle,
             marginTop: 20,
           }}
         >
@@ -424,8 +447,8 @@ export function RecapCardImage({
             fontWeight: 500,
           }}
         >
-          <div style={{ color: "#666" }}>{`@${data.username}`}</div>
-          <div style={{ color: "#999" }}>straude.com</div>
+          <div style={{ color: palette.textMuted }}>{`@${data.username}`}</div>
+          <div style={{ color: palette.textSubtle }}>straude.com</div>
         </div>
       </div>
     </div>
@@ -438,12 +461,14 @@ function StatBox({
   suffix,
   accent,
   large,
+  palette = LIGHT_PALETTE,
 }: {
   label: string;
   value: string;
   suffix?: string;
   accent?: boolean;
   large?: boolean;
+  palette?: RecapPalette;
 }) {
   const labelSize = large ? 18 : 12;
   const valueSize = large ? 42 : 28;
@@ -456,7 +481,7 @@ function StatBox({
         style={{
           fontSize: labelSize,
           fontWeight: 500,
-          color: "#999",
+          color: palette.textSubtle,
           textTransform: "uppercase" as const,
           letterSpacing: "0.08em",
           marginBottom: 4,
@@ -471,7 +496,7 @@ function StatBox({
           gap: 4,
           fontSize: valueSize,
           fontWeight: 700,
-          color: accent ? "#DF561F" : "#000",
+          color: accent ? "#DF561F" : palette.text,
           letterSpacing: "-0.02em",
         }}
       >
@@ -484,7 +509,7 @@ function StatBox({
             style={{
               fontSize: suffixSize,
               fontWeight: 500,
-              color: "#999",
+              color: palette.textSubtle,
             }}
           >
             {suffix}
