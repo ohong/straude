@@ -4,6 +4,7 @@ import Link from "next/link";
 import { Flame } from "lucide-react";
 import { formatCurrency, formatTokens } from "@/lib/utils/format";
 import { Avatar } from "@/components/ui/Avatar";
+import { InviteButton } from "@/components/app/profile/InviteButton";
 
 interface SidebarProps {
   username: string | null;
@@ -103,6 +104,19 @@ export function Sidebar({
               <p className="text-xs text-muted">{post.date}</p>
             </Link>
           ))}
+        </div>
+      )}
+
+      {/* Referral CTA */}
+      {username && (
+        <div className="border-b border-border p-6">
+          <p className="mb-1 text-xs font-semibold uppercase tracking-widest text-muted">
+            Grow Your Crew
+          </p>
+          <p className="mb-3 text-sm text-muted">
+            Invite a training partner. See who racks up more.
+          </p>
+          <InviteButton username={username} />
         </div>
       )}
 
