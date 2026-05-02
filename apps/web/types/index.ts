@@ -114,6 +114,8 @@ export interface LeaderboardEntry {
   avatar_url: string | null;
   country: string | null;
   region: string | null;
+  team_url: string | null;
+  team_favicon_url: string | null;
   total_cost: number;
   total_output_tokens: number;
   streak: number;

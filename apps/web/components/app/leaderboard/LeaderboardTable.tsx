@@ -7,6 +7,7 @@ import { formatCurrency, formatTokens } from "@/lib/utils/format";
 import { Avatar } from "@/components/ui/Avatar";
 import { Badge } from "@/components/ui/Badge";
 import { LevelBadge } from "@/components/app/shared/LevelBadge";
+import { TeamBadge } from "@/components/app/shared/TeamBadge";
 import type { LeaderboardEntry } from "@/types";
 
 const PERIODS = [
@@ -129,6 +130,11 @@ export function LeaderboardTable({
                     />
                     <div className="flex min-w-0 items-center gap-2">
                       <span className="truncate font-medium">{entry.username}</span>
+                      <TeamBadge
+                        url={entry.team_url}
+                        faviconUrl={entry.team_favicon_url}
+                        size="sm"
+                      />
                       {entry.level ? (
                         <LevelBadge level={entry.level} />
                       ) : null}
@@ -182,6 +188,11 @@ export function LeaderboardTable({
             <div className="flex-1 overflow-hidden">
               <div className="flex items-center gap-2">
                 <p className="truncate font-medium">{entry.username}</p>
+                <TeamBadge
+                  url={entry.team_url}
+                  faviconUrl={entry.team_favicon_url}
+                  size="sm"
+                />
                 {entry.level ? (
                   <Badge
                     variant="default"

@@ -6,6 +6,7 @@ import { Zap, MessageCircle, CheckCircle, MoreHorizontal, Pencil } from "lucide-
 import { Avatar } from "@/components/ui/Avatar";
 import { ImageGrid } from "@/components/app/shared/ImageGrid";
 import { ImageLightbox } from "@/components/app/shared/ImageLightbox";
+import { TeamBadge } from "@/components/app/shared/TeamBadge";
 import { ShareMenu } from "./ShareMenu";
 import { cn } from "@/lib/utils/cn";
 import { formatCurrency, formatTokens } from "@/lib/utils/format";
@@ -307,6 +308,11 @@ export function ActivityCard({ post, userId, hideShareMenu }: { post: Post; user
             >
               {user?.username ?? "anonymous"}
             </Link>
+            <TeamBadge
+              url={user?.team_url ?? null}
+              faviconUrl={user?.team_favicon_url ?? null}
+              size="sm"
+            />
           </div>
           <div className="flex items-center gap-2 text-xs text-muted">
             <span suppressHydrationWarning>{timeAgo(post.created_at, usage?.date)}</span>

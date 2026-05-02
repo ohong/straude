@@ -68,14 +68,17 @@ export default async function LeaderboardPage({
   const { data: rawEntries } = await query;
   const entries = (rawEntries ?? []) as LeaderboardViewRow[];
 
-  // Fetch streaks + levels for all leaderboard users in parallel
+  // Fetch streaks + levels + team affiliation for all leaderboard users in parallel.
+  // The leaderboard materialized views don't carry team_url/team_favicon_url, so
+  // we side-fetch them (mirrors the level/streak pattern below).
   const userIds = entries.map((entry) => entry.user_id);
-  const [{ data: streakRows }, { data: levelRows }] = userIds.length > 0
+  const [{ data: streakRows }, { data: levelRows }, { data: teamRows }] = userIds.length > 0
     ? await Promise.all([
         supabase.rpc("calculate_streaks_batch", { p_user_ids: userIds }),
         db.from("user_levels").select("user_id, level").in("user_id", userIds),
+        db.from("users").select("id, team_url, team_favicon_url").in("id", userIds),
       ])
-    : [{ data: [] }, { data: [] }];
+    : [{ data: [] }, { data: [] }, { data: [] }];
 
   const streakMap = new Map<string, number>();
   for (const row of streakRows ?? []) {
@@ -87,6 +90,14 @@ export default async function LeaderboardPage({
     levelMap.set(row.user_id, Number(row.level));
   }
 
+  const teamMap = new Map<string, { team_url: string | null; team_favicon_url: string | null }>();
+  for (const row of teamRows ?? []) {
+    teamMap.set(row.id, {
+      team_url: row.team_url ?? null,
+      team_favicon_url: row.team_favicon_url ?? null,
+    });
+  }
+
   // Add rank numbers and streaks
   const ranked: LeaderboardEntry[] = entries.map((entry, i) => ({
       ...entry,
@@ -95,6 +106,8 @@ export default async function LeaderboardPage({
       total_output_tokens: Number(entry.total_output_tokens),
       streak: streakMap.get(entry.user_id) ?? 0,
       level: levelMap.get(entry.user_id),
+      team_url: teamMap.get(entry.user_id)?.team_url ?? null,
+      team_favicon_url: teamMap.get(entry.user_id)?.team_favicon_url ?? null,
     }));
 
   const itemListJsonLd = {
