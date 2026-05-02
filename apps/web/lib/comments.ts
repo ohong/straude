@@ -53,7 +53,7 @@ export async function loadPostComments(opts: {
   return { comments, nextCursor, error: null };
 }
 
-export function enrichComments(
+function enrichComments(
   comments: Comment[],
   reactionRows: CommentReactionRow[],
   viewerId?: string | null,

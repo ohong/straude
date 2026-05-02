@@ -36,15 +36,15 @@ export function getMissingSupabaseBrowserEnv(): BrowserEnvKey[] {
   return getMissing(BROWSER_ENV_KEYS, browserEnv) as BrowserEnvKey[];
 }
 
-export function getMissingSupabaseServerEnv(): ServerEnvKey[] {
+function getMissingSupabaseServerEnv(): ServerEnvKey[] {
   return getMissing(SERVER_ENV_KEYS, serverEnv) as ServerEnvKey[];
 }
 
-export function hasSupabaseBrowserEnv() {
+function hasSupabaseBrowserEnv() {
   return getMissingSupabaseBrowserEnv().length === 0;
 }
 
-export function hasSupabaseServerEnv() {
+function hasSupabaseServerEnv() {
   return getMissingSupabaseServerEnv().length === 0;
 }
 

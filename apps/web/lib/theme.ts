@@ -7,7 +7,7 @@ export const THEME_ATTRIBUTE = "data-theme";
 export const THEME_META_COLOR_LIGHT = "#fcfbf7";
 export const THEME_META_COLOR_DARK = "#050505";
 
-export function isThemePreference(value: string | null | undefined): value is ThemePreference {
+function isThemePreference(value: string | null | undefined): value is ThemePreference {
   return value === "light" || value === "dark" || value === "system";
 }
 

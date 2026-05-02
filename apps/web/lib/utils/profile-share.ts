@@ -1,4 +1,4 @@
-export function buildProfileShareText(username: string) {
+function buildProfileShareText(username: string) {
   return [
     `My Claude Code stats on Straude`,
     `52 weeks of tracked work by @${username}`,
