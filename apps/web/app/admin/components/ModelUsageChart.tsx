@@ -14,6 +14,7 @@ import {
   Legend,
 } from "recharts";
 import { useAdminTheme } from "./AdminShell";
+import { formatDateMonDay as formatDate } from "@/lib/utils/dates";
 
 interface ModelUsageRow {
   date: string;
@@ -34,11 +35,6 @@ const VIEW_MODES: { key: ViewMode; label: string }[] = [
   { key: "cumulative", label: "Cumulative" },
   { key: "daily", label: "Daily" },
 ];
-
-function formatDate(dateStr: string) {
-  const d = new Date(dateStr + "T00:00:00");
-  return d.toLocaleDateString("en-US", { month: "short", day: "numeric" });
-}
 
 function formatUsd(value: number) {
   return `$${value.toLocaleString("en-US", { minimumFractionDigits: 0, maximumFractionDigits: 0 })}`;

@@ -12,6 +12,7 @@ import {
   Legend,
 } from "recharts";
 import { useAdminTheme } from "./AdminShell";
+import { formatDateMonDay as formatDate } from "@/lib/utils/dates";
 
 interface RpcRow {
   date: string;
@@ -39,11 +40,6 @@ const RANGES = [
 ] as const;
 
 type DayRow = Record<string, string | number>;
-
-function formatDate(dateStr: string) {
-  const d = new Date(dateStr + "T00:00:00");
-  return d.toLocaleDateString("en-US", { month: "short", day: "numeric" });
-}
 
 function Skeleton() {
   return (

@@ -1,8 +1,9 @@
 import { fal } from "@fal-ai/client";
 import { createClient } from "@supabase/supabase-js";
 import sharp from "sharp";
-import { mkdir, readFile, rm, writeFile } from "node:fs/promises";
+import { readFile, writeFile } from "node:fs/promises";
 import { basename, join, resolve } from "node:path";
+import { ensureCleanOutputDir } from "./_lib";
 
 const MODEL_ID = "fal-ai/nano-banana-2/edit";
 const WIDTH = 1200;
@@ -95,11 +96,6 @@ const VARIANT_FLAVORS = [
   "Make the leaderboard card a little crisper and easier to scan while preserving the same overall composition.",
   "Keep the same layout but make the UI text sharper and the user identity details more legible at social-preview scale.",
 ] as const;
-
-async function ensureCleanOutputDir() {
-  await rm(OUTPUT_DIR, { recursive: true, force: true });
-  await mkdir(FINAL_DIR, { recursive: true });
-}
 
 async function fetchTopUsers(): Promise<[LeaderUser, LeaderUser, LeaderUser]> {
   const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
@@ -299,7 +295,7 @@ async function main() {
 
   fal.config({ credentials: falKey });
 
-  await ensureCleanOutputDir();
+  await ensureCleanOutputDir(OUTPUT_DIR);
 
   const users = await fetchTopUsers();
   const referenceUrls = await prepareReferenceUrls(users);

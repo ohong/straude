@@ -1,46 +1,12 @@
 "use client";
 
 import { formatCurrency, formatTokens, getCellColor } from "@/lib/utils/format";
-import type { RecapData } from "@/lib/utils/recap";
+import { fillContributionDays, type RecapData } from "@/lib/utils/recap";
 import {
   getBackgroundById,
   getPalette,
   DEFAULT_BACKGROUND_ID,
 } from "@/lib/recap-backgrounds";
-
-function fillDays(
-  data: { date: string; cost_usd: number }[],
-  totalDays: number,
-  period: "week" | "month"
-): { date: string; cost_usd: number }[] {
-  const lookup = new Map(data.map((d) => [d.date, d.cost_usd]));
-  const now = new Date();
-  let start: Date;
-
-  if (period === "week") {
-    const day = now.getDay();
-    const mondayOffset = day === 0 ? -6 : 1 - day;
-    start = new Date(now);
-    start.setDate(now.getDate() + mondayOffset);
-  } else {
-    start = new Date(now.getFullYear(), now.getMonth(), 1);
-  }
-
-  // Cap at today — don't render future days
-  const msPerDay = 86400000;
-  const daysSinceStart =
-    Math.floor((now.getTime() - start.getTime()) / msPerDay) + 1;
-  const cappedDays = Math.min(totalDays, daysSinceStart);
-
-  const result: { date: string; cost_usd: number }[] = [];
-  for (let i = 0; i < cappedDays; i++) {
-    const d = new Date(start);
-    d.setDate(start.getDate() + i);
-    const key = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
-    result.push({ date: key, cost_usd: lookup.get(key) ?? 0 });
-  }
-  return result;
-}
 
 export function RecapCard({
   data,
@@ -49,7 +15,11 @@ export function RecapCard({
   data: RecapData;
   backgroundId?: string;
 }) {
-  const allDays = fillDays(data.contribution_data, data.total_days, data.period);
+  const allDays = fillContributionDays(
+    data.contribution_data,
+    data.total_days,
+    data.period,
+  );
   const bg = getBackgroundById(backgroundId ?? DEFAULT_BACKGROUND_ID);
   const palette = getPalette(bg);
 

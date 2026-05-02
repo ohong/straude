@@ -1,6 +1,7 @@
 import sharp from "sharp";
-import { mkdir, readFile, rm, writeFile } from "node:fs/promises";
+import { readFile, writeFile } from "node:fs/promises";
 import { join, resolve } from "node:path";
+import { ensureCleanOutputDir } from "./_lib";
 
 const WIDTH = 1200;
 const HEIGHT = 630;
@@ -229,11 +230,6 @@ function buildOverlaySvg(
   `);
 }
 
-async function ensureCleanOutputDir() {
-  await rm(OUTPUT_DIR, { recursive: true, force: true });
-  await mkdir(FINAL_DIR, { recursive: true });
-}
-
 async function renderVariant(
   variant: VariantConfig,
   baseImage: Buffer,
@@ -337,7 +333,7 @@ async function main() {
     readFile(INTER_MEDIUM_PATH),
   ]);
 
-  await ensureCleanOutputDir();
+  await ensureCleanOutputDir(OUTPUT_DIR);
 
   const entries: ManifestEntry[] = [];
   for (const variant of VARIANTS) {
