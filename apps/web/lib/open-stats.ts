@@ -1,8 +1,6 @@
 import { prettifyModel } from "@straude/shared/models";
 import { getServiceClient } from "@/lib/supabase/service";
 
-const OPEN_STATS_REVALIDATE_SECONDS = 86_400;
-
 const OPEN_STATS_SNAPSHOT_TABLE = "open_stats_snapshots";
 const DAY_MS = 86_400_000;
 

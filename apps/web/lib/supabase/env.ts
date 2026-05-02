@@ -40,14 +40,6 @@ function getMissingSupabaseServerEnv(): ServerEnvKey[] {
   return getMissing(SERVER_ENV_KEYS, serverEnv) as ServerEnvKey[];
 }
 
-function hasSupabaseBrowserEnv() {
-  return getMissingSupabaseBrowserEnv().length === 0;
-}
-
-function hasSupabaseServerEnv() {
-  return getMissingSupabaseServerEnv().length === 0;
-}
-
 export function formatSupabaseEnvHelp(missing: readonly string[]) {
   const joined = missing.map((key) => `- ${key}`).join("\n");
   return [

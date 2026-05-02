@@ -61,7 +61,8 @@
 - **Stale root-level artifacts.** `straude-codemap.html`, `prometheus-list.png`, and `posthog-setup-report.md` were committed to the repo root during exploratory work and never referenced — deleted.
 - **Pass-through wrappers left over from prior renames.** `proxy` is now a direct re-export of `updateSession`, `getCellColor` is a re-export of `getHeatmapCellColor`, and the unused `buildSubject`, `buildProfileShareUrl`, and `hasCodexLogs` shims were removed.
 - **Orphaned source files.** `apps/web/lib/performance/interaction.ts` (zero importers, no `lib/performance` consumers remained), `apps/web/components/landing/GlobalFeed.tsx` (the CHANGELOG had previously announced its removal but the file was never deleted), and `packages/cli/src/lib/codex.ts` (a 7-line re-export shim with no callers — consumers now import from `./codex-native` directly) were deleted.
-- **Stray `export` keywords on module-private helpers.** `enrichComments`, `extractPublicStoragePath`, `isThemePreference`, `buildProfileShareText`, `OPEN_STATS_REVALIDATE_SECONDS`, `getMissingSupabaseServerEnv`, `hasSupabaseBrowserEnv`, and `hasSupabaseServerEnv` were exported but only referenced inside their own files. Downgraded to module-private to signal scope honestly.
+- **Stray `export` keywords on module-private helpers.** `enrichComments`, `extractPublicStoragePath`, `isThemePreference`, `buildProfileShareText`, and `getMissingSupabaseServerEnv` were exported but only referenced inside their own files. Downgraded to module-private to signal scope honestly.
+- **Truly-dead constants and helpers.** Un-exporting also revealed three symbols with zero callers anywhere — `OPEN_STATS_REVALIDATE_SECONDS` (declared but never wired into a `revalidate` site), `hasSupabaseBrowserEnv`, and `hasSupabaseServerEnv`. Removed.
 
 ### Added
 
