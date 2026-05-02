@@ -45,7 +45,7 @@ vi.mock("node:child_process", () => ({
 vi.mock("../../src/lib/codex-native.js", () => ({
   CODEX_NATIVE_COLLECTOR: "straude-codex-native-v1",
   collectCodexUsageAsync: _collectCodexUsageAsync,
-  hasCodexLogs: _hasCodexLogs,
+  containsSessionFile: _hasCodexLogs,
 }));
 
 // Speed up login polling in tests

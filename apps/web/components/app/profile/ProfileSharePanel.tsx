@@ -3,10 +3,7 @@
 import Image from "next/image";
 import { useEffect, useMemo, useState } from "react";
 import { Check, Copy, Download, ImageIcon } from "lucide-react";
-import {
-  buildProfileIntentUrl,
-  buildProfileShareUrl,
-} from "@/lib/utils/profile-share";
+import { buildProfileIntentUrl } from "@/lib/utils/profile-share";
 
 export function ProfileSharePanel({
   username,
@@ -43,7 +40,8 @@ export function ProfileSharePanel({
 
   useEffect(() => {
     setPublicUrl(
-      shareUrlOverride ?? buildProfileShareUrl(window.location.origin, username)
+      shareUrlOverride ??
+        new URL(`/stats/${username}`, window.location.origin).toString()
     );
     setSupportsClipboardImage(
       typeof ClipboardItem !== "undefined" &&

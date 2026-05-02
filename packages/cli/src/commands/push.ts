@@ -9,7 +9,7 @@ import type { CcusageDailyEntry, ModelBreakdownEntry } from "../lib/ccusage.js";
 import {
   CODEX_NATIVE_COLLECTOR,
   collectCodexUsageAsync,
-  hasCodexLogs,
+  containsSessionFile,
 } from "../lib/codex-native.js";
 import { MAX_BACKFILL_DAYS, DEFAULT_SYNC_DAYS } from "../config.js";
 import { Spinner } from "../lib/spinner.js";
@@ -187,7 +187,7 @@ export async function pushCommand(options: PushOptions, apiUrlOverride?: string)
   const todayStr = formatDate(today);
   const shouldRunCodexRepair = !options.date
     && !config.codex_native_repair_completed_at
-    && await hasCodexLogs();
+    && await containsSessionFile();
 
   let sinceDate: Date;
   let untilDate: Date;

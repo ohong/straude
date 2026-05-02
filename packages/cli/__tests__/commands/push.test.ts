@@ -22,7 +22,7 @@ vi.mock("../../src/lib/ccusage.js", () => ({
 vi.mock("../../src/lib/codex-native.js", () => ({
   CODEX_NATIVE_COLLECTOR: "straude-codex-native-v1",
   collectCodexUsageAsync: vi.fn(),
-  hasCodexLogs: vi.fn(),
+  containsSessionFile: vi.fn(),
 }));
 
 import { pushCommand, mergeEntries } from "../../src/commands/push.js";
@@ -30,7 +30,7 @@ import { loadConfig, saveConfig } from "../../src/lib/auth.js";
 import { loginCommand } from "../../src/commands/login.js";
 import { apiRequest } from "../../src/lib/api.js";
 import { runCcusageRawAsync, parseCcusageOutput } from "../../src/lib/ccusage.js";
-import { collectCodexUsageAsync, hasCodexLogs } from "../../src/lib/codex-native.js";
+import { collectCodexUsageAsync, containsSessionFile } from "../../src/lib/codex-native.js";
 
 const mockLoadConfig = vi.mocked(loadConfig);
 const mockLoginCommand = vi.mocked(loginCommand);
@@ -39,7 +39,7 @@ const mockApiRequest = vi.mocked(apiRequest);
 const mockRunCcusageRawAsync = vi.mocked(runCcusageRawAsync);
 const mockParseCcusageOutput = vi.mocked(parseCcusageOutput);
 const mockCollectCodexUsageAsync = vi.mocked(collectCodexUsageAsync);
-const mockHasCodexLogs = vi.mocked(hasCodexLogs);
+const mockHasCodexLogs = vi.mocked(containsSessionFile);
 
 const fakeConfig = { token: "tok", username: "alice", api_url: "https://straude.com" };
 
