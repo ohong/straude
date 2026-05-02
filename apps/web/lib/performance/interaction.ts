@@ -38,7 +38,8 @@ export function measureInteraction(
 
   try {
     performance.measure(measure, start, ready);
-  } catch {
+  } catch (err) {
+    console.debug("[performance] capture failed", err);
     return null;
   }
 
