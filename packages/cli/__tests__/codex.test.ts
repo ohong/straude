@@ -2,7 +2,7 @@ import { mkdtemp, mkdir, writeFile, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { collectCodexUsageAsync, hasCodexLogs } from "../src/lib/codex-native.js";
+import { collectCodexUsageAsync, containsSessionFile } from "../src/lib/codex-native.js";
 
 let homeDir: string;
 
@@ -69,9 +69,9 @@ afterEach(async () => {
 
 describe("native Codex collector", () => {
   it("detects local Codex session logs", async () => {
-    expect(await hasCodexLogs()).toBe(false);
+    expect(await containsSessionFile()).toBe(false);
     await writeSession("2026-04-24", "session.jsonl", [meta("s1")]);
-    expect(await hasCodexLogs()).toBe(true);
+    expect(await containsSessionFile()).toBe(true);
   });
 
   it("does not add last_token_usage when cumulative total_token_usage is unchanged", async () => {

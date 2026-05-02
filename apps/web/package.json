@@ -19,6 +19,7 @@
     "@base-ui-components/react": "1.0.0-rc.0",
     "@fal-ai/client": "^1.4.0",
     "@react-email/components": "^1.0.8",
+    "@straude/shared": "workspace:*",
     "@supabase/ssr": "^0.6",
     "@supabase/supabase-js": "^2",
     "@tanstack/react-query": "^5.100.5",

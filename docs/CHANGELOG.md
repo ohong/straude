@@ -26,6 +26,9 @@
 - **Replaced GLOBAL_FEED.LOG with Privacy Pledge on landing page.** New section 03 ("Privacy by architecture") lists what Straude cannot access (prompts, code, transcripts), explains the local ccusage pipeline, links to the open-source CLI and full privacy policy. Links to ccusage docs at deepwiki.com for auditability. Removed `GlobalFeed` component from the landing page.
 - **Landing page performance: Lighthouse 67 → ~85+ (mobile).** Lazy-load `HalftoneCanvas` (ssr: false via client wrapper) and `WallOfLove` (dynamic import). Convert `CTASection` from motion/react to CSS `animate-fade-in-up` (now a server component). Convert `Footer` to server component with tiny `UtcClock` client island. Removes motion/react from critical path.
 - **WCAG AA contrast for accent backgrounds.** Introduced `accent-foreground` design token (`#1a0500`) replacing hardcoded `text-white` on all `bg-accent` elements. Contrast ratio 5.15:1 vs previous 3.82:1. Updated Button, Badge, and 11 component files.
+- **Cross-package helpers consolidated into `@straude/shared`.** `prettifyModel`, `getShareModelLabel`, and `formatTokens` were duplicated across `apps/web` and `packages/cli`; they now live in a new `@straude/shared` workspace package consumed by both surfaces. Single source of truth for model-name normalization and token formatting.
+- **Web-only utility duplication removed.** Date formatting, contribution-day filling, the focus-trap hook, and OG-script utilities are now shared modules under `apps/web/lib/utils/` and `apps/web/components/app/shared/` instead of being re-implemented in each consumer.
+- **`stripMarkdown` extracted to `apps/web/lib/utils/strip-markdown.ts`.** Previously inlined in multiple share-text builders; now a single utility with unit-test coverage.
 
 ### Fixed
 
@@ -50,6 +53,16 @@
 - **Missing `rel=canonical` on `/login`.** Added `alternates.canonical` to the auth layout metadata.
 - **Auth layout missing `<main>` landmark.** Changed wrapper `<div>` to `<main>` for screen readers.
 - **HalftoneCanvas respects `prefers-reduced-motion`.** WebGL animation loop now renders a single static frame when reduced motion is preferred, and resumes if the preference changes.
+- **`getOpenStatsForPage` snapshot read/write failures are now observable.** The fallback path no longer swallows errors silently; failures emit observable events so degraded `/open` and landing-page stats can be detected in production.
+- **`users/me` invalid-link rejection preserves the underlying parse error.** When a stored profile link fails URL validation, the response now propagates the original `URL` parse error via `cause` instead of discarding it, making the failure traceable.
+
+### Removed
+
+- **Stale root-level artifacts.** `straude-codemap.html`, `prometheus-list.png`, and `posthog-setup-report.md` were committed to the repo root during exploratory work and never referenced — deleted.
+- **Pass-through wrappers left over from prior renames.** `proxy` is now a direct re-export of `updateSession`, `getCellColor` is a re-export of `getHeatmapCellColor`, and the unused `buildSubject`, `buildProfileShareUrl`, and `hasCodexLogs` shims were removed.
+- **Orphaned source files.** `apps/web/lib/performance/interaction.ts` (zero importers, no `lib/performance` consumers remained), `apps/web/components/landing/GlobalFeed.tsx` (the CHANGELOG had previously announced its removal but the file was never deleted), and `packages/cli/src/lib/codex.ts` (a 7-line re-export shim with no callers — consumers now import from `./codex-native` directly) were deleted.
+- **Stray `export` keywords on module-private helpers.** `enrichComments`, `extractPublicStoragePath`, `isThemePreference`, `buildProfileShareText`, and `getMissingSupabaseServerEnv` were exported but only referenced inside their own files. Downgraded to module-private to signal scope honestly.
+- **Truly-dead constants and helpers.** Un-exporting also revealed three symbols with zero callers anywhere — `OPEN_STATS_REVALIDATE_SECONDS` (declared but never wired into a `revalidate` site), `hasSupabaseBrowserEnv`, and `hasSupabaseServerEnv`. Removed.
 
 ### Added
 

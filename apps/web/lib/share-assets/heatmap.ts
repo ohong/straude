@@ -1,3 +1,5 @@
+import { formatDateKey } from "@/lib/utils/dates";
+
 export interface HeatmapContributionDay {
   date: string;
   cost_usd: number;
@@ -28,13 +30,6 @@ const SHORT_MONTHS = [
   "Nov",
   "Dec",
 ] as const;
-
-function formatDateKey(date: Date): string {
-  const y = date.getFullYear();
-  const m = String(date.getMonth() + 1).padStart(2, "0");
-  const d = String(date.getDate()).padStart(2, "0");
-  return `${y}-${m}-${d}`;
-}
 
 export function getHeatmapCellColor(cost: number): string {
   if (cost <= 0) return "#EAE2D7";

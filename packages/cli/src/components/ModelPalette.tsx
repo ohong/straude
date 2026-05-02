@@ -1,32 +1,10 @@
 import React from 'react';
 import { Box, Text } from 'ink';
+import { prettifyModel } from '@straude/shared/models';
 import { theme, modelColors, modelFallback } from './theme.js';
 
 export interface ModelPaletteProps {
   breakdown: Array<{ model: string; cost_usd: number }>;
-}
-
-/**
- * Normalize raw model identifiers to display names.
- * Ported from apps/web/components/app/feed/ActivityCard.tsx:39-57
- */
-function prettifyModel(model: string): string {
-  const normalized = model.trim();
-  if (/claude-opus-4/i.test(normalized)) return 'Claude Opus';
-  if (/claude-sonnet-4/i.test(normalized)) return 'Claude Sonnet';
-  if (/claude-haiku-4/i.test(normalized)) return 'Claude Haiku';
-  if (/^gpt-/i.test(normalized)) {
-    return normalized
-      .replace(/^gpt/i, 'GPT')
-      .replace(/-codex$/i, '-Codex');
-  }
-  if (/^o4/i.test(normalized)) return 'o4';
-  if (/^o3/i.test(normalized)) return 'o3';
-  // Legacy: broader Claude matching
-  if (normalized.includes('opus')) return 'Claude Opus';
-  if (normalized.includes('sonnet')) return 'Claude Sonnet';
-  if (normalized.includes('haiku')) return 'Claude Haiku';
-  return normalized;
 }
 
 function hashString(input: string): number {

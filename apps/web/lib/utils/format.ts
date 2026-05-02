@@ -1,4 +1,5 @@
-import { getHeatmapCellColor } from "@/lib/share-assets/heatmap";
+export { formatTokens } from "@straude/shared/format";
+export { getHeatmapCellColor as getCellColor } from "@/lib/share-assets/heatmap";
 
 export function formatCurrency(n: number | null | undefined): string {
   const value = Number(n ?? 0);
@@ -6,13 +7,6 @@ export function formatCurrency(n: number | null | undefined): string {
     minimumFractionDigits: 2,
     maximumFractionDigits: 2,
   });
-}
-
-export function formatTokens(n: number): string {
-  if (n >= 1_000_000_000) return `${(n / 1_000_000_000).toFixed(1)}B`;
-  if (n >= 1_000_000) return `${(n / 1_000_000).toFixed(1)}M`;
-  if (n >= 1_000) return `${(n / 1_000).toFixed(1)}k`;
-  return String(n);
 }
 
 export function timeAgo(dateStr: string): string {
@@ -36,7 +30,3 @@ export function getInitials(name: string | null): string {
     .join("");
 }
 
-/** Color scale for contribution graph cells */
-export function getCellColor(cost: number): string {
-  return getHeatmapCellColor(cost);
-}

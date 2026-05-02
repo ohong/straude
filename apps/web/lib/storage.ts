@@ -30,7 +30,7 @@ export function isStoragePathOwnedByUser(path: string, userId: string): boolean 
   return isValidStoragePath(path) && path.startsWith(`${userId}/`);
 }
 
-export function extractPublicStoragePath(
+function extractPublicStoragePath(
   url: string,
   bucket: StorageBucket,
 ): string | null {

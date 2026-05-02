@@ -6,6 +6,7 @@ import Link from "next/link";
 import { X } from "lucide-react";
 import { Button } from "@/components/ui/Button";
 import { Textarea } from "@/components/ui/Textarea";
+import { useFocusTrap } from "@/components/app/shared/useFocusTrap";
 
 interface SuggestCompanyWidgetProps {
   isLoggedIn: boolean;
@@ -60,27 +61,7 @@ export function SuggestCompanyWidget({ isLoggedIn, children }: SuggestCompanyWid
   }, [open]);
 
   // Focus trap
-  useEffect(() => {
-    if (!open) return;
-    function onFocusTrap(e: KeyboardEvent) {
-      if (e.key !== "Tab" || !dialogRef.current) return;
-      const focusable = dialogRef.current.querySelectorAll<HTMLElement>(
-        'button, textarea, input, [href], [tabindex]:not([tabindex="-1"])',
-      );
-      if (focusable.length === 0) return;
-      const first = focusable[0];
-      const last = focusable[focusable.length - 1];
-      if (e.shiftKey && document.activeElement === first) {
-        e.preventDefault();
-        last.focus();
-      } else if (!e.shiftKey && document.activeElement === last) {
-        e.preventDefault();
-        first.focus();
-      }
-    }
-    document.addEventListener("keydown", onFocusTrap);
-    return () => document.removeEventListener("keydown", onFocusTrap);
-  }, [open]);
+  useFocusTrap(dialogRef, open);
 
   // Flash timeout
   useEffect(() => {

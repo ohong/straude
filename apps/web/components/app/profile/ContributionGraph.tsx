@@ -3,6 +3,7 @@
 import { useState, useCallback } from "react";
 import { cn } from "@/lib/utils/cn";
 import { formatCurrency, getCellColor } from "@/lib/utils/format";
+import { formatDateKey } from "@/lib/utils/dates";
 import { getHeatmapLegend } from "@/lib/share-assets/heatmap";
 import type { ContributionDay } from "@/types";
 
@@ -13,13 +14,6 @@ const GAP = 3;
 const STEP = CELL_SIZE + GAP;
 const DAYS = 7;
 const MONTH_LABEL_HEIGHT = 16;
-
-function formatDateKey(d: Date): string {
-  const y = d.getFullYear();
-  const m = String(d.getMonth() + 1).padStart(2, "0");
-  const day = String(d.getDate()).padStart(2, "0");
-  return `${y}-${m}-${day}`;
-}
 
 function formatDateLabel(d: Date): string {
   return d.toLocaleDateString("en-US", {

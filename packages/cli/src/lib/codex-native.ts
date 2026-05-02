@@ -246,7 +246,7 @@ async function listSessionFiles(dir = sessionsDir(), root = sessionsDir()): Prom
   return files.sort((a, b) => relative(root, a).localeCompare(relative(root, b)));
 }
 
-async function containsSessionFile(dir = sessionsDir()): Promise<boolean> {
+export async function containsSessionFile(dir = sessionsDir()): Promise<boolean> {
   let entries: Dirent<string>[];
   try {
     entries = await readdir(dir, { withFileTypes: true });
@@ -517,10 +517,6 @@ function aggregateSessions(sessions: ParsedSession[]): { data: CcusageDailyEntry
   );
 
   return { data, metas, parsedEvents };
-}
-
-export async function hasCodexLogs(): Promise<boolean> {
-  return containsSessionFile();
 }
 
 export async function collectCodexUsageAsync(sinceDate: string, untilDate: string): Promise<CodexNativeOutput> {

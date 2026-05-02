@@ -1,7 +1,8 @@
 import { fal } from "@fal-ai/client";
 import sharp from "sharp";
-import { mkdir, rm, writeFile } from "node:fs/promises";
+import { writeFile } from "node:fs/promises";
 import { join, resolve } from "node:path";
+import { ensureCleanOutputDir } from "./_lib";
 
 const MODEL_ID = "fal-ai/nano-banana-2";
 const WIDTH = 1200;
@@ -117,11 +118,6 @@ function escapeXml(value: string): string {
     .replaceAll(">", "&gt;")
     .replaceAll('"', "&quot;")
     .replaceAll("'", "&apos;");
-}
-
-async function ensureCleanOutputDir() {
-  await rm(OUTPUT_DIR, { recursive: true, force: true });
-  await mkdir(FINAL_DIR, { recursive: true });
 }
 
 async function downloadImage(url: string): Promise<Buffer> {
@@ -245,7 +241,7 @@ async function main() {
 
   fal.config({ credentials: apiKey });
 
-  await ensureCleanOutputDir();
+  await ensureCleanOutputDir(OUTPUT_DIR);
 
   const entries: ManifestEntry[] = [];
   for (const variant of VARIANTS) {

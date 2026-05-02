@@ -228,8 +228,8 @@ export function parseCcusageOutput(raw: string): CcusageOutput {
   let parsed: unknown;
   try {
     parsed = JSON.parse(raw);
-  } catch {
-    throw new Error("Failed to parse ccusage output as JSON");
+  } catch (err) {
+    throw new Error("Failed to parse ccusage output as JSON", { cause: err });
   }
 
   // ccusage returns `[]` when there's no data for the period

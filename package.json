@@ -8,6 +8,7 @@
     "dev:local": "bun run local:env && bun --cwd apps/web dev:plain",
     "build": "turbo build",
     "lint": "turbo lint",
+    "typecheck": "turbo typecheck",
     "local:up": "bunx supabase start",
     "local:down": "bunx supabase stop",
     "local:reset": "bunx supabase db reset --yes",

@@ -1,6 +1,5 @@
+import { prettifyModel } from "@straude/shared/models";
 import { getServiceClient } from "@/lib/supabase/service";
-
-export const OPEN_STATS_REVALIDATE_SECONDS = 86_400;
 
 const OPEN_STATS_SNAPSHOT_TABLE = "open_stats_snapshots";
 const DAY_MS = 86_400_000;
@@ -179,22 +178,6 @@ function throwIfSupabaseError(label: string, error: SupabaseErrorLike) {
     .join(" | ");
 
   throw new Error(`${label}: ${details}`);
-}
-
-export function prettifyModel(model: string): string {
-  const normalized = model.trim();
-  if (/claude-opus-4/i.test(normalized)) return "Claude Opus";
-  if (/claude-sonnet-4/i.test(normalized)) return "Claude Sonnet";
-  if (/claude-haiku-4/i.test(normalized)) return "Claude Haiku";
-  if (/^gpt-/i.test(normalized)) {
-    return normalized.replace(/^gpt/i, "GPT").replace(/-codex$/i, "-Codex");
-  }
-  if (/^o4/i.test(normalized)) return "o4";
-  if (/^o3/i.test(normalized)) return "o3";
-  if (normalized.includes("opus")) return "Claude Opus";
-  if (normalized.includes("sonnet")) return "Claude Sonnet";
-  if (normalized.includes("haiku")) return "Claude Haiku";
-  return normalized;
 }
 
 function buildOpenStats(params: {
@@ -423,7 +406,10 @@ export async function getOpenStatsForPage(
     try {
       await persistOpenStatsSnapshot(db, liveStats);
     } catch (error) {
-      console.error(error);
+      // TODO(observability): forward to PostHog server-side capture once a
+      // helper exists (context: "open-stats:snapshot-write"). For now, log
+      // so prod failures are visible in server logs.
+      console.error("open stats snapshot write failed:", error);
     }
 
     return liveStats;
@@ -432,11 +418,15 @@ export async function getOpenStatsForPage(
       const snapshot = await readLatestOpenStatsSnapshot(db);
       if (snapshot) return snapshot;
     } catch (snapshotError) {
+      // TODO(observability): forward to PostHog server-side capture once a
+      // helper exists (context: "open-stats:snapshot-fallback").
       console.error("open stats snapshot fallback failed:", snapshotError);
     }
 
     // Both live and snapshot failed (e.g. Supabase unreachable in CI).
     // Return an empty placeholder so the build doesn't crash.
+    // TODO(observability): forward to PostHog server-side capture once a
+    // helper exists (context: "open-stats:all-sources-failed").
     console.error("open stats: all sources failed, returning placeholder", liveError);
     const now = new Date().toISOString();
     return {
