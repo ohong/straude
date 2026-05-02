@@ -21,6 +21,7 @@ function openBrowser(url: string): void {
   try {
     parsed = new URL(url);
   } catch {
+    // malformed URL — caller already prints it for manual fallback, no spawn needed
     return;
   }
 

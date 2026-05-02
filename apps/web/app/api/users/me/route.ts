@@ -37,8 +37,8 @@ function normalizeProfileLink(value: unknown): string | null {
   let parsed: URL;
   try {
     parsed = new URL(link);
-  } catch {
-    throw new Error("Profile link must be a valid URL");
+  } catch (err) {
+    throw new Error("Profile link must be a valid URL", { cause: err });
   }
 
   if (parsed.protocol !== "http:" && parsed.protocol !== "https:") {

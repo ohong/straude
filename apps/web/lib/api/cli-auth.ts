@@ -77,6 +77,7 @@ export function verifyCliToken(authHeader: string | null): string | null {
 
   // Decode and check expiry
   let decoded: JwtPayload;
+  // malformed JWT payload — treat as anonymous
   try {
     decoded = JSON.parse(base64urlDecode(payload));
   } catch {

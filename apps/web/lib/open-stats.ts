@@ -423,7 +423,10 @@ export async function getOpenStatsForPage(
     try {
       await persistOpenStatsSnapshot(db, liveStats);
     } catch (error) {
-      console.error(error);
+      // TODO(observability): forward to PostHog server-side capture once a
+      // helper exists (context: "open-stats:snapshot-write"). For now, log
+      // so prod failures are visible in server logs.
+      console.error("open stats snapshot write failed:", error);
     }
 
     return liveStats;
@@ -432,11 +435,15 @@ export async function getOpenStatsForPage(
       const snapshot = await readLatestOpenStatsSnapshot(db);
       if (snapshot) return snapshot;
     } catch (snapshotError) {
+      // TODO(observability): forward to PostHog server-side capture once a
+      // helper exists (context: "open-stats:snapshot-fallback").
       console.error("open stats snapshot fallback failed:", snapshotError);
     }
 
     // Both live and snapshot failed (e.g. Supabase unreachable in CI).
     // Return an empty placeholder so the build doesn't crash.
+    // TODO(observability): forward to PostHog server-side capture once a
+    // helper exists (context: "open-stats:all-sources-failed").
     console.error("open stats: all sources failed, returning placeholder", liveError);
     const now = new Date().toISOString();
     return {
