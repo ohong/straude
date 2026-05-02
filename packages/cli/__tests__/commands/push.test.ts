@@ -25,12 +25,18 @@ vi.mock("../../src/lib/codex-native.js", () => ({
   containsSessionFile: vi.fn(),
 }));
 
+vi.mock("../../src/lib/telemetry.js", () => ({
+  reportUsagePushFailed: vi.fn(),
+  errorMessage: (error: unknown) => error instanceof Error ? error.message : String(error),
+}));
+
 import { pushCommand, mergeEntries } from "../../src/commands/push.js";
 import { loadConfig, saveConfig } from "../../src/lib/auth.js";
 import { loginCommand } from "../../src/commands/login.js";
 import { apiRequest } from "../../src/lib/api.js";
 import { runCcusageRawAsync, parseCcusageOutput } from "../../src/lib/ccusage.js";
 import { collectCodexUsageAsync, containsSessionFile } from "../../src/lib/codex-native.js";
+import { reportUsagePushFailed } from "../../src/lib/telemetry.js";
 
 const mockLoadConfig = vi.mocked(loadConfig);
 const mockLoginCommand = vi.mocked(loginCommand);
@@ -40,6 +46,7 @@ const mockRunCcusageRawAsync = vi.mocked(runCcusageRawAsync);
 const mockParseCcusageOutput = vi.mocked(parseCcusageOutput);
 const mockCollectCodexUsageAsync = vi.mocked(collectCodexUsageAsync);
 const mockHasCodexLogs = vi.mocked(containsSessionFile);
+const mockReportUsagePushFailed = vi.mocked(reportUsagePushFailed);
 
 const fakeConfig = { token: "tok", username: "alice", api_url: "https://straude.com" };
 
@@ -215,6 +222,11 @@ describe("pushCommand", () => {
     mockApiRequest.mockRejectedValue(new Error("Server error"));
 
     await expect(pushCommand({})).rejects.toThrow(ExitError);
+    expect(mockReportUsagePushFailed).toHaveBeenCalledWith(
+      fakeConfig,
+      expect.any(Error),
+      { command: "push", stage: "submit" },
+    );
     expect(process.exit).toHaveBeenCalledWith(1);
   });
 

@@ -17,6 +17,7 @@ import type { DashboardData as DashboardResponse } from "../components/PushSumma
 import { posthog } from "../lib/posthog.js";
 import { getDistinctId } from "../lib/machine-id.js";
 import { isDebug, debugLog } from "../lib/debug.js";
+import { errorMessage, reportUsagePushFailed } from "../lib/telemetry.js";
 import type { NormalizationAnomaly } from "../lib/ccusage.js";
 
 interface UsageSubmitRequest {
@@ -402,14 +403,12 @@ export async function pushCommand(options: PushOptions, apiUrlOverride?: string)
     syncSpinner.stop();
   } catch (err) {
     syncSpinner.stop();
-    posthog.captureException(err, getDistinctId(config), { command: "push" });
-    posthog.capture({
-      distinctId: getDistinctId(config),
-      event: "usage_push_failed",
-      properties: { error: truncate((err as Error).message, 200) },
+    reportUsagePushFailed(config, err, {
+      command: "push",
+      stage: "submit",
     });
     await posthog._shutdown();
-    console.error(`\nFailed to submit: ${(err as Error).message}`);
+    console.error(`\nFailed to submit: ${errorMessage(err)}`);
     process.exit(1);
   }
 
@@ -484,10 +483,6 @@ export async function pushCommand(options: PushOptions, apiUrlOverride?: string)
       console.log(`${verb} ${result.date}: ${result.post_url}?edit=1`);
     }
   }
-}
-
-function truncate(value: string, max: number): string {
-  return value.length > max ? `${value.slice(0, max)}…` : value;
 }
 
 function countAnomalies(

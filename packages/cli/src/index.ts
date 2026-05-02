@@ -7,8 +7,13 @@ import { autoCommand, enableAutoPush, disableAutoPush } from "./commands/auto.js
 import { loadConfig } from "./lib/auth.js";
 import { CLI_VERSION } from "./config.js";
 import { posthog } from "./lib/posthog.js";
-import { getDistinctId } from "./lib/machine-id.js";
 import { setDebug } from "./lib/debug.js";
+import {
+  errorMessage,
+  isPushInvocation,
+  reportCliException,
+  reportUsagePushFailed,
+} from "./lib/telemetry.js";
 
 const HELP = `
 straude v${CLI_VERSION} — Push your Claude Code usage to Straude
@@ -98,9 +103,12 @@ function parseTimeout(value: string): number {
   return seconds * 1000;
 }
 
+let activeCommand: string | null = null;
+
 async function main(): Promise<void> {
   const args = process.argv.slice(2);
   const { command, subcommand, options } = parseArgs(args);
+  activeCommand = command;
 
   if (options.debug) {
     setDebug(true);
@@ -161,9 +169,22 @@ async function main(): Promise<void> {
   }
 }
 
+let exitCode = 0;
+
 main()
   .catch((err: unknown) => {
-    posthog.captureException(err, getDistinctId(loadConfig()));
-    console.error(`Error: ${(err as Error).message}`);
+    exitCode = 1;
+    const config = loadConfig();
+    if (isPushInvocation(activeCommand)) {
+      reportUsagePushFailed(config, err, {
+        command: activeCommand ?? "push",
+        stage: "command",
+      });
+    } else {
+      reportCliException(config, err, {
+        command: activeCommand ?? "unknown",
+      });
+    }
+    console.error(`Error: ${errorMessage(err)}`);
   })
-  .finally(() => posthog._shutdown().then(() => process.exit(0)));
+  .finally(() => posthog._shutdown().then(() => process.exit(exitCode)));
