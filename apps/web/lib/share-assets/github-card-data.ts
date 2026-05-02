@@ -1,5 +1,6 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { prettifyModel } from "@/lib/utils/post-share";
+import { formatDateKey } from "@/lib/utils/dates";
 
 export interface GithubCardData {
   username: string;
@@ -19,13 +20,6 @@ interface ProfileRow {
   username: string | null;
   display_name: string | null;
   is_public: boolean;
-}
-
-function formatDate(date: Date) {
-  const y = date.getFullYear();
-  const m = String(date.getMonth() + 1).padStart(2, "0");
-  const d = String(date.getDate()).padStart(2, "0");
-  return `${y}-${m}-${d}`;
 }
 
 function resolvePrimaryModel(
@@ -58,7 +52,7 @@ export async function getGithubCardData(
 
   const thirtyDaysAgo = new Date(today);
   thirtyDaysAgo.setDate(thirtyDaysAgo.getDate() - 29);
-  const thirtyDaysAgoStr = formatDate(thirtyDaysAgo);
+  const thirtyDaysAgoStr = formatDateKey(thirtyDaysAgo);
 
   const [
     { data: streakData },
@@ -72,7 +66,7 @@ export async function getGithubCardData(
       .from("daily_usage")
       .select("date, cost_usd, models")
       .eq("user_id", profile.id)
-      .gte("date", formatDate(heatmapStart))
+      .gte("date", formatDateKey(heatmapStart))
       .order("date", { ascending: true }),
     supabase
       .from("daily_usage")

@@ -10,16 +10,12 @@ import {
   ResponsiveContainer,
 } from "recharts";
 import { useAdminTheme } from "./AdminShell";
+import { formatDateMonDay as formatDate } from "@/lib/utils/dates";
 
 interface GrowthRow {
   date: string;
   signups: number;
   cumulative_users: number;
-}
-
-function formatDate(dateStr: string) {
-  const d = new Date(dateStr + "T00:00:00");
-  return d.toLocaleDateString("en-US", { month: "short", day: "numeric" });
 }
 
 export function GrowthMetrics({ data }: { data: GrowthRow[] }) {

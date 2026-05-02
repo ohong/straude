@@ -4,6 +4,7 @@ import { useState, useEffect, useCallback, useRef } from "react";
 import { createPortal } from "react-dom";
 import Image from "next/image";
 import { X, ChevronLeft, ChevronRight } from "lucide-react";
+import { useFocusTrap } from "@/components/app/shared/useFocusTrap";
 
 interface ImageLightboxProps {
   images: string[];
@@ -54,26 +55,7 @@ export function ImageLightbox({ images, initialIndex, onClose }: ImageLightboxPr
   }, []);
 
   // Trap focus within lightbox
-  useEffect(() => {
-    function handleFocusTrap(e: KeyboardEvent) {
-      if (e.key !== "Tab" || !dialogRef.current) return;
-      const focusable = dialogRef.current.querySelectorAll<HTMLElement>(
-        'button, [href], [tabindex]:not([tabindex="-1"])'
-      );
-      if (focusable.length === 0) return;
-      const first = focusable[0];
-      const last = focusable[focusable.length - 1];
-      if (e.shiftKey && document.activeElement === first) {
-        e.preventDefault();
-        last.focus();
-      } else if (!e.shiftKey && document.activeElement === last) {
-        e.preventDefault();
-        first.focus();
-      }
-    }
-    document.addEventListener("keydown", handleFocusTrap);
-    return () => document.removeEventListener("keydown", handleFocusTrap);
-  }, []);
+  useFocusTrap(dialogRef, true);
 
   // Touch swipe
   function handleTouchStart(e: React.TouchEvent) {

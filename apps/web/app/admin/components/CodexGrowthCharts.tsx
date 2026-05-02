@@ -16,6 +16,7 @@ import {
   ReferenceLine,
 } from "recharts";
 import { useAdminTheme } from "./AdminShell";
+import { formatDateMonDay as formatDate } from "@/lib/utils/dates";
 
 interface ModelUsageRow {
   date: string;
@@ -28,11 +29,6 @@ const RANGES = [
   { key: "30d", label: "30D", days: 30 },
   { key: "all", label: "All", days: Infinity },
 ] as const;
-
-function formatDate(dateStr: string) {
-  const d = new Date(dateStr + "T00:00:00");
-  return d.toLocaleDateString("en-US", { month: "short", day: "numeric" });
-}
 
 function useChartTheme() {
   const { theme } = useAdminTheme();
