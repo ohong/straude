@@ -1,5 +1,8 @@
 import type { DailyUsage, Post, User } from "@/types";
+import { getShareModelLabel } from "@straude/shared/models";
 import { formatCurrency, formatTokens } from "./format";
+
+export { prettifyModel, getShareModelLabel } from "@straude/shared/models";
 
 type ShareablePost = Pick<Post, "id" | "title" | "images"> & {
   user?: Pick<User, "username"> | null;
@@ -8,35 +11,6 @@ type ShareablePost = Pick<Post, "id" | "title" | "images"> & {
     "cost_usd" | "output_tokens" | "models" | "is_verified"
   > | null;
 };
-
-export function prettifyModel(model: string): string {
-  const normalized = model.trim();
-  if (/claude-opus-4/i.test(normalized)) return "Claude Opus";
-  if (/claude-sonnet-4/i.test(normalized)) return "Claude Sonnet";
-  if (/claude-haiku-4/i.test(normalized)) return "Claude Haiku";
-
-  if (/^gpt-/i.test(normalized)) {
-    return normalized
-      .replace(/^gpt/i, "GPT")
-      .replace(/-codex$/i, "-Codex");
-  }
-
-  if (/^o4/i.test(normalized)) return "o4";
-  if (/^o3/i.test(normalized)) return "o3";
-  return normalized;
-}
-
-export function getShareModelLabel(
-  models: string[] | null | undefined
-): string | null {
-  if (!models || models.length === 0) return null;
-  if (models.some((model) => /claude-opus-4/i.test(model))) return "Claude Opus";
-  if (models.some((model) => /claude-sonnet-4/i.test(model))) {
-    return "Claude Sonnet";
-  }
-  if (models.some((model) => /claude-haiku-4/i.test(model))) return "Claude Haiku";
-  return prettifyModel(models[0]!);
-}
 
 export function buildPostShareUrl(origin: string, postId: string) {
   return new URL(`/post/${postId}`, origin).toString();

@@ -22,6 +22,7 @@
         "@base-ui-components/react": "1.0.0-rc.0",
         "@fal-ai/client": "^1.4.0",
         "@react-email/components": "^1.0.8",
+        "@straude/shared": "workspace:*",
         "@supabase/ssr": "^0.6",
         "@supabase/supabase-js": "^2",
         "@tanstack/react-query": "^5.100.5",
@@ -70,6 +71,7 @@
       },
       "dependencies": {
         "@pppp606/ink-chart": "^0.2.4",
+        "@straude/shared": "workspace:*",
         "chalk": "^5.6.2",
         "ink": "^6.8.0",
         "posthog-node": "^5.29.1",
@@ -80,6 +82,13 @@
         "@types/react": "^19.2.14",
         "typescript": "^5",
         "vitest": "^4.0.18",
+      },
+    },
+    "packages/shared": {
+      "name": "@straude/shared",
+      "version": "0.0.0",
+      "devDependencies": {
+        "typescript": "^5",
       },
     },
   },
@@ -520,6 +529,8 @@
     "@standard-schema/spec": ["@standard-schema/spec@1.1.0", "", {}, "sha512-l2aFy5jALhniG5HgqrD6jXLi/rUWrKvqN/qJx6yoJsgKhblVd+iqqU4RCXavm/jPityDo5TCvKMnpjKnOriy0w=="],
 
     "@standard-schema/utils": ["@standard-schema/utils@0.3.0", "", {}, "sha512-e7Mew686owMaPJVNNLs55PUvgz371nKgwsc4vxE49zsODpJEnxgxRo2y/OKrqueavXgZNMDVj3DdHFlaSAeU8g=="],
+
+    "@straude/shared": ["@straude/shared@workspace:packages/shared"],
 
     "@straude/web": ["@straude/web@workspace:apps/web"],
 
