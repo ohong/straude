@@ -1,3 +1,4 @@
+import { prettifyModel } from "@straude/shared/models";
 import { getServiceClient } from "@/lib/supabase/service";
 
 export const OPEN_STATS_REVALIDATE_SECONDS = 86_400;
@@ -179,22 +180,6 @@ function throwIfSupabaseError(label: string, error: SupabaseErrorLike) {
     .join(" | ");
 
   throw new Error(`${label}: ${details}`);
-}
-
-export function prettifyModel(model: string): string {
-  const normalized = model.trim();
-  if (/claude-opus-4/i.test(normalized)) return "Claude Opus";
-  if (/claude-sonnet-4/i.test(normalized)) return "Claude Sonnet";
-  if (/claude-haiku-4/i.test(normalized)) return "Claude Haiku";
-  if (/^gpt-/i.test(normalized)) {
-    return normalized.replace(/^gpt/i, "GPT").replace(/-codex$/i, "-Codex");
-  }
-  if (/^o4/i.test(normalized)) return "o4";
-  if (/^o3/i.test(normalized)) return "o3";
-  if (normalized.includes("opus")) return "Claude Opus";
-  if (normalized.includes("sonnet")) return "Claude Sonnet";
-  if (normalized.includes("haiku")) return "Claude Haiku";
-  return normalized;
 }
 
 function buildOpenStats(params: {

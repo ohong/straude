@@ -7,6 +7,8 @@ import { Avatar } from "@/components/ui/Avatar";
 import { ImageGrid } from "@/components/app/shared/ImageGrid";
 import { ImageLightbox } from "@/components/app/shared/ImageLightbox";
 import { ShareMenu } from "./ShareMenu";
+import { prettifyModel } from "@straude/shared/models";
+export { prettifyModel } from "@straude/shared/models";
 import { cn } from "@/lib/utils/cn";
 import { formatCurrency, formatTokens } from "@/lib/utils/format";
 import { mentionsToMarkdownLinks } from "@/lib/utils/mentions";
@@ -52,26 +54,6 @@ function timeAgo(dateStr: string, usageDate?: string | null) {
   const days = Math.floor(hrs / 24);
   if (days < 7) return `${days}d ago`;
   return createdAt.toLocaleDateString("en-US", { month: "short", day: "numeric" });
-}
-
-export function prettifyModel(model: string): string {
-  const normalized = model.trim();
-  if (/claude-opus-4/i.test(normalized)) return "Claude Opus";
-  if (/claude-sonnet-4/i.test(normalized)) return "Claude Sonnet";
-  if (/claude-haiku-4/i.test(normalized)) return "Claude Haiku";
-  // Preserve full OpenAI model names (e.g. gpt-5.3-codex -> GPT-5.3-Codex)
-  if (/^gpt-/i.test(normalized)) {
-    return normalized
-      .replace(/^gpt/i, "GPT")
-      .replace(/-codex$/i, "-Codex");
-  }
-  if (/^o4/i.test(normalized)) return "o4";
-  if (/^o3/i.test(normalized)) return "o3";
-  // Legacy: broader Claude matching
-  if (normalized.includes("opus")) return "Claude Opus";
-  if (normalized.includes("sonnet")) return "Claude Sonnet";
-  if (normalized.includes("haiku")) return "Claude Haiku";
-  return normalized;
 }
 
 function formatModels(
