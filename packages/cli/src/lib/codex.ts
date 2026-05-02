@@ -1,6 +1,6 @@
 export {
   CODEX_NATIVE_COLLECTOR,
   collectCodexUsageAsync,
+  containsSessionFile,
   getCodexSessionStats,
-  hasCodexLogs,
 } from "./codex-native.js";

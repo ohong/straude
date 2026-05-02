@@ -1,7 +1,7 @@
 import { getResend } from "./resend";
 import { createUnsubscribeToken } from "./unsubscribe";
 import NotificationEmail, {
-  buildSubject,
+  subjectLine,
   type NotificationType,
 } from "./notification-email";
 
@@ -52,7 +52,7 @@ export async function sendNotificationEmail({
     from: `Straude <${fromEmail}>`,
     replyTo: "hey@straude.com",
     to: recipientEmail,
-    subject: buildSubject(type, actorUsername),
+    subject: subjectLine(type, actorUsername),
     react: NotificationEmail({
       actorUsername,
       type,

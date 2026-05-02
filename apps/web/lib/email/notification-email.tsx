@@ -28,7 +28,7 @@ function truncate(str: string, max: number): string {
   return str.length > max ? str.slice(0, max) + "..." : str;
 }
 
-function subjectLine(type: NotificationType, actor: string): string {
+export function subjectLine(type: NotificationType, actor: string): string {
   switch (type) {
     case "comment":
       return `${actor} commented on your post`;
@@ -53,10 +53,6 @@ function previewText(
     case "post_mention":
       return `${actor} tagged you: "${short}"`;
   }
-}
-
-export function buildSubject(type: NotificationType, actor: string): string {
-  return subjectLine(type, actor);
 }
 
 export default function NotificationEmail({
