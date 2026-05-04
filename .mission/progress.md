@@ -2,7 +2,13 @@
 
 **Mission:** improve Straude activation
 **Started:** 2026-05-04
-**Status:** Planning complete. Executing.
+**Status:** Complete. PR https://github.com/ohong/straude/pull/113 opened 2026-05-04.
+
+## Follow-ups
+
+- 7-day check-in scheduled (one-shot cron in this Claude session, plus the manual notebook): query insight `DV22QC1d` on 2026-05-11 and confirm activation rate moved from the 47% baseline.
+- Re-engage the 55 install-but-never-pushed users once the PR ships and the new CLI propagates via npm.
+- Consider relaxing or quarantining the flaky `authenticated-100ms.test.tsx > messages optimistic send` perf budget — flaked at 1018ms / 1068ms under concurrent monorepo load.
 
 ## Milestones
 
