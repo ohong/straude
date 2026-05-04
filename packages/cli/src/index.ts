@@ -32,7 +32,9 @@ setAuthRefreshStrategy(async (apiUrl) => {
 function silenceEpipe(stream: NodeJS.WriteStream): void {
   stream.on("error", (err: NodeJS.ErrnoException) => {
     if (err.code === "EPIPE") {
-      process.exit(0);
+      // Preserve any failure status the main flow has already set; otherwise
+      // a piped command that was already failing would report success here.
+      process.exit(process.exitCode ?? 0);
     }
     throw err;
   });
@@ -229,6 +231,7 @@ let exitCode = 0;
 main()
   .catch((err: unknown) => {
     exitCode = 1;
+    process.exitCode = 1;
     const config = loadConfig();
     if (isPushInvocation(activeCommand)) {
       reportUsagePushFailed(config, err, {

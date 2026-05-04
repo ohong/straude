@@ -59,6 +59,10 @@ function isMissingClaudeDataError(error: Error): boolean {
   return error.message.includes("No valid Claude data directories found");
 }
 
+function isCcusageNotInstalledError(error: Error): boolean {
+  return error.message.includes("ccusage is not installed or not on PATH");
+}
+
 function formatDate(d: Date): string {
   const y = d.getFullYear();
   const m = String(d.getMonth() + 1).padStart(2, "0");
@@ -263,18 +267,29 @@ export async function pushCommand(options: PushOptions, apiUrlOverride?: string)
       : `Pushing usage for ${formatDate(sinceDate)} to ${formatDate(untilDate)}...`,
   );
 
-  // Make sure ccusage is installed before we try to spawn it. In a TTY this
-  // prompts the user and runs `bun add -g` / `npm install -g`; otherwise it
-  // throws the same "not on PATH" error as before so auto-push behavior is
-  // unchanged.
-  await ensureCcusageInstalled(config);
+  // Try to ensure ccusage is installed. In a TTY this prompts the user and
+  // runs `bun add -g` / `npm install -g`. We catch the throw rather than
+  // propagating it: Codex-only users (no Claude data) shouldn't be blocked by
+  // a missing ccusage. If ccusage is genuinely required, the runCcusage call
+  // below will surface the "not installed" error and we treat it the same as
+  // missing Claude data.
+  let ccusageReady = true;
+  try {
+    await ensureCcusageInstalled(config);
+  } catch {
+    ccusageReady = false;
+  }
 
   // Run ccusage + codex in parallel — the single biggest perf win
   const scanSpinner = new Spinner("scan");
   scanSpinner.start();
   let codexCollectFailed = false;
   const [claudeResult, codexParsed] = await Promise.all([
-    runCcusageRawAsync(sinceStr, untilStr, options.timeoutMs).catch((err: Error) => err),
+    ccusageReady
+      ? runCcusageRawAsync(sinceStr, untilStr, options.timeoutMs).catch((err: Error) => err)
+      : Promise.resolve(
+          new Error("ccusage is not installed or not on PATH"),
+        ),
     collectCodexUsageAsync(sinceStr, untilStr).catch(() => {
       codexCollectFailed = true;
       return {
@@ -295,7 +310,10 @@ export async function pushCommand(options: PushOptions, apiUrlOverride?: string)
 
   if (claudeResult instanceof Error) {
     // Codex-only users do not have local Claude data; keep other Claude failures fatal.
-    if (isMissingClaudeDataError(claudeResult)) {
+    if (
+      isMissingClaudeDataError(claudeResult) ||
+      isCcusageNotInstalledError(claudeResult)
+    ) {
       console.log("No Claude Code data found locally; syncing Codex usage only.");
     } else {
       console.error(claudeResult.message);

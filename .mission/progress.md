@@ -2,7 +2,7 @@
 
 **Mission:** improve Straude activation
 **Started:** 2026-05-04
-**Status:** Complete. PR https://github.com/ohong/straude/pull/113 opened 2026-05-04.
+**Status:** Complete. PR https://github.com/ohong/straude/pull/114 opened 2026-05-04.
 
 ## Follow-ups
 
