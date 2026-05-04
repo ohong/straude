@@ -6,6 +6,7 @@ vi.mock("@/lib/supabase/server", () => ({
 
 vi.mock("@/lib/api/cli-auth", () => ({
   verifyCliToken: vi.fn(),
+  verifyCliTokenWithRefresh: vi.fn(),
 }));
 
 vi.mock("@/lib/supabase/service", () => ({
@@ -18,7 +19,7 @@ vi.mock("@supabase/supabase-js", () => ({
 
 import { POST, aggregateDeviceRows } from "@/app/api/usage/submit/route";
 import { createClient } from "@/lib/supabase/server";
-import { verifyCliToken } from "@/lib/api/cli-auth";
+import { verifyCliToken, verifyCliTokenWithRefresh } from "@/lib/api/cli-auth";
 import { getServiceClient } from "@/lib/supabase/service";
 
 function makeEntry(dateStr: string, overrides: Record<string, any> = {}) {
@@ -124,6 +125,12 @@ beforeEach(() => {
   process.env.SUPABASE_SECRET_KEY = "secret";
   process.env.NEXT_PUBLIC_APP_URL = "https://straude.com";
   (verifyCliToken as any).mockReturnValue(null);
+  // Auto-derive verifyCliTokenWithRefresh from verifyCliToken so existing
+  // tests can keep setting `verifyCliToken.mockReturnValue("cli-user-id")`.
+  (verifyCliTokenWithRefresh as any).mockImplementation((header: string | null) => {
+    const userId = (verifyCliToken as any)(header);
+    return userId ? { userId, username: null, refreshedToken: null } : null;
+  });
 });
 
 describe("POST /api/usage/submit", () => {

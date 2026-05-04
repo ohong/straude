@@ -7,6 +7,20 @@ interface JwtPayload {
   exp: number;
 }
 
+/**
+ * If a verified token is older than this many days, the next CLI request
+ * gets a fresh one returned in the X-Straude-Refreshed-Token response header.
+ * This keeps active users from ever hitting the 30-day expiry cliff.
+ */
+export const TOKEN_REFRESH_AFTER_DAYS = 7;
+
+export interface CliAuthResult {
+  userId: string;
+  username: string | null;
+  /** Set when the verified token is older than TOKEN_REFRESH_AFTER_DAYS. */
+  refreshedToken: string | null;
+}
+
 function base64urlEncode(data: string): string {
   return Buffer.from(data, "utf-8")
     .toString("base64")
@@ -51,11 +65,7 @@ export function createCliToken(userId: string, username: string | null): string 
   return `${header}.${payload}.${signature}`;
 }
 
-/**
- * Verify a CLI JWT from the Authorization header.
- * Returns the user_id (sub) if valid, null otherwise.
- */
-export function verifyCliToken(authHeader: string | null): string | null {
+function decodeAndVerify(authHeader: string | null): JwtPayload | null {
   if (!authHeader?.startsWith("Bearer ")) return null;
 
   const secret = process.env.CLI_JWT_SECRET;
@@ -67,7 +77,6 @@ export function verifyCliToken(authHeader: string | null): string | null {
 
   const [header, payload, signature] = parts as [string, string, string];
 
-  // Verify signature
   const expectedSig = sign(header, payload, secret);
   const sigBuf = Buffer.from(signature, "utf-8");
   const expectedBuf = Buffer.from(expectedSig, "utf-8");
@@ -75,9 +84,7 @@ export function verifyCliToken(authHeader: string | null): string | null {
     return null;
   }
 
-  // Decode and check expiry
   let decoded: JwtPayload;
-  // malformed JWT payload — treat as anonymous
   try {
     decoded = JSON.parse(base64urlDecode(payload));
   } catch {
@@ -88,6 +95,41 @@ export function verifyCliToken(authHeader: string | null): string | null {
   if (!decoded.sub || !decoded.exp || decoded.exp < now) {
     return null;
   }
+  return decoded;
+}
 
-  return decoded.sub;
+/**
+ * Verify a CLI JWT from the Authorization header.
+ * Returns the user_id (sub) if valid, null otherwise.
+ */
+export function verifyCliToken(authHeader: string | null): string | null {
+  return decodeAndVerify(authHeader)?.sub ?? null;
+}
+
+/**
+ * Verify and, if the token is approaching expiry, mint a fresh one. CLI
+ * routes attach `refreshedToken` to a response header so the CLI can rotate
+ * its stored credential without the user ever seeing a "session expired"
+ * error.
+ */
+export function verifyCliTokenWithRefresh(authHeader: string | null): CliAuthResult | null {
+  const decoded = decodeAndVerify(authHeader);
+  if (!decoded) return null;
+
+  const username = decoded.username ?? null;
+  const tokenAgeSeconds = Math.floor(Date.now() / 1000) - decoded.iat;
+  const refreshThresholdSeconds = TOKEN_REFRESH_AFTER_DAYS * 24 * 60 * 60;
+
+  let refreshedToken: string | null = null;
+  if (tokenAgeSeconds >= refreshThresholdSeconds && process.env.CLI_JWT_SECRET) {
+    try {
+      refreshedToken = createCliToken(decoded.sub, username);
+    } catch {
+      // If we can't mint a refresh, the request still succeeds with the old
+      // token. The user just won't get the rotation this round.
+      refreshedToken = null;
+    }
+  }
+
+  return { userId: decoded.sub, username, refreshedToken };
 }
