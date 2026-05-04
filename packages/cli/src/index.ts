@@ -8,12 +8,28 @@ import { loadConfig } from "./lib/auth.js";
 import { CLI_VERSION } from "./config.js";
 import { posthog } from "./lib/posthog.js";
 import { setDebug } from "./lib/debug.js";
+import { isFirstRun, markFirstRun } from "./lib/first-run.js";
+import { getDistinctId } from "./lib/machine-id.js";
 import {
   errorMessage,
   isPushInvocation,
   reportCliException,
   reportUsagePushFailed,
 } from "./lib/telemetry.js";
+
+// Exit cleanly when stdout/stderr is piped to a process that closes early
+// (e.g., `straude --help | head`). Without this, every active user hits a
+// `write EPIPE` exception.
+function silenceEpipe(stream: NodeJS.WriteStream): void {
+  stream.on("error", (err: NodeJS.ErrnoException) => {
+    if (err.code === "EPIPE") {
+      process.exit(0);
+    }
+    throw err;
+  });
+}
+silenceEpipe(process.stdout);
+silenceEpipe(process.stderr);
 
 const HELP = `
 straude v${CLI_VERSION} — Push your Claude Code usage to Straude
@@ -114,6 +130,22 @@ async function main(): Promise<void> {
     setDebug(true);
   }
 
+  // Activation telemetry: fire `cli_first_run` once per machine. Done before
+  // the help/version short-circuits so `npx straude --help` still counts as
+  // installation — that's the canonical "user tried straude" signal.
+  if (isFirstRun()) {
+    markFirstRun();
+    posthog.capture({
+      distinctId: getDistinctId(null),
+      event: "cli_first_run",
+      properties: {
+        platform: process.platform,
+        node_version: process.version,
+        command: command ?? "push",
+      },
+    });
+  }
+
   if (options.version) {
     console.log(`straude v${CLI_VERSION}`);
     return;
@@ -122,6 +154,20 @@ async function main(): Promise<void> {
   if (options.help || command === "help") {
     console.log(HELP);
     return;
+  }
+
+  // `cli_authenticated` fires whenever a stored config is loaded for a real
+  // command run (not --help/--version). Pairs with `cli_first_run` and
+  // `usage_pushed` to power the activation funnel.
+  const existingConfig = loadConfig();
+  if (existingConfig) {
+    posthog.capture({
+      distinctId: getDistinctId(existingConfig),
+      event: "cli_authenticated",
+      properties: {
+        command: command ?? "push",
+      },
+    });
   }
 
   const apiUrl = options.apiUrl as string | undefined;
