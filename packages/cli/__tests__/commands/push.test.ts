@@ -203,6 +203,53 @@ describe("pushCommand", () => {
     expect(process.exit).toHaveBeenCalledWith(1);
   });
 
+  it("filters out-of-window entries client-side and warns", async () => {
+    // Faked date: 2026-03-13. 60 days back is 2026-01-12.
+    const today = todayStr();
+    const oldDate = "2026-01-12";
+
+    mockRunCcusageRawAsync.mockResolvedValue("{}");
+    mockParseCcusageOutput.mockReturnValue({
+      data: [
+        {
+          date: oldDate,
+          models: ["claude-sonnet-4-5-20250929"],
+          inputTokens: 100, outputTokens: 50,
+          cacheCreationTokens: 0, cacheReadTokens: 0,
+          totalTokens: 150, costUSD: 0.01,
+        },
+        {
+          date: today,
+          models: ["claude-sonnet-4-5-20250929"],
+          inputTokens: 1000, outputTokens: 500,
+          cacheCreationTokens: 0, cacheReadTokens: 0,
+          totalTokens: 1500, costUSD: 0.05,
+        },
+      ],
+    });
+    mockApiRequest.mockResolvedValue({
+      results: [
+        { date: today, usage_id: "u-1", post_id: "p-1", post_url: "https://straude.com/post/p-1" },
+      ],
+    });
+
+    await pushCommand({ days: 30 });
+
+    // The submit body must contain only the in-window entry.
+    const submitCall = mockApiRequest.mock.calls.find(
+      ([, path]) => path === "/api/usage/submit",
+    );
+    expect(submitCall).toBeDefined();
+    const body = JSON.parse((submitCall![2] as { body: string }).body);
+    expect(body.entries).toHaveLength(1);
+    expect(body.entries[0].date).toBe(today);
+
+    // And the user got a heads-up about the dropped row.
+    expect(console.log).toHaveBeenCalledWith(
+      expect.stringContaining(`skipping 1 date(s) outside the 30-day backfill window: ${oldDate}`),
+    );
+  });
+
   it("handles API submission failure", async () => {
     mockRunCcusageRawAsync.mockResolvedValue("{}");
     mockParseCcusageOutput.mockReturnValue({

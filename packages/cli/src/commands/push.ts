@@ -92,6 +92,19 @@ function daysBetweenStrings(dateStrA: string, dateStrB: string): number {
   return Math.round((b.getTime() - a.getTime()) / msPerDay);
 }
 
+/**
+ * Mirrors the server's backfill-window check (apps/web/app/api/usage/submit/
+ * route.ts). Pre-filtering on the client keeps a single edge-case row from
+ * failing the whole submit with HTTP 400.
+ */
+export function isWithinBackfillWindow(dateStr: string): boolean {
+  const now = Date.now();
+  const target = new Date(dateStr).getTime();
+  if (Number.isNaN(target)) return false;
+  const diffDays = (now - target) / 86_400_000;
+  return diffDays >= -1 && diffDays <= MAX_BACKFILL_DAYS;
+}
+
 function formatTokens(n: number): string {
   if (n >= 1_000_000) return `${(n / 1_000_000).toFixed(1)}M`;
   if (n >= 1_000) return `${Math.round(n / 1_000)}k`;
@@ -345,7 +358,21 @@ export async function pushCommand(options: PushOptions, apiUrlOverride?: string)
   const codexEntries = codexParsed.data.filter((entry) => !blockedDates.has(entry.date));
 
   // Merge Claude + Codex entries by date
-  const entries = mergeEntries(claudeEntries, codexEntries);
+  const merged = mergeEntries(claudeEntries, codexEntries);
+
+  // Drop entries the server would reject as out-of-window. Pre-filtering keeps
+  // a single edge-case row from failing the whole batch with HTTP 400.
+  const droppedDates: string[] = [];
+  const entries = merged.filter((entry) => {
+    if (isWithinBackfillWindow(entry.date)) return true;
+    droppedDates.push(entry.date);
+    return false;
+  });
+  if (droppedDates.length > 0) {
+    console.log(
+      `Note: skipping ${droppedDates.length} date(s) outside the ${MAX_BACKFILL_DAYS}-day backfill window: ${droppedDates.join(", ")}`,
+    );
+  }
 
   if (entries.length === 0) {
     console.log("No usage data found for the specified period.");
