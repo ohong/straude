@@ -2,6 +2,10 @@
 
 ## Unreleased
 
+### Changed
+
+- **Replaced mock-heavy CLI tests with pure unit + real-I/O integration tests.** PostHog audit of the test suite found 503 of 794 tests (63%) lived in files that mocked something. Three of the worst offenders are now honest: (a) `first-run.test.ts` was 100% `vi.mock("node:fs")` — replaced with `mkdtempSync` and real fs operations, exercising actual mode bits (0o600 / 0o700), real permission-denied paths, and the round-trip between `isFirstRun` and `markFirstRun`. (b) `api.test.ts` stubbed `globalThis.fetch` — replaced with a real `http.createServer` so every test exercises actual fetch / Authorization-header serialization / JSON parsing / response-header reading, including the sliding-token-refresh and 401-retry paths. (c) `ccusage-install.test.ts` had its decision logic (`bun add -g` vs `npm install -g`) split into a new pure helper `pickInstallCommand({ hasBun })` and `resolvePushDateRange()` — both unit-tested with zero mocks. The orchestration test in `ccusage-install.test.ts` is trimmed to branches that genuinely depend on process state (PATH, isatty). CLI test count is now 265 (was 240); 25 new pure tests, 7 retired mock tests.
+
 ### Added
 
 - **CLI activation tracking events: `cli_first_run` and `cli_authenticated`.** PostHog showed 103 users tried Straude in the last 7 days but only 48 (47%) ever pushed once successfully — the missing event was a clean install→activate funnel. The CLI now writes `~/.straude/.first-run` on the first invocation per machine and captures `cli_first_run` (with `platform`, `node_version`, `command`) before any other code runs, so even `npx straude --help` counts as install. Every subsequent invocation that loads a stored config also captures `cli_authenticated`. Saved insight `DV22QC1d` ([URL](https://us.posthog.com/project/374497/insights/DV22QC1d)) tracks the funnel; goal is ≥75% activation on `cli_version` ≥ 0.1.24.
