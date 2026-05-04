@@ -134,9 +134,11 @@ describe("apiRequest — sliding token refresh", () => {
     expect(mockSaveConfig).not.toHaveBeenCalled();
   });
 
-  it("swallows saveConfig errors so the request still resolves", async () => {
+  it("swallows read-only-fs saveConfig errors so the request still resolves", async () => {
     mockSaveConfig.mockImplementation(() => {
-      throw new Error("EACCES");
+      const err = new Error("read-only filesystem") as NodeJS.ErrnoException;
+      err.code = "EROFS";
+      throw err;
     });
     mockFetch.mockResolvedValue({
       ok: true,
@@ -144,6 +146,20 @@ describe("apiRequest — sliding token refresh", () => {
       headers: { get: () => "new-token" },
     });
     await expect(apiRequest(config, "/api/test")).resolves.toEqual({ ok: true });
+  });
+
+  it("propagates unexpected saveConfig errors instead of swallowing them", async () => {
+    mockSaveConfig.mockImplementation(() => {
+      const err = new Error("disk full") as NodeJS.ErrnoException;
+      err.code = "ENOSPC";
+      throw err;
+    });
+    mockFetch.mockResolvedValue({
+      ok: true,
+      json: () => Promise.resolve({ ok: true }),
+      headers: { get: () => "new-token" },
+    });
+    await expect(apiRequest(config, "/api/test")).rejects.toThrow(/disk full/);
   });
 });
 
