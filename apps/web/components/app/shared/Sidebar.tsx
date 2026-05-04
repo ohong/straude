@@ -54,13 +54,15 @@ export function Sidebar({
           {displayName && (
             <p className="mt-3 text-base font-semibold">{displayName}</p>
           )}
-          {username && (
-            <p className="inline-flex items-center gap-1.5 text-sm text-muted">
-              <span>@{username}</span>
-              <TeamBadge url={teamUrl} faviconUrl={teamFaviconUrl} size="sm" />
-            </p>
-          )}
         </Link>
+        {username && (
+          <p className="mt-1 inline-flex items-center gap-1.5 text-sm text-muted">
+            <Link href={profileHref} className="hover:underline">
+              @{username}
+            </Link>
+            <TeamBadge url={teamUrl} faviconUrl={teamFaviconUrl} size="sm" />
+          </p>
+        )}
       </div>
 
       {/* Stats row — stacked for readability */}

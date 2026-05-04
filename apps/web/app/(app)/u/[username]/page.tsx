@@ -86,11 +86,6 @@ export default async function ProfilePage({
                 <h1 className="text-xl font-medium sm:text-2xl" style={{ letterSpacing: "-0.03em" }}>
                   {profile.display_name ?? profile.username}
                 </h1>
-                <TeamBadge
-                  url={profile.team_url}
-                  faviconUrl={profile.team_favicon_url}
-                  size="md"
-                />
                 {authUserId && (
                   <FollowButton username={username} initialFollowing={isFollowing} />
                 )}

@@ -118,18 +118,26 @@ export function LeaderboardTable({
                   <Badge variant={rankVariant(entry.rank)}>{entry.rank}</Badge>
                 </td>
                 <td className="px-6 py-3">
-                  <Link
-                    href={`/u/${entry.username}`}
-                    className="flex items-center gap-3 hover:underline"
-                  >
-                    <Avatar
-                      src={entry.avatar_url}
-                      alt={entry.username}
-                      fallback={entry.username}
-                      size="sm"
-                    />
+                  <div className="flex items-center gap-3">
+                    <Link
+                      href={`/u/${entry.username}`}
+                      aria-label={`Profile of @${entry.username}`}
+                      className="shrink-0"
+                    >
+                      <Avatar
+                        src={entry.avatar_url}
+                        alt={entry.username}
+                        fallback={entry.username}
+                        size="sm"
+                      />
+                    </Link>
                     <div className="flex min-w-0 items-center gap-2">
-                      <span className="truncate font-medium">{entry.username}</span>
+                      <Link
+                        href={`/u/${entry.username}`}
+                        className="truncate font-medium hover:underline"
+                      >
+                        {entry.username}
+                      </Link>
                       <TeamBadge
                         url={entry.team_url}
                         faviconUrl={entry.team_favicon_url}
@@ -142,7 +150,7 @@ export function LeaderboardTable({
                     {entry.country && (
                       <span className="text-xs text-muted">{entry.country}</span>
                     )}
-                  </Link>
+                  </div>
                 </td>
                 <td className="px-6 py-3 text-right font-mono font-medium tabular-nums text-accent">
                   ${formatCurrency(entry.total_cost)}
@@ -169,11 +177,10 @@ export function LeaderboardTable({
       {/* Mobile card list */}
       <div className="sm:hidden">
         {entries.map((entry) => (
-          <Link
+          <div
             key={entry.user_id}
-            href={`/u/${entry.username}`}
             className={cn(
-              "flex items-center gap-3 border-b border-border px-[var(--app-page-padding-x)] py-3 hover:bg-subtle",
+              "relative flex items-center gap-3 border-b border-border px-[var(--app-page-padding-x)] py-3 hover:bg-subtle",
               entry.user_id === currentUserId &&
                 "border-l-4 border-l-accent bg-highlight-row",
             )}
@@ -187,11 +194,21 @@ export function LeaderboardTable({
             />
             <div className="flex-1 overflow-hidden">
               <div className="flex items-center gap-2">
-                <p className="truncate font-medium">{entry.username}</p>
+                {/* Stretched link: ::before covers the whole row so the row
+                    stays clickable, while TeamBadge below uses position:
+                    relative to remain an independent click target without
+                    nesting <a> inside <a>. */}
+                <Link
+                  href={`/u/${entry.username}`}
+                  className="truncate font-medium before:absolute before:inset-0 before:content-['']"
+                >
+                  {entry.username}
+                </Link>
                 <TeamBadge
                   url={entry.team_url}
                   faviconUrl={entry.team_favicon_url}
                   size="sm"
+                  className="relative"
                 />
                 {entry.level ? (
                   <Badge
@@ -215,7 +232,7 @@ export function LeaderboardTable({
                 {formatTokens(entry.total_output_tokens)}
               </p>
             </div>
-          </Link>
+          </div>
         ))}
         {entries.length === 0 && (
           <p className="px-[var(--app-page-padding-x)] py-12 text-center text-muted">No entries yet.</p>
