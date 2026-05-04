@@ -1,5 +1,64 @@
 # Architecture & Design Decisions
 
+## CLI auto-installs `ccusage` on first interactive run (2026-05-04)
+
+**Decision:** When `straude push` runs and `ccusage` is not on PATH, prompt the user (TTY only) and run `bun add -g ccusage` (or `npm install -g ccusage`) on consent. Non-TTY contexts continue to throw with the explicit install command.
+
+**Why:** PostHog showed the "ccusage is not installed or not on PATH" error fired 1,627 times across 14 users in the 7 days preceding the change — 14 of the 103 total CLI users (13.6%) hit this error and many never recovered. The previous comment in `packages/cli/src/lib/ccusage.ts` explicitly said the CLI "do[es] not auto-install/execute package-runner fallbacks" "for security reasons." That stance was the right starting position but cost too much in activation: a user who runs `npx straude` and gets a hard error has no easy recovery path.
+
+**Alternatives considered:**
+
+1. **Bundle ccusage as a hard `dependencies` entry in `packages/cli/package.json`.** Tightest UX but inherits ccusage's release cadence and license posture. A breaking change in ccusage would force a Straude release. Rejected.
+2. **Inline a usage parser so ccusage isn't needed at all.** ~500–1000 lines of new code maintaining session-format compatibility with Claude Code's evolving on-disk layout. The Codex collector (`codex-native.ts`) is already inline and is non-trivial to keep current; doubling that surface to remove a single dependency was a bad trade. Rejected.
+3. **Detect and prompt with copy-pasteable instructions, but never run install ourselves.** What we had before, just with better wording. Doesn't fix the underlying activation drop — users still face a hard stop. Rejected.
+
+**Why this is safe enough:**
+
+- Consent is required: the prompt defaults to Yes but the user has to press Enter or `y`. Declining produces a clean error with the same install command.
+- Non-TTY contexts (auto-push via launchd/cron, Claude Code hooks, CI) preserve the original throw, so non-interactive systems can never spawn an unattended `npm install -g`.
+- The package name is hardcoded (`ccusage`) — there's no string interpolation that could be hijacked.
+- We prefer `bun add -g` only when `bun` is already on PATH (Straude is bun-first). Users on a stock npm setup get `npm install -g`.
+- Telemetry events (`ccusage_install_attempted`, `_succeeded`, `_failed`, `_declined`) make adoption and failure rates measurable, so we can roll back the trade-off if it turns out to surprise users.
+
+## CLI session credentials use a sliding 7-day refresh, not a refresh-token endpoint (2026-05-04)
+
+**Decision:** When the CLI sends a JWT older than 7 days (`TOKEN_REFRESH_AFTER_DAYS` in `apps/web/lib/api/cli-auth.ts`) to a CLI-authenticated endpoint, the server mints a fresh 30-day JWT via `createCliToken` and returns it in the `X-Straude-Refreshed-Token` response header. The CLI persists the new token (`saveConfig`) and uses it for the next request. On 401 — the rare case where rotation can't recover (token deleted, secret rotated, JWT expired before any request) — `apiRequest` runs a registered `AuthRefreshStrategy` that calls `loginCommand`, then retries the original request once. Auto-relogin is gated on `isInteractive()`, so auto-push and CI runs still surface the original "Session expired" message.
+
+**Why:** "Session expired or invalid" fired 33 times across 9 users in the 7 days preceding the change. Tokens have a 30-day TTL — none of the 9 users hit organic expiry that fast. The errors were a mix of secret rotation in deploys, users with stored configs from a different `--api-url` environment, and edge cases. Either way, the right experience is "the session refreshes itself when you keep using the tool, and re-runs login transparently when refresh isn't possible."
+
+**Alternatives considered:**
+
+1. **Add a dedicated `/api/auth/cli/refresh` endpoint and have the CLI call it proactively.** More standard OAuth shape, but every CLI invocation would need an extra round-trip just to check freshness, and the implementation would need both client and server changes for the same outcome we get from a header. Rejected.
+2. **Issue refresh tokens alongside access tokens.** Would let us shorten the access-token TTL, but the JWTs aren't an attack surface that benefits much from short TTLs in the CLI context (token theft requires read access to a 0o600 file in the user's home), and we'd be carrying two tokens through `~/.straude/config.json` for marginal value. Rejected.
+3. **Lengthen the JWT TTL to 90+ days.** Pushes the cliff out but doesn't remove it; secret rotation and user-environment edge cases still hit. Rejected.
+
+**Why header-based rotation is safe:**
+
+- Purely additive: older CLI versions ignore unknown response headers, so the new server keeps working with `straude` 0.1.23 and earlier.
+- The token is rotated only on a verified, non-expired JWT — same auth check the request already passes.
+- The CLI saves over the old token at the same path with the same `0o600` mode (`saveConfig`).
+- No third party sees the header — the server returns it on first-party endpoints that the CLI already calls.
+
+**Why auto-relogin is opt-in to interactivity:** an unattended `straude push` (auto-push, CI, hook) running in 30 days should fail loudly so the user notices and runs login manually, not silently spawn a browser at 9pm. The `isInteractive()` gate matches the same TTY-detection used for the ccusage install prompt above.
+
+## Activation tracking via `cli_first_run` marker file (2026-05-04)
+
+**Decision:** Detect first-ever CLI invocation per machine by writing `~/.straude/.first-run` (`0o600`) on the first run and capturing a `cli_first_run` PostHog event then. The event fires before the help/version short-circuits so even `npx straude --help` counts as "user installed and tried Straude" — the canonical activation signal.
+
+**Why a separate marker rather than piggybacking on `~/.straude/machine_id` or the config file:**
+
+- `machine_id` is created lazily by `getMachineId()` the first time any code asks for a distinct ID. Tying first-run detection to its absence would couple two concerns, and a future refactor (e.g. eager-creating `machine_id` at install time) would silently break the funnel.
+- The config file (`~/.straude/config.json`) only exists after a successful login, but most "users who never push" never even get to login — they hit the ccusage error first. We need a marker that exists from the very first invocation, before any auth.
+- A dedicated `.first-run` marker is explicit, cheap, and unambiguous to read.
+
+**On the `cli_authenticated` event:** fires on every invocation that loads a stored config for a real command (not `--help`/`--version`). Together with `cli_first_run` and the existing `usage_pushed` it gives a clean three-step funnel: install → has-stored-creds → pushed. Useful for diagnosing whether activation drops happen between install and login (ccusage / EPIPE / declined-prompt) vs. between login and push (auth / network / bug).
+
+## CLI activation check-in is a saved insight + manual reminder, not a PostHog Subscription (2026-05-04)
+
+**Decision:** Track the activation funnel via saved insight [`DV22QC1d`](https://us.posthog.com/project/374497/insights/DV22QC1d) and a companion notebook ([`QQ7eCe7G`](https://us.posthog.com/project/374497/notebooks/QQ7eCe7G)). For now, check it manually on Mondays.
+
+**Why not Subscriptions:** PostHog Subscriptions (scheduled email/Slack delivery of insights) are a paid-tier feature. The Side Projects org is on the free tier, so `subscriptions-create` returns 402 Payment Required. The closest no-cost equivalents are (a) bookmarking the insight URL and checking it manually, or (b) running the query weekly via the PostHog MCP from a Claude scheduled agent. We picked (a) for now because it requires no additional moving parts; if the manual check ever slips, we can either upgrade the tier (sustainable long-term) or stand up a `/schedule`-based remote agent that runs `mcp__posthog__insight-query` on a cron.
+
 ## `calculate_user_streak` runs as SECURITY DEFINER (2026-04-30)
 
 **Decision:** Promote `public.calculate_user_streak(uuid, integer)` to `SECURITY DEFINER` with a fixed `search_path = public` and grant `EXECUTE` to both `authenticated` and `anon`.
