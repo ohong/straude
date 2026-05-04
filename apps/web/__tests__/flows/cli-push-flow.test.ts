@@ -15,6 +15,7 @@ vi.mock("@/lib/supabase/server", () => ({
 vi.mock("@/lib/api/cli-auth", () => ({
   createCliToken: vi.fn(() => "mock-cli-jwt-token"),
   verifyCliToken: vi.fn(),
+  verifyCliTokenWithRefresh: vi.fn(),
 }));
 
 const mockServiceClient = {
@@ -26,7 +27,21 @@ vi.mock("@/lib/supabase/service", () => ({
   getServiceClient: vi.fn(() => mockServiceClient),
 }));
 
-import { verifyCliToken } from "@/lib/api/cli-auth";
+import { verifyCliToken, verifyCliTokenWithRefresh } from "@/lib/api/cli-auth";
+
+/**
+ * Auto-derive verifyCliTokenWithRefresh from verifyCliToken so existing
+ * tests that set verifyCliToken's return value continue to work. Must be
+ * called after vi.clearAllMocks() in each beforeEach.
+ */
+function autoDeriveCliAuthMocks() {
+  (verifyCliTokenWithRefresh as ReturnType<typeof vi.fn>).mockImplementation(
+    (header: string | null) => {
+      const userId = (verifyCliToken as ReturnType<typeof vi.fn>)(header);
+      return userId ? { userId, username: null, refreshedToken: null } : null;
+    },
+  );
+}
 
 // ---------------------------------------------------------------------------
 // Helpers
@@ -65,6 +80,7 @@ describe("Flow: CLI Push", () => {
   beforeEach(() => {
     vi.useFakeTimers({ now: new Date('2026-03-13T12:00:00Z'), toFake: ['Date'] });
     vi.clearAllMocks();
+    autoDeriveCliAuthMocks();
     mockServiceClient.rpc.mockResolvedValue({ data: null, error: null });
     vi.stubEnv("NEXT_PUBLIC_APP_URL", "https://straude.com");
     vi.stubEnv("NEXT_PUBLIC_SUPABASE_URL", "https://test.supabase.co");

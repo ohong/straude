@@ -5,6 +5,7 @@ import { pushCommand } from "./commands/push.js";
 import { statusCommand } from "./commands/status.js";
 import { autoCommand, enableAutoPush, disableAutoPush } from "./commands/auto.js";
 import { loadConfig } from "./lib/auth.js";
+import { setAuthRefreshStrategy } from "./lib/api.js";
 import { CLI_VERSION } from "./config.js";
 import { posthog } from "./lib/posthog.js";
 import { setDebug } from "./lib/debug.js";
@@ -16,6 +17,14 @@ import {
   reportCliException,
   reportUsagePushFailed,
 } from "./lib/telemetry.js";
+
+// On 401, transparently re-run the browser login flow and let api.ts retry
+// the failed request. apiRequest gates this on isInteractive() so auto-push
+// and CI runs still surface the original error.
+setAuthRefreshStrategy(async (apiUrl) => {
+  await loginCommand(apiUrl);
+  return loadConfig();
+});
 
 // Exit cleanly when stdout/stderr is piped to a process that closes early
 // (e.g., `straude --help | head`). Without this, every active user hits a
