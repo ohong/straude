@@ -105,6 +105,69 @@ export function isWithinBackfillWindow(dateStr: string): boolean {
   return diffDays >= -1 && diffDays <= MAX_BACKFILL_DAYS;
 }
 
+export type DateRangeResolution =
+  | { ok: true; since: Date; until: Date }
+  | { ok: false; error: string };
+
+/**
+ * Pure resolver for the date range a push should cover. Extracted from
+ * `pushCommand` so each branch (explicit --date, codex repair, --days,
+ * smart-sync from last_push_date, fresh install) can be unit-tested without
+ * mocking ccusage / the API / the filesystem.
+ */
+export function resolvePushDateRange(args: {
+  today: Date;
+  options: { date?: string; days?: number };
+  lastPushDate?: string;
+  shouldRunCodexRepair: boolean;
+}): DateRangeResolution {
+  const { today, options, lastPushDate, shouldRunCodexRepair } = args;
+  const todayStr = formatDate(today);
+
+  if (options.date) {
+    const target = parseDate(options.date);
+    if (daysBetween(today, target) > MAX_BACKFILL_DAYS) {
+      return { ok: false, error: `Date must be within the last ${MAX_BACKFILL_DAYS} days.` };
+    }
+    if (target > today) {
+      return { ok: false, error: "Cannot push usage for a future date." };
+    }
+    return { ok: true, since: target, until: target };
+  }
+
+  if (shouldRunCodexRepair) {
+    const since = new Date(today);
+    since.setDate(since.getDate() - MAX_BACKFILL_DAYS + 1);
+    return { ok: true, since, until: today };
+  }
+
+  if (options.days) {
+    const days = Math.min(options.days, MAX_BACKFILL_DAYS);
+    const since = new Date(today);
+    since.setDate(since.getDate() - days + 1);
+    return { ok: true, since, until: today };
+  }
+
+  if (lastPushDate) {
+    if (lastPushDate >= todayStr) {
+      return { ok: true, since: new Date(today), until: new Date(today) };
+    }
+    const gap = daysBetweenStrings(lastPushDate, todayStr);
+    if (gap > DEFAULT_SYNC_DAYS) {
+      const since = new Date(today);
+      since.setDate(since.getDate() - DEFAULT_SYNC_DAYS + 1);
+      return { ok: true, since, until: today };
+    }
+    return { ok: true, since: parseDate(lastPushDate), until: today };
+  }
+
+  // Never pushed before — backfill last 3 days by default
+  const FIRST_RUN_BACKFILL_DAYS = 3;
+  const since = new Date(today);
+  since.setDate(since.getDate() - FIRST_RUN_BACKFILL_DAYS + 1);
+  return { ok: true, since, until: today };
+}
+
 function formatTokens(n: number): string {
   if (n >= 1_000_000) return `${(n / 1_000_000).toFixed(1)}M`;
   if (n >= 1_000) return `${Math.round(n / 1_000)}k`;
@@ -198,61 +261,22 @@ export async function pushCommand(options: PushOptions, apiUrlOverride?: string)
   }
 
   const today = new Date();
-  const todayStr = formatDate(today);
   const shouldRunCodexRepair = !options.date
     && !config.codex_native_repair_completed_at
     && await containsSessionFile();
 
-  let sinceDate: Date;
-  let untilDate: Date;
-
-  if (options.date) {
-    const target = parseDate(options.date);
-    if (daysBetween(today, target) > MAX_BACKFILL_DAYS) {
-      console.error(`Date must be within the last ${MAX_BACKFILL_DAYS} days.`);
-      process.exit(1);
-    }
-    if (target > today) {
-      console.error("Cannot push usage for a future date.");
-      process.exit(1);
-    }
-    sinceDate = target;
-    untilDate = target;
-  } else if (shouldRunCodexRepair) {
-    sinceDate = new Date(today);
-    sinceDate.setDate(sinceDate.getDate() - MAX_BACKFILL_DAYS + 1);
-    untilDate = today;
-  } else if (options.days) {
-    const days = Math.min(options.days, MAX_BACKFILL_DAYS);
-    sinceDate = new Date(today);
-    sinceDate.setDate(sinceDate.getDate() - days + 1);
-    untilDate = today;
-  } else if (config.last_push_date) {
-    // Smart sync: calculate days since last push
-    if (config.last_push_date >= todayStr) {
-      // Already pushed today — re-sync with days=1
-      sinceDate = today;
-      untilDate = today;
-    } else {
-      const gap = daysBetweenStrings(config.last_push_date, todayStr);
-      if (gap > DEFAULT_SYNC_DAYS) {
-        // Can't include last pushed date, too far back — cap at default window
-        const days = DEFAULT_SYNC_DAYS;
-        sinceDate = new Date(today);
-        sinceDate.setDate(sinceDate.getDate() - days + 1);
-      } else {
-        // Include last pushed date to catch any updates from that day
-        sinceDate = parseDate(config.last_push_date);
-      }
-      untilDate = today;
-    }
-  } else {
-    // Never pushed before — backfill last 3 days by default
-    const FIRST_RUN_BACKFILL_DAYS = 3;
-    sinceDate = new Date(today);
-    sinceDate.setDate(sinceDate.getDate() - FIRST_RUN_BACKFILL_DAYS + 1);
-    untilDate = today;
+  const resolution = resolvePushDateRange({
+    today,
+    options: { date: options.date, days: options.days },
+    lastPushDate: config.last_push_date,
+    shouldRunCodexRepair,
+  });
+  if (!resolution.ok) {
+    console.error(resolution.error);
+    process.exit(1);
   }
+  const sinceDate = resolution.since;
+  const untilDate = resolution.until;
 
   const sinceStr = formatDateCompact(sinceDate);
   const untilStr = formatDateCompact(untilDate);

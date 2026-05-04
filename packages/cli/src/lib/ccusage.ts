@@ -66,14 +66,24 @@ export function isCcusageInstalled(): boolean {
 }
 
 /**
+ * Pick the right global-install command for ccusage. Pure: takes a snapshot of
+ * environment state and returns the command/args to run. Extracted so the
+ * decision logic is unit-testable without spawning processes or mocking PATH.
+ */
+export function pickInstallCommand(env: { hasBun: boolean }): { cmd: string; args: string[]; manager: "bun" | "npm" } {
+  if (env.hasBun) {
+    return { cmd: "bun", args: ["add", "-g", "ccusage"], manager: "bun" };
+  }
+  return { cmd: "npm", args: ["install", "-g", "ccusage"], manager: "npm" };
+}
+
+/**
  * Best-effort install of ccusage globally. Prefers `bun add -g` when bun is
  * present (faster, and Straude is bun-first), falls back to `npm install -g`.
  * stdio is inherited so the user sees install progress.
  */
 function installCcusage(): void {
-  const useBun = isOnPath("bun");
-  const cmd = useBun ? "bun" : "npm";
-  const args = useBun ? ["add", "-g", "ccusage"] : ["install", "-g", "ccusage"];
+  const { cmd, args } = pickInstallCommand({ hasBun: isOnPath("bun") });
   execFileSync(cmd, args, {
     stdio: "inherit",
     timeout: 5 * 60 * 1000,
@@ -125,7 +135,7 @@ export async function ensureCcusageInstalled(
   posthog.capture({
     distinctId,
     event: "ccusage_install_attempted",
-    properties: { manager: isOnPath("bun") ? "bun" : "npm" },
+    properties: { manager: pickInstallCommand({ hasBun: isOnPath("bun") }).manager },
   });
 
   try {

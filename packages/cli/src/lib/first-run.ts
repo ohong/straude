@@ -2,18 +2,23 @@ import { existsSync, mkdirSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { CONFIG_DIR } from "../config.js";
 
-export const FIRST_RUN_MARKER = join(CONFIG_DIR, ".first-run");
+export const FIRST_RUN_MARKER_FILENAME = ".first-run";
+export const FIRST_RUN_MARKER = join(CONFIG_DIR, FIRST_RUN_MARKER_FILENAME);
 
-export function isFirstRun(): boolean {
-  return !existsSync(FIRST_RUN_MARKER);
+function markerPath(configDir: string): string {
+  return join(configDir, FIRST_RUN_MARKER_FILENAME);
 }
 
-export function markFirstRun(): void {
+export function isFirstRun(configDir: string = CONFIG_DIR): boolean {
+  return !existsSync(markerPath(configDir));
+}
+
+export function markFirstRun(configDir: string = CONFIG_DIR): void {
   try {
-    if (!existsSync(CONFIG_DIR)) {
-      mkdirSync(CONFIG_DIR, { recursive: true, mode: 0o700 });
+    if (!existsSync(configDir)) {
+      mkdirSync(configDir, { recursive: true, mode: 0o700 });
     }
-    writeFileSync(FIRST_RUN_MARKER, new Date().toISOString() + "\n", {
+    writeFileSync(markerPath(configDir), new Date().toISOString() + "\n", {
       encoding: "utf-8",
       mode: 0o600,
     });
