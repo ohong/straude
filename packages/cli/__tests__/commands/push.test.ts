@@ -17,6 +17,7 @@ vi.mock("../../src/lib/api.js", () => ({
 vi.mock("../../src/lib/ccusage.js", () => ({
   runCcusageRawAsync: vi.fn(),
   parseCcusageOutput: vi.fn(),
+  ensureCcusageInstalled: vi.fn(() => Promise.resolve()),
 }));
 
 vi.mock("../../src/lib/codex-native.js", () => ({

@@ -4,7 +4,7 @@ import { loadConfig, updateLastPushDate, saveConfig } from "../lib/auth.js";
 import type { StraudeConfig } from "../lib/auth.js";
 import { loginCommand } from "./login.js";
 import { apiRequest } from "../lib/api.js";
-import { runCcusageRawAsync, parseCcusageOutput } from "../lib/ccusage.js";
+import { runCcusageRawAsync, parseCcusageOutput, ensureCcusageInstalled } from "../lib/ccusage.js";
 import type { CcusageDailyEntry, ModelBreakdownEntry } from "../lib/ccusage.js";
 import {
   CODEX_NATIVE_COLLECTOR,
@@ -249,6 +249,12 @@ export async function pushCommand(options: PushOptions, apiUrlOverride?: string)
       ? `Pushing usage for ${formatDate(sinceDate)}...`
       : `Pushing usage for ${formatDate(sinceDate)} to ${formatDate(untilDate)}...`,
   );
+
+  // Make sure ccusage is installed before we try to spawn it. In a TTY this
+  // prompts the user and runs `bun add -g` / `npm install -g`; otherwise it
+  // throws the same "not on PATH" error as before so auto-push behavior is
+  // unchanged.
+  await ensureCcusageInstalled(config);
 
   // Run ccusage + codex in parallel — the single biggest perf win
   const scanSpinner = new Spinner("scan");
