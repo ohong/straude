@@ -7,6 +7,7 @@ import Link from "next/link";
 import { MapPin, LinkIcon, Github, Flame, Zap, Users, Lock } from "lucide-react";
 import { Avatar } from "@/components/ui/Avatar";
 import { LevelBadge } from "@/components/app/shared/LevelBadge";
+import { TeamBadge } from "@/components/app/shared/TeamBadge";
 import { AchievementBadges } from "@/components/app/profile/AchievementBadges";
 import { ContributionGraph } from "@/components/app/profile/ContributionGraph";
 import { ProfileSharePanel } from "@/components/app/profile/ProfileSharePanel";
@@ -35,6 +36,8 @@ type ProfileRow = {
   region: string | null;
   link: string | null;
   github_username: string | null;
+  team_url: string | null;
+  team_favicon_url: string | null;
   is_public: boolean;
   streak_freezes: number | null;
   referred_by: string | null;
@@ -61,7 +64,7 @@ export default async function ProfilePage({
   const { username } = await params;
   const access = await getProfileAccessContext<ProfileRow>(
     username,
-    "id, username, display_name, avatar_url, bio, country, region, link, github_username, is_public, streak_freezes, referred_by",
+    "id, username, display_name, avatar_url, bio, country, region, link, github_username, team_url, team_favicon_url, is_public, streak_freezes, referred_by",
   );
   if (!access) notFound();
 
@@ -228,6 +231,11 @@ export default async function ProfilePage({
                 <h1 className="text-xl font-medium sm:text-2xl" style={{ letterSpacing: "-0.03em" }}>
                   {profile.display_name ?? profile.username}
                 </h1>
+                <TeamBadge
+                  url={profile.team_url}
+                  faviconUrl={profile.team_favicon_url}
+                  size="md"
+                />
                 {levelRow?.level ? (
                   <LevelBadge level={Number(levelRow.level)} />
                 ) : null}

@@ -4,6 +4,20 @@ Grouped by the pirate metric (AARRR) each feature primarily moves.
 
 ---
 
+## Activation
+
+### Team Affiliation Badge — v2
+
+The v1 ship (2026-05-01) covers the basic "X Premium Organizations"-style affiliation: the user enters an org URL on `/settings`, we cache the favicon to Storage by domain, and a small clickable badge renders next to their @handle on profile / feed / leaderboard / sidebar. No verification, no team name, no multi-team. Follow-ups, ordered roughly by leverage:
+
+- **Direct site scraping for the favicon** instead of always going through Google's `s2/favicons` endpoint. Try `/favicon.ico` first, then parse the HTML `<link rel="icon">` (and `<link rel="apple-touch-icon">`) for the highest-resolution variant. Independent of Google rate-limits / service deprecation, and better-quality logos for sites with proper Open Graph icons. Trade-off rationale captured in `docs/DECISIONS.md`.
+- **Periodic favicon refresh.** v1 caches forever — if a company rebrands, every user's badge is stale until they re-save. A weekly cron that re-fetches favicons for all distinct domains in `users.team_url` would keep the cache fresh without per-user action.
+- **Domain verification / claiming.** No verification today — anyone can claim any URL. A v2 verification flow (DNS TXT record or `/.well-known/straude-team` file) would let a real org claim their domain, with verified badges visually distinguished from unverified ones.
+- **Team profile pages.** `/team/{domain}` showing every user with that team URL, leaderboard scoped to that team, and a team-only feed. Natural B2B wedge — pairs with the **Team / Org Workspaces** Acquisition entry below.
+- **Multiple team affiliations per user.** People work at one place but contribute to N open-source projects. A `users → user_teams (many-to-many)` table replaces the single `team_url` column, with a primary affiliation rendered inline and the rest accessible on hover/click.
+- **Custom team badge upload.** For users whose org has a non-standard logo or whose favicon is low-resolution, accept an uploaded image (size-capped, MIME-validated) that overrides the auto-cached favicon. Stored alongside the auto-cached one in `team-favicons` with a different naming scheme.
+- **Save-flow Playwright e2e.** v1 ships rendering-only e2e on public surfaces (profile + leaderboard) because the repo has no auth fixture for Playwright. A follow-up should add a shared `signInAs(username)` helper (likely via Supabase admin creating a session and dropping the cookie via `page.context().addCookies`) and write the full save-flow spec the original brief asked for: sign in → /settings → enter URL → save → navigate to all four surfaces and assert the badge.
+
 ## Acquisition
 
 ### Stats Card Enhancements

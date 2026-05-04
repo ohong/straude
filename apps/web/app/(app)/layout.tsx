@@ -18,6 +18,8 @@ type ShellProfile = {
   username: string | null;
   avatar_url: string | null;
   display_name: string | null;
+  team_url: string | null;
+  team_favicon_url: string | null;
   onboarding_completed: boolean | null;
   streak_freezes: number | null;
 };
@@ -236,6 +238,8 @@ async function DeferredSidebar({
       username={profile?.username ?? null}
       avatarUrl={profile?.avatar_url ?? null}
       displayName={profile?.display_name ?? null}
+      teamUrl={profile?.team_url ?? null}
+      teamFaviconUrl={profile?.team_favicon_url ?? null}
       followingCount={followingRes.count ?? 0}
       followersCount={followersRes.count ?? 0}
       postsCount={postsRes.count ?? 0}
@@ -324,7 +328,7 @@ export default async function AppLayout({
   const db = getServiceClient();
   const { data: profileData } = await db
     .from("users")
-    .select("username, avatar_url, display_name, onboarding_completed, streak_freezes")
+    .select("username, avatar_url, display_name, team_url, team_favicon_url, onboarding_completed, streak_freezes")
     .eq("id", user.id)
     .single();
 

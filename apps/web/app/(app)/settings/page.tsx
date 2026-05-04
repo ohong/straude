@@ -10,10 +10,11 @@ import { Input } from "@/components/ui/Input";
 import { Textarea } from "@/components/ui/Textarea";
 import { Button } from "@/components/ui/Button";
 import { Avatar } from "@/components/ui/Avatar";
-import { LogOut, Copy, Check, Camera, Loader2 } from "lucide-react";
+import { LogOut, Copy, Check, Camera, Loader2, X as XIcon } from "lucide-react";
 import { usePostHog } from "posthog-js/react";
 import { compressImage } from "@/lib/utils/compress-image";
 import { CountryPicker } from "@/components/ui/CountryPicker";
+import { TeamBadge } from "@/components/app/shared/TeamBadge";
 
 type ProfileUpdatePayloadInput = {
   username: string;
@@ -23,6 +24,7 @@ type ProfileUpdatePayloadInput = {
   link: string;
   country: string;
   githubUsername: string;
+  teamUrl: string;
   isPublic: boolean;
   emailNotifications: boolean;
   emailMentionNotifications: boolean;
@@ -39,6 +41,7 @@ export function buildProfileUpdatePayload(input: ProfileUpdatePayloadInput) {
     link: input.link.trim() || null,
     country: input.country || null,
     github_username: input.githubUsername.trim() || null,
+    team_url: input.teamUrl.trim() || null,
     is_public: input.isPublic,
     email_notifications: input.emailNotifications,
     email_mention_notifications: input.emailMentionNotifications,
@@ -63,6 +66,8 @@ export default function SettingsPage() {
   const [link, setLink] = useState("");
   const [country, setCountry] = useState("");
   const [githubUsername, setGithubUsername] = useState("");
+  const [teamUrl, setTeamUrl] = useState("");
+  const [clearingTeam, setClearingTeam] = useState(false);
   const [isPublic, setIsPublic] = useState(true);
   const [emailNotifications, setEmailNotifications] = useState(true);
   const [emailMentionNotifications, setEmailMentionNotifications] = useState(true);
@@ -96,6 +101,7 @@ export default function SettingsPage() {
         setLink(data.link ?? "");
         setCountry(data.country ?? "");
         setGithubUsername(data.github_username ?? "");
+        setTeamUrl(data.team_url ?? "");
         setIsPublic(data.is_public);
         setEmailNotifications(data.email_notifications ?? true);
         setEmailMentionNotifications(data.email_mention_notifications ?? true);
@@ -169,6 +175,7 @@ export default function SettingsPage() {
         link,
         country,
         githubUsername,
+        teamUrl,
         isPublic,
         emailNotifications,
         emailMentionNotifications,
@@ -181,10 +188,35 @@ export default function SettingsPage() {
       const data = await res.json();
       setError(data.error ?? "Failed to save");
     } else {
+      const data = await res.json();
+      setProfile((prev) => (prev ? { ...prev, ...data } : data));
+      setTeamUrl(data.team_url ?? "");
       setSaved(true);
       posthog.capture("profile_saved", { is_public: isPublic });
     }
     setSaving(false);
+  }
+
+  async function handleClearTeam() {
+    setClearingTeam(true);
+    setError(null);
+    try {
+      const res = await fetch("/api/users/me", {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ team_url: null }),
+      });
+      if (!res.ok) {
+        const data = await res.json().catch(() => ({}));
+        setError(data.error ?? "Failed to clear team");
+        return;
+      }
+      const data = await res.json();
+      setProfile((prev) => (prev ? { ...prev, ...data } : data));
+      setTeamUrl("");
+    } finally {
+      setClearingTeam(false);
+    }
   }
 
   if (loading) {
@@ -345,6 +377,49 @@ export default function SettingsPage() {
               placeholder="https://example.com"
               maxLength={200}
             />
+          </div>
+
+          <div>
+            <label htmlFor="settings-team-url" className="mb-1 block text-xs font-semibold uppercase tracking-widest text-muted">
+              Team
+            </label>
+            <Input
+              id="settings-team-url"
+              name="team_url"
+              type="url"
+              autoComplete="off"
+              value={teamUrl}
+              onChange={(e) => setTeamUrl(e.target.value)}
+              placeholder="https://anthropic.com"
+              maxLength={200}
+              aria-describedby="settings-team-url-hint"
+            />
+            <p id="settings-team-url-hint" className="mt-1 text-xs text-muted">
+              The URL of an organization you&rsquo;re affiliated with. Its logo
+              will appear next to your username across Straude.
+            </p>
+            {profile?.team_url && (
+              <div className="mt-2 flex items-center gap-2 rounded border border-border bg-subtle px-3 py-2">
+                <TeamBadge
+                  url={profile.team_url}
+                  faviconUrl={profile.team_favicon_url}
+                  size="md"
+                />
+                <span className="flex-1 truncate font-[family-name:var(--font-mono)] text-xs text-muted">
+                  {profile.team_url}
+                </span>
+                <button
+                  type="button"
+                  onClick={handleClearTeam}
+                  disabled={clearingTeam}
+                  aria-label="Clear team affiliation"
+                  className="inline-flex items-center gap-1 rounded-sm px-2 py-1 text-xs text-muted hover:text-foreground disabled:opacity-50"
+                >
+                  <XIcon size={12} />
+                  Clear
+                </button>
+              </div>
+            )}
           </div>
 
           <div>

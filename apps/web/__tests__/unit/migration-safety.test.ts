@@ -182,9 +182,12 @@ describe("Migration safety", () => {
   });
 
   it("latest interaction RLS policies inherit parent post visibility", () => {
+    // Match only migrations that actually CREATE POLICY on the interaction
+    // tables — not every migration that happens to reference them in passing
+    // (e.g. a get_feed redefinition with COUNT(*) FROM public.kudos).
     const latest = getLatestMigrationMatching(
       migrations,
-      /public\.(kudos|comments|comment_reactions)/i
+      /CREATE\s+POLICY[^;]*ON\s+public\.(kudos|comments|comment_reactions)/i
     );
 
     expect(latest, "Expected an interaction policy migration").toBeTruthy();

@@ -5,11 +5,14 @@ import { Flame } from "lucide-react";
 import { formatCurrency, formatTokens } from "@/lib/utils/format";
 import { Avatar } from "@/components/ui/Avatar";
 import { InviteButton } from "@/components/app/profile/InviteButton";
+import { TeamBadge } from "@/components/app/shared/TeamBadge";
 
 interface SidebarProps {
   username: string | null;
   avatarUrl: string | null;
   displayName: string | null;
+  teamUrl?: string | null;
+  teamFaviconUrl?: string | null;
   followingCount: number;
   followersCount: number;
   postsCount: number;
@@ -24,6 +27,8 @@ export function Sidebar({
   username,
   avatarUrl,
   displayName,
+  teamUrl,
+  teamFaviconUrl,
   followingCount,
   followersCount,
   postsCount,
@@ -49,10 +54,15 @@ export function Sidebar({
           {displayName && (
             <p className="mt-3 text-base font-semibold">{displayName}</p>
           )}
-          {username && (
-            <p className="text-sm text-muted">@{username}</p>
-          )}
         </Link>
+        {username && (
+          <p className="mt-1 inline-flex items-center gap-1.5 text-sm text-muted">
+            <Link href={profileHref} className="hover:underline">
+              @{username}
+            </Link>
+            <TeamBadge url={teamUrl} faviconUrl={teamFaviconUrl} size="sm" />
+          </p>
+        )}
       </div>
 
       {/* Stats row — stacked for readability */}

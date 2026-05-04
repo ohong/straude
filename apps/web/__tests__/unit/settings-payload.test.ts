@@ -9,6 +9,7 @@ const baseInput = {
   link: "https://example.com",
   country: "US",
   githubUsername: "alicehub",
+  teamUrl: "https://anthropic.com",
   isPublic: true,
   emailNotifications: true,
   emailMentionNotifications: true,
@@ -26,6 +27,7 @@ describe("settings profile update payload", () => {
         link: "",
         country: "",
         githubUsername: "",
+        teamUrl: "",
       })
     ).toMatchObject({
       username: "alice",
@@ -34,6 +36,18 @@ describe("settings profile update payload", () => {
       link: null,
       country: null,
       github_username: null,
+      team_url: null,
+    });
+  });
+
+  it("trims and forwards a non-empty team URL", () => {
+    expect(
+      buildProfileUpdatePayload({
+        ...baseInput,
+        teamUrl: "  https://anthropic.com  ",
+      })
+    ).toMatchObject({
+      team_url: "https://anthropic.com",
     });
   });
 

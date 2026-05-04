@@ -20,6 +20,8 @@ export interface User {
   email_dm_notifications?: boolean;
   streak_freezes: number;
   referred_by?: string | null;
+  team_url: string | null;
+  team_favicon_url: string | null;
   created_at: string;
   updated_at: string;
 }
@@ -112,6 +114,8 @@ export interface LeaderboardEntry {
   avatar_url: string | null;
   country: string | null;
   region: string | null;
+  team_url: string | null;
+  team_favicon_url: string | null;
   total_cost: number;
   total_output_tokens: number;
   streak: number;

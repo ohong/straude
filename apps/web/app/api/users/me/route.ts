@@ -4,6 +4,7 @@ import { getServiceClient } from "@/lib/supabase/service";
 import { COUNTRY_TO_REGION } from "@/lib/constants/regions";
 import { sendWelcomeEmail } from "@/lib/email/send-welcome-email";
 import { attributeReferral } from "@/lib/referral";
+import { resolveTeamFavicon } from "@/lib/team-favicon";
 
 const ALLOWED_FIELDS = [
   "username",
@@ -155,6 +156,31 @@ export async function PATCH(request: NextRequest) {
       return NextResponse.json(
         { error: (error as Error).message },
         { status: 400 }
+      );
+    }
+  }
+
+  // Team affiliation: validate URL and derive cached favicon URL via the
+  // resolver. team_favicon_url is server-derived only — never accepted from
+  // the client body.
+  if (body.team_url !== undefined) {
+    if (body.team_url === null || body.team_url === "") {
+      updates.team_url = null;
+      updates.team_favicon_url = null;
+    } else if (typeof body.team_url === "string") {
+      const result = await resolveTeamFavicon(body.team_url);
+      if (!result.ok) {
+        return NextResponse.json(
+          { error: "Team URL must be a valid http(s) URL" },
+          { status: 400 },
+        );
+      }
+      updates.team_url = result.teamUrl;
+      updates.team_favicon_url = result.teamFaviconUrl;
+    } else {
+      return NextResponse.json(
+        { error: "Team URL must be a string or null" },
+        { status: 400 },
       );
     }
   }
