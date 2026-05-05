@@ -12,6 +12,7 @@
     "generate:og:athletic": "bun run ./scripts/generate-og-athletic-surge.ts",
     "typecheck": "tsc --noEmit -p tsconfig.check.json",
     "test": "vitest run",
+    "test:integration": "vitest run -c vitest.integration.config.ts",
     "test:e2e": "playwright test"
   },
   "dependencies": {
@@ -49,12 +50,14 @@
     "@testing-library/react": "^16.3.2",
     "@types/heic-convert": "^2.1.0",
     "@types/node": "^20",
+    "@types/pg": "^8.20.0",
     "@types/react": "^19",
     "@types/react-dom": "^19",
     "@vitejs/plugin-react": "^5.1.4",
     "eslint": "^9",
     "eslint-config-next": "16.1.6",
     "jsdom": "^28.1.0",
+    "pg": "^8.20.0",
     "tailwindcss": "^4",
     "typescript": "5.9.3",
     "vitest": "^4.0.18"

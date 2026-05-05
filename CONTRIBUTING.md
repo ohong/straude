@@ -97,10 +97,13 @@ The bar is "would this have caught the bug if it had existed before?" — not 10
 Run tests:
 
 ```bash
-bun --cwd apps/web test          # unit (vitest + jsdom)
-bun --cwd apps/web test:e2e      # e2e (playwright, chromium)
-bun --cwd packages/cli test      # CLI unit (vitest)
+bun --cwd apps/web test                  # unit (vitest + jsdom, mock-based)
+bun --cwd apps/web test:integration      # integration (vitest + real Supabase)
+bun --cwd apps/web test:e2e              # e2e (playwright, chromium)
+bun --cwd packages/cli test              # CLI unit (vitest)
 ```
+
+Integration tests in `apps/web/__tests__/integration/` exercise the real route handlers against a real local Supabase stack — full migration history, real Postgres, real PostgREST, real CLI JWT signing. Avoid `vi.mock` in this directory; that's the whole point. Start the stack with `bun run local:up` (or `bunx supabase start`) before running them. CI starts it automatically. See `apps/web/__tests__/integration/usage-submit.test.ts` for the pattern.
 
 ## Code Style
 
