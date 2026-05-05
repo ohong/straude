@@ -4,7 +4,7 @@ import { loadConfig, updateLastPushDate, saveConfig } from "../lib/auth.js";
 import type { StraudeConfig } from "../lib/auth.js";
 import { loginCommand } from "./login.js";
 import { apiRequest } from "../lib/api.js";
-import { runCcusageRawAsync, parseCcusageOutput } from "../lib/ccusage.js";
+import { runCcusageRawAsync, parseCcusageOutput, ensureCcusageInstalled } from "../lib/ccusage.js";
 import type { CcusageDailyEntry, ModelBreakdownEntry } from "../lib/ccusage.js";
 import {
   CODEX_NATIVE_COLLECTOR,
@@ -59,6 +59,10 @@ function isMissingClaudeDataError(error: Error): boolean {
   return error.message.includes("No valid Claude data directories found");
 }
 
+function isCcusageNotInstalledError(error: Error): boolean {
+  return error.message.includes("ccusage is not installed or not on PATH");
+}
+
 function formatDate(d: Date): string {
   const y = d.getFullYear();
   const m = String(d.getMonth() + 1).padStart(2, "0");
@@ -90,6 +94,82 @@ function daysBetweenStrings(dateStrA: string, dateStrB: string): number {
   const b = new Date(by!, bm! - 1, bd!);
   const msPerDay = 86_400_000;
   return Math.round((b.getTime() - a.getTime()) / msPerDay);
+}
+
+/**
+ * Mirrors the server's backfill-window check (apps/web/app/api/usage/submit/
+ * route.ts). Pre-filtering on the client keeps a single edge-case row from
+ * failing the whole submit with HTTP 400.
+ */
+export function isWithinBackfillWindow(dateStr: string): boolean {
+  const now = Date.now();
+  const target = new Date(dateStr).getTime();
+  if (Number.isNaN(target)) return false;
+  const diffDays = (now - target) / 86_400_000;
+  return diffDays >= -1 && diffDays <= MAX_BACKFILL_DAYS;
+}
+
+export type DateRangeResolution =
+  | { ok: true; since: Date; until: Date }
+  | { ok: false; error: string };
+
+/**
+ * Pure resolver for the date range a push should cover. Extracted from
+ * `pushCommand` so each branch (explicit --date, codex repair, --days,
+ * smart-sync from last_push_date, fresh install) can be unit-tested without
+ * mocking ccusage / the API / the filesystem.
+ */
+export function resolvePushDateRange(args: {
+  today: Date;
+  options: { date?: string; days?: number };
+  lastPushDate?: string;
+  shouldRunCodexRepair: boolean;
+}): DateRangeResolution {
+  const { today, options, lastPushDate, shouldRunCodexRepair } = args;
+  const todayStr = formatDate(today);
+
+  if (options.date) {
+    const target = parseDate(options.date);
+    if (daysBetween(today, target) > MAX_BACKFILL_DAYS) {
+      return { ok: false, error: `Date must be within the last ${MAX_BACKFILL_DAYS} days.` };
+    }
+    if (target > today) {
+      return { ok: false, error: "Cannot push usage for a future date." };
+    }
+    return { ok: true, since: target, until: target };
+  }
+
+  if (shouldRunCodexRepair) {
+    const since = new Date(today);
+    since.setDate(since.getDate() - MAX_BACKFILL_DAYS + 1);
+    return { ok: true, since, until: today };
+  }
+
+  if (options.days) {
+    const days = Math.min(options.days, MAX_BACKFILL_DAYS);
+    const since = new Date(today);
+    since.setDate(since.getDate() - days + 1);
+    return { ok: true, since, until: today };
+  }
+
+  if (lastPushDate) {
+    if (lastPushDate >= todayStr) {
+      return { ok: true, since: new Date(today), until: new Date(today) };
+    }
+    const gap = daysBetweenStrings(lastPushDate, todayStr);
+    if (gap > DEFAULT_SYNC_DAYS) {
+      const since = new Date(today);
+      since.setDate(since.getDate() - DEFAULT_SYNC_DAYS + 1);
+      return { ok: true, since, until: today };
+    }
+    return { ok: true, since: parseDate(lastPushDate), until: today };
+  }
+
+  // Never pushed before — backfill last 3 days by default
+  const FIRST_RUN_BACKFILL_DAYS = 3;
+  const since = new Date(today);
+  since.setDate(since.getDate() - FIRST_RUN_BACKFILL_DAYS + 1);
+  return { ok: true, since, until: today };
 }
 
 function formatTokens(n: number): string {
@@ -185,61 +265,22 @@ export async function pushCommand(options: PushOptions, apiUrlOverride?: string)
   }
 
   const today = new Date();
-  const todayStr = formatDate(today);
   const shouldRunCodexRepair = !options.date
     && !config.codex_native_repair_completed_at
     && await containsSessionFile();
 
-  let sinceDate: Date;
-  let untilDate: Date;
-
-  if (options.date) {
-    const target = parseDate(options.date);
-    if (daysBetween(today, target) > MAX_BACKFILL_DAYS) {
-      console.error(`Date must be within the last ${MAX_BACKFILL_DAYS} days.`);
-      process.exit(1);
-    }
-    if (target > today) {
-      console.error("Cannot push usage for a future date.");
-      process.exit(1);
-    }
-    sinceDate = target;
-    untilDate = target;
-  } else if (shouldRunCodexRepair) {
-    sinceDate = new Date(today);
-    sinceDate.setDate(sinceDate.getDate() - MAX_BACKFILL_DAYS + 1);
-    untilDate = today;
-  } else if (options.days) {
-    const days = Math.min(options.days, MAX_BACKFILL_DAYS);
-    sinceDate = new Date(today);
-    sinceDate.setDate(sinceDate.getDate() - days + 1);
-    untilDate = today;
-  } else if (config.last_push_date) {
-    // Smart sync: calculate days since last push
-    if (config.last_push_date >= todayStr) {
-      // Already pushed today — re-sync with days=1
-      sinceDate = today;
-      untilDate = today;
-    } else {
-      const gap = daysBetweenStrings(config.last_push_date, todayStr);
-      if (gap > DEFAULT_SYNC_DAYS) {
-        // Can't include last pushed date, too far back — cap at default window
-        const days = DEFAULT_SYNC_DAYS;
-        sinceDate = new Date(today);
-        sinceDate.setDate(sinceDate.getDate() - days + 1);
-      } else {
-        // Include last pushed date to catch any updates from that day
-        sinceDate = parseDate(config.last_push_date);
-      }
-      untilDate = today;
-    }
-  } else {
-    // Never pushed before — backfill last 3 days by default
-    const FIRST_RUN_BACKFILL_DAYS = 3;
-    sinceDate = new Date(today);
-    sinceDate.setDate(sinceDate.getDate() - FIRST_RUN_BACKFILL_DAYS + 1);
-    untilDate = today;
+  const resolution = resolvePushDateRange({
+    today,
+    options: { date: options.date, days: options.days },
+    lastPushDate: config.last_push_date,
+    shouldRunCodexRepair,
+  });
+  if (!resolution.ok) {
+    console.error(resolution.error);
+    process.exit(1);
   }
+  const sinceDate = resolution.since;
+  const untilDate = resolution.until;
 
   const sinceStr = formatDateCompact(sinceDate);
   const untilStr = formatDateCompact(untilDate);
@@ -250,12 +291,29 @@ export async function pushCommand(options: PushOptions, apiUrlOverride?: string)
       : `Pushing usage for ${formatDate(sinceDate)} to ${formatDate(untilDate)}...`,
   );
 
+  // Try to ensure ccusage is installed. In a TTY this prompts the user and
+  // runs `bun add -g` / `npm install -g`. We catch the throw rather than
+  // propagating it: Codex-only users (no Claude data) shouldn't be blocked by
+  // a missing ccusage. If ccusage is genuinely required, the runCcusage call
+  // below will surface the "not installed" error and we treat it the same as
+  // missing Claude data.
+  let ccusageReady = true;
+  try {
+    await ensureCcusageInstalled(config);
+  } catch {
+    ccusageReady = false;
+  }
+
   // Run ccusage + codex in parallel — the single biggest perf win
   const scanSpinner = new Spinner("scan");
   scanSpinner.start();
   let codexCollectFailed = false;
   const [claudeResult, codexParsed] = await Promise.all([
-    runCcusageRawAsync(sinceStr, untilStr, options.timeoutMs).catch((err: Error) => err),
+    ccusageReady
+      ? runCcusageRawAsync(sinceStr, untilStr, options.timeoutMs).catch((err: Error) => err)
+      : Promise.resolve(
+          new Error("ccusage is not installed or not on PATH"),
+        ),
     collectCodexUsageAsync(sinceStr, untilStr).catch(() => {
       codexCollectFailed = true;
       return {
@@ -276,7 +334,10 @@ export async function pushCommand(options: PushOptions, apiUrlOverride?: string)
 
   if (claudeResult instanceof Error) {
     // Codex-only users do not have local Claude data; keep other Claude failures fatal.
-    if (isMissingClaudeDataError(claudeResult)) {
+    if (
+      isMissingClaudeDataError(claudeResult) ||
+      isCcusageNotInstalledError(claudeResult)
+    ) {
       console.log("No Claude Code data found locally; syncing Codex usage only.");
     } else {
       console.error(claudeResult.message);
@@ -339,7 +400,21 @@ export async function pushCommand(options: PushOptions, apiUrlOverride?: string)
   const codexEntries = codexParsed.data.filter((entry) => !blockedDates.has(entry.date));
 
   // Merge Claude + Codex entries by date
-  const entries = mergeEntries(claudeEntries, codexEntries);
+  const merged = mergeEntries(claudeEntries, codexEntries);
+
+  // Drop entries the server would reject as out-of-window. Pre-filtering keeps
+  // a single edge-case row from failing the whole batch with HTTP 400.
+  const droppedDates: string[] = [];
+  const entries = merged.filter((entry) => {
+    if (isWithinBackfillWindow(entry.date)) return true;
+    droppedDates.push(entry.date);
+    return false;
+  });
+  if (droppedDates.length > 0) {
+    console.log(
+      `Note: skipping ${droppedDates.length} date(s) outside the ${MAX_BACKFILL_DAYS}-day backfill window: ${droppedDates.join(", ")}`,
+    );
+  }
 
   if (entries.length === 0) {
     console.log("No usage data found for the specified period.");

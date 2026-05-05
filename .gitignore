@@ -55,6 +55,7 @@ next-env.d.ts
 .claude/settings.local.json
 .claude/worktrees/
 .claude/review-loop.log
+.claude/scheduled_tasks.lock
 
 # supabase cli runtime cache (machine-local)
 supabase/.temp/

@@ -1,14 +1,15 @@
 import { NextResponse } from "next/server";
-import { verifyCliToken } from "@/lib/api/cli-auth";
+import { verifyCliTokenWithRefresh } from "@/lib/api/cli-auth";
 import { getServiceClient } from "@/lib/supabase/service";
 
 export async function GET(request: Request) {
   // Auth: verify CLI JWT from Authorization header
   const authHeader = request.headers.get("authorization");
-  const userId = verifyCliToken(authHeader);
-  if (!userId) {
+  const auth = verifyCliTokenWithRefresh(authHeader);
+  if (!auth) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
+  const userId = auth.userId;
 
   const db = getServiceClient();
 
@@ -179,15 +180,23 @@ export async function GET(request: Request) {
     leaderboard = { rank, total_users: totalUsers, above, below };
   }
 
-  return NextResponse.json({
-    username: profile.username,
-    level: levelRow ? Number(levelRow.level) : null,
-    streak,
-    daily,
-    week_cost,
-    prev_week_cost,
-    leaderboard,
-    model_breakdown,
-    total_output_tokens,
-  });
+  const headers: Record<string, string> = {};
+  if (auth.refreshedToken) {
+    headers["X-Straude-Refreshed-Token"] = auth.refreshedToken;
+  }
+
+  return NextResponse.json(
+    {
+      username: profile.username,
+      level: levelRow ? Number(levelRow.level) : null,
+      streak,
+      daily,
+      week_cost,
+      prev_week_cost,
+      leaderboard,
+      model_breakdown,
+      total_output_tokens,
+    },
+    { headers },
+  );
 }
