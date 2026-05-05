@@ -81,12 +81,13 @@ export async function insertUser(
   );
 
   await client.query(
-    `INSERT INTO public.users (id, username, is_public, onboarding_completed)
-     VALUES ($1, $2, $3, $4)
+    `INSERT INTO public.users (id, username, is_public, onboarding_completed, timezone)
+     VALUES ($1, $2, $3, $4, 'UTC')
      ON CONFLICT (id) DO UPDATE
        SET username = EXCLUDED.username,
            is_public = EXCLUDED.is_public,
-           onboarding_completed = EXCLUDED.onboarding_completed`,
+           onboarding_completed = EXCLUDED.onboarding_completed,
+           timezone = EXCLUDED.timezone`,
     [id, username, overrides.is_public ?? true, overrides.onboarding_completed ?? true],
   );
   return id;
