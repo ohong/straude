@@ -1,5 +1,10 @@
 import { describe, it, expect, beforeEach, afterEach, vi } from "vitest";
-import { createCliToken, verifyCliToken } from "@/lib/api/cli-auth";
+import {
+  createCliToken,
+  verifyCliToken,
+  verifyCliTokenWithRefresh,
+  TOKEN_REFRESH_AFTER_DAYS,
+} from "@/lib/api/cli-auth";
 
 const TEST_SECRET = "test-secret-key-for-jwt";
 
@@ -138,6 +143,44 @@ describe("cli-auth", () => {
       const token = createCliToken("user-123", "test");
       vi.stubEnv("CLI_JWT_SECRET", "");
       expect(verifyCliToken(`Bearer ${token}`)).toBeNull();
+    });
+  });
+
+  describe("verifyCliTokenWithRefresh", () => {
+    it("returns userId, username, and no refresh on a fresh token", () => {
+      const token = createCliToken("user-1", "alice");
+      const result = verifyCliTokenWithRefresh(`Bearer ${token}`);
+      expect(result).not.toBeNull();
+      expect(result!.userId).toBe("user-1");
+      expect(result!.username).toBe("alice");
+      expect(result!.refreshedToken).toBeNull();
+    });
+
+    it("emits a refreshed token once iat is older than the threshold", () => {
+      // Mint a token "now" then jump the clock past the refresh threshold.
+      const token = createCliToken("user-1", "alice");
+      vi.setSystemTime(
+        new Date(Date.now() + (TOKEN_REFRESH_AFTER_DAYS + 1) * 24 * 60 * 60 * 1000),
+      );
+      const result = verifyCliTokenWithRefresh(`Bearer ${token}`);
+      expect(result).not.toBeNull();
+      expect(result!.refreshedToken).toBeTypeOf("string");
+      expect(result!.refreshedToken!.split(".")).toHaveLength(3);
+      expect(result!.refreshedToken).not.toBe(token);
+    });
+
+    it("does not refresh if the token is just barely under the threshold", () => {
+      const token = createCliToken("user-1", "alice");
+      vi.setSystemTime(
+        new Date(Date.now() + (TOKEN_REFRESH_AFTER_DAYS - 1) * 24 * 60 * 60 * 1000),
+      );
+      const result = verifyCliTokenWithRefresh(`Bearer ${token}`);
+      expect(result!.refreshedToken).toBeNull();
+    });
+
+    it("returns null for invalid tokens", () => {
+      expect(verifyCliTokenWithRefresh("Bearer not.a.token")).toBeNull();
+      expect(verifyCliTokenWithRefresh(null)).toBeNull();
     });
   });
 });

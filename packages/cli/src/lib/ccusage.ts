@@ -10,6 +10,10 @@ import {
   type TokenNormalizationMode,
 } from "./token-normalization.js";
 import { DEFAULT_SUBPROCESS_TIMEOUT_MS } from "../config.js";
+import { isInteractive, promptYesNo } from "./prompt.js";
+import { posthog } from "./posthog.js";
+import { getDistinctId } from "./machine-id.js";
+import type { StraudeConfig } from "./auth.js";
 
 /** Type-safe representation of the error thrown by execFileSync / execFile. */
 interface ExecError extends Error {
@@ -54,6 +58,111 @@ function resolveCcusageCommand(): { cmd: string; args: string[] } {
 /** Reset resolver cache — for testing only. */
 export function _resetCcusageResolver(): void {
   _resolved = undefined;
+}
+
+/** Whether ccusage is currently resolvable on PATH. */
+export function isCcusageInstalled(): boolean {
+  return isOnPath("ccusage");
+}
+
+/**
+ * Best-effort install of ccusage globally. Prefers `bun add -g` when bun is
+ * present (faster, and Straude is bun-first), falls back to `npm install -g`.
+ * stdio is inherited so the user sees install progress.
+ */
+function installCcusage(): void {
+  const useBun = isOnPath("bun");
+  const cmd = useBun ? "bun" : "npm";
+  const args = useBun ? ["add", "-g", "ccusage"] : ["install", "-g", "ccusage"];
+  execFileSync(cmd, args, {
+    stdio: "inherit",
+    timeout: 5 * 60 * 1000,
+    // npm/bun on Windows are .cmd shims; execFileSync skips PATHEXT lookup.
+    shell: process.platform === "win32",
+  });
+}
+
+/**
+ * Make sure ccusage is installed and runnable. If missing and we're attached to
+ * an interactive TTY, prompt to install. Non-TTY callers (auto-push, CI) get
+ * the same throw as before so they can recover by installing manually.
+ *
+ * Pass `config` so PostHog events are attributed to the logged-in user when
+ * possible; falls back to the machine UUID otherwise.
+ */
+export async function ensureCcusageInstalled(
+  config: StraudeConfig | null = null,
+): Promise<void> {
+  if (isCcusageInstalled()) return;
+
+  const distinctId = getDistinctId(config);
+
+  if (!isInteractive()) {
+    posthog.capture({
+      distinctId,
+      event: "ccusage_install_skipped",
+      properties: { reason: "non_interactive" },
+    });
+    throw new Error(
+      "ccusage is not installed or not on PATH. Install it globally and retry (e.g. `npm install -g ccusage`).",
+    );
+  }
+
+  console.log("\nStraude needs `ccusage` to read your Claude Code usage.");
+  const accepted = await promptYesNo(
+    "Install ccusage globally now? [Y/n] ",
+    true,
+  );
+
+  if (!accepted) {
+    posthog.capture({
+      distinctId,
+      event: "ccusage_install_declined",
+    });
+    throw new Error(
+      "ccusage is required. Install it manually with `npm install -g ccusage` and run straude again.",
+    );
+  }
+
+  posthog.capture({
+    distinctId,
+    event: "ccusage_install_attempted",
+    properties: { manager: isOnPath("bun") ? "bun" : "npm" },
+  });
+
+  try {
+    installCcusage();
+  } catch (err) {
+    posthog.capture({
+      distinctId,
+      event: "ccusage_install_failed",
+      properties: { error: (err as Error).message?.slice(0, 200) ?? "unknown" },
+    });
+    throw new Error(
+      `Failed to install ccusage automatically: ${(err as Error).message}\n` +
+        "Install it manually with `npm install -g ccusage` and run straude again.",
+    );
+  }
+
+  // Reset resolver cache so the freshly installed binary is picked up.
+  _resolved = undefined;
+
+  if (!isCcusageInstalled()) {
+    posthog.capture({
+      distinctId,
+      event: "ccusage_install_failed",
+      properties: { error: "not_on_path_after_install" },
+    });
+    throw new Error(
+      "ccusage installed but not found on PATH. You may need to open a new shell, then re-run straude.",
+    );
+  }
+
+  posthog.capture({
+    distinctId,
+    event: "ccusage_install_succeeded",
+  });
+  console.log("ccusage installed successfully.\n");
 }
 
 /** Run ccusage via the resolved binary. */

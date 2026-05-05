@@ -14,6 +14,7 @@ vi.mock("@/lib/supabase/server", () => ({
 
 vi.mock("@/lib/api/cli-auth", () => ({
   verifyCliToken: vi.fn(() => null), // web flow — no CLI token
+  verifyCliTokenWithRefresh: vi.fn(() => null),
 }));
 
 vi.mock("@/lib/supabase/service", () => ({
