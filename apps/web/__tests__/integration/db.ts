@@ -73,7 +73,7 @@ export async function insertUser(
        '',
        now(),
        '{"provider":"email","providers":["email"]}'::jsonb,
-       jsonb_build_object('user_name', $3),
+       jsonb_build_object('user_name', $3::text),
        now(),
        now()
      )`,
