@@ -70,9 +70,14 @@ async function doRequest<T>(
     config.token = refreshed;
     try {
       saveConfig(config);
-    } catch {
+    } catch (error) {
       // Read-only home directory: keep the new token in memory but don't
       // crash the request — the user just won't get rotation persisted.
+      // Surface anything else (disk full, etc.) so it isn't silently swallowed.
+      const code = (error as NodeJS.ErrnoException).code;
+      if (code !== "EACCES" && code !== "EPERM" && code !== "EROFS") {
+        throw error;
+      }
     }
   }
 

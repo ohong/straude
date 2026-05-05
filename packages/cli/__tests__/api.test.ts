@@ -212,9 +212,11 @@ describe("apiRequest — sliding token refresh", () => {
     expect(recorded[1]!.headers.authorization).toBe("Bearer rotated-1");
   });
 
-  it("still resolves the request when saveConfig fails (read-only home)", async () => {
+  it("swallows read-only-fs saveConfig errors so the request still resolves", async () => {
     mockSaveConfig.mockImplementation(() => {
-      throw new Error("EACCES");
+      const err = new Error("read-only filesystem") as NodeJS.ErrnoException;
+      err.code = "EROFS";
+      throw err;
     });
     plan.push({
       status: 200,
@@ -222,6 +224,20 @@ describe("apiRequest — sliding token refresh", () => {
       headers: { [REFRESHED_TOKEN_HEADER]: "new-token" },
     });
     await expect(apiRequest(configFor(), "/api/test")).resolves.toEqual({ ok: true });
+  });
+
+  it("propagates unexpected saveConfig errors instead of swallowing them", async () => {
+    mockSaveConfig.mockImplementation(() => {
+      const err = new Error("disk full") as NodeJS.ErrnoException;
+      err.code = "ENOSPC";
+      throw err;
+    });
+    plan.push({
+      status: 200,
+      body: { ok: true },
+      headers: { [REFRESHED_TOKEN_HEADER]: "new-token" },
+    });
+    await expect(apiRequest(configFor(), "/api/test")).rejects.toThrow(/disk full/);
   });
 });
 

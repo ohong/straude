@@ -87,6 +87,8 @@ function installCcusage(): void {
   execFileSync(cmd, args, {
     stdio: "inherit",
     timeout: 5 * 60 * 1000,
+    // npm/bun on Windows are .cmd shims; execFileSync skips PATHEXT lookup.
+    shell: process.platform === "win32",
   });
 }
 
