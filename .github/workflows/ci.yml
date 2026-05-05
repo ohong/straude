@@ -75,6 +75,18 @@ jobs:
         run: bun run test
         working-directory: packages/cli
 
+      - name: Setup Supabase CLI
+        uses: supabase/setup-cli@v1
+        with:
+          version: latest
+
+      - name: Start local Supabase stack
+        run: bunx supabase start --workdir .
+
+      - name: Test (web — integration, real Supabase)
+        run: bun run test:integration
+        working-directory: apps/web
+
       - name: Install Playwright Chromium
         run: bunx playwright install --with-deps chromium
         working-directory: apps/web
