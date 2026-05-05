@@ -9,7 +9,10 @@ export default defineConfig({
     globals: true,
     setupFiles: ["./__tests__/setup.ts"],
     include: ["__tests__/**/*.test.{ts,tsx}", "**/*.test.{ts,tsx}"],
-    exclude: ["node_modules", ".next"],
+    // Integration tests live under __tests__/integration and run via
+    // vitest.integration.config.ts (real Supabase stack required) — keep
+    // them out of the fast default suite.
+    exclude: ["node_modules", ".next", "__tests__/integration/**"],
   },
   resolve: {
     alias: {
