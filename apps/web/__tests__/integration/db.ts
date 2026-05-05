@@ -38,15 +38,57 @@ export async function cleanDb(client: Client): Promise<void> {
 /** Insert a real user row directly via SQL. Returns the generated UUID. */
 export async function insertUser(
   client: Client,
-  overrides: Partial<{ id: string; username: string; email: string; is_public: boolean; onboarding_completed: boolean }> = {},
+  overrides: Partial<{
+    id: string;
+    username: string;
+    email: string;
+    is_public: boolean;
+    onboarding_completed: boolean;
+  }> = {},
 ): Promise<string> {
   const id = overrides.id ?? crypto.randomUUID();
   const username = overrides.username ?? `user_${id.slice(0, 8)}`;
   const email = overrides.email ?? `${username}@example.test`;
+
   await client.query(
-    `INSERT INTO public.users (id, username, email, is_public, onboarding_completed)
-     VALUES ($1, $2, $3, $4, $5)`,
-    [id, username, email, overrides.is_public ?? true, overrides.onboarding_completed ?? true],
+    `INSERT INTO auth.users (
+       id,
+       instance_id,
+       aud,
+       role,
+       email,
+       encrypted_password,
+       email_confirmed_at,
+       raw_app_meta_data,
+       raw_user_meta_data,
+       created_at,
+       updated_at
+     )
+     VALUES (
+       $1,
+       '00000000-0000-0000-0000-000000000000',
+       'authenticated',
+       'authenticated',
+       $2,
+       '',
+       now(),
+       '{"provider":"email","providers":["email"]}'::jsonb,
+       jsonb_build_object('user_name', $3::text),
+       now(),
+       now()
+     )`,
+    [id, email, username],
+  );
+
+  await client.query(
+    `INSERT INTO public.users (id, username, is_public, onboarding_completed, timezone)
+     VALUES ($1, $2, $3, $4, 'UTC')
+     ON CONFLICT (id) DO UPDATE
+       SET username = EXCLUDED.username,
+           is_public = EXCLUDED.is_public,
+           onboarding_completed = EXCLUDED.onboarding_completed,
+           timezone = EXCLUDED.timezone`,
+    [id, username, overrides.is_public ?? true, overrides.onboarding_completed ?? true],
   );
   return id;
 }

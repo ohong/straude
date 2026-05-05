@@ -159,8 +159,8 @@ describe("POST /api/usage/submit (real Supabase)", () => {
     // The route also writes a device_usage row keyed by device_id.
     const dev = await db.query(
       `SELECT count(*)::int AS n FROM public.device_usage
-       WHERE daily_usage_id = (SELECT id FROM public.daily_usage WHERE user_id = $1 AND date = $2)`,
-      [userId, today],
+       WHERE user_id = $1 AND date = $2 AND device_id = $3`,
+      [userId, today, DEVICE_ID],
     );
     expect(dev.rows[0].n).toBe(1);
 

@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 import { createClient } from "@/lib/supabase/server";
-import { verifyCliToken } from "@/lib/api/cli-auth";
+import { verifyCliTokenWithRefresh } from "@/lib/api/cli-auth";
 import { getServiceClient } from "@/lib/supabase/service";
 import { checkAndAwardAchievements } from "@/lib/achievements";
 import { rateLimit } from "@/lib/rate-limit";
@@ -51,13 +51,21 @@ function hasNonCodexModels(models: unknown): boolean {
 interface AuthContext {
   userId: string;
   source: "cli" | "web";
+  /** When set, the response should include X-Straude-Refreshed-Token. */
+  refreshedToken?: string | null;
 }
 
 async function resolveAuthContext(request: Request): Promise<AuthContext | null> {
   // Try CLI JWT first
   const authHeader = request.headers.get("authorization");
-  const cliUserId = verifyCliToken(authHeader);
-  if (cliUserId) return { userId: cliUserId, source: "cli" };
+  const cliAuth = verifyCliTokenWithRefresh(authHeader);
+  if (cliAuth) {
+    return {
+      userId: cliAuth.userId,
+      source: "cli",
+      refreshedToken: cliAuth.refreshedToken,
+    };
+  }
 
   // Fall back to Supabase session (web)
   try {
@@ -482,9 +490,14 @@ export async function POST(request: Request) {
     })
     .catch(() => {});
 
+  const responseHeaders: Record<string, string> = {};
+  if (auth.source === "cli" && auth.refreshedToken) {
+    responseHeaders["X-Straude-Refreshed-Token"] = auth.refreshedToken;
+  }
+
   const response: UsageSubmitResponse = { results };
   if (errors.length > 0) {
-    return NextResponse.json({ ...response, errors }, { status: 207 });
+    return NextResponse.json({ ...response, errors }, { status: 207, headers: responseHeaders });
   }
-  return NextResponse.json(response);
+  return NextResponse.json(response, { headers: responseHeaders });
 }
