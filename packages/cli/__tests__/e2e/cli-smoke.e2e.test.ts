@@ -1,6 +1,6 @@
 import { describe, it, expect, beforeAll, beforeEach, afterEach } from "vitest";
 import { spawnSync } from "node:child_process";
-import { existsSync, mkdtempSync, rmSync } from "node:fs";
+import { existsSync, mkdtempSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join, dirname, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
@@ -86,12 +86,11 @@ describe("straude binary — smoke", () => {
     expect(r.stderr).toMatch(/Unknown command/);
   });
 
-  it("--version is a side-effect-free read (no ~/.straude written)", async () => {
-    // Sanity that the version path doesn't accidentally trigger config
-    // creation or machine_id generation. Independent of any first-run
-    // telemetry that may land in other PRs.
+  it("--version does not create an authenticated config", async () => {
+    // First-run telemetry may create ~/.straude metadata, but version reads
+    // must never create an auth config or require a logged-in account.
     const r = await spawnCli({ args: ["--version"], home });
     expect(r.exitCode).toBe(0);
-    expect(existsSync(join(home, ".straude"))).toBe(false);
+    expect(existsSync(join(home, ".straude", "config.json"))).toBe(false);
   });
 });
