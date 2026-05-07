@@ -13,6 +13,59 @@ interface ImportResult {
   post_url: string;
 }
 
+interface CanonicalEntry {
+  date: string;
+  models: string[];
+  inputTokens: number;
+  outputTokens: number;
+  cacheCreationTokens: number;
+  cacheReadTokens: number;
+  totalTokens: number;
+  costUSD: number;
+}
+
+/**
+ * Map an "entry-like" record from either schema shape into the canonical
+ * shape that /api/usage/submit expects.
+ *
+ * - Legacy ccusage entries use `models` / `costUSD` / `totalTokens`.
+ * - Modern ccusage and agentsview entries use `modelsUsed` / `totalCost`,
+ *   and may omit `totalTokens` (we derive it from the four token buckets,
+ *   matching the CLI's normalizer in packages/cli/src/lib/ccusage.ts).
+ */
+function toCanonicalEntry(d: Record<string, unknown>): CanonicalEntry {
+  const num = (v: unknown) => (typeof v === "number" ? v : 0);
+  const models = Array.isArray(d.modelsUsed)
+    ? (d.modelsUsed as string[])
+    : Array.isArray(d.models)
+      ? (d.models as string[])
+      : [];
+  const inputTokens = num(d.inputTokens);
+  const outputTokens = num(d.outputTokens);
+  const cacheCreationTokens = num(d.cacheCreationTokens);
+  const cacheReadTokens = num(d.cacheReadTokens);
+  const totalTokens =
+    typeof d.totalTokens === "number" && d.totalTokens > 0
+      ? d.totalTokens
+      : inputTokens + outputTokens + cacheCreationTokens + cacheReadTokens;
+  const costUSD =
+    typeof d.costUSD === "number"
+      ? d.costUSD
+      : typeof d.totalCost === "number"
+        ? d.totalCost
+        : 0;
+  return {
+    date: d.date as string,
+    models,
+    inputTokens,
+    outputTokens,
+    cacheCreationTokens,
+    cacheReadTokens,
+    totalTokens,
+    costUSD,
+  };
+}
+
 export default function ImportPage() {
   const posthog = usePostHog();
   const [json, setJson] = useState("");
@@ -37,32 +90,39 @@ export default function ImportPage() {
     try {
       parsed = JSON.parse(json);
     } catch {
-      setError("Invalid JSON. Please paste the output of: ccusage daily --json");
-      setLoading(false);
-      return;
-    }
-
-    const obj = parsed as { type?: string; data?: unknown[] };
-    if (obj.type !== "daily" || !Array.isArray(obj.data)) {
       setError(
-        'Expected ccusage output with { "type": "daily", "data": [...] }. Make sure you run: ccusage daily --json',
+        "Invalid JSON. Please paste the output of: ccusage daily --json or agentsview usage daily --json",
       );
       setLoading(false);
       return;
     }
 
-    const entries = (obj.data as Record<string, unknown>[]).map((d) => ({
+    // Accept both schema shapes:
+    // - Legacy ccusage: { type: "daily", data: [{ date, models, costUSD, totalTokens, ... }, ...] }
+    // - Modern (current ccusage and agentsview):
+    //     { daily: [{ date, modelsUsed, totalCost, totalTokens?, ... }, ...], totals: {...} }
+    const obj = parsed as {
+      type?: string;
+      data?: unknown[];
+      daily?: unknown[];
+    };
+
+    let rawEntries: Record<string, unknown>[];
+    if (obj.type === "daily" && Array.isArray(obj.data)) {
+      rawEntries = obj.data as Record<string, unknown>[];
+    } else if (Array.isArray(obj.daily)) {
+      rawEntries = obj.daily as Record<string, unknown>[];
+    } else {
+      setError(
+        'Expected ccusage or agentsview output — either { "type": "daily", "data": [...] } or { "daily": [...], "totals": {...} }.',
+      );
+      setLoading(false);
+      return;
+    }
+
+    const entries = rawEntries.map((d) => ({
       date: d.date as string,
-      data: {
-        date: d.date as string,
-        models: (d.models as string[]) ?? [],
-        inputTokens: (d.inputTokens as number) ?? 0,
-        outputTokens: (d.outputTokens as number) ?? 0,
-        cacheCreationTokens: (d.cacheCreationTokens as number) ?? 0,
-        cacheReadTokens: (d.cacheReadTokens as number) ?? 0,
-        totalTokens: (d.totalTokens as number) ?? 0,
-        costUSD: (d.costUSD as number) ?? 0,
-      },
+      data: toCanonicalEntry(d),
     }));
 
     const res = await fetch("/api/usage/submit", {
@@ -118,7 +178,15 @@ export default function ImportPage() {
         <div className="mb-6 border-l-2 border-l-border bg-subtle p-4">
           <p className="text-sm font-medium">Alternative: paste JSON manually</p>
           <p className="mt-1 text-xs text-muted">
-            Run <code className="rounded bg-foreground/5 px-1 py-0.5 font-mono">ccusage daily --json --since YYYYMMDD --until YYYYMMDD</code> and paste the output below. Manual imports are unverified and won&apos;t count towards the leaderboard &mdash; they only post to your feed.
+            Run either{" "}
+            <code className="rounded bg-foreground/5 px-1 py-0.5 font-mono">
+              ccusage daily --json --since YYYYMMDD --until YYYYMMDD
+            </code>{" "}
+            or{" "}
+            <code className="rounded bg-foreground/5 px-1 py-0.5 font-mono">
+              agentsview usage daily --json --since YYYY-MM-DD --until YYYY-MM-DD
+            </code>{" "}
+            and paste the output below. Manual imports are unverified and won&apos;t count towards the leaderboard &mdash; they only post to your feed.
           </p>
         </div>
 
@@ -126,7 +194,7 @@ export default function ImportPage() {
           <Textarea
             value={json}
             onChange={(e) => setJson(e.target.value)}
-            placeholder='{"type":"daily","data":[...],"summary":{...}}'
+            placeholder='Paste ccusage or agentsview JSON here ({"daily":[...],"totals":{...}} or {"type":"daily","data":[...]})'
             rows={12}
             className="font-mono text-sm"
           />

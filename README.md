@@ -1,8 +1,8 @@
 # Straude
 
-**Strava for Claude Code.**
+**Strava for AI coding agents.**
 
-Track your Claude Code usage. Share your sessions. Climb the leaderboard.
+Track your AI coding usage. Share your sessions. Climb the leaderboard.
 
 [![Watch the demo](https://img.youtube.com/vi/NTI_-jRtW2g/maxresdefault.jpg)](https://www.youtube.com/watch?v=NTI_-jRtW2g)
 
@@ -18,9 +18,9 @@ Sync your stats with a single command — no install needed:
 npx straude@latest
 ```
 
-The CLI reads your local [ccusage](https://github.com/ryoppippi/ccusage) data (cost, tokens, models, sessions), uploads it to Straude, and auto-creates a post on your feed. First run opens a browser login; after that, just run `npx straude@latest` daily. It automatically pushes new stats since your last sync.
+The CLI reads local aggregate usage data, uploads it to Straude, and auto-creates a post on your feed. CLI 1.0 can use [agentsview](https://www.agentsview.io/) for Claude Code when installed and keeps Straude's native Codex collector for accurate Codex accounting. First run opens a browser login; after that, just run `npx straude@latest` daily. It automatically pushes new stats since your last sync.
 
-Options: `--date YYYY-MM-DD` to push a specific date, `--days N` to backfill the last N days (max 7), `--dry-run` to preview without posting. Run `npx straude@latest status` to check your streak and rank.
+Options: `--date YYYY-MM-DD` to push a specific date, `--days N` to backfill the last N days (max 30), `--dry-run` to preview without posting. Run `npx straude@latest status` to check your streak and rank.
 
 ## Features
 
@@ -83,15 +83,15 @@ Only **aggregate token usage statistics** — the same numbers you'd see on your
 - Model names used (e.g. "Claude Opus", "GPT-4.1")
 - Session count and dates
 
-That's it. **We have zero access to your prompts, code, conversations, file contents, or anything you do inside Claude Code or Codex.** The CLI reads pre-aggregated daily totals from local [ccusage](https://github.com/ryoppippi/ccusage) data — it never touches your session transcripts or project files.
+That's it. **We have zero access to your prompts, code, conversations, file contents, or anything you do inside Claude Code or Codex.** The CLI reads pre-aggregated daily totals from local collector output — it never touches your session transcripts or project files.
 
 ### Where does the usage data come from?
 
-The CLI runs [ccusage](https://github.com/ryoppippi/ccusage) locally on your machine, which reads the JSONL log files that Claude Code writes to `~/.claude/`. These logs contain token counts and cost per API call. ccusage aggregates them into daily totals, and the Straude CLI sends those totals to the server. The raw logs never leave your machine.
+The CLI runs local collectors on your machine: agentsview or ccusage for Claude Code, and Straude's native collector for Codex. These collectors aggregate token counts and cost into daily totals, and the Straude CLI sends only those totals to the server. The raw logs never leave your machine.
 
 ### Can Straude see my code or prompts?
 
-No. The data pipeline is: local JSONL logs → ccusage (local aggregation) → daily totals sent to Straude. At no point does any conversation content, prompt text, code, or file path leave your machine. You can verify this yourself — the CLI is open source, and you can run `npx straude --dry-run` to see exactly what would be sent before it's sent.
+No. The data pipeline is: local agent logs → local aggregation → daily totals sent to Straude. At no point does any conversation content, prompt text, code, or file path leave your machine. You can verify this yourself — the CLI is open source, and you can run `npx straude --dry-run` to see exactly what would be sent before it's sent.
 
 ### Is my profile public by default?
 

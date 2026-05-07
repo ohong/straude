@@ -42,6 +42,15 @@ export default function PrivacyPage() {
                 >
                   ccusage
                 </a>{" "}
+                or{" "}
+                <a
+                  href="https://www.agentsview.io/"
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="text-accent underline underline-offset-2 hover:no-underline"
+                >
+                  agentsview
+                </a>{" "}
                 locally to aggregate your session logs into daily totals — token
                 counts, cost, model names, and session count. Those totals are
                 all that ever get sent. The raw logs, your project files, and

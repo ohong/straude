@@ -113,7 +113,8 @@ export default async function NewPostPage() {
             Or import manually
           </h4>
           <p className="mt-2 text-sm text-muted">
-            Paste ccusage JSON output. Manual imports are unverified.
+            Paste ccusage or agentsview JSON output. Manual imports are
+            unverified.
           </p>
           <Link
             href="/settings/import"

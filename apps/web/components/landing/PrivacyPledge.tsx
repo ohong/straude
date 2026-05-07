@@ -66,6 +66,15 @@ export function PrivacyPledge() {
             >
               ccusage
             </a>{" "}
+            or{" "}
+            <a
+              href="https://www.agentsview.io/"
+              target="_blank"
+              rel="noopener noreferrer"
+              className="text-accent underline underline-offset-2 hover:no-underline"
+            >
+              agentsview
+            </a>{" "}
             locally to aggregate daily totals from Claude Code&apos;s log
             files — only those totals are sent.
           </p>

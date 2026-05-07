@@ -326,16 +326,34 @@ straude auto logs`}</Pre>
                 Data Sources
               </h2>
               <p className="mt-2">
-                The CLI collects data from two sources in parallel:
+                The CLI collects from two local collectors in parallel:
               </p>
               <ul className="mt-3 list-disc pl-6 space-y-1">
                 <li>
-                  <strong>ccusage</strong> — Claude Code session data (cost,
-                  tokens, models).
+                  <strong>Claude Code</strong> — in <Code>auto</Code> mode,
+                  prefers{" "}
+                  <a
+                    href="https://www.agentsview.io/"
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="text-accent underline underline-offset-2 hover:no-underline"
+                  >
+                    agentsview
+                  </a>{" "}
+                  &ge; 0.26.1 when installed, falls back to{" "}
+                  <a
+                    href="https://github.com/ryoppippi/ccusage"
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="text-accent underline underline-offset-2 hover:no-underline"
+                  >
+                    ccusage
+                  </a>
+                  .
                 </li>
                 <li>
-                  <strong>@ccusage/codex</strong> — Codex usage data (same
-                  schema).
+                  <strong>Codex</strong> — Straude&apos;s native collector,
+                  always.
                 </li>
               </ul>
               <p className="mt-2">
