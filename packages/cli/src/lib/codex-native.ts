@@ -12,7 +12,7 @@ import {
   type NormalizationSummary,
 } from "./token-normalization.js";
 
-export const CODEX_NATIVE_COLLECTOR = "straude-codex-native-v2" as const;
+export const CODEX_NATIVE_COLLECTOR = "straude-codex-native-last-token-usage" as const;
 
 interface RawTokenUsage {
   input_tokens: number;

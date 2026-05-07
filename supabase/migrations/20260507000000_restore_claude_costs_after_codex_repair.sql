@@ -1,5 +1,5 @@
 -- Restore Claude model costs that were incorrectly scaled down by the
--- legacy/v1 codex inflation repair migrations
+-- legacy and previous native Codex inflation repair migrations
 -- (20260506120100_repair_legacy_codex_inflation.sql and
 --  20260506120200_repair_native_v1_codex_inflation.sql).
 --

@@ -11,7 +11,7 @@ const MAX_BACKFILL_DAYS = 30;
 // Bump in lockstep with CODEX_NATIVE_COLLECTOR in packages/cli/src/lib/codex-native.ts.
 // The trusted collector is the only one allowed to *lower* totals on UPSERT,
 // which is how the server accepts retroactive corrections from a fixed CLI.
-const TRUSTED_CODEX_COLLECTOR = "straude-codex-native-v2";
+const TRUSTED_CODEX_COLLECTOR = "straude-codex-native-last-token-usage";
 const LEGACY_DEVICE_ID = "00000000-0000-0000-0000-000000000000";
 const CODEX_MODEL_RE = /^(gpt-|o3|o4)/i;
 const COST_EPSILON_USD = 0.005;
@@ -405,11 +405,11 @@ export async function POST(request: Request) {
         ));
 
       // Protect rows that the codex-only repair migration corrected from
-      // being re-inflated by a v1 (untrusted) push. Without this guard, a
-      // user still on the v1 CLI auto-pushes their next daily payload, the
+      // being re-inflated by an older untrusted collector. Without this guard, a
+      // user still on the older collector auto-pushes their next daily payload, the
       // payload's cost is higher than the repaired row, and the existing
-      // "raise allowed" path overwrites the repair. v2 (trusted) uploads
-      // bypass the guard and heal the row to ground truth.
+      // "raise allowed" path overwrites the repair. Trusted uploads bypass the
+      // guard and heal the row to ground truth.
       const mayOverwriteDevice = (
         !existingDevice
         || (entry.data.costUSD >= Number(existingDevice.cost_usd) && !existingDeviceWasRepaired)

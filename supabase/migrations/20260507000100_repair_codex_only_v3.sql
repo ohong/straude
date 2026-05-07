@@ -10,7 +10,8 @@
 --
 -- 20260507000000_restore_claude_costs_after_codex_repair.sql restored Claude
 -- entries on rows still tagged with the prior `repair` markers. But many rows
--- have since been overwritten by fresh v1 CLI pushes (auto-push, hooks),
+-- have since been overwritten by fresh pushes from the older collector
+-- (auto-push, hooks),
 -- which strip the tags. Those rows are inflated again AND any future repair
 -- needs to leave Claude alone from the start.
 --
@@ -26,7 +27,7 @@
 -- `cache_creation_tokens`.
 --
 -- Idempotent via `collector_meta->>'repair_v3_codex_only' = 'true'`. A fresh
--- v1 push overwrites the tag, so this migration can be re-applied to catch
+-- A push from the older collector overwrites the tag, so this migration can be re-applied to catch
 -- rows that have been re-uploaded since it last ran.
 
 DO $repair$

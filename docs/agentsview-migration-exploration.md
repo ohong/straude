@@ -201,13 +201,13 @@ Mostly mirrors §4 of the 2026-04-28 doc, restated here for completeness.
 - `packages/cli/src/lib/ccusage.ts` (276 lines) — resolves the `ccusage` binary on PATH, runs `ccusage daily --json --breakdown --since … --until …`, parses v18 output into our canonical `CcusageDailyEntry`, runs token normalization, surfaces anomalies.
 - `packages/cli/src/lib/codex-native.ts` (577 lines) — separate native collector that walks `~/.codex/sessions/`, parses JSONL, applies `CODEX_PRICING` (LiteLLM-style), deduplicates forked sessions via `forked_from_id` ancestor signatures, produces the same `CcusageDailyEntry` shape.
 - `packages/cli/src/lib/token-normalization.ts` (300 lines) — has `source: "ccusage"` and `source: "codex"` branches that differ in how cache semantics ("separate" vs "subset_of_input") are inferred.
-- `packages/cli/src/commands/push.ts` (501 lines) — runs ccusage + codex-native in parallel (`Promise.all`), merges entries by date (`mergeEntries`), hashes the raw payload, tags submissions with `collector.claude = "ccusage-v18"` / `collector.codex = "straude-codex-native-v1"`.
+- `packages/cli/src/commands/push.ts` (501 lines) — runs ccusage + codex-native in parallel (`Promise.all`), merges entries by date (`mergeEntries`), hashes the raw payload, tags submissions with `collector.claude = "ccusage-v18"` / `collector.codex = CODEX_NATIVE_COLLECTOR` (`straude-codex-native-last-token-usage` after the last-token-usage repair).
 - Tests: `ccusage.test.ts` (267), `codex.test.ts` (190), `commands/push.test.ts` (925), `flows/cli-sync-flow.test.ts` (795), `token-normalization.test.ts` (112).
 
 ### Web app
 
-- `apps/web/types/index.ts:140–208` — `CcusageDailyEntry`, `CcusageOutput`, `UsageCollectorMeta` (string-typed with `"ccusage-v18"` / `"straude-codex-native-v1"` literals), `UsageSubmitRequest`, `UsageSubmitResponse`.
-- `apps/web/app/api/usage/submit/route.ts` (491 lines) — server validator + per-date upsert into `device_usage` and aggregation into `daily_usage`. Has `TRUSTED_CODEX_COLLECTOR = "straude-codex-native-v1"` literal at line 11 used for the cost-monotonicity carve-out (codex-native is allowed to *lower* totals because it repairs inflated upstream values).
+- `apps/web/types/index.ts:140–208` — `CcusageDailyEntry`, `CcusageOutput`, `UsageCollectorMeta` (string-typed with `"ccusage-v18"`, the current native Codex collector marker, and the previous native Codex collector marker), `UsageSubmitRequest`, `UsageSubmitResponse`.
+- `apps/web/app/api/usage/submit/route.ts` (491 lines) — server validator + per-date upsert into `device_usage` and aggregation into `daily_usage`. Has a `TRUSTED_CODEX_COLLECTOR` literal matched to `CODEX_NATIVE_COLLECTOR`, used for the cost-monotonicity carve-out (codex-native is allowed to *lower* totals because it repairs inflated upstream values).
 - `apps/web/app/(app)/settings/import/page.tsx` and `apps/web/app/(app)/post/new/page.tsx` — paste-import UX. **Schema check requires Straude's normalized shape (`{ "type": "daily", "data": [...] }`), not raw collector output → unaffected by migration.**
 
 ### User-facing copy

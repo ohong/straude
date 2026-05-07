@@ -1,26 +1,26 @@
--- Repair native-v1 Codex collector inflation
+-- Repair previous native Codex collector inflation
 --
 -- The first native Codex collector (straude-codex-native-v1, in
--- packages/cli/src/lib/codex-native.ts before the v2 bump) used a
+-- packages/cli/src/lib/codex-native.ts before the fixed collector marker) used a
 -- dual-candidate "consistency error" normalizer that, on bucket-level
 -- arithmetic drift, picked the "separate cache" candidate and let
 -- cache_read_tokens exceed input_tokens — producing the same headline
 -- inflation as the legacy aggregator (cache priced at cache rate but
 -- against impossible counts).
 --
--- The v2 collector (deterministic inclusive-cache clamp) fixes this for
--- new uploads. For affected users with v1-tagged rows, the cleanest fix
--- is for them to re-upload via the v2 CLI — the server's trusted-collector
--- logic (apps/web/app/api/usage/submit/route.ts:192) lets v2 lower totals
+-- The fixed collector (deterministic inclusive-cache clamp) fixes this for
+-- new uploads. For affected users with rows tagged by the previous collector
+-- marker, the cleanest fix is for them to re-upload with the fixed CLI — the
+-- server's trusted-collector logic lets fixed Codex submissions lower totals
 -- on UPSERT. This migration handles the gap until each user updates and
--- re-runs `straude`: it applies the same inclusive-cache repair to
--- v1-tagged rows server-side.
+-- re-runs `straude`: it applies the same inclusive-cache repair to rows tagged
+-- by the previous collector marker server-side.
 --
 -- Differences from the legacy migration:
 --   - Filter targets collector_meta->>'codex' = 'straude-codex-native-v1'
 --     (not collector_meta IS NULL).
 --   - Preserves collector_meta.codex and collector_meta.claude so the
---     trusted-collector overwrite path on v2 re-upload still works.
+--     trusted-collector overwrite path on re-upload still works.
 --   - Tags repair with reason = 'native_v1_inflation_repair_2026_05'.
 --
 -- Properties match the legacy migration: idempotent, per-row exception
@@ -204,7 +204,7 @@ BEGIN
       v_corrected_cost := round(v_row.cost_usd * v_correction_factor, 4);
 
       -- Merge repair fields into the existing collector_meta (preserve codex/claude
-      -- markers so the v2 trusted-collector overwrite on re-upload still works).
+      -- markers so the trusted-collector overwrite on re-upload still works).
       v_new_meta := COALESCE(v_row.collector_meta, '{}'::jsonb)
         || jsonb_build_object(
              'repair',                    v_reason,

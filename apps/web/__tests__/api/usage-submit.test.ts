@@ -888,17 +888,17 @@ describe("POST /api/usage/submit", () => {
           modelBreakdown: [{ model: "gpt-5-codex", cost_usd: 10 }],
         })],
         source: "cli",
-        collector: { codex: "straude-codex-native-v2" },
+        collector: { codex: "straude-codex-native-last-token-usage" },
       })
     );
     const json = await res.json();
 
     expect(res.status).toBe(200);
     expect(deviceUpsertChain.upsert).toHaveBeenCalled();
-    expect(deviceUpsertChain.upsert.mock.calls[0][0].collector_meta).toEqual({ codex: "straude-codex-native-v2" });
+    expect(deviceUpsertChain.upsert.mock.calls[0][0].collector_meta).toEqual({ codex: "straude-codex-native-last-token-usage" });
     expect(deviceDeleteChain.delete).toHaveBeenCalled();
     expect(dailyChain.upsert.mock.calls[0][0].cost_usd).toBe(10);
-    expect(dailyChain.upsert.mock.calls[0][0].collector_meta).toEqual({ codex: "straude-codex-native-v2" });
+    expect(dailyChain.upsert.mock.calls[0][0].collector_meta).toEqual({ codex: "straude-codex-native-last-token-usage" });
     expect(json.results[0].previous_cost).toBe(100);
     expect(json.results[0].daily_total).toBe(10);
   });
@@ -1014,7 +1014,7 @@ describe("POST /api/usage/submit", () => {
           modelBreakdown: [{ model: "gpt-5-codex", cost_usd: 10 }],
         })],
         source: "cli",
-        collector: { codex: "straude-codex-native-v2" },
+        collector: { codex: "straude-codex-native-last-token-usage" },
       })
     );
     const json = await res.json();
@@ -1124,7 +1124,7 @@ describe("POST /api/usage/submit", () => {
           modelBreakdown: [{ model: "gpt-5-codex", cost_usd: 10 }],
         })],
         source: "cli",
-        collector: { codex: "straude-codex-native-v2" },
+        collector: { codex: "straude-codex-native-last-token-usage" },
       })
     );
     const json = await res.json();
@@ -1222,7 +1222,7 @@ describe("POST /api/usage/submit", () => {
           modelBreakdown: [{ model: "claude-opus-4-20250505", cost_usd: 10 }],
         })],
         source: "cli",
-        collector: { codex: "straude-codex-native-v2", claude: "ccusage-v18" },
+        collector: { codex: "straude-codex-native-last-token-usage", claude: "ccusage-v18" },
       })
     );
     const json = await res.json();
@@ -1260,7 +1260,7 @@ describe("POST /api/usage/submit", () => {
         { model: "claude-opus-4-20250505", cost_usd: 90 },
         { model: "gpt-5-codex", cost_usd: 10 },
       ],
-      collector_meta: { claude: "ccusage-v18", codex: "straude-codex-native-v2" },
+      collector_meta: { claude: "ccusage-v18", codex: "straude-codex-native-last-token-usage" },
     };
     const deviceGuardChain: Record<string, any> = {
       select: vi.fn().mockReturnThis(),
@@ -1339,7 +1339,7 @@ describe("POST /api/usage/submit", () => {
           modelBreakdown: correctedMixedRow.model_breakdown,
         })],
         source: "cli",
-        collector: { codex: "straude-codex-native-v2", claude: "ccusage-v18" },
+        collector: { codex: "straude-codex-native-last-token-usage", claude: "ccusage-v18" },
       })
     );
 
@@ -1349,7 +1349,7 @@ describe("POST /api/usage/submit", () => {
     expect(dailyChain.upsert.mock.calls[0][0].cost_usd).toBe(100);
     expect(dailyChain.upsert.mock.calls[0][0].collector_meta).toEqual({
       claude: "ccusage-v18",
-      codex: "straude-codex-native-v2",
+      codex: "straude-codex-native-last-token-usage",
     });
   });
 
@@ -1449,7 +1449,7 @@ describe("POST /api/usage/submit", () => {
           ],
         })],
         source: "cli",
-        collector: { codex: "straude-codex-native-v2", claude: "ccusage-v18" },
+        collector: { codex: "straude-codex-native-last-token-usage", claude: "ccusage-v18" },
       })
     );
     const json = await res.json();
@@ -1465,7 +1465,7 @@ describe("POST /api/usage/submit", () => {
     ["legacy repair", { repair: "codex_inflation_repair", previous_cost_usd: 100 }],
     ["v3 codex repair", { repair_v3_codex_only: "true", cost_before_v3: 100 }],
     ["Claude restore", { claude_restore_2026_05_07: "true", cost_before_claude_restore: 5 }],
-  ])("preserves %s metadata and blocks stale v1 reinflation", async (_label, repairMeta) => {
+  ])("preserves %s metadata and blocks reinflation from the older collector", async (_label, repairMeta) => {
     (verifyCliToken as any).mockReturnValue(`user-repair-${String(_label).replaceAll(" ", "-")}`);
 
     const repairedRow = {

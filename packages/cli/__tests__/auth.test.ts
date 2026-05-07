@@ -56,6 +56,18 @@ describe("loadConfig", () => {
     expect(config!.api_url).toBe("https://straude.com");
   });
 
+  it("loads the last-token-usage Codex repair marker", () => {
+    mockExistsSync.mockReturnValue(true);
+    mockReadFileSync.mockReturnValue(
+      JSON.stringify({
+        token: "tok-abc",
+        codex_native_last_token_usage_repair_completed_at: "2026-05-07T00:00:00.000Z",
+      }),
+    );
+    const config = loadConfig();
+    expect(config!.codex_native_last_token_usage_repair_completed_at).toBe("2026-05-07T00:00:00.000Z");
+  });
+
   it("returns null when token is missing from config", () => {
     mockExistsSync.mockReturnValue(true);
     mockReadFileSync.mockReturnValue(JSON.stringify({ username: "alice" }));
