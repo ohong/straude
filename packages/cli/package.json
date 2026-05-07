@@ -1,7 +1,7 @@
 {
   "name": "straude",
-  "version": "0.1.24",
-  "description": "CLI for pushing Claude Code usage stats to Straude",
+  "version": "1.0.0",
+  "description": "CLI for pushing AI coding usage stats to Straude",
   "main": "dist/index.js",
   "bin": {
     "straude": "dist/index.js"

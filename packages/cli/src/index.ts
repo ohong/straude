@@ -43,7 +43,7 @@ silenceEpipe(process.stdout);
 silenceEpipe(process.stderr);
 
 const HELP = `
-straude v${CLI_VERSION} — Push your Claude Code usage to Straude
+straude v${CLI_VERSION} — Push your AI coding usage to Straude
 
 Usage:
   straude                Sync latest stats (login if needed)
@@ -60,6 +60,7 @@ Push options:
   --days N           Push last N days (max 30)
   --dry-run          Preview without posting
   --timeout N        Subprocess timeout in seconds (default: 240)
+  STRAUDE_COLLECTOR=auto|agentsview|legacy  Collector mode (default: auto)
   --auto             Enable daily auto-push (OS scheduler)
   --auto hooks       Enable auto-push via Claude Code hook
   --auto --time HH:MM  Set auto-push time (default: 21:00)

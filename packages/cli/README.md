@@ -1,6 +1,6 @@
 # straude CLI
 
-Push your Claude Code usage stats to [Straude](https://straude.com).
+Push your AI coding usage stats to [Straude](https://straude.com).
 
 ## Quick start
 
@@ -15,7 +15,8 @@ Running with no arguments performs a smart sync: logs you in if needed, then pus
 ## Requirements
 
 - Node 18+
-- [Claude Code](https://claude.ai/code) installed (provides the `ccusage` binary)
+- Optional: [agentsview](https://www.agentsview.io/) >= 0.26.1 for Claude Code collection
+- Fallback: `ccusage` on PATH for Claude Code collection
 
 ## Commands
 
@@ -25,7 +26,7 @@ Running with no arguments performs a smart sync: logs you in if needed, then pus
 straude
 ```
 
-- First run: opens a browser tab to authenticate, then pushes today's usage.
+- First run: opens a browser tab to authenticate, then pushes recent usage.
 - Subsequent runs: pushes all days since the last sync (up to 7 days).
 - Already synced today: prints today's stats and exits.
 
@@ -47,9 +48,19 @@ Push usage data to Straude.
 
 | Flag | Description |
 |---|---|
-| `--date YYYY-MM-DD` | Push a specific date (must be within the last 7 days) |
-| `--days N` | Push the last N days (max 7) |
+| `--date YYYY-MM-DD` | Push a specific date (must be within the last 30 days) |
+| `--days N` | Push the last N days (max 30) |
 | `--dry-run` | Preview what would be submitted without posting |
+
+## Collectors
+
+CLI 1.0 uses `STRAUDE_COLLECTOR=auto|agentsview|legacy`.
+
+- `auto` (default): use agentsview >= 0.26.1 for Claude Code when available; keep Straude's native Codex collector for Codex; fall back to legacy when agentsview is missing/outdated.
+- `agentsview`: require agentsview >= 0.26.1 for Claude Code; still keep native Codex for Codex accuracy.
+- `legacy`: force ccusage for Claude Code plus native Codex.
+
+Native Codex remains in place because it contains Straude's fork-heavy session repair for inflated Codex totals.
 
 ### `status`
 

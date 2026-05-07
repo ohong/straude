@@ -20,6 +20,15 @@ vi.mock("../../src/lib/ccusage.js", () => ({
   ensureCcusageInstalled: vi.fn(() => Promise.resolve()),
 }));
 
+vi.mock("../../src/lib/agentsview.js", () => ({
+  AGENTSVIEW_COLLECTOR: "agentsview-v1",
+  MIN_AGENTSVIEW_VERSION: "0.26.1",
+  isSupportedAgentsViewInstalled: vi.fn(),
+  getAgentsViewVersion: vi.fn(),
+  runAgentsViewRawAsync: vi.fn(),
+  parseAgentsViewOutput: vi.fn(),
+}));
+
 vi.mock("../../src/lib/codex-native.js", () => ({
   CODEX_NATIVE_COLLECTOR: "straude-codex-native-v1",
   collectCodexUsageAsync: vi.fn(),
@@ -36,6 +45,7 @@ import { loadConfig, saveConfig } from "../../src/lib/auth.js";
 import { loginCommand } from "../../src/commands/login.js";
 import { apiRequest } from "../../src/lib/api.js";
 import { runCcusageRawAsync, parseCcusageOutput } from "../../src/lib/ccusage.js";
+import { isSupportedAgentsViewInstalled, getAgentsViewVersion, runAgentsViewRawAsync, parseAgentsViewOutput } from "../../src/lib/agentsview.js";
 import { collectCodexUsageAsync, containsSessionFile } from "../../src/lib/codex-native.js";
 import { reportUsagePushFailed } from "../../src/lib/telemetry.js";
 
@@ -45,6 +55,10 @@ const mockSaveConfig = vi.mocked(saveConfig);
 const mockApiRequest = vi.mocked(apiRequest);
 const mockRunCcusageRawAsync = vi.mocked(runCcusageRawAsync);
 const mockParseCcusageOutput = vi.mocked(parseCcusageOutput);
+const mockIsSupportedAgentsViewInstalled = vi.mocked(isSupportedAgentsViewInstalled);
+const mockGetAgentsViewVersion = vi.mocked(getAgentsViewVersion);
+const mockRunAgentsViewRawAsync = vi.mocked(runAgentsViewRawAsync);
+const mockParseAgentsViewOutput = vi.mocked(parseAgentsViewOutput);
 const mockCollectCodexUsageAsync = vi.mocked(collectCodexUsageAsync);
 const mockHasCodexLogs = vi.mocked(containsSessionFile);
 const mockReportUsagePushFailed = vi.mocked(reportUsagePushFailed);
@@ -77,6 +91,21 @@ function codexEntry(date: string, overrides: Record<string, any> = {}) {
   };
 }
 
+function agentsViewClaudeEntry(date: string, overrides: Record<string, any> = {}) {
+  return {
+    date,
+    models: ["claude-opus-4-20250505"],
+    inputTokens: 1000,
+    outputTokens: 500,
+    cacheCreationTokens: 100,
+    cacheReadTokens: 50,
+    totalTokens: 1650,
+    costUSD: 10.0,
+    modelBreakdown: [{ model: "claude-opus-4-20250505", cost_usd: 10.0 }],
+    ...overrides,
+  };
+}
+
 class ExitError extends Error {
   code: number;
   constructor(code: number) {
@@ -97,6 +126,8 @@ beforeEach(() => {
   vi.useFakeTimers({ now: new Date('2026-03-13T12:00:00Z'), toFake: ['Date'] });
   vi.clearAllMocks();
   mockLoadConfig.mockReturnValue(fakeConfig);
+  mockIsSupportedAgentsViewInstalled.mockResolvedValue(false);
+  mockGetAgentsViewVersion.mockResolvedValue("0.26.1");
   // Default: no Codex data
   mockHasCodexLogs.mockResolvedValue(false);
   mockCollectCodexUsageAsync.mockResolvedValue(codexOutput());
@@ -428,6 +459,130 @@ describe("pushCommand", () => {
     expect(entry.modelBreakdown).toHaveLength(2);
     expect(entry.modelBreakdown[0]).toEqual({ model: "claude-opus-4-20250505", cost_usd: 10.0 });
     expect(entry.modelBreakdown[1]).toEqual({ model: "gpt-5-codex", cost_usd: 3.0 });
+    expect(body.collector).toEqual({
+      claude: "ccusage-v18",
+      codex: "straude-codex-native-v1",
+    });
+  });
+
+  it("uses agentsview for Claude and native Codex for Codex when agentsview is supported", async () => {
+    const today = todayStr();
+    mockIsSupportedAgentsViewInstalled.mockResolvedValue(true);
+    mockLoadConfig.mockReturnValue({
+      ...fakeConfig,
+      codex_native_repair_completed_at: "2026-03-01T00:00:00.000Z",
+    });
+    mockRunAgentsViewRawAsync.mockResolvedValue("agentsview-json");
+    mockParseAgentsViewOutput.mockReturnValue({
+      data: [agentsViewClaudeEntry(today)],
+    });
+    mockCollectCodexUsageAsync.mockResolvedValue(codexOutput([codexEntry(today)]));
+    mockApiRequest.mockResolvedValue({
+      results: [
+        { date: today, usage_id: "u-1", post_id: "p-1", post_url: "https://straude.com/post/p-1", action: "created" },
+      ],
+    });
+
+    await pushCommand({});
+
+    expect(mockRunCcusageRawAsync).not.toHaveBeenCalled();
+    expect(mockRunAgentsViewRawAsync).toHaveBeenCalledWith(
+      expect.stringMatching(/^\d{4}-\d{2}-\d{2}$/),
+      expect.stringMatching(/^\d{4}-\d{2}-\d{2}$/),
+      undefined,
+      expect.objectContaining({ agent: "claude" }),
+    );
+
+    const submitCall = mockApiRequest.mock.calls[0]!;
+    const body = JSON.parse(submitCall[2]!.body as string);
+    expect(body.entries[0].data.costUSD).toBe(13.0);
+    expect(body.entries[0].data.models).toContain("claude-opus-4-20250505");
+    expect(body.entries[0].data.models).toContain("gpt-5-codex");
+    expect(body.collector).toEqual({
+      claude: "agentsview-v1",
+      codex: "straude-codex-native-v1",
+    });
+  });
+
+  it("proceeds with Codex data only when agentsview reports no Claude data", async () => {
+    const today = todayStr();
+    mockIsSupportedAgentsViewInstalled.mockResolvedValue(true);
+    mockLoadConfig.mockReturnValue({
+      ...fakeConfig,
+      codex_native_repair_completed_at: "2026-03-01T00:00:00.000Z",
+    });
+    // Simulate agentsview erroring out because there are no Claude sessions.
+    // The exact phrasing is best-guess until we have real fixtures; the
+    // matcher in `isMissingAgentsViewClaudeDataError` is intentionally
+    // conservative.
+    mockRunAgentsViewRawAsync.mockRejectedValue(
+      new Error("agentsview failed: no claude sessions found in ~/.claude"),
+    );
+    mockCollectCodexUsageAsync.mockResolvedValue(codexOutput([codexEntry(today)]));
+    mockApiRequest.mockResolvedValue({
+      results: [
+        { date: today, usage_id: "u-1", post_id: "p-1", post_url: "https://straude.com/post/p-1", action: "created" },
+      ],
+    });
+
+    await pushCommand({});
+
+    expect(mockParseAgentsViewOutput).not.toHaveBeenCalled();
+    expect(console.log).toHaveBeenCalledWith(
+      "No Claude Code data found locally; syncing Codex usage only.",
+    );
+
+    const submitCall = mockApiRequest.mock.calls[0]!;
+    const body = JSON.parse(submitCall[2]!.body as string);
+    expect(body.entries).toHaveLength(1);
+    expect(body.entries[0]!.data.models).toEqual(["gpt-5-codex"]);
+    expect(body.entries[0]!.data.costUSD).toBe(3.0);
+    expect(body.collector).toEqual({ codex: "straude-codex-native-v1" });
+  });
+
+  it("still fails fatally on generic agentsview errors", async () => {
+    const today = todayStr();
+    mockIsSupportedAgentsViewInstalled.mockResolvedValue(true);
+    mockLoadConfig.mockReturnValue({
+      ...fakeConfig,
+      codex_native_repair_completed_at: "2026-03-01T00:00:00.000Z",
+    });
+    mockRunAgentsViewRawAsync.mockRejectedValue(
+      new Error("agentsview failed: unexpected runtime error"),
+    );
+    mockCollectCodexUsageAsync.mockResolvedValue(codexOutput([codexEntry(today)]));
+
+    await expect(pushCommand({})).rejects.toThrow(ExitError);
+    expect(process.exit).toHaveBeenCalledWith(1);
+    expect(mockApiRequest).not.toHaveBeenCalled();
+  });
+
+  it("keeps auto on legacy while the one-time Codex repair is pending", async () => {
+    const today = todayStr();
+    mockIsSupportedAgentsViewInstalled.mockResolvedValue(true);
+    mockHasCodexLogs.mockResolvedValue(true);
+    mockLoadConfig.mockReturnValue({
+      ...fakeConfig,
+      device_id: "device-1",
+      device_name: "work-laptop",
+    });
+    mockRunCcusageRawAsync.mockResolvedValue("{}");
+    mockParseCcusageOutput.mockReturnValue({
+      data: [agentsViewClaudeEntry(today)],
+    });
+    mockCollectCodexUsageAsync.mockResolvedValue(codexOutput([codexEntry(today)]));
+    mockApiRequest.mockResolvedValue({
+      results: [
+        { date: today, usage_id: "u-1", post_id: "p-1", post_url: "https://straude.com/post/p-1", action: "updated" },
+      ],
+    });
+
+    await pushCommand({});
+
+    expect(mockRunAgentsViewRawAsync).not.toHaveBeenCalled();
+    expect(mockRunCcusageRawAsync).toHaveBeenCalled();
+    const submitCall = mockApiRequest.mock.calls[0]!;
+    const body = JSON.parse(submitCall[2]!.body as string);
     expect(body.collector).toEqual({
       claude: "ccusage-v18",
       codex: "straude-codex-native-v1",

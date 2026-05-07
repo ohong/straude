@@ -7,6 +7,14 @@ import { apiRequest } from "../lib/api.js";
 import { runCcusageRawAsync, parseCcusageOutput, ensureCcusageInstalled } from "../lib/ccusage.js";
 import type { CcusageDailyEntry, ModelBreakdownEntry } from "../lib/ccusage.js";
 import {
+  AGENTSVIEW_COLLECTOR,
+  MIN_AGENTSVIEW_VERSION,
+  getAgentsViewVersion,
+  isSupportedAgentsViewInstalled,
+  parseAgentsViewOutput,
+  runAgentsViewRawAsync,
+} from "../lib/agentsview.js";
+import {
   CODEX_NATIVE_COLLECTOR,
   collectCodexUsageAsync,
   containsSessionFile,
@@ -27,8 +35,9 @@ interface UsageSubmitRequest {
   }>;
   hash?: string;
   collector?: {
-    claude?: "ccusage-v18";
+    claude?: "ccusage-v18" | typeof AGENTSVIEW_COLLECTOR;
     codex?: typeof CODEX_NATIVE_COLLECTOR;
+    unified?: typeof AGENTSVIEW_COLLECTOR;
   };
   source: "cli" | "web";
   device_id?: string;
@@ -55,12 +64,20 @@ interface PushOptions {
   timeoutMs?: number;
 }
 
+type CollectorPreference = "auto" | "agentsview" | "legacy";
+type SelectedCollector = "agentsview-claude-native-codex" | "legacy";
+
 function isMissingClaudeDataError(error: Error): boolean {
   return error.message.includes("No valid Claude data directories found");
 }
 
 function isCcusageNotInstalledError(error: Error): boolean {
   return error.message.includes("ccusage is not installed or not on PATH");
+}
+
+function isMissingAgentsViewClaudeDataError(error: Error): boolean {
+  const message = error.message ?? "";
+  return /no\s+claude\s+(?:code\s+)?(?:data|sessions?|directories|director(?:y|ies))/i.test(message);
 }
 
 function formatDate(d: Date): string {
@@ -75,6 +92,31 @@ function formatDateCompact(d: Date): string {
   const m = String(d.getMonth() + 1).padStart(2, "0");
   const day = String(d.getDate()).padStart(2, "0");
   return `${y}${m}${day}`;
+}
+
+function localTimeZone(): string | undefined {
+  try {
+    return Intl.DateTimeFormat().resolvedOptions().timeZone || undefined;
+  } catch {
+    return undefined;
+  }
+}
+
+function readCollectorPreference(): CollectorPreference {
+  const value = (process.env.STRAUDE_COLLECTOR ?? "auto").toLowerCase();
+  if (value === "auto" || value === "agentsview" || value === "legacy") return value;
+  throw new Error("Invalid STRAUDE_COLLECTOR value. Expected auto, agentsview, or legacy.");
+}
+
+function selectCollector(
+  preference: CollectorPreference,
+  shouldRunCodexRepair: boolean,
+  agentsViewAvailable: boolean,
+): SelectedCollector {
+  if (preference === "legacy") return "legacy";
+  if (preference === "agentsview") return "agentsview-claude-native-codex";
+  if (shouldRunCodexRepair) return "legacy";
+  return agentsViewAvailable ? "agentsview-claude-native-codex" : "legacy";
 }
 
 function parseDate(dateStr: string): Date {
@@ -264,10 +306,28 @@ export async function pushCommand(options: PushOptions, apiUrlOverride?: string)
     saveConfig(config);
   }
 
+  let collectorPreference: CollectorPreference;
+  try {
+    collectorPreference = readCollectorPreference();
+  } catch (err) {
+    console.error((err as Error).message);
+    process.exit(1);
+  }
+
   const today = new Date();
   const shouldRunCodexRepair = !options.date
     && !config.codex_native_repair_completed_at
     && await containsSessionFile();
+  const shouldProbeAgentsView = collectorPreference !== "legacy"
+    && !(collectorPreference === "auto" && shouldRunCodexRepair);
+  const agentsViewProbeTimeoutMs = Math.min(options.timeoutMs ?? 3_000, 3_000);
+  const agentsViewAvailable = shouldProbeAgentsView
+    ? await isSupportedAgentsViewInstalled(agentsViewProbeTimeoutMs)
+    : false;
+  if (collectorPreference === "agentsview" && !agentsViewAvailable) {
+    console.error(`agentsview ${MIN_AGENTSVIEW_VERSION} or newer is required. Install or upgrade it from https://www.agentsview.io/.`);
+    process.exit(1);
+  }
 
   const resolution = resolvePushDateRange({
     today,
@@ -284,6 +344,10 @@ export async function pushCommand(options: PushOptions, apiUrlOverride?: string)
 
   const sinceStr = formatDateCompact(sinceDate);
   const untilStr = formatDateCompact(untilDate);
+  const sinceIso = formatDate(sinceDate);
+  const untilIso = formatDate(untilDate);
+
+  const selectedCollector = selectCollector(collectorPreference, shouldRunCodexRepair, agentsViewAvailable);
 
   console.log(
     sinceDate.getTime() === untilDate.getTime()
@@ -291,82 +355,211 @@ export async function pushCommand(options: PushOptions, apiUrlOverride?: string)
       : `Pushing usage for ${formatDate(sinceDate)} to ${formatDate(untilDate)}...`,
   );
 
-  // Try to ensure ccusage is installed. In a TTY this prompts the user and
-  // runs `bun add -g` / `npm install -g`. We catch the throw rather than
-  // propagating it: Codex-only users (no Claude data) shouldn't be blocked by
-  // a missing ccusage. If ccusage is genuinely required, the runCcusage call
-  // below will surface the "not installed" error and we treat it the same as
-  // missing Claude data.
-  let ccusageReady = true;
-  try {
-    await ensureCcusageInstalled(config);
-  } catch {
-    ccusageReady = false;
-  }
-
-  // Run ccusage + codex in parallel — the single biggest perf win
   const scanSpinner = new Spinner("scan");
   scanSpinner.start();
+
+  let entries: CcusageDailyEntry[] = [];
+  let rawHashInput = "";
+  let collector: UsageSubmitRequest["collector"] | undefined;
+  let allAnomalies: NormalizationAnomaly[] = [];
+  let anomalyCounts = countAnomalies([]);
   let codexCollectFailed = false;
-  const [claudeResult, codexParsed] = await Promise.all([
-    ccusageReady
-      ? runCcusageRawAsync(sinceStr, untilStr, options.timeoutMs).catch((err: Error) => err)
-      : Promise.resolve(
-          new Error("ccusage is not installed or not on PATH"),
-        ),
-    collectCodexUsageAsync(sinceStr, untilStr).catch(() => {
-      codexCollectFailed = true;
-      return {
-        data: [],
-        anomalies: [],
-        entryMeta: [],
-        fingerprint: "",
-        scannedFiles: 0,
-        parsedEvents: 0,
-      };
-    }),
-  ]);
-  scanSpinner.stop();
+  let agentsViewVersion: string | undefined;
+  const blockedDates = new Set<string>();
 
-  let claudeRaw = "";
-  let claudeEntries: CcusageDailyEntry[] = [];
-  let claudeAnomalies: NormalizationAnomaly[] = [];
+  if (isDebug()) {
+    debugLog(`collector mode: ${selectedCollector} (preference=${collectorPreference})`);
+    debugLog(`agentsview available: ${agentsViewAvailable}`);
+    debugLog(`codex repair pending: ${shouldRunCodexRepair}`);
+    debugLog(`codex_native_repair_completed_at: ${config.codex_native_repair_completed_at ?? "(unset)"}`);
+    debugLog(`timezone: ${localTimeZone() ?? "(unset)"}`);
+    debugLog(`pricing mode: offline`);
+  }
 
-  if (claudeResult instanceof Error) {
-    // Codex-only users do not have local Claude data; keep other Claude failures fatal.
-    if (
-      isMissingClaudeDataError(claudeResult) ||
-      isCcusageNotInstalledError(claudeResult)
-    ) {
-      console.log("No Claude Code data found locally; syncing Codex usage only.");
-    } else {
-      console.error(claudeResult.message);
-      process.exit(1);
-    }
-  } else {
-    claudeRaw = claudeResult;
+  if (selectedCollector === "agentsview-claude-native-codex") {
+    // Probe agentsview version once, eagerly, so telemetry + debug logs can
+    // record it even if the main agentsview run later fails. Failures here
+    // are non-fatal — the version is metadata, not a gate.
     try {
-      const parsed = parseCcusageOutput(claudeRaw);
-      claudeEntries = parsed.data;
-      claudeAnomalies = parsed.anomalies ?? [];
-    } catch (err) {
-      console.error((err as Error).message);
-      process.exit(1);
+      agentsViewVersion = await getAgentsViewVersion(options.timeoutMs);
+      if (isDebug()) {
+        debugLog(`agentsview version: ${agentsViewVersion}`);
+      }
+    } catch {
+      if (isDebug()) {
+        debugLog(`agentsview version: (probe failed)`);
+      }
     }
+
+    const [agentsViewResult, codexParsed] = await Promise.all([
+      runAgentsViewRawAsync(sinceIso, untilIso, options.timeoutMs, {
+        agent: "claude",
+        timezone: localTimeZone(),
+      }).catch((err: Error) => err),
+      collectCodexUsageAsync(sinceStr, untilStr).catch(() => {
+        codexCollectFailed = true;
+        return {
+          data: [],
+          anomalies: [],
+          entryMeta: [],
+          fingerprint: "",
+          scannedFiles: 0,
+          parsedEvents: 0,
+        };
+      }),
+    ]);
+    scanSpinner.stop();
+
+    let agentsViewRaw = "";
+    let claudeEntries: CcusageDailyEntry[] = [];
+    let claudeAnomalies: NormalizationAnomaly[] = [];
+
+    if (agentsViewResult instanceof Error) {
+      // Mirror the legacy ccusage three-branch structure: a missing
+      // `~/.claude/` tree shouldn't crash a Codex-only user. Real failures
+      // (binary error, parse error, timeout) still exit fatally.
+      if (isMissingAgentsViewClaudeDataError(agentsViewResult)) {
+        console.log("No Claude Code data found locally; syncing Codex usage only.");
+      } else {
+        console.error(agentsViewResult.message);
+        process.exit(1);
+      }
+    } else {
+      agentsViewRaw = agentsViewResult;
+      try {
+        const parsed = parseAgentsViewOutput(agentsViewRaw);
+        claudeEntries = parsed.data;
+        claudeAnomalies = parsed.anomalies ?? [];
+      } catch (err) {
+        console.error((err as Error).message);
+        process.exit(1);
+      }
+    }
+
+    allAnomalies = [
+      ...claudeAnomalies,
+      ...(codexParsed.anomalies ?? []),
+    ];
+    anomalyCounts = countAnomalies(allAnomalies);
+
+    const codexMetaByDate = new Map((codexParsed.entryMeta ?? []).map((row) => [row.date, row.meta]));
+
+    for (const [date, meta] of codexMetaByDate) {
+      if (meta.mode === "unresolved") {
+        blockedDates.add(date);
+      }
+    }
+
+    if (blockedDates.size > 0) {
+      const blocked = [...blockedDates].sort();
+      const reason = "unresolved codex normalization";
+      console.log(`Warning: skipping Codex rows for ${blocked.length} date(s) due to ${reason}: ${blocked.join(", ")}`);
+    }
+
+    const codexEntries = codexParsed.data.filter((entry) => !blockedDates.has(entry.date));
+
+    entries = mergeEntries(claudeEntries, codexEntries);
+    rawHashInput = codexParsed.fingerprint ? agentsViewRaw + codexParsed.fingerprint : agentsViewRaw;
+    const hybridCollector: UsageSubmitRequest["collector"] = {};
+    if (claudeEntries.length > 0) hybridCollector.claude = AGENTSVIEW_COLLECTOR;
+    if (codexEntries.length > 0) hybridCollector.codex = CODEX_NATIVE_COLLECTOR;
+    collector = Object.keys(hybridCollector).length > 0 ? hybridCollector : undefined;
+  } else {
+    // Legacy fallback path: ccusage + native Codex.
+    //
+    // Try to ensure ccusage is installed. In a TTY this prompts the user and
+    // runs `bun add -g` / `npm install -g`. We catch the throw rather than
+    // propagating it: Codex-only users (no Claude data) shouldn't be blocked
+    // by a missing ccusage. If ccusage is genuinely required, the runCcusage
+    // call below will surface the "not installed" error and we treat it the
+    // same as missing Claude data.
+    let ccusageReady = true;
+    try {
+      await ensureCcusageInstalled(config);
+    } catch {
+      ccusageReady = false;
+    }
+
+    const [claudeResult, codexParsed] = await Promise.all([
+      ccusageReady
+        ? runCcusageRawAsync(sinceStr, untilStr, options.timeoutMs).catch((err: Error) => err)
+        : Promise.resolve(
+            new Error("ccusage is not installed or not on PATH"),
+          ),
+      collectCodexUsageAsync(sinceStr, untilStr).catch(() => {
+        codexCollectFailed = true;
+        return {
+          data: [],
+          anomalies: [],
+          entryMeta: [],
+          fingerprint: "",
+          scannedFiles: 0,
+          parsedEvents: 0,
+        };
+      }),
+    ]);
+    scanSpinner.stop();
+
+    let claudeRaw = "";
+    let claudeEntries: CcusageDailyEntry[] = [];
+    let claudeAnomalies: NormalizationAnomaly[] = [];
+
+    if (claudeResult instanceof Error) {
+      // Codex-only users do not have local Claude data; keep other Claude failures fatal.
+      if (
+        isMissingClaudeDataError(claudeResult) ||
+        isCcusageNotInstalledError(claudeResult)
+      ) {
+        console.log("No Claude Code data found locally; syncing Codex usage only.");
+      } else {
+        console.error(claudeResult.message);
+        process.exit(1);
+      }
+    } else {
+      claudeRaw = claudeResult;
+      try {
+        const parsed = parseCcusageOutput(claudeRaw);
+        claudeEntries = parsed.data;
+        claudeAnomalies = parsed.anomalies ?? [];
+      } catch (err) {
+        console.error((err as Error).message);
+        process.exit(1);
+      }
+    }
+
+    allAnomalies = [
+      ...claudeAnomalies,
+      ...(codexParsed.anomalies ?? []),
+    ];
+    anomalyCounts = countAnomalies(allAnomalies);
+
+    const codexMetaByDate = new Map((codexParsed.entryMeta ?? []).map((row) => [row.date, row.meta]));
+
+    for (const [date, meta] of codexMetaByDate) {
+      if (meta.mode === "unresolved") {
+        blockedDates.add(date);
+      }
+    }
+
+    if (blockedDates.size > 0) {
+      const blocked = [...blockedDates].sort();
+      const reason = "unresolved codex normalization";
+      console.log(`Warning: skipping Codex rows for ${blocked.length} date(s) due to ${reason}: ${blocked.join(", ")}`);
+    }
+
+    const codexEntries = codexParsed.data.filter((entry) => !blockedDates.has(entry.date));
+
+    entries = mergeEntries(claudeEntries, codexEntries);
+    rawHashInput = codexParsed.fingerprint ? claudeRaw + codexParsed.fingerprint : claudeRaw;
+    const legacyCollector: UsageSubmitRequest["collector"] = {};
+    if (claudeEntries.length > 0) legacyCollector.claude = "ccusage-v18";
+    if (codexEntries.length > 0) legacyCollector.codex = CODEX_NATIVE_COLLECTOR;
+    collector = Object.keys(legacyCollector).length > 0 ? legacyCollector : undefined;
   }
 
   // Token-normalization anomalies are diagnostic, not user-actionable: rows
-  // tagged medium/low confidence still get pushed (we just had to infer
-  // cache semantics). Only `mode === "unresolved"` rows are dropped, and
-  // those have their own warning below. So keep these counts quiet by
-  // default and surface them only under --debug; ship the counts to PostHog
-  // either way so we can monitor normalization quality across users.
-  const allAnomalies: NormalizationAnomaly[] = [
-    ...claudeAnomalies,
-    ...(codexParsed.anomalies ?? []),
-  ];
-  const anomalyCounts = countAnomalies(allAnomalies);
-
+  // tagged medium/low confidence still get pushed (we just had to infer cache
+  // semantics). Only native Codex `mode === "unresolved"` rows are dropped.
   if (isDebug() && anomalyCounts.mediumLow > 0) {
     debugLog(
       `normalization anomalies: ${anomalyCounts.mediumLow} medium/low,`,
@@ -382,30 +575,10 @@ export async function pushCommand(options: PushOptions, apiUrlOverride?: string)
     }
   }
 
-  const codexMetaByDate = new Map((codexParsed.entryMeta ?? []).map((row) => [row.date, row.meta]));
-  const blockedDates = new Set<string>();
-
-  for (const [date, meta] of codexMetaByDate) {
-    if (meta.mode === "unresolved") {
-      blockedDates.add(date);
-    }
-  }
-
-  if (blockedDates.size > 0) {
-    const blocked = [...blockedDates].sort();
-    const reason = "unresolved codex normalization";
-    console.log(`Warning: skipping Codex rows for ${blocked.length} date(s) due to ${reason}: ${blocked.join(", ")}`);
-  }
-
-  const codexEntries = codexParsed.data.filter((entry) => !blockedDates.has(entry.date));
-
-  // Merge Claude + Codex entries by date
-  const merged = mergeEntries(claudeEntries, codexEntries);
-
   // Drop entries the server would reject as out-of-window. Pre-filtering keeps
   // a single edge-case row from failing the whole batch with HTTP 400.
   const droppedDates: string[] = [];
-  const entries = merged.filter((entry) => {
+  entries = entries.filter((entry) => {
     if (isWithinBackfillWindow(entry.date)) return true;
     droppedDates.push(entry.date);
     return false;
@@ -448,12 +621,7 @@ export async function pushCommand(options: PushOptions, apiUrlOverride?: string)
     return;
   }
 
-  // Compute SHA-256 hash of Claude raw JSON plus native Codex aggregate fingerprint.
-  const hashInput = codexParsed.fingerprint ? claudeRaw + codexParsed.fingerprint : claudeRaw;
-  const hash = createHash("sha256").update(hashInput).digest("hex");
-  const collector: UsageSubmitRequest["collector"] = {};
-  if (claudeEntries.length > 0) collector.claude = "ccusage-v18";
-  if (codexEntries.length > 0) collector.codex = CODEX_NATIVE_COLLECTOR;
+  const hash = createHash("sha256").update(rawHashInput).digest("hex");
 
   const body: UsageSubmitRequest = {
     entries: entries.map((entry) => ({
@@ -461,7 +629,7 @@ export async function pushCommand(options: PushOptions, apiUrlOverride?: string)
       data: entry,
     })),
     hash,
-    collector: Object.keys(collector).length > 0 ? collector : undefined,
+    collector,
     source: "cli",
     device_id: config.device_id,
     device_name: config.device_name,
@@ -520,21 +688,32 @@ export async function pushCommand(options: PushOptions, apiUrlOverride?: string)
   const totalTokens = entries.reduce((sum, e) => sum + e.totalTokens, 0);
   const datesCreated = response.results.filter((r) => r.action === "created").length;
   const datesUpdated = response.results.filter((r) => r.action === "updated").length;
-  posthog.capture({
-    distinctId: getDistinctId(config),
-    event: "usage_pushed",
-    properties: {
-      days_pushed: entries.length,
-      dates_created: datesCreated,
-      dates_updated: datesUpdated,
-      total_cost_usd: Math.round(totalCost * 100) / 100,
-      total_tokens: totalTokens,
-      dry_run: false,
-      anomalies_medium_low: anomalyCounts.mediumLow,
-      anomalies_low_confidence: anomalyCounts.low,
-      anomalies_unresolved: anomalyCounts.unresolved,
-    },
-  });
+  // Wrap telemetry capture in try/catch — a property assembly bug or
+  // PostHog hiccup must never crash the user-facing command.
+  try {
+    posthog.capture({
+      distinctId: getDistinctId(config),
+      event: "usage_pushed",
+      properties: {
+        days_pushed: entries.length,
+        dates_created: datesCreated,
+        dates_updated: datesUpdated,
+        total_cost_usd: Math.round(totalCost * 100) / 100,
+        total_tokens: totalTokens,
+        dry_run: false,
+        anomalies_medium_low: anomalyCounts.mediumLow,
+        anomalies_low_confidence: anomalyCounts.low,
+        anomalies_unresolved: anomalyCounts.unresolved,
+        collector_mode: selectedCollector,
+        collector_preference: collectorPreference,
+        agentsview_available: agentsViewAvailable,
+        codex_repair_pending: shouldRunCodexRepair,
+        agentsview_version: agentsViewVersion,
+      },
+    });
+  } catch {
+    // Telemetry failure is non-fatal.
+  }
 
   // Render visual dashboard
   try {
