@@ -63,4 +63,50 @@ describe("ResponsiveShellFrame", () => {
     expect(screen.queryByText("Right rail content")).not.toBeInTheDocument();
     expect(screen.getByRole("button", { name: /open panels/i })).toBeInTheDocument();
   });
+
+  it("keeps desktop rails and main content in hidden-scrollbar scroll regions", () => {
+    Object.defineProperty(window, "innerWidth", {
+      configurable: true,
+      writable: true,
+      value: 1280,
+    });
+
+    const queryClient = new QueryClient({
+      defaultOptions: {
+        queries: { retry: false },
+      },
+    });
+
+    const { container } = render(
+      <QueryClientProvider client={queryClient}>
+        <ResponsiveShellFrame
+          username="alice"
+          avatarUrl={null}
+          leftPanel={<div>Left rail content</div>}
+          rightPanel={<div>Right rail content</div>}
+        >
+          <div>Page content</div>
+        </ResponsiveShellFrame>
+      </QueryClientProvider>,
+    );
+
+    const rails = Array.from(container.querySelectorAll("aside"));
+    expect(rails).toHaveLength(2);
+
+    for (const rail of rails) {
+      expect(rail).toHaveClass(
+        "scrollbar-none",
+        "min-h-0",
+        "overflow-y-auto",
+        "overflow-x-hidden",
+      );
+    }
+
+    expect(screen.getByRole("main")).toHaveClass(
+      "scrollbar-none",
+      "overflow-y-auto",
+      "overflow-x-hidden",
+      "overscroll-contain",
+    );
+  });
 });

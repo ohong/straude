@@ -145,13 +145,16 @@ export async function PATCH(request: NextRequest, context: RouteContext) {
     );
   }
 
+  if (body.images !== undefined && Array.isArray(body.images) && body.images.length > 0) {
+    try {
+      await checkAndAwardAchievements(user.id, "photo");
+    } catch (err) {
+      console.error("[achievements] first-photo award failed:", err);
+    }
+  }
+
   // Defer non-blocking work after the response is sent
   after(async () => {
-    // Photo achievement — when images were added
-    if (body.images !== undefined && Array.isArray(post.images) && post.images.length > 0) {
-      checkAndAwardAchievements(user.id, "photo").catch(() => {});
-    }
-
     // Award streak freeze when enriching a bare post (first time adding title or description)
     const wasBare = currentPost && currentPost.title === null && currentPost.description === null;
     const isEnriching = wasBare && (body.title || body.description);
