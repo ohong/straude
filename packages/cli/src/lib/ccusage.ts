@@ -1,6 +1,4 @@
 import { execFileSync, execFile as execFileCb } from "node:child_process";
-import { existsSync } from "node:fs";
-import { delimiter, join } from "node:path";
 import {
   normalizeTokenBuckets,
   summarizeNormalization,
@@ -10,6 +8,7 @@ import {
   type TokenNormalizationMode,
 } from "./token-normalization.js";
 import { DEFAULT_SUBPROCESS_TIMEOUT_MS } from "../config.js";
+import { isBinaryOnPath } from "./binary.js";
 import { isInteractive, promptYesNo } from "./prompt.js";
 import { posthog } from "./posthog.js";
 import { getDistinctId } from "./machine-id.js";
@@ -27,15 +26,6 @@ interface ExecError extends Error {
 /** Resolved ccusage command. Cached after first resolution. */
 let _resolved: { cmd: string; args: string[] } | undefined;
 
-/** Check if a binary exists on PATH without spawning a subprocess. */
-function isOnPath(binary: string): boolean {
-  const dirs = (process.env.PATH || "").split(delimiter);
-  const suffixes = process.platform === "win32" ? ["", ".cmd", ".exe"] : [""];
-  return dirs.some((dir) =>
-    suffixes.some((ext) => existsSync(join(dir, binary + ext))),
-  );
-}
-
 /**
  * Resolve how to run ccusage.
  * For security reasons we only execute an explicitly installed `ccusage`
@@ -45,7 +35,7 @@ function resolveCcusageCommand(): { cmd: string; args: string[] } {
   if (_resolved) return _resolved;
 
   // Check if ccusage binary exists on PATH (pure fs, no subprocess)
-  if (isOnPath("ccusage")) {
+  if (isBinaryOnPath("ccusage")) {
     _resolved = { cmd: "ccusage", args: [] };
     return _resolved;
   }
@@ -62,7 +52,7 @@ export function _resetCcusageResolver(): void {
 
 /** Whether ccusage is currently resolvable on PATH. */
 export function isCcusageInstalled(): boolean {
-  return isOnPath("ccusage");
+  return isBinaryOnPath("ccusage");
 }
 
 /**
@@ -83,7 +73,7 @@ export function pickInstallCommand(env: { hasBun: boolean }): { cmd: string; arg
  * stdio is inherited so the user sees install progress.
  */
 function installCcusage(): void {
-  const { cmd, args } = pickInstallCommand({ hasBun: isOnPath("bun") });
+  const { cmd, args } = pickInstallCommand({ hasBun: isBinaryOnPath("bun") });
   execFileSync(cmd, args, {
     stdio: "inherit",
     timeout: 5 * 60 * 1000,
@@ -137,7 +127,7 @@ export async function ensureCcusageInstalled(
   posthog.capture({
     distinctId,
     event: "ccusage_install_attempted",
-    properties: { manager: pickInstallCommand({ hasBun: isOnPath("bun") }).manager },
+    properties: { manager: pickInstallCommand({ hasBun: isBinaryOnPath("bun") }).manager },
   });
 
   try {
@@ -260,7 +250,7 @@ interface CcusageV18Entry {
   outputTokens: number;
   cacheCreationTokens: number;
   cacheReadTokens: number;
-  totalTokens: number;
+  totalTokens?: number;
   totalCost: number;
   modelBreakdowns?: Array<{ modelName: string; cost: number }>;
 }
@@ -272,7 +262,7 @@ interface CcusageV18Output {
     outputTokens: number;
     cacheCreationTokens: number;
     cacheReadTokens: number;
-    totalTokens: number;
+    totalTokens?: number;
     totalCost: number;
   };
 }
@@ -285,7 +275,7 @@ export interface CcusageOutput {
 
 export interface NormalizationAnomaly {
   date: string;
-  source: "ccusage" | "codex";
+  source: "ccusage" | "codex" | "agentsview";
   mode: TokenNormalizationMode;
   confidence: TokenNormalizationConfidence;
   consistencyError: number;
@@ -313,8 +303,10 @@ export function runCcusageRawAsync(sinceDate: string, untilDate: string, timeout
   return execCcusageAsync(args, timeoutMs);
 }
 
-/** Normalize a v18 entry into our canonical format. */
-function normalizeEntry(raw: CcusageV18Entry): { entry: CcusageDailyEntry; meta: NormalizationMeta } {
+type DailyUsageSource = "ccusage" | "agentsview";
+
+/** Normalize a ccusage-compatible daily entry into our canonical format. */
+function normalizeEntry(raw: CcusageV18Entry, source: DailyUsageSource): { entry: CcusageDailyEntry; meta: NormalizationMeta } {
   const normalized = normalizeTokenBuckets(
     {
       inputTokens: raw.inputTokens,
@@ -323,7 +315,7 @@ function normalizeEntry(raw: CcusageV18Entry): { entry: CcusageDailyEntry; meta:
       cacheReadTokens: raw.cacheReadTokens,
       totalTokens: raw.totalTokens,
     },
-    { source: "ccusage", cacheSemantics: "separate" },
+    { source: source === "ccusage" ? "ccusage" : "generic", cacheSemantics: "separate" },
   );
 
   return {
@@ -343,12 +335,13 @@ function normalizeEntry(raw: CcusageV18Entry): { entry: CcusageDailyEntry; meta:
   };
 }
 
-export function parseCcusageOutput(raw: string): CcusageOutput {
+export function parseDailyUsageOutput(raw: string, source: DailyUsageSource): CcusageOutput {
+  const label = source === "agentsview" ? "agentsview" : "ccusage";
   let parsed: unknown;
   try {
     parsed = JSON.parse(raw);
   } catch (err) {
-    throw new Error("Failed to parse ccusage output as JSON", { cause: err });
+    throw new Error(`Failed to parse ${label} output as JSON`, { cause: err });
   }
 
   // ccusage returns `[]` when there's no data for the period
@@ -358,15 +351,15 @@ export function parseCcusageOutput(raw: string): CcusageOutput {
 
   const v18 = parsed as CcusageV18Output;
   if (!Array.isArray(v18.daily)) {
-    throw new Error("Unexpected ccusage output format (expected 'daily' array)");
+    throw new Error(`Unexpected ${label} output format (expected 'daily' array)`);
   }
 
-  const normalizedRows = v18.daily.map(normalizeEntry);
+  const normalizedRows = v18.daily.map((entry) => normalizeEntry(entry, source));
   const data = normalizedRows.map((row) => row.entry);
 
   for (const entry of data) {
-    if (!entry.date || typeof entry.costUSD !== "number") {
-      throw new Error(`Invalid entry in ccusage output for date: ${entry.date}`);
+    if (!entry.date || typeof entry.costUSD !== "number" || !Number.isFinite(entry.costUSD)) {
+      throw new Error(`Invalid entry in ${label} output for date: ${entry.date}`);
     }
     if (entry.costUSD < 0) {
       throw new Error(`Negative cost for date: ${entry.date}`);
@@ -380,7 +373,7 @@ export function parseCcusageOutput(raw: string): CcusageOutput {
     .filter((row) => row.meta.mode === "unresolved" || row.meta.confidence !== "high" || row.meta.warnings.length > 0)
     .map((row) => ({
       date: row.entry.date,
-      source: "ccusage",
+      source,
       mode: row.meta.mode,
       confidence: row.meta.confidence,
       consistencyError: row.meta.consistencyError,
@@ -392,4 +385,8 @@ export function parseCcusageOutput(raw: string): CcusageOutput {
     anomalies,
     normalizationSummary: summarizeNormalization(normalizedRows.map((row) => row.meta)),
   };
+}
+
+export function parseCcusageOutput(raw: string): CcusageOutput {
+  return parseDailyUsageOutput(raw, "ccusage");
 }
