@@ -7,13 +7,12 @@ import { basename, join, relative, sep } from "node:path";
 import { createInterface } from "node:readline";
 import type { CcusageDailyEntry, ModelBreakdownEntry, NormalizationAnomaly } from "./ccusage.js";
 import {
-  normalizeTokenBuckets,
   summarizeNormalization,
   type NormalizationMeta,
   type NormalizationSummary,
 } from "./token-normalization.js";
 
-export const CODEX_NATIVE_COLLECTOR = "straude-codex-native-v1" as const;
+export const CODEX_NATIVE_COLLECTOR = "straude-codex-native-v2" as const;
 
 interface RawTokenUsage {
   input_tokens: number;
@@ -37,6 +36,12 @@ interface ParsedSession {
   startedAt: string;
   events: SessionEvent[];
   signatures: Set<string>;
+  // Highest cumulative `total_token_usage` observed in the file. Used as the
+  // baseline (initialPreviousTotals) when re-parsing a child session forked
+  // from this one — without this, the child's first event's delta is the
+  // entire parent-inclusive cumulative, double-counting the parent's tokens.
+  lastCumulative: RawTokenUsage;
+  filePath: string;
 }
 
 interface AggregateBucket {
@@ -184,6 +189,14 @@ function isZeroUsage(usage: RawTokenUsage): boolean {
     && usage.total_tokens === 0;
 }
 
+function rawUsageEquals(a: RawTokenUsage, b: RawTokenUsage): boolean {
+  return a.input_tokens === b.input_tokens
+    && a.cached_input_tokens === b.cached_input_tokens
+    && a.output_tokens === b.output_tokens
+    && a.reasoning_output_tokens === b.reasoning_output_tokens
+    && a.total_tokens === b.total_tokens;
+}
+
 function extractModel(value: unknown): string | undefined {
   if (!value || typeof value !== "object") return undefined;
   const record = value as Record<string, unknown>;
@@ -268,9 +281,19 @@ function shouldScanFile(file: string, sinceIso: string, untilIso: string): boole
   return pathDate >= addDays(sinceIso, -1) && pathDate <= addDays(untilIso, 1);
 }
 
-async function parseSessionFile(file: string, sinceIso: string, untilIso: string): Promise<ParsedSession> {
+async function parseSessionFile(
+  file: string,
+  sinceIso: string,
+  untilIso: string,
+  initialPreviousTotals: RawTokenUsage | null = null,
+): Promise<ParsedSession> {
   let currentModel: string | undefined;
-  let previousTotals: RawTokenUsage | null = null;
+  let previousTotals: RawTokenUsage | null = initialPreviousTotals;
+  let lastCumulative: RawTokenUsage = initialPreviousTotals ?? { ...ZERO_USAGE };
+  // Cumulative-snapshot dedupe: Codex sometimes re-emits the same
+  // token_count event twice in a row (identical total_token_usage). We dedupe
+  // on the cumulative snapshot so we don't double-bill those events.
+  let prevTotalSnapshot: RawTokenUsage | null = null;
   const events: SessionEvent[] = [];
   const signatures = new Set<string>();
   let id = sessionIdFromPath(file);
@@ -324,15 +347,46 @@ async function parseSessionFile(file: string, sinceIso: string, untilIso: string
     currentModel = extractModel({ ...payload, info }) ?? currentModel;
     const totalUsage = normalizeRawUsage(info.total_token_usage);
     const lastUsage = normalizeRawUsage(info.last_token_usage);
-    let raw: RawTokenUsage | null = null;
 
-    if (totalUsage) {
+    // Skip consecutive duplicate emissions of the same cumulative snapshot —
+    // they represent a single billed request being re-reported, not new
+    // tokens. (Verified against real Codex sessions where the last few
+    // events of a stream often duplicate the prior total_token_usage exactly.)
+    if (totalUsage && prevTotalSnapshot && rawUsageEquals(totalUsage, prevTotalSnapshot)) {
+      continue;
+    }
+
+    // Codex's `total_token_usage` is the *current request's context snapshot*
+    // — the prompt size + cache hits + output for the request that just
+    // completed. It is NOT a monotonic session cumulative: the IDE
+    // periodically prunes the conversation context, which causes the snapshot
+    // to drop and then grow again. The legacy logic computed deltas via
+    // `total_now - total_prev`, which double-counts every prune-then-regrow
+    // cycle (verified to inflate by 70x+ on real heavy-usage days). The
+    // correct per-event billing data is `last_token_usage` — the token cost
+    // of the single request that produced this event. We sum those directly.
+    //
+    // Fallback: when only `total_token_usage` is present (older event
+    // shapes / partial events), fall back to cumulative-delta semantics.
+    // The forked-session baseline subtraction (handled in the caller via
+    // `initialPreviousTotals`) keeps that fallback honest.
+    let raw: RawTokenUsage | null = null;
+    if (lastUsage) {
+      raw = lastUsage;
+      if (totalUsage) {
+        previousTotals = totalUsage;
+        lastCumulative = totalUsage;
+      } else {
+        previousTotals = addRawUsage(previousTotals, lastUsage);
+        lastCumulative = previousTotals;
+      }
+    } else if (totalUsage) {
       raw = subtractRawUsage(totalUsage, previousTotals);
       previousTotals = totalUsage;
-    } else if (lastUsage) {
-      raw = lastUsage;
-      previousTotals = addRawUsage(previousTotals, lastUsage);
+      lastCumulative = totalUsage;
     }
+
+    if (totalUsage) prevTotalSnapshot = totalUsage;
 
     if (!raw || isZeroUsage(raw)) continue;
 
@@ -353,6 +407,8 @@ async function parseSessionFile(file: string, sinceIso: string, untilIso: string
     startedAt,
     events,
     signatures,
+    lastCumulative,
+    filePath: file,
   };
 }
 
@@ -423,32 +479,61 @@ function calculateCost(entry: CcusageDailyEntry, model: string): number {
   );
 }
 
+/**
+ * Codex's documented schema (OpenAI Responses API):
+ *   total_token_usage.input_tokens         = total input (uncached + cached)
+ *   total_token_usage.cached_input_tokens  = subset of input that was a cache hit
+ *   total_token_usage.output_tokens        = output (includes any reasoning tokens)
+ *   total_token_usage.total_tokens         = input_tokens + output_tokens
+ *
+ * The previous implementation passed these into the shared dual-candidate
+ * normalizer, which under bucket-level arithmetic drift could choose the
+ * "separate cache" candidate and let cache_read exceed input — producing
+ * wildly inflated costs (cache priced like uncached input). For the codex
+ * path the invariant cache ⊆ input is non-negotiable, so we apply it
+ * directly and emit a NormalizationAnomaly when bad upstream data tries to
+ * violate it.
+ */
 function normalizeBucket(date: string, model: string, raw: RawTokenUsage): { entry: CcusageDailyEntry; meta: NormalizationMeta } {
-  const normalized = normalizeTokenBuckets(
-    {
-      inputTokens: raw.input_tokens,
-      cachedInputTokens: raw.cached_input_tokens,
-      outputTokens: raw.output_tokens,
-      reasoningOutputTokens: raw.reasoning_output_tokens,
-      totalTokens: raw.total_tokens,
-    },
-    { source: "codex", cacheSemantics: "subset_of_input" },
-  );
+  const rawInput = Math.max(raw.input_tokens, 0);
+  const rawCached = Math.max(raw.cached_input_tokens, 0);
+  const rawOutput = Math.max(raw.output_tokens, 0);
+  const rawReasoning = Math.max(raw.reasoning_output_tokens, 0);
+
+  const cacheClamped = rawCached > rawInput;
+  const cacheReadTokens = Math.min(rawCached, rawInput);
+  const inputTokens = rawInput - cacheReadTokens;
+  const outputTokens = rawOutput;
+  const totalTokens = inputTokens + cacheReadTokens + outputTokens;
+
+  const warnings: string[] = [];
+  if (cacheClamped) {
+    warnings.push(
+      `Codex source reported cached_input_tokens (${rawCached}) > input_tokens (${rawInput}); clamped to inclusive subset.`,
+    );
+  }
+
+  const meta: NormalizationMeta = {
+    mode: "inclusive_cache_input",
+    confidence: cacheClamped ? "low" : "high",
+    warnings,
+    consistencyError: 0,
+  };
 
   const entry: CcusageDailyEntry = {
     date,
     models: [model],
-    inputTokens: normalized.normalized.inputTokens,
-    outputTokens: normalized.normalized.outputTokens,
-    cacheCreationTokens: normalized.normalized.cacheCreationTokens,
-    cacheReadTokens: normalized.normalized.cacheReadTokens,
-    totalTokens: normalized.normalized.totalTokens,
+    inputTokens,
+    outputTokens,
+    cacheCreationTokens: 0,
+    cacheReadTokens,
+    totalTokens,
     costUSD: 0,
-    reasoningOutputTokens: normalized.normalized.reasoningOutputTokens,
+    reasoningOutputTokens: Math.min(rawReasoning, outputTokens),
   };
   entry.costUSD = calculateCost(entry, model);
 
-  return { entry, meta: normalized.meta };
+  return { entry, meta };
 }
 
 function aggregateSessions(sessions: ParsedSession[]): { data: CcusageDailyEntry[]; metas: Array<{ date: string; meta: NormalizationMeta }>; parsedEvents: number } {
@@ -530,6 +615,31 @@ export async function collectCodexUsageAsync(sinceDate: string, untilDate: strin
     sessions.push(await parseSessionFile(file, sinceIso, untilIso));
   }
   await addMissingAncestors(sessions, allFiles, sinceIso, untilIso);
+
+  // Second pass: re-parse forked sessions with their parent's lastCumulative
+  // as the baseline. Without this, a child's first event delta is the entire
+  // parent-inclusive cumulative, and even after the per-bucket cache clamp the
+  // bucket sums end up double-counting parent tokens (real-world pattern: a
+  // single day of heavy session forking inflated by ~10x).
+  //
+  // Topological order: parents always have an earlier startedAt than their
+  // children (Codex assigns startedAt at fork time), so iterating sorted
+  // ensures a parent has already been re-parsed before its children. We swap
+  // the re-parsed session into the array in-place so descendants pick up the
+  // updated lastCumulative.
+  const byId = new Map(sessions.map((s) => [s.id, s]));
+  const sortedByStart = [...sessions].sort((a, b) => a.startedAt.localeCompare(b.startedAt));
+  for (const session of sortedByStart) {
+    const parentId = session.parentId;
+    if (!parentId) continue;
+    const parent = byId.get(parentId);
+    if (!parent) continue;
+    if (isZeroUsage(parent.lastCumulative)) continue;
+    const reParsed = await parseSessionFile(session.filePath, sinceIso, untilIso, parent.lastCumulative);
+    byId.set(reParsed.id, reParsed);
+    const idx = sessions.findIndex((s) => s.id === session.id);
+    if (idx >= 0) sessions[idx] = reParsed;
+  }
 
   const { data, metas, parsedEvents } = aggregateSessions(sessions);
   const anomalies: NormalizationAnomaly[] = metas

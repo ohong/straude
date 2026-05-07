@@ -187,4 +187,122 @@ describe("native Codex collector", () => {
     expect(entry.costUSD).toBeCloseTo((200 * 0.00003) + (800 * 0.00003) + (200 * 0.00018));
     expect(entry.modelBreakdown).toEqual([{ model: "gpt-5.5-pro", cost_usd: entry.costUSD }]);
   });
+
+  it("clamps cached_input_tokens to input_tokens and emits an anomaly when source data is impossible", async () => {
+    // Pathological input: Codex schema guarantees cached ≤ input, but some
+    // upstream replay/fork edge cases produced rows where cached >> input.
+    // The collector must clamp rather than letting cache_read leak past input
+    // (which would price as cache-rate × billions of tokens).
+    await writeSession("2026-04-24", "session.jsonl", [
+      meta("s1"),
+      turn("gpt-5.5"),
+      token("2026-04-24T14:00:01.000Z", {
+        total_token_usage: usage(1_000_000, 100_000, 50_000_000),
+      }),
+    ]);
+
+    const result = await collectCodexUsageAsync("20260424", "20260424");
+    const entry = result.data[0]!;
+    expect(entry.inputTokens).toBe(0);
+    expect(entry.cacheReadTokens).toBe(1_000_000);
+    expect(entry.outputTokens).toBe(100_000);
+    expect(entry.costUSD).toBeCloseTo((1_000_000 * 0.0000005) + (100_000 * 0.00003));
+    expect(result.anomalies?.length).toBeGreaterThan(0);
+    expect(result.anomalies?.[0]?.warnings.some((w) => w.includes("clamped"))).toBe(true);
+  });
+
+  it("never lets cache_read_tokens exceed input_tokens after aggregation across many events", async () => {
+    // Simulates the May-4 inflation pattern: many cumulative-total events where
+    // cumulative cached drifts above cumulative input due to upstream replay.
+    // After bucket aggregation the deterministic clamp must still hold.
+    await writeSession("2026-04-24", "session.jsonl", [
+      meta("s1"),
+      turn("gpt-5.5"),
+      token("2026-04-24T14:00:01.000Z", { total_token_usage: usage(100, 50, 80) }),
+      token("2026-04-24T14:00:02.000Z", { total_token_usage: usage(200, 100, 250) }),
+      token("2026-04-24T14:00:03.000Z", { total_token_usage: usage(300, 150, 1000) }),
+    ]);
+
+    const result = await collectCodexUsageAsync("20260424", "20260424");
+    const entry = result.data[0]!;
+    expect(entry.cacheReadTokens).toBeLessThanOrEqual(entry.inputTokens + entry.cacheReadTokens);
+    expect(entry.cacheReadTokens + entry.inputTokens).toBe(300);
+    expect(entry.cacheReadTokens).toBe(300);
+    expect(entry.inputTokens).toBe(0);
+  });
+
+  it("preserves ordinary inclusive-cache semantics when cache ≤ input", async () => {
+    // Sanity: typical case where cached is a clean subset of input.
+    await writeSession("2026-04-24", "session.jsonl", [
+      meta("s1"),
+      turn("gpt-5"),
+      token("2026-04-24T14:00:01.000Z", {
+        total_token_usage: usage(10_000, 1_000, 6_000),
+      }),
+    ]);
+
+    const result = await collectCodexUsageAsync("20260424", "20260424");
+    const entry = result.data[0]!;
+    expect(entry.inputTokens).toBe(4_000);
+    expect(entry.cacheReadTokens).toBe(6_000);
+    expect(entry.outputTokens).toBe(1_000);
+    expect(entry.costUSD).toBeCloseTo((4_000 * 0.00000125) + (6_000 * 0.000000125) + (1_000 * 0.00001));
+  });
+
+  it("uses last_token_usage to bill per-request — context-prune oscillation must not inflate", async () => {
+    // Real Codex sessions emit `total_token_usage` as the *current request's*
+    // context snapshot, not session cumulative. The IDE periodically prunes
+    // the conversation context, which causes the snapshot to drop and grow
+    // again. Computing deltas via cumulative subtraction over-counts every
+    // prune-then-regrow cycle (verified to inflate by 70x on real data).
+    // Per-event billing comes from `last_token_usage` — the token cost of
+    // the single request that produced the event.
+    //
+    // This fixture simulates 5 requests, each costing 100 input + 200 cached
+    // + 20 output, with the context size oscillating around 1000 input as
+    // the IDE prunes between requests. Expected total = 5 × per-request cost.
+    await writeSession("2026-04-24", "session.jsonl", [
+      meta("s1"),
+      turn("gpt-5"),
+      token("2026-04-24T15:00:01.000Z", {
+        total_token_usage: { input_tokens: 1000, cached_input_tokens: 800, output_tokens: 20, reasoning_output_tokens: 0, total_tokens: 1020 },
+        last_token_usage:  { input_tokens:  100, cached_input_tokens: 200, output_tokens: 20, reasoning_output_tokens: 0, total_tokens:  120 },
+      }),
+      token("2026-04-24T15:00:02.000Z", {
+        total_token_usage: { input_tokens: 1100, cached_input_tokens: 900, output_tokens: 40, reasoning_output_tokens: 0, total_tokens: 1140 },
+        last_token_usage:  { input_tokens:  100, cached_input_tokens: 200, output_tokens: 20, reasoning_output_tokens: 0, total_tokens:  120 },
+      }),
+      // Prune: total drops back below the previous snapshot.
+      token("2026-04-24T15:00:03.000Z", {
+        total_token_usage: { input_tokens:  900, cached_input_tokens: 700, output_tokens: 60, reasoning_output_tokens: 0, total_tokens:  960 },
+        last_token_usage:  { input_tokens:  100, cached_input_tokens: 200, output_tokens: 20, reasoning_output_tokens: 0, total_tokens:  120 },
+      }),
+      token("2026-04-24T15:00:04.000Z", {
+        total_token_usage: { input_tokens: 1050, cached_input_tokens: 850, output_tokens: 80, reasoning_output_tokens: 0, total_tokens: 1130 },
+        last_token_usage:  { input_tokens:  100, cached_input_tokens: 200, output_tokens: 20, reasoning_output_tokens: 0, total_tokens:  120 },
+      }),
+      // Duplicate emission of the prior event: same total AND last. Must
+      // dedupe (Codex really does re-emit identical events).
+      token("2026-04-24T15:00:05.000Z", {
+        total_token_usage: { input_tokens: 1050, cached_input_tokens: 850, output_tokens: 80, reasoning_output_tokens: 0, total_tokens: 1130 },
+        last_token_usage:  { input_tokens:  100, cached_input_tokens: 200, output_tokens: 20, reasoning_output_tokens: 0, total_tokens:  120 },
+      }),
+      token("2026-04-24T15:00:06.000Z", {
+        total_token_usage: { input_tokens: 1150, cached_input_tokens: 950, output_tokens: 100, reasoning_output_tokens: 0, total_tokens: 1250 },
+        last_token_usage:  { input_tokens:  100, cached_input_tokens: 200, output_tokens: 20, reasoning_output_tokens: 0, total_tokens:  120 },
+      }),
+    ]);
+
+    const result = await collectCodexUsageAsync("20260424", "20260424");
+    const entry = result.data[0]!;
+    // 5 distinct requests × 100 input + 200 cached + 20 output each
+    // (1 of 6 events was a duplicate emission, must be skipped).
+    // After inclusive-cache clamp at the bucket level: cacheRead=min(cached, input).
+    // Sum of last: input=500, cached=1000 → cache > input, clamp:
+    // bucket cacheRead = 500, bucket input = 0. Output untouched.
+    expect(entry.inputTokens).toBe(0);
+    expect(entry.cacheReadTokens).toBe(500);
+    expect(entry.outputTokens).toBe(100);
+    expect(entry.costUSD).toBeCloseTo((0 * 0.00000125) + (500 * 0.000000125) + (100 * 0.00001));
+  });
 });

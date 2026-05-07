@@ -14,6 +14,10 @@ export interface StraudeConfig {
   api_url: string;
   last_push_date?: string;
   codex_native_repair_completed_at?: string;
+  // Set after the user has done the one-time v2 collector repair (30-day backfill
+  // run with the inclusive-cache fix in straude-codex-native-v2). Distinct from
+  // the v1 flag because users who repaired against v1 still have inflated rows.
+  codex_native_v2_repair_completed_at?: string;
   device_id?: string;
   device_name?: string;
   auto_push?: AutoPushConfig;
@@ -31,6 +35,7 @@ export function loadConfig(): StraudeConfig | null {
       api_url: parsed.api_url ?? DEFAULT_API_URL,
       last_push_date: parsed.last_push_date ?? undefined,
       codex_native_repair_completed_at: parsed.codex_native_repair_completed_at ?? undefined,
+      codex_native_v2_repair_completed_at: parsed.codex_native_v2_repair_completed_at ?? undefined,
       device_id: parsed.device_id ?? undefined,
       device_name: parsed.device_name ?? undefined,
       auto_push: parsed.auto_push ?? undefined,

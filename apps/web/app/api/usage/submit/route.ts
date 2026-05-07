@@ -8,7 +8,10 @@ import { formatCurrency } from "@/lib/utils/format";
 import type { UsageSubmitRequest, UsageSubmitResponse, CcusageDailyEntry, ModelBreakdownEntry } from "@/types";
 
 const MAX_BACKFILL_DAYS = 30;
-const TRUSTED_CODEX_COLLECTOR = "straude-codex-native-v1";
+// Bump in lockstep with CODEX_NATIVE_COLLECTOR in packages/cli/src/lib/codex-native.ts.
+// The trusted collector is the only one allowed to *lower* totals on UPSERT,
+// which is how the server accepts retroactive corrections from a fixed CLI.
+const TRUSTED_CODEX_COLLECTOR = "straude-codex-native-v2";
 const LEGACY_DEVICE_ID = "00000000-0000-0000-0000-000000000000";
 const CODEX_MODEL_RE = /^(gpt-|o3|o4)/i;
 
@@ -221,7 +224,7 @@ export async function POST(request: Request) {
       // rows produced by the older upstream Codex aggregation behavior.
       const { data: existingDevice } = await db
         .from("device_usage")
-        .select("cost_usd,models")
+        .select("cost_usd,models,collector_meta")
         .eq("user_id", userId)
         .eq("date", entry.date)
         .eq("device_id", deviceId)
@@ -244,9 +247,18 @@ export async function POST(request: Request) {
         && !entryHasNonCodexModels
         && existingDeviceHasNonCodexModels;
 
+      // Protect rows that the codex-only repair migration corrected from
+      // being re-inflated by a v1 (untrusted) push. Without this guard, a
+      // user still on the v1 CLI auto-pushes their next daily payload, the
+      // payload's cost is higher than the repaired row, and the existing
+      // "raise allowed" path overwrites the repair. v2 (trusted) uploads
+      // bypass the guard and heal the row to ground truth.
+      const existingDeviceMeta = (existingDevice as { collector_meta?: { repair_v3_codex_only?: string } | null } | null | undefined)?.collector_meta;
+      const existingDeviceWasRepaired = existingDeviceMeta?.repair_v3_codex_only === "true";
+
       const mayOverwriteDevice = (
         !existingDevice
-        || entry.data.costUSD >= Number(existingDevice.cost_usd)
+        || (entry.data.costUSD >= Number(existingDevice.cost_usd) && !existingDeviceWasRepaired)
         || isTrustedCodexCorrection
       ) && !codexOnlyRepairWouldDropMixedDevice;
 

@@ -406,6 +406,14 @@ export function ActivityCard({ post, userId, hideShareMenu }: { post: Post; user
                   <p className="font-[family-name:var(--font-mono)] text-[1.1rem] font-medium tabular-nums text-accent">
                     ${formatCurrency(usage.cost_usd)}
                   </p>
+                  {usage.collector_meta?.repair && typeof usage.collector_meta.previous_cost_usd === "number" && (
+                    <p
+                      className="mt-0.5 text-[0.65rem] uppercase tracking-wider text-muted"
+                      title={`Originally logged at $${formatCurrency(usage.collector_meta.previous_cost_usd)}. Cache-vs-uncached token accounting was repaired retroactively.`}
+                    >
+                      Repaired (was ${formatCurrency(usage.collector_meta.previous_cost_usd)})
+                    </p>
+                  )}
                 </div>
               )
             ) : (

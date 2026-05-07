@@ -265,8 +265,12 @@ export async function pushCommand(options: PushOptions, apiUrlOverride?: string)
   }
 
   const today = new Date();
+  // Trigger a one-time 30-day backfill when either the v1 or v2 native-repair
+  // marker is missing. v2 covers users who already ran the v1 repair and need
+  // their inflated rows re-uploaded against the fixed inclusive-cache logic
+  // (see CODEX_NATIVE_COLLECTOR bump and the legacy SQL repair migration).
   const shouldRunCodexRepair = !options.date
-    && !config.codex_native_repair_completed_at
+    && (!config.codex_native_repair_completed_at || !config.codex_native_v2_repair_completed_at)
     && await containsSessionFile();
 
   const resolution = resolvePushDateRange({
@@ -509,7 +513,9 @@ export async function pushCommand(options: PushOptions, apiUrlOverride?: string)
     entries[0]!.date,
   );
   if (shouldRunCodexRepair && !codexCollectFailed && blockedDates.size === 0) {
-    config.codex_native_repair_completed_at = new Date().toISOString();
+    const stamp = new Date().toISOString();
+    config.codex_native_repair_completed_at = stamp;
+    config.codex_native_v2_repair_completed_at = stamp;
     config.last_push_date = latestDate;
     saveConfig(config);
   } else {
