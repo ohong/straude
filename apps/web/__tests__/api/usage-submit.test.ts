@@ -170,6 +170,47 @@ describe("POST /api/usage/submit", () => {
     expect(json.results).toHaveLength(1);
   });
 
+  it("rejects unknown collector metadata", async () => {
+    const res = await POST(
+      mockRequest({
+        entries: [makeEntry(todayStr())],
+        source: "cli",
+        collector: { claude: "ccusage-v18", extra: "surprise" },
+      })
+    );
+    const json = await res.json();
+
+    expect(res.status).toBe(400);
+    expect(json.error).toContain("Unknown collector metadata key");
+  });
+
+  it("accepts agentsview collector metadata", async () => {
+    (verifyCliToken as any).mockReturnValue("cli-user-id");
+    mockSupabaseAuth(null);
+    const svc = mockServiceClient();
+    svc.single
+      .mockResolvedValueOnce({ data: { id: "dev-1" }, error: null })
+      .mockResolvedValueOnce({ data: { id: "usage-1" }, error: null })
+      .mockResolvedValueOnce({ data: { id: "post-1" }, error: null });
+
+    const res = await POST(
+      mockRequest(
+        {
+          entries: [makeEntry(todayStr())],
+          source: "cli",
+          collector: { claude: "agentsview-v1", codex: "straude-codex-native-v1" },
+        },
+        { authorization: "Bearer some-token" }
+      )
+    );
+
+    expect(res.status).toBe(200);
+    expect(svc.upsert.mock.calls[0][0].collector_meta).toEqual({
+      claude: "agentsview-v1",
+      codex: "straude-codex-native-v1",
+    });
+  });
+
   it("handles Supabase session auth (cookie/web)", async () => {
     mockSupabaseAuth("web-user-id");
     const svc = mockServiceClient();
@@ -901,6 +942,107 @@ describe("POST /api/usage/submit", () => {
     expect(dailyChain.upsert.mock.calls[0][0].collector_meta).toEqual({ codex: "straude-codex-native-v1" });
     expect(json.results[0].previous_cost).toBe(100);
     expect(json.results[0].daily_total).toBe(10);
+  });
+
+  it("rejects web-auth Codex repair attempts even with trusted collector", async () => {
+    // No CLI token — request authenticates via Supabase web session instead.
+    // Use a unique user ID so we don't share the 20/min in-memory rate-limit
+    // bucket with the other "user-1" tests in this describe block.
+    (verifyCliToken as any).mockReturnValue(null);
+    mockSupabaseAuth("web-codex-repair-user");
+
+    const existingDeviceRow = {
+      cost_usd: 100,
+      input_tokens: 100000,
+      output_tokens: 1000,
+      cache_creation_tokens: 0,
+      cache_read_tokens: 0,
+      total_tokens: 101000,
+      models: ["gpt-5-codex"],
+      model_breakdown: [{ model: "gpt-5-codex", cost_usd: 100 }],
+    };
+
+    const deviceGuardChain: Record<string, any> = {
+      select: vi.fn().mockReturnThis(),
+      eq: vi.fn().mockReturnThis(),
+      maybeSingle: vi.fn().mockResolvedValue({
+        data: { cost_usd: 100, models: ["gpt-5-codex"] },
+        error: null,
+      }),
+    };
+    const deviceCountChain: Record<string, any> = {
+      select: vi.fn().mockReturnThis(),
+      eq: vi.fn().mockImplementation(() => ({
+        eq: vi.fn().mockResolvedValue({ count: 1, data: null, error: null }),
+      })),
+    };
+    const deviceUpsertChain: Record<string, any> = {
+      upsert: vi.fn().mockReturnThis(),
+      select: vi.fn().mockReturnThis(),
+      single: vi.fn().mockResolvedValue({ data: { id: "dev-1" }, error: null }),
+    };
+    const deviceDeleteChain: Record<string, any> = {
+      delete: vi.fn().mockReturnThis(),
+      eq: vi.fn().mockReturnThis(),
+    };
+    const deviceFetchChain: Record<string, any> = {
+      select: vi.fn().mockReturnThis(),
+      eq: vi.fn().mockImplementation(() => ({
+        eq: vi.fn().mockResolvedValue({ data: [existingDeviceRow], error: null }),
+      })),
+    };
+    const dailyChain: Record<string, any> = {
+      select: vi.fn().mockReturnThis(),
+      upsert: vi.fn().mockReturnThis(),
+      eq: vi.fn().mockReturnThis(),
+      maybeSingle: vi.fn().mockResolvedValue({ data: { id: "usage-1", cost_usd: 100, models: ["gpt-5-codex"] }, error: null }),
+      single: vi.fn().mockResolvedValue({ data: { id: "usage-1" }, error: null }),
+    };
+    const postChain: Record<string, any> = {
+      select: vi.fn().mockReturnThis(),
+      update: vi.fn().mockReturnThis(),
+      eq: vi.fn().mockReturnThis(),
+      maybeSingle: vi.fn().mockResolvedValue({ data: { id: "post-1", title: "Apr 24" }, error: null }),
+      single: vi.fn().mockResolvedValue({ data: { id: "post-1" }, error: null }),
+    };
+
+    let deviceFromCallCount = 0;
+    const fromFn = vi.fn((table: string) => {
+      if (table === "device_usage") {
+        deviceFromCallCount++;
+        if (deviceFromCallCount === 1) return deviceGuardChain;
+        if (deviceFromCallCount === 2) return deviceCountChain;
+        return deviceFetchChain;
+      }
+      if (table === "daily_usage") return dailyChain;
+      if (table === "posts") return postChain;
+      return dailyChain;
+    });
+    (getServiceClient as any).mockReturnValue({ from: fromFn, rpc: vi.fn().mockResolvedValue({ data: null, error: null }) });
+
+    const res = await POST(
+      mockRequest({
+        entries: [makeEntry(todayStr(), {
+          models: ["gpt-5-codex"],
+          costUSD: 10,
+          inputTokens: 10000,
+          outputTokens: 100,
+          totalTokens: 10100,
+          modelBreakdown: [{ model: "gpt-5-codex", cost_usd: 10 }],
+        })],
+        source: "web",
+        collector: { codex: "straude-codex-native-v1" },
+      })
+    );
+    const json = await res.json();
+
+    // The trusted collector flag is only honored on the CLI auth path.
+    // Web-auth callers must not be able to lower an existing higher-cost row.
+    expect(res.status).toBe(200);
+    expect(deviceUpsertChain.upsert).not.toHaveBeenCalled();
+    expect(deviceDeleteChain.delete).not.toHaveBeenCalled();
+    expect(json.results[0].daily_total).toBe(100);
+    expect(dailyChain.upsert.mock.calls[0][0].cost_usd).toBe(100);
   });
 
   it("does not drop mixed legacy usage on a Codex-only repair", async () => {

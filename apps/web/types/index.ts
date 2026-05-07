@@ -194,8 +194,9 @@ export interface DeviceUsage {
 }
 
 export interface UsageCollectorMeta {
-  claude?: "ccusage-v18" | string;
+  claude?: "ccusage-v18" | "agentsview-v1" | string;
   codex?: "straude-codex-native-v1" | string;
+  unified?: "agentsview-v1" | string;
 }
 
 // API request/response types

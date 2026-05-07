@@ -9,8 +9,10 @@ import type { UsageSubmitRequest, UsageSubmitResponse, CcusageDailyEntry, ModelB
 
 const MAX_BACKFILL_DAYS = 30;
 const TRUSTED_CODEX_COLLECTOR = "straude-codex-native-v1";
+const AGENTSVIEW_COLLECTOR = "agentsview-v1";
 const LEGACY_DEVICE_ID = "00000000-0000-0000-0000-000000000000";
 const CODEX_MODEL_RE = /^(gpt-|o3|o4)/i;
+const ALLOWED_COLLECTOR_KEYS = new Set(["claude", "codex", "unified"]);
 
 function isValidDate(dateStr: string): boolean {
   const match = dateStr.match(/^(\d{4})-(\d{2})-(\d{2})$/);
@@ -32,6 +34,36 @@ function validateEntry(entry: CcusageDailyEntry): string | null {
   if (entry.inputTokens < 0) return `Negative input tokens for ${entry.date}`;
   if (entry.outputTokens < 0) return `Negative output tokens for ${entry.date}`;
   if (entry.totalTokens < 0) return `Negative total tokens for ${entry.date}`;
+  return null;
+}
+
+function validateCollectorMeta(collector: unknown): string | null {
+  if (collector == null) return null;
+  if (typeof collector !== "object" || Array.isArray(collector)) {
+    return "Invalid collector metadata";
+  }
+  const json = JSON.stringify(collector);
+  if (json.length > 512) return "Collector metadata is too large";
+
+  const record = collector as Record<string, unknown>;
+  for (const key of Object.keys(record)) {
+    if (!ALLOWED_COLLECTOR_KEYS.has(key)) return `Unknown collector metadata key: ${key}`;
+    if (typeof record[key] !== "string") return `Invalid collector metadata value for ${key}`;
+  }
+
+  if (
+    record.claude != null
+    && record.claude !== "ccusage-v18"
+    && record.claude !== AGENTSVIEW_COLLECTOR
+  ) {
+    return "Unknown Claude collector";
+  }
+  if (record.codex != null && record.codex !== TRUSTED_CODEX_COLLECTOR) {
+    return "Unknown Codex collector";
+  }
+  if (record.unified != null && record.unified !== AGENTSVIEW_COLLECTOR) {
+    return "Unknown unified collector";
+  }
   return null;
 }
 
@@ -156,6 +188,11 @@ export async function POST(request: Request) {
     return NextResponse.json({ error: "Invalid source" }, { status: 400 });
   }
 
+  const collectorError = validateCollectorMeta(body.collector);
+  if (collectorError) {
+    return NextResponse.json({ error: collectorError }, { status: 400 });
+  }
+
   const auth = await resolveAuthContext(request);
   if (!auth) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
@@ -189,7 +226,8 @@ export async function POST(request: Request) {
 
   const deviceId = body.device_id;
   const deviceName = body.device_name;
-  const isTrustedCodexCorrection = body.collector?.codex === TRUSTED_CODEX_COLLECTOR;
+  const isTrustedCodexCorrection = auth.source === "cli"
+    && body.collector?.codex === TRUSTED_CODEX_COLLECTOR;
 
   if (!deviceId) {
     return NextResponse.json(
