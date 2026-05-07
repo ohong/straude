@@ -120,4 +120,48 @@ describe("ActivityCard", () => {
     expect(screen.getByLabelText("Model usage: 100% Claude Opus")).toBeInTheDocument();
     expect(screen.queryByText(/GPT-5\.3-Codex/)).not.toBeInTheDocument();
   });
+
+  it("renders v3 Codex repair metadata with neutral audit copy", () => {
+    render(
+      <ActivityCard
+        post={makePost({
+          daily_usage: {
+            ...makePost().daily_usage,
+            collector_meta: {
+              repair_v3_codex_only: "true",
+              cost_before_v3: 100,
+            },
+          },
+        }) as any}
+      />
+    );
+
+    const hint = screen.getByText("Repaired (was $100.00)");
+    expect(hint).toHaveAttribute(
+      "title",
+      "Originally logged at $100.00. Codex costs were repaired retroactively while preserving non-Codex usage.",
+    );
+  });
+
+  it("renders Claude restore metadata without saying Codex recalculated Claude", () => {
+    render(
+      <ActivityCard
+        post={makePost({
+          daily_usage: {
+            ...makePost().daily_usage,
+            collector_meta: {
+              claude_restore_2026_05_07: "true",
+              cost_before_claude_restore: 5,
+            },
+          },
+        }) as any}
+      />
+    );
+
+    const hint = screen.getByText("Repaired (was $5.00)");
+    expect(hint).toHaveAttribute(
+      "title",
+      "Originally logged at $5.00. Claude costs were restored from the audit log while preserving Codex repairs.",
+    );
+  });
 });

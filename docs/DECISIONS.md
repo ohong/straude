@@ -18,7 +18,7 @@
 - `new_estimate = Σ_m (max(0, input_share_m − cache_share_m) × input_rate_m + min(input_share_m, cache_share_m) × cache_read_rate_m + output_share_m × output_rate_m)` over the inclusive-cache buckets.
 - `correction_factor = new_estimate / old_estimate` — applied to both `daily_usage.cost_usd` and each `model_breakdown[*].cost_usd` so per-model proportions are preserved.
 
-Per-model token splits aren't stored, so the migration approximates each model's input/cache/output share from its `cost_usd` share of `model_breakdown` (best available proxy without re-aggregating from device rows). For the row that prompted the investigation (April 10, $16,714) the corrected cost lands at $2,521 (factor 0.151) — still elevated for that user but plausible given their genuine usage volume. Aggregate North Star dropped from $515,225.95 → $157,264.61.
+Per-model token splits aren't stored, so the migration approximates each model's input/cache/output share from its `cost_usd` share of `model_breakdown` (best available proxy without re-aggregating from device rows). For the row that prompted the investigation (April 10, $16,714) the corrected cost lands at $2,521 (factor 0.151) — still elevated for that user but plausible given their genuine usage volume. This first pass dropped Aggregate North Star from $515,225.95 to $157,264.61; the later Claude-restore migration put legitimate ccusage-derived Claude spend back, so v2 CLI re-pushes remain the authoritative path for exact Codex repair on mixed rows.
 
 **Defaults / safeguards:**
 
@@ -46,7 +46,7 @@ Per-model token splits aren't stored, so the migration approximates each model's
 
 ## Codex `total_token_usage` is per-request context, not session-cumulative (2026-05-07)
 
-**Decision:** In `parseSessionFile`, prefer `last_token_usage` (the per-event delta Codex emits alongside `total_token_usage`) over computing a delta via `subtractRawUsage(total_now, previous_total)`. Dedupe consecutive events with identical `total_token_usage` snapshots (Codex re-emits the same event ~50% of the time on heavy-usage days). Fall back to cumulative-delta semantics only when `last_token_usage` is missing entirely.
+**Decision:** In `parseSessionFile`, prefer `last_token_usage` (the per-event delta Codex emits alongside `total_token_usage`) over computing a delta via `subtractRawUsage(total_now, previous_total)`. Dedupe consecutive events only when both `total_token_usage` and `last_token_usage` are identical (Codex re-emits the same event ~50% of the time on heavy-usage days). Fall back to cumulative-delta semantics only when `last_token_usage` is missing entirely.
 
 **Why:** The original code assumed `total_token_usage.input_tokens` was a session-cumulative counter that grows monotonically. Verified against real `~/.codex/sessions/2026/05/04/*.jsonl`: it isn't. It's the *current request's context snapshot* — prompt size + cache hits + output for the request that just finished. The IDE periodically prunes the conversation context (system prompt re-anchoring, tool-call budget management, summarization), which causes the snapshot to drop. When it grows again, the legacy cumulative-delta logic added the entire regrowth on top of the pre-prune peak. On a session with 352 prune events out of 1,381 token_count emissions, this inflated the bucket sum by **70x** — and across all 9 May-4 sessions, by 18x at the day level.
 
@@ -65,19 +65,11 @@ Pricing the new-logic numbers at gpt-5.5 rates: $228.68 — matches what OpenAI 
 
 1. **Trust `total_token_usage` as cumulative + treat backwards steps as resets.** I.e., when `total < previous`, snapshot the previous as a "turn complete" amount and start a new accumulator. Mechanically possible but fragile — small prunes (200k-token shifts in a multi-megabyte context) aren't really "turn boundaries", and the heuristic would still mis-bill. Rejected.
 2. **Sum `last_token_usage` without dedup.** Simpler, but in real data 51% of events are duplicate emissions of the same `last_token_usage` (verified: 2,236 of 2,240 same-`total` pairs also have same `last`). That'd over-count by 2x. Rejected.
-3. **Dedup only on `(timestamp, total_token_usage)`.** More restrictive than `total_token_usage`-only dedup. Real Codex events with same total tend to be emitted within milliseconds of each other so the timestamp dedup would mostly agree, but adds an axis of brittleness. Rejected — `total`-only dedup is sufficient and the 4 of 2,240 cases where same-total has different-last (~0.2%) lose at most a handful of tokens.
+3. **Dedup only on `total_token_usage`.** Initially tempting, but the remaining same-total/different-`last_token_usage` events are real billed requests. Rejected because billing truth lives in `last_token_usage`, not the context snapshot.
 
-**Why this preserves the existing test suite:** the synthetic test fixtures all happen to satisfy *both* interpretations (last == total when only one event, only one of the two fields set, or two events with same total + same last). The new logic produces identical outputs for all 276 tests. The added regression test (`uses last_token_usage to bill per-request — context-prune oscillation must not inflate`) explicitly exercises the prune-then-regrow pattern that breaks the old logic.
+**Why the previous test suite missed it:** the synthetic fixtures all happened to satisfy *both* interpretations (last == total when only one event, only one of the two fields set, or two events with same total + same last). Regression tests now cover prune-then-regrow billing, same-total/different-`last_token_usage`, true duplicate emissions, and forked child sessions whose parent keeps running after the fork.
 
 **Implication for the legacy / native-v1 SQL repair migrations:** they still scale from the (inflated) token counts that were already written to `daily_usage`. They produce a *directionally-correct* repair (May-4 ohong row went $7,821 → $1,071) but not the ground-truth value ($228 + $82 ccusage ≈ $310). The full fix requires users to re-upload via the v2 CLI so the server's trusted-collector overwrite path can replace the heuristic with the real number. The auto-trigger on `codex_native_v2_repair_completed_at` does this on the user's next `straude` run.
-
-## Codex collector uses a deterministic inclusive-cache clamp, not a dual-candidate inference (2026-05-06)
-
-**Decision:** In `packages/cli/src/lib/codex-native.ts:normalizeBucket`, replace the call to the shared `normalizeTokenBuckets({source:"codex", cacheSemantics:"subset_of_input"})` with a direct, hard-coded `cache_read = min(cached, input); input = input - cache_read` clamp. Emit a `NormalizationAnomaly` with `confidence: low` when source data violates the invariant.
-
-**Why:** Codex's documented schema says `cached_input_tokens` is a subset of `input_tokens`. The dual-candidate logic could pick the "separate" candidate when arithmetic drift made it look more consistent, letting cache_read exceed input.
-
-**This shipped before the deeper fix above.** Real-data verification later revealed that the dual-candidate path wasn't actually being chosen (all 6 May-1-to-5 buckets came back with `confidence: high` and `mode: inclusive_cache_input`). The clamp is correct and worth keeping as defense in depth, but the inflation in the May-4 row was upstream of normalization. See the "per-request context" decision above.
 
 ## CLI auto-installs `ccusage` on first interactive run (2026-05-04)
 

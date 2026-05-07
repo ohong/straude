@@ -74,7 +74,7 @@ describe("native Codex collector", () => {
     expect(await containsSessionFile()).toBe(true);
   });
 
-  it("does not add last_token_usage when cumulative total_token_usage is unchanged", async () => {
+  it("records fresh last_token_usage when cumulative total_token_usage is unchanged", async () => {
     await writeSession("2026-04-24", "session.jsonl", [
       meta("s1"),
       turn("gpt-5"),
@@ -90,9 +90,9 @@ describe("native Codex collector", () => {
 
     const result = await collectCodexUsageAsync("20260424", "20260424");
     expect(result.data).toHaveLength(1);
-    expect(result.data[0]!.inputTokens).toBe(1000);
-    expect(result.data[0]!.totalTokens).toBe(1000);
-    expect(result.data[0]!.costUSD).toBeCloseTo(0.00125);
+    expect(result.data[0]!.inputTokens).toBe(1100);
+    expect(result.data[0]!.totalTokens).toBe(1100);
+    expect(result.data[0]!.costUSD).toBeCloseTo(0.001375);
   });
 
   it("advances the cumulative baseline after last_token_usage-only records", async () => {
@@ -135,6 +135,30 @@ describe("native Codex collector", () => {
     const result = await collectCodexUsageAsync("20260424", "20260424");
     expect(result.data[0]!.inputTokens).toBe(150);
     expect(result.data[0]!.totalTokens).toBe(150);
+  });
+
+  it("uses the parent cumulative snapshot at fork time for total-only child sessions", async () => {
+    await writeSession("2026-04-24", "parent.jsonl", [
+      meta("parent", "2026-04-24T12:00:00.000Z"),
+      turn("gpt-5"),
+      token("2026-04-24T12:00:01.000Z", {
+        total_token_usage: usage(100),
+      }),
+      token("2026-04-24T12:10:00.000Z", {
+        total_token_usage: usage(500),
+      }),
+    ]);
+    await writeSession("2026-04-24", "child.jsonl", [
+      meta("child", "2026-04-24T12:05:00.000Z", "parent"),
+      turn("gpt-5"),
+      token("2026-04-24T12:05:01.000Z", {
+        total_token_usage: usage(150),
+      }),
+    ]);
+
+    const result = await collectCodexUsageAsync("20260424", "20260424");
+    expect(result.data[0]!.inputTokens).toBe(550);
+    expect(result.data[0]!.totalTokens).toBe(550);
   });
 
   it("normalizes cached input and prices model breakdowns per model", async () => {

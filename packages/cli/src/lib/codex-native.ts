@@ -30,17 +30,22 @@ interface SessionEvent {
   signature: string;
 }
 
+interface CumulativeSnapshot {
+  timestamp: string;
+  usage: RawTokenUsage;
+}
+
 interface ParsedSession {
   id: string;
   parentId?: string;
   startedAt: string;
   events: SessionEvent[];
   signatures: Set<string>;
-  // Highest cumulative `total_token_usage` observed in the file. Used as the
-  // baseline (initialPreviousTotals) when re-parsing a child session forked
-  // from this one — without this, the child's first event's delta is the
-  // entire parent-inclusive cumulative, double-counting the parent's tokens.
+  // Current cumulative/context snapshot after parsing. Retained for stats and
+  // as a final fallback only; forked child baselines must use cumulativeSnapshots
+  // at the fork timestamp rather than this end-of-file value.
   lastCumulative: RawTokenUsage;
+  cumulativeSnapshots: CumulativeSnapshot[];
   filePath: string;
 }
 
@@ -292,8 +297,11 @@ async function parseSessionFile(
   let lastCumulative: RawTokenUsage = initialPreviousTotals ?? { ...ZERO_USAGE };
   // Cumulative-snapshot dedupe: Codex sometimes re-emits the same
   // token_count event twice in a row (identical total_token_usage). We dedupe
-  // on the cumulative snapshot so we don't double-bill those events.
+  // only when both the cumulative snapshot and per-request usage are repeated;
+  // the same total with different last_token_usage is a distinct billed request.
   let prevTotalSnapshot: RawTokenUsage | null = null;
+  let prevLastSnapshot: RawTokenUsage | null = null;
+  const cumulativeSnapshots: CumulativeSnapshot[] = [];
   const events: SessionEvent[] = [];
   const signatures = new Set<string>();
   let id = sessionIdFromPath(file);
@@ -348,12 +356,13 @@ async function parseSessionFile(
     const totalUsage = normalizeRawUsage(info.total_token_usage);
     const lastUsage = normalizeRawUsage(info.last_token_usage);
 
-    // Skip consecutive duplicate emissions of the same cumulative snapshot —
-    // they represent a single billed request being re-reported, not new
-    // tokens. (Verified against real Codex sessions where the last few
-    // events of a stream often duplicate the prior total_token_usage exactly.)
+    // Skip consecutive duplicate emissions of the same cumulative snapshot only
+    // when the single-request usage is also repeated. A stable context total can
+    // still produce a fresh billed request with a different last_token_usage.
     if (totalUsage && prevTotalSnapshot && rawUsageEquals(totalUsage, prevTotalSnapshot)) {
-      continue;
+      const lastUsageIsDuplicate = !lastUsage
+        || (prevLastSnapshot != null && rawUsageEquals(lastUsage, prevLastSnapshot));
+      if (lastUsageIsDuplicate) continue;
     }
 
     // Codex's `total_token_usage` is the *current request's context snapshot*
@@ -387,6 +396,8 @@ async function parseSessionFile(
     }
 
     if (totalUsage) prevTotalSnapshot = totalUsage;
+    prevLastSnapshot = lastUsage;
+    if (timestamp) cumulativeSnapshots.push({ timestamp, usage: { ...lastCumulative } });
 
     if (!raw || isZeroUsage(raw)) continue;
 
@@ -408,6 +419,7 @@ async function parseSessionFile(
     events,
     signatures,
     lastCumulative,
+    cumulativeSnapshots,
     filePath: file,
   };
 }
@@ -466,6 +478,26 @@ function resolvePricing(model: string): Pricing | undefined {
   if (aliased.startsWith("gpt-5-nano")) return CODEX_PRICING["gpt-5-nano"];
   if (aliased.startsWith("gpt-5")) return CODEX_PRICING["gpt-5"];
   return undefined;
+}
+
+function cumulativeSnapshotAtOrBefore(session: ParsedSession, timestamp: string): RawTokenUsage | null {
+  const targetMs = Date.parse(timestamp);
+  if (!Number.isFinite(targetMs)) return null;
+
+  let best: CumulativeSnapshot | null = null;
+  let bestMs = Number.NEGATIVE_INFINITY;
+  for (const snapshot of session.cumulativeSnapshots) {
+    const snapshotMs = Date.parse(snapshot.timestamp);
+    if (!Number.isFinite(snapshotMs) || snapshotMs > targetMs || snapshotMs < bestMs) continue;
+    best = snapshot;
+    bestMs = snapshotMs;
+  }
+
+  return best ? { ...best.usage } : null;
+}
+
+function forkBaselineTimestamp(session: ParsedSession): string {
+  return session.startedAt || session.events[0]?.timestamp || "";
 }
 
 function calculateCost(entry: CcusageDailyEntry, model: string): number {
@@ -616,11 +648,11 @@ export async function collectCodexUsageAsync(sinceDate: string, untilDate: strin
   }
   await addMissingAncestors(sessions, allFiles, sinceIso, untilIso);
 
-  // Second pass: re-parse forked sessions with their parent's lastCumulative
-  // as the baseline. Without this, a child's first event delta is the entire
-  // parent-inclusive cumulative, and even after the per-bucket cache clamp the
-  // bucket sums end up double-counting parent tokens (real-world pattern: a
-  // single day of heavy session forking inflated by ~10x).
+  // Second pass: re-parse forked sessions with their parent's cumulative
+  // snapshot at the fork time as the baseline. Without this, a child's first
+  // total-only event delta is the entire parent-inclusive context. Using the
+  // parent's end-of-file snapshot is also wrong when the parent continues after
+  // the fork, because that subtracts post-fork parent traffic from the child.
   //
   // Topological order: parents always have an earlier startedAt than their
   // children (Codex assigns startedAt at fork time), so iterating sorted
@@ -634,8 +666,9 @@ export async function collectCodexUsageAsync(sinceDate: string, untilDate: strin
     if (!parentId) continue;
     const parent = byId.get(parentId);
     if (!parent) continue;
-    if (isZeroUsage(parent.lastCumulative)) continue;
-    const reParsed = await parseSessionFile(session.filePath, sinceIso, untilIso, parent.lastCumulative);
+    const parentBaseline = cumulativeSnapshotAtOrBefore(parent, forkBaselineTimestamp(session));
+    if (!parentBaseline || isZeroUsage(parentBaseline)) continue;
+    const reParsed = await parseSessionFile(session.filePath, sinceIso, untilIso, parentBaseline);
     byId.set(reParsed.id, reParsed);
     const idx = sessions.findIndex((s) => s.id === session.id);
     if (idx >= 0) sessions[idx] = reParsed;

@@ -43,6 +43,7 @@ DECLARE
   v_old_breakdown jsonb;
   v_new_breakdown jsonb;
   v_corrected_cost numeric;
+  v_new_total_tokens bigint;
   v_entry jsonb;
   v_entry_model text;
   v_entry_cost numeric;
@@ -70,7 +71,9 @@ BEGIN
     'gpt-5.5',                  jsonb_build_object('input', 0.000005,   'output', 0.00003,    'cache_read', 0.0000005),
     'gpt-5.5-pro',              jsonb_build_object('input', 0.00003,    'output', 0.00018,    'cache_read', 0.00003),
     'gpt-5-mini',               jsonb_build_object('input', 0.00000025, 'output', 0.000002,   'cache_read', 0.000000025),
-    'gpt-5-nano',               jsonb_build_object('input', 0.00000005, 'output', 0.0000004,  'cache_read', 0.000000005)
+    'gpt-5-mini-2025-08-07',    jsonb_build_object('input', 0.00000025, 'output', 0.000002,   'cache_read', 0.000000025),
+    'gpt-5-nano',               jsonb_build_object('input', 0.00000005, 'output', 0.0000004,  'cache_read', 0.000000005),
+    'gpt-5-nano-2025-08-07',    jsonb_build_object('input', 0.00000005, 'output', 0.0000004,  'cache_read', 0.000000005)
   );
 
   FOR v_row IN
@@ -165,16 +168,22 @@ BEGIN
       SELECT COALESCE(SUM((e ->> 'cost_usd')::numeric), 0) INTO v_corrected_cost
       FROM jsonb_array_elements(v_new_breakdown) e;
       v_corrected_cost := round(v_corrected_cost, 4);
+      v_new_total_tokens := COALESCE(v_row.input_tokens, 0)
+        + COALESCE(v_row.output_tokens, 0)
+        + COALESCE(v_row.cache_creation_tokens, 0)
+        + COALESCE(v_eff_cache_read, 0);
 
       UPDATE public.daily_usage
       SET cost_usd          = v_corrected_cost,
           cache_read_tokens = v_eff_cache_read,
+          total_tokens      = v_new_total_tokens,
           model_breakdown   = v_new_breakdown,
           is_verified       = TRUE,
           collector_meta    = COALESCE(collector_meta, '{}'::jsonb)
             || jsonb_build_object(
                  'repair_v3_codex_only', 'true',
                  'cost_before_v3',                v_row.cost_usd,
+                 'total_tokens_before_v3',        v_row.total_tokens,
                  'cache_read_before_v3',          v_row.cache_read_tokens,
                  'model_breakdown_before_v3',     v_old_breakdown,
                  'repaired_at_v3',                now()
@@ -201,6 +210,7 @@ BEGIN
           v_dev_new_bd jsonb := '[]'::jsonb;
           v_dev_new_cost numeric;
           v_dev_eff_cache bigint;
+          v_dev_new_total bigint;
         BEGIN
           IF jsonb_typeof(v_dev_old_bd) = 'array' THEN
             FOR v_entry IN SELECT * FROM jsonb_array_elements(v_dev_old_bd) LOOP
@@ -254,14 +264,20 @@ BEGIN
           FROM jsonb_array_elements(v_dev_new_bd) e;
           v_dev_new_cost := round(v_dev_new_cost, 4);
           v_dev_eff_cache := LEAST(v_dev.cache_read_tokens, v_dev.input_tokens);
+          v_dev_new_total := COALESCE(v_dev.input_tokens, 0)
+            + COALESCE(v_dev.output_tokens, 0)
+            + COALESCE(v_dev.cache_creation_tokens, 0)
+            + COALESCE(v_dev_eff_cache, 0);
 
           UPDATE public.device_usage
           SET cost_usd          = v_dev_new_cost,
               cache_read_tokens = v_dev_eff_cache,
+              total_tokens      = v_dev_new_total,
               model_breakdown   = v_dev_new_bd,
               collector_meta    = COALESCE(collector_meta, '{}'::jsonb)
                 || jsonb_build_object('repair_v3_codex_only', 'true',
                      'cost_before_v3', v_dev.cost_usd,
+                     'total_tokens_before_v3', v_dev.total_tokens,
                      'cache_read_before_v3', v_dev.cache_read_tokens),
               updated_at = now()
           WHERE id = v_dev.id;
@@ -272,7 +288,8 @@ BEGIN
       -- sums match the daily totals exactly.
       WITH summed AS (
         SELECT SUM(cost_usd) AS s_cost,
-               SUM(cache_read_tokens) AS s_cache
+               SUM(cache_read_tokens) AS s_cache,
+               SUM(total_tokens) AS s_total
         FROM public.device_usage
         WHERE user_id = v_row.user_id AND date = v_row.date
       ),
@@ -283,14 +300,15 @@ BEGIN
       )
       UPDATE public.device_usage du
       SET cost_usd          = du.cost_usd          + (v_corrected_cost - (SELECT s_cost  FROM summed)),
-          cache_read_tokens = du.cache_read_tokens + (v_eff_cache_read - (SELECT s_cache FROM summed))
+          cache_read_tokens = du.cache_read_tokens + (v_eff_cache_read - (SELECT s_cache FROM summed))::bigint,
+          total_tokens      = du.total_tokens      + (v_new_total_tokens - (SELECT s_total FROM summed))::bigint
       WHERE du.id = (SELECT id FROM last_dev)
         AND EXISTS (SELECT 1 FROM summed s WHERE s.s_cost IS NOT NULL);
 
       INSERT INTO public.corrections_log (user_id, date, table_name, reason, previous_values, new_values)
       VALUES (v_row.user_id, v_row.date, 'daily_usage', 'repair_v3_codex_only_2026_05_07',
-        jsonb_build_object('cost_usd', v_row.cost_usd, 'cache_read_tokens', v_row.cache_read_tokens, 'model_breakdown', v_old_breakdown, 'collector_meta', v_row.collector_meta),
-        jsonb_build_object('cost_usd', v_corrected_cost, 'cache_read_tokens', v_eff_cache_read, 'model_breakdown', v_new_breakdown, 'codex_factor', v_codex_factor, 'note', 'Codex entries scaled, Claude entries left untouched.'));
+        jsonb_build_object('cost_usd', v_row.cost_usd, 'cache_read_tokens', v_row.cache_read_tokens, 'total_tokens', v_row.total_tokens, 'model_breakdown', v_old_breakdown, 'collector_meta', v_row.collector_meta),
+        jsonb_build_object('cost_usd', v_corrected_cost, 'cache_read_tokens', v_eff_cache_read, 'total_tokens', v_new_total_tokens, 'model_breakdown', v_new_breakdown, 'codex_factor', v_codex_factor, 'note', 'Codex entries scaled, Claude entries left untouched.'));
 
       v_repaired_count := v_repaired_count + 1;
       v_total_delta := v_total_delta + (v_row.cost_usd - v_corrected_cost);

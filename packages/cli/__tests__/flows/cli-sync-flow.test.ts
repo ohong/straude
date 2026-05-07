@@ -43,7 +43,7 @@ vi.mock("node:child_process", () => ({
 }));
 
 vi.mock("../../src/lib/codex-native.js", () => ({
-  CODEX_NATIVE_COLLECTOR: "straude-codex-native-v1",
+  CODEX_NATIVE_COLLECTOR: "straude-codex-native-v2",
   collectCodexUsageAsync: _collectCodexUsageAsync,
   containsSessionFile: _hasCodexLogs,
 }));
@@ -362,7 +362,7 @@ describe("Codex integration", () => {
     expect(data.modelBreakdown).toContainEqual({ model: "gpt-5-codex", cost_usd: 3.0 });
     expect(body.collector).toEqual({
       claude: "ccusage-v18",
-      codex: "straude-codex-native-v1",
+      codex: "straude-codex-native-v2",
     });
   });
 
@@ -404,7 +404,7 @@ describe("Codex integration", () => {
     expect(data.models).toEqual(["gpt-5-codex"]);
     expect(data.costUSD).toBe(3.0);
     expect(data.modelBreakdown).toEqual([{ model: "gpt-5-codex", cost_usd: 3.0 }]);
-    expect(body.collector).toEqual({ codex: "straude-codex-native-v1" });
+    expect(body.collector).toEqual({ codex: "straude-codex-native-v2" });
   });
 
   it("dry-run fetches dashboard but skips submit", async () => {

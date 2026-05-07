@@ -204,6 +204,14 @@ export interface UsageCollectorMeta {
   previous_input_tokens?: number;
   previous_cache_read_tokens?: number;
   repaired_at?: string;
+  repair_v3_codex_only?: string;
+  cost_before_v3?: number;
+  total_tokens_before_v3?: number;
+  cache_read_before_v3?: number;
+  model_breakdown_before_v3?: ModelBreakdownEntry[];
+  repaired_at_v3?: string;
+  claude_restore_2026_05_07?: string;
+  cost_before_claude_restore?: number;
 }
 
 // API request/response types

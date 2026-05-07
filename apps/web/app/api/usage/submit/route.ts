@@ -5,7 +5,7 @@ import { getServiceClient } from "@/lib/supabase/service";
 import { checkAndAwardAchievements } from "@/lib/achievements";
 import { rateLimit } from "@/lib/rate-limit";
 import { formatCurrency } from "@/lib/utils/format";
-import type { UsageSubmitRequest, UsageSubmitResponse, CcusageDailyEntry, ModelBreakdownEntry } from "@/types";
+import type { UsageSubmitRequest, UsageSubmitResponse, CcusageDailyEntry, ModelBreakdownEntry, UsageCollectorMeta } from "@/types";
 
 const MAX_BACKFILL_DAYS = 30;
 // Bump in lockstep with CODEX_NATIVE_COLLECTOR in packages/cli/src/lib/codex-native.ts.
@@ -14,6 +14,22 @@ const MAX_BACKFILL_DAYS = 30;
 const TRUSTED_CODEX_COLLECTOR = "straude-codex-native-v2";
 const LEGACY_DEVICE_ID = "00000000-0000-0000-0000-000000000000";
 const CODEX_MODEL_RE = /^(gpt-|o3|o4)/i;
+const COST_EPSILON_USD = 0.005;
+const REPAIR_META_KEYS = [
+  "repair",
+  "previous_cost_usd",
+  "previous_input_tokens",
+  "previous_cache_read_tokens",
+  "repaired_at",
+  "repair_v3_codex_only",
+  "cost_before_v3",
+  "total_tokens_before_v3",
+  "cache_read_before_v3",
+  "model_breakdown_before_v3",
+  "repaired_at_v3",
+  "claude_restore_2026_05_07",
+  "cost_before_claude_restore",
+] as const;
 
 function isValidDate(dateStr: string): boolean {
   const match = dateStr.match(/^(\d{4})-(\d{2})-(\d{2})$/);
@@ -42,6 +58,14 @@ function isCodexModel(model: unknown): boolean {
   return typeof model === "string" && CODEX_MODEL_RE.test(model);
 }
 
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === "object" && value !== null && !Array.isArray(value);
+}
+
+function containsCodexModel(models: unknown): boolean {
+  return Array.isArray(models) && models.some(isCodexModel);
+}
+
 function containsNonCodexModel(models: unknown): boolean {
   return Array.isArray(models) && models.some((model) => !isCodexModel(model));
 }
@@ -49,6 +73,135 @@ function containsNonCodexModel(models: unknown): boolean {
 function hasNonCodexModels(models: unknown): boolean {
   if (!Array.isArray(models) || models.length === 0) return true;
   return containsNonCodexModel(models);
+}
+
+function sumBreakdownCost(
+  breakdown: unknown,
+  matchesModel: (model: unknown) => boolean,
+): number | null {
+  if (!Array.isArray(breakdown)) return null;
+
+  let total = 0;
+  for (const item of breakdown) {
+    if (!isRecord(item)) return null;
+    if (!matchesModel(item.model)) continue;
+
+    const cost = Number(item.cost_usd);
+    if (!Number.isFinite(cost)) return null;
+    total += cost;
+  }
+
+  return total;
+}
+
+function entryContainsCodexUsage(entry: CcusageDailyEntry): boolean {
+  if (containsCodexModel(entry.models)) return true;
+  const codexBreakdownCost = sumBreakdownCost(entry.modelBreakdown, isCodexModel);
+  return codexBreakdownCost != null && codexBreakdownCost > 0;
+}
+
+function entryContainsNonCodexUsage(entry: CcusageDailyEntry): boolean {
+  if (containsNonCodexModel(entry.models)) return true;
+  const nonCodexBreakdownCost = sumBreakdownCost(entry.modelBreakdown, (model) => !isCodexModel(model));
+  return nonCodexBreakdownCost != null && nonCodexBreakdownCost > 0;
+}
+
+function rowContainsNonCodexUsage(models: unknown, breakdown: unknown): boolean {
+  if (hasNonCodexModels(models)) return true;
+  const nonCodexBreakdownCost = sumBreakdownCost(breakdown, (model) => !isCodexModel(model));
+  return nonCodexBreakdownCost != null && nonCodexBreakdownCost > 0;
+}
+
+function collectorForEntry(
+  collector: UsageCollectorMeta | undefined,
+  entry: CcusageDailyEntry,
+): UsageCollectorMeta | undefined {
+  if (!collector) return undefined;
+
+  const entryCollector: UsageCollectorMeta = {};
+  if (collector.claude && entryContainsNonCodexUsage(entry)) {
+    entryCollector.claude = collector.claude;
+  }
+  if (collector.codex && entryContainsCodexUsage(entry)) {
+    entryCollector.codex = collector.codex;
+  }
+
+  return Object.keys(entryCollector).length > 0 ? entryCollector : undefined;
+}
+
+function nonCodexCostIsPreserved(
+  existingBreakdown: unknown,
+  incomingBreakdown: unknown,
+): boolean {
+  const existingNonCodexCost = sumBreakdownCost(existingBreakdown, (model) => !isCodexModel(model));
+  const incomingNonCodexCost = sumBreakdownCost(incomingBreakdown, (model) => !isCodexModel(model));
+  if (existingNonCodexCost == null || incomingNonCodexCost == null) return false;
+  return incomingNonCodexCost + COST_EPSILON_USD >= existingNonCodexCost;
+}
+
+function trustedCodexEntryPreservesNonCodex(
+  existingModels: unknown,
+  existingBreakdown: unknown,
+  incomingEntry: CcusageDailyEntry,
+): boolean {
+  if (!rowContainsNonCodexUsage(existingModels, existingBreakdown)) return true;
+  return nonCodexCostIsPreserved(existingBreakdown, incomingEntry.modelBreakdown);
+}
+
+function isTruthyMetaValue(value: unknown): boolean {
+  if (typeof value === "boolean") return value;
+  if (typeof value === "number") return value !== 0;
+  if (typeof value !== "string") return value != null;
+
+  const normalized = value.trim().toLowerCase();
+  return normalized !== "" && normalized !== "false" && normalized !== "0";
+}
+
+function rowWasRepaired(meta: unknown): boolean {
+  if (!isRecord(meta)) return false;
+  return isTruthyMetaValue(meta.repair)
+    || isTruthyMetaValue(meta.repair_v3_codex_only)
+    || isTruthyMetaValue(meta.claude_restore_2026_05_07);
+}
+
+function mergeRepairMeta(target: Record<string, unknown>, meta: unknown): void {
+  if (!isRecord(meta) || !rowWasRepaired(meta)) return;
+  for (const key of REPAIR_META_KEYS) {
+    if (key in meta) target[key] = meta[key];
+  }
+}
+
+function mergeCollectorSourceMeta(target: Record<string, unknown>, meta: unknown): void {
+  if (!isRecord(meta)) return;
+  if (typeof meta.claude === "string") target.claude = meta.claude;
+  if (typeof meta.codex === "string") target.codex = meta.codex;
+}
+
+function mergeDailyCollectorMeta(
+  currentCollector: UsageCollectorMeta | undefined,
+  existingDailyMeta: unknown,
+  deviceRows: DeviceUsageRow[],
+): UsageCollectorMeta | null {
+  const merged: Record<string, unknown> = {};
+  mergeCollectorSourceMeta(merged, existingDailyMeta);
+  mergeRepairMeta(merged, existingDailyMeta);
+  for (const row of deviceRows) {
+    mergeCollectorSourceMeta(merged, row.collector_meta);
+    mergeRepairMeta(merged, row.collector_meta);
+  }
+  if (currentCollector) Object.assign(merged, currentCollector);
+  return Object.keys(merged).length > 0 ? merged as UsageCollectorMeta : null;
+}
+
+function mergeCollectorWithRepairMeta(
+  currentCollector: UsageCollectorMeta | undefined,
+  existingMeta: unknown,
+): UsageCollectorMeta | null {
+  const merged: Record<string, unknown> = {};
+  mergeCollectorSourceMeta(merged, existingMeta);
+  mergeRepairMeta(merged, existingMeta);
+  if (currentCollector) Object.assign(merged, currentCollector);
+  return Object.keys(merged).length > 0 ? merged as UsageCollectorMeta : null;
 }
 
 interface AuthContext {
@@ -90,6 +243,7 @@ interface DeviceUsageRow {
   total_tokens: number;
   models: string[];
   model_breakdown: ModelBreakdownEntry[] | null;
+  collector_meta?: UsageCollectorMeta | null;
 }
 
 /**
@@ -192,7 +346,7 @@ export async function POST(request: Request) {
 
   const deviceId = body.device_id;
   const deviceName = body.device_name;
-  const isTrustedCodexCorrection = body.collector?.codex === TRUSTED_CODEX_COLLECTOR;
+  const requestHasTrustedCodexCollector = body.collector?.codex === TRUSTED_CODEX_COLLECTOR;
 
   if (!deviceId) {
     return NextResponse.json(
@@ -207,7 +361,7 @@ export async function POST(request: Request) {
       // Check if a record already exists to determine create vs update
       const { data: existing } = await db
         .from("daily_usage")
-        .select("id, cost_usd, models")
+        .select("id, cost_usd, models, model_breakdown, collector_meta")
         .eq("user_id", userId)
         .eq("date", entry.date)
         .maybeSingle();
@@ -217,18 +371,21 @@ export async function POST(request: Request) {
 
       let usage: { id: string } | null = null;
       let usageErrorMessage: string | null = null;
-      const entryHasNonCodexModels = containsNonCodexModel(entry.data.models);
+      const entryIsTrustedCodexCorrection = requestHasTrustedCodexCollector && entryContainsCodexUsage(entry.data);
+      const entryCollector = collectorForEntry(body.collector, entry.data);
 
       // Guard against decreasing values (e.g., ccusage log rotation). The native
       // Codex collector is allowed to lower totals because it repairs inflated
       // rows produced by the older upstream Codex aggregation behavior.
       const { data: existingDevice } = await db
         .from("device_usage")
-        .select("cost_usd,models,collector_meta")
+        .select("cost_usd,models,model_breakdown,collector_meta")
         .eq("user_id", userId)
         .eq("date", entry.date)
         .eq("device_id", deviceId)
         .maybeSingle();
+      const existingDeviceMeta = (existingDevice as { collector_meta?: UsageCollectorMeta | null } | null | undefined)?.collector_meta;
+      const existingDeviceWasRepaired = rowWasRepaired(existingDeviceMeta);
 
       let preexistingDeviceCount = 0;
       if (existing) {
@@ -240,12 +397,12 @@ export async function POST(request: Request) {
         preexistingDeviceCount = count ?? 0;
       }
 
-      const existingDeviceHasNonCodexModels = existingDevice
-        ? hasNonCodexModels((existingDevice as { models?: unknown }).models)
-        : false;
-      const codexOnlyRepairWouldDropMixedDevice = isTrustedCodexCorrection
-        && !entryHasNonCodexModels
-        && existingDeviceHasNonCodexModels;
+      const trustedEntryCanOverwriteDevice = entryIsTrustedCodexCorrection
+        && (!existingDevice || trustedCodexEntryPreservesNonCodex(
+          (existingDevice as { models?: unknown }).models,
+          (existingDevice as { model_breakdown?: unknown }).model_breakdown,
+          entry.data,
+        ));
 
       // Protect rows that the codex-only repair migration corrected from
       // being re-inflated by a v1 (untrusted) push. Without this guard, a
@@ -253,14 +410,11 @@ export async function POST(request: Request) {
       // payload's cost is higher than the repaired row, and the existing
       // "raise allowed" path overwrites the repair. v2 (trusted) uploads
       // bypass the guard and heal the row to ground truth.
-      const existingDeviceMeta = (existingDevice as { collector_meta?: { repair_v3_codex_only?: string } | null } | null | undefined)?.collector_meta;
-      const existingDeviceWasRepaired = existingDeviceMeta?.repair_v3_codex_only === "true";
-
       const mayOverwriteDevice = (
         !existingDevice
         || (entry.data.costUSD >= Number(existingDevice.cost_usd) && !existingDeviceWasRepaired)
-        || isTrustedCodexCorrection
-      ) && !codexOnlyRepairWouldDropMixedDevice;
+        || trustedEntryCanOverwriteDevice
+      );
 
       // Only upsert if new data is >= existing, unless this is a trusted repair.
       if (mayOverwriteDevice) {
@@ -282,7 +436,7 @@ export async function POST(request: Request) {
               model_breakdown: entry.data.modelBreakdown ?? null,
               session_count: 1,
               raw_hash: body.hash ?? null,
-              collector_meta: body.collector ?? null,
+              collector_meta: mergeCollectorWithRepairMeta(entryCollector, existingDeviceMeta),
               updated_at: new Date().toISOString(),
             },
             { onConflict: "user_id,date,device_id" },
@@ -295,11 +449,17 @@ export async function POST(request: Request) {
         }
       }
 
-      const existingHasNonCodexModels = existing
-        ? hasNonCodexModels((existing as { models?: unknown }).models)
+      const existingHasNonCodexUsage = existing
+        ? rowContainsNonCodexUsage(
+          (existing as { models?: unknown }).models,
+          (existing as { model_breakdown?: unknown }).model_breakdown,
+        )
         : false;
-      const canDropLegacyDevice = isTrustedCodexCorrection
-        && (!existingHasNonCodexModels || entryHasNonCodexModels);
+      const canDropLegacyDevice = entryIsTrustedCodexCorrection
+        && (!existingHasNonCodexUsage || nonCodexCostIsPreserved(
+          (existing as { model_breakdown?: unknown } | null)?.model_breakdown,
+          entry.data.modelBreakdown,
+        ));
 
       if (canDropLegacyDevice) {
         await db
@@ -347,7 +507,7 @@ export async function POST(request: Request) {
       // Fetch all device rows for this (user_id, date) and aggregate
       const { data: deviceRows, error: fetchError } = await db
         .from("device_usage")
-        .select("cost_usd,input_tokens,output_tokens,cache_creation_tokens,cache_read_tokens,total_tokens,models,model_breakdown")
+        .select("cost_usd,input_tokens,output_tokens,cache_creation_tokens,cache_read_tokens,total_tokens,models,model_breakdown,collector_meta")
         .eq("user_id", userId)
         .eq("date", entry.date);
 
@@ -356,6 +516,11 @@ export async function POST(request: Request) {
       }
 
       const agg = aggregateDeviceRows(deviceRows as DeviceUsageRow[]);
+      const dailyCollectorMeta = mergeDailyCollectorMeta(
+        mayOverwriteDevice ? entryCollector : undefined,
+        (existing as { collector_meta?: unknown } | null)?.collector_meta,
+        deviceRows as DeviceUsageRow[],
+      );
 
       const { data, error } = await db
         .from("daily_usage")
@@ -374,7 +539,7 @@ export async function POST(request: Request) {
             session_count: agg.session_count,
             is_verified: isVerified,
             raw_hash: body.hash ?? null,
-            collector_meta: body.collector ?? null,
+            collector_meta: dailyCollectorMeta,
             updated_at: new Date().toISOString(),
           },
           { onConflict: "user_id,date" },

@@ -888,17 +888,17 @@ describe("POST /api/usage/submit", () => {
           modelBreakdown: [{ model: "gpt-5-codex", cost_usd: 10 }],
         })],
         source: "cli",
-        collector: { codex: "straude-codex-native-v1" },
+        collector: { codex: "straude-codex-native-v2" },
       })
     );
     const json = await res.json();
 
     expect(res.status).toBe(200);
     expect(deviceUpsertChain.upsert).toHaveBeenCalled();
-    expect(deviceUpsertChain.upsert.mock.calls[0][0].collector_meta).toEqual({ codex: "straude-codex-native-v1" });
+    expect(deviceUpsertChain.upsert.mock.calls[0][0].collector_meta).toEqual({ codex: "straude-codex-native-v2" });
     expect(deviceDeleteChain.delete).toHaveBeenCalled();
     expect(dailyChain.upsert.mock.calls[0][0].cost_usd).toBe(10);
-    expect(dailyChain.upsert.mock.calls[0][0].collector_meta).toEqual({ codex: "straude-codex-native-v1" });
+    expect(dailyChain.upsert.mock.calls[0][0].collector_meta).toEqual({ codex: "straude-codex-native-v2" });
     expect(json.results[0].previous_cost).toBe(100);
     expect(json.results[0].daily_total).toBe(10);
   });
@@ -1014,7 +1014,7 @@ describe("POST /api/usage/submit", () => {
           modelBreakdown: [{ model: "gpt-5-codex", cost_usd: 10 }],
         })],
         source: "cli",
-        collector: { codex: "straude-codex-native-v1" },
+        collector: { codex: "straude-codex-native-v2" },
       })
     );
     const json = await res.json();
@@ -1124,7 +1124,7 @@ describe("POST /api/usage/submit", () => {
           modelBreakdown: [{ model: "gpt-5-codex", cost_usd: 10 }],
         })],
         source: "cli",
-        collector: { codex: "straude-codex-native-v1" },
+        collector: { codex: "straude-codex-native-v2" },
       })
     );
     const json = await res.json();
@@ -1134,6 +1134,433 @@ describe("POST /api/usage/submit", () => {
     expect(deviceDeleteChain.delete).not.toHaveBeenCalled();
     expect(dailyChain.upsert.mock.calls[0][0].cost_usd).toBe(100);
     expect(json.results[0].daily_total).toBe(100);
+  });
+
+  it("does not let a trusted Codex request lower a Claude-only device row", async () => {
+    (verifyCliToken as any).mockReturnValue("user-claude-lower");
+
+    const existingClaudeRow = {
+      cost_usd: 20,
+      input_tokens: 1000,
+      output_tokens: 500,
+      cache_creation_tokens: 0,
+      cache_read_tokens: 0,
+      total_tokens: 1500,
+      models: ["claude-opus-4-20250505"],
+      model_breakdown: [{ model: "claude-opus-4-20250505", cost_usd: 20 }],
+      collector_meta: { claude: "ccusage-v18" },
+    };
+    const deviceGuardChain: Record<string, any> = {
+      select: vi.fn().mockReturnThis(),
+      eq: vi.fn().mockReturnThis(),
+      maybeSingle: vi.fn().mockResolvedValue({ data: existingClaudeRow, error: null }),
+    };
+    const deviceCountChain: Record<string, any> = {
+      select: vi.fn().mockReturnThis(),
+      eq: vi.fn().mockImplementation(() => ({
+        eq: vi.fn().mockResolvedValue({ count: 1, data: null, error: null }),
+      })),
+    };
+    const deviceUpsertChain: Record<string, any> = {
+      upsert: vi.fn().mockReturnThis(),
+      select: vi.fn().mockReturnThis(),
+      single: vi.fn().mockResolvedValue({ data: { id: "dev-1" }, error: null }),
+    };
+    const deviceFetchChain: Record<string, any> = {
+      select: vi.fn().mockReturnThis(),
+      eq: vi.fn().mockImplementation(() => ({
+        eq: vi.fn().mockResolvedValue({ data: [existingClaudeRow], error: null }),
+      })),
+    };
+    const dailyChain: Record<string, any> = {
+      select: vi.fn().mockReturnThis(),
+      upsert: vi.fn().mockReturnThis(),
+      eq: vi.fn().mockReturnThis(),
+      maybeSingle: vi.fn().mockResolvedValue({
+        data: {
+          id: "usage-1",
+          cost_usd: 20,
+          models: existingClaudeRow.models,
+          model_breakdown: existingClaudeRow.model_breakdown,
+          collector_meta: { claude: "ccusage-v18" },
+        },
+        error: null,
+      }),
+      single: vi.fn().mockResolvedValue({ data: { id: "usage-1" }, error: null }),
+    };
+    const postChain: Record<string, any> = {
+      select: vi.fn().mockReturnThis(),
+      update: vi.fn().mockReturnThis(),
+      eq: vi.fn().mockReturnThis(),
+      maybeSingle: vi.fn().mockResolvedValue({ data: { id: "post-1", title: "Apr 24" }, error: null }),
+      single: vi.fn().mockResolvedValue({ data: { id: "post-1" }, error: null }),
+    };
+
+    let deviceFromCallCount = 0;
+    const fromFn = vi.fn((table: string) => {
+      if (table === "device_usage") {
+        deviceFromCallCount++;
+        if (deviceFromCallCount === 1) return deviceGuardChain;
+        if (deviceFromCallCount === 2) return deviceCountChain;
+        if (deviceFromCallCount === 3) return deviceFetchChain;
+        return deviceUpsertChain;
+      }
+      if (table === "daily_usage") return dailyChain;
+      if (table === "posts") return postChain;
+      return dailyChain;
+    });
+    (getServiceClient as any).mockReturnValue({ from: fromFn, rpc: vi.fn().mockResolvedValue({ data: null, error: null }) });
+
+    const res = await POST(
+      mockRequest({
+        entries: [makeEntry(todayStr(), {
+          models: ["claude-opus-4-20250505"],
+          costUSD: 10,
+          inputTokens: 500,
+          outputTokens: 250,
+          totalTokens: 750,
+          modelBreakdown: [{ model: "claude-opus-4-20250505", cost_usd: 10 }],
+        })],
+        source: "cli",
+        collector: { codex: "straude-codex-native-v2", claude: "ccusage-v18" },
+      })
+    );
+    const json = await res.json();
+
+    expect(res.status).toBe(200);
+    expect(deviceUpsertChain.upsert).not.toHaveBeenCalled();
+    expect(dailyChain.upsert.mock.calls[0][0].cost_usd).toBe(20);
+    expect(dailyChain.upsert.mock.calls[0][0].collector_meta).toEqual({ claude: "ccusage-v18" });
+    expect(json.results[0].daily_total).toBe(20);
+  });
+
+  it("allows a mixed trusted Codex correction when non-Codex cost is preserved", async () => {
+    (verifyCliToken as any).mockReturnValue("user-mixed-preserved");
+
+    const existingMixedRow = {
+      cost_usd: 120,
+      input_tokens: 100000,
+      output_tokens: 1000,
+      cache_creation_tokens: 0,
+      cache_read_tokens: 50000,
+      total_tokens: 151000,
+      models: ["claude-opus-4-20250505", "gpt-5-codex"],
+      model_breakdown: [
+        { model: "claude-opus-4-20250505", cost_usd: 90 },
+        { model: "gpt-5-codex", cost_usd: 30 },
+      ],
+    };
+    const correctedMixedRow = {
+      ...existingMixedRow,
+      cost_usd: 100,
+      input_tokens: 80000,
+      cache_read_tokens: 10000,
+      total_tokens: 91000,
+      model_breakdown: [
+        { model: "claude-opus-4-20250505", cost_usd: 90 },
+        { model: "gpt-5-codex", cost_usd: 10 },
+      ],
+      collector_meta: { claude: "ccusage-v18", codex: "straude-codex-native-v2" },
+    };
+    const deviceGuardChain: Record<string, any> = {
+      select: vi.fn().mockReturnThis(),
+      eq: vi.fn().mockReturnThis(),
+      maybeSingle: vi.fn().mockResolvedValue({ data: existingMixedRow, error: null }),
+    };
+    const deviceCountChain: Record<string, any> = {
+      select: vi.fn().mockReturnThis(),
+      eq: vi.fn().mockImplementation(() => ({
+        eq: vi.fn().mockResolvedValue({ count: 1, data: null, error: null }),
+      })),
+    };
+    const deviceUpsertChain: Record<string, any> = {
+      upsert: vi.fn().mockReturnThis(),
+      select: vi.fn().mockReturnThis(),
+      single: vi.fn().mockResolvedValue({ data: { id: "dev-1" }, error: null }),
+    };
+    const deviceDeleteChain: Record<string, any> = {
+      delete: vi.fn().mockReturnThis(),
+      eq: vi.fn().mockReturnThis(),
+    };
+    const deviceFetchChain: Record<string, any> = {
+      select: vi.fn().mockReturnThis(),
+      eq: vi.fn().mockImplementation(() => ({
+        eq: vi.fn().mockResolvedValue({ data: [correctedMixedRow], error: null }),
+      })),
+    };
+    const dailyChain: Record<string, any> = {
+      select: vi.fn().mockReturnThis(),
+      upsert: vi.fn().mockReturnThis(),
+      eq: vi.fn().mockReturnThis(),
+      maybeSingle: vi.fn().mockResolvedValue({
+        data: {
+          id: "usage-1",
+          cost_usd: 120,
+          models: existingMixedRow.models,
+          model_breakdown: existingMixedRow.model_breakdown,
+        },
+        error: null,
+      }),
+      single: vi.fn().mockResolvedValue({ data: { id: "usage-1" }, error: null }),
+    };
+    const postChain: Record<string, any> = {
+      select: vi.fn().mockReturnThis(),
+      update: vi.fn().mockReturnThis(),
+      eq: vi.fn().mockReturnThis(),
+      maybeSingle: vi.fn().mockResolvedValue({ data: { id: "post-1", title: "Apr 24" }, error: null }),
+      single: vi.fn().mockResolvedValue({ data: { id: "post-1" }, error: null }),
+    };
+
+    let deviceFromCallCount = 0;
+    const fromFn = vi.fn((table: string) => {
+      if (table === "device_usage") {
+        deviceFromCallCount++;
+        if (deviceFromCallCount === 1) return deviceGuardChain;
+        if (deviceFromCallCount === 2) return deviceCountChain;
+        if (deviceFromCallCount === 3) return deviceUpsertChain;
+        if (deviceFromCallCount === 4) return deviceDeleteChain;
+        return deviceFetchChain;
+      }
+      if (table === "daily_usage") return dailyChain;
+      if (table === "posts") return postChain;
+      return dailyChain;
+    });
+    (getServiceClient as any).mockReturnValue({ from: fromFn, rpc: vi.fn().mockResolvedValue({ data: null, error: null }) });
+
+    const res = await POST(
+      mockRequest({
+        entries: [makeEntry(todayStr(), {
+          models: ["claude-opus-4-20250505", "gpt-5-codex"],
+          costUSD: 100,
+          inputTokens: 80000,
+          outputTokens: 1000,
+          cacheReadTokens: 10000,
+          totalTokens: 91000,
+          modelBreakdown: correctedMixedRow.model_breakdown,
+        })],
+        source: "cli",
+        collector: { codex: "straude-codex-native-v2", claude: "ccusage-v18" },
+      })
+    );
+
+    expect(res.status).toBe(200);
+    expect(deviceUpsertChain.upsert).toHaveBeenCalled();
+    expect(deviceDeleteChain.delete).toHaveBeenCalled();
+    expect(dailyChain.upsert.mock.calls[0][0].cost_usd).toBe(100);
+    expect(dailyChain.upsert.mock.calls[0][0].collector_meta).toEqual({
+      claude: "ccusage-v18",
+      codex: "straude-codex-native-v2",
+    });
+  });
+
+  it("blocks a mixed trusted Codex correction when non-Codex cost would fall", async () => {
+    (verifyCliToken as any).mockReturnValue("user-mixed-blocked");
+
+    const existingMixedRow = {
+      cost_usd: 120,
+      input_tokens: 100000,
+      output_tokens: 1000,
+      cache_creation_tokens: 0,
+      cache_read_tokens: 50000,
+      total_tokens: 151000,
+      models: ["claude-opus-4-20250505", "gpt-5-codex"],
+      model_breakdown: [
+        { model: "claude-opus-4-20250505", cost_usd: 90 },
+        { model: "gpt-5-codex", cost_usd: 30 },
+      ],
+      collector_meta: { claude: "ccusage-v18", codex: "straude-codex-native-v1" },
+    };
+    const deviceGuardChain: Record<string, any> = {
+      select: vi.fn().mockReturnThis(),
+      eq: vi.fn().mockReturnThis(),
+      maybeSingle: vi.fn().mockResolvedValue({ data: existingMixedRow, error: null }),
+    };
+    const deviceCountChain: Record<string, any> = {
+      select: vi.fn().mockReturnThis(),
+      eq: vi.fn().mockImplementation(() => ({
+        eq: vi.fn().mockResolvedValue({ count: 1, data: null, error: null }),
+      })),
+    };
+    const deviceUpsertChain: Record<string, any> = {
+      upsert: vi.fn().mockReturnThis(),
+      select: vi.fn().mockReturnThis(),
+      single: vi.fn().mockResolvedValue({ data: { id: "dev-1" }, error: null }),
+    };
+    const deviceDeleteChain: Record<string, any> = {
+      delete: vi.fn().mockReturnThis(),
+      eq: vi.fn().mockReturnThis(),
+    };
+    const deviceFetchChain: Record<string, any> = {
+      select: vi.fn().mockReturnThis(),
+      eq: vi.fn().mockImplementation(() => ({
+        eq: vi.fn().mockResolvedValue({ data: [existingMixedRow], error: null }),
+      })),
+    };
+    const dailyChain: Record<string, any> = {
+      select: vi.fn().mockReturnThis(),
+      upsert: vi.fn().mockReturnThis(),
+      eq: vi.fn().mockReturnThis(),
+      maybeSingle: vi.fn().mockResolvedValue({
+        data: {
+          id: "usage-1",
+          cost_usd: 120,
+          models: existingMixedRow.models,
+          model_breakdown: existingMixedRow.model_breakdown,
+        },
+        error: null,
+      }),
+      single: vi.fn().mockResolvedValue({ data: { id: "usage-1" }, error: null }),
+    };
+    const postChain: Record<string, any> = {
+      select: vi.fn().mockReturnThis(),
+      update: vi.fn().mockReturnThis(),
+      eq: vi.fn().mockReturnThis(),
+      maybeSingle: vi.fn().mockResolvedValue({ data: { id: "post-1", title: "Apr 24" }, error: null }),
+      single: vi.fn().mockResolvedValue({ data: { id: "post-1" }, error: null }),
+    };
+
+    let deviceFromCallCount = 0;
+    const fromFn = vi.fn((table: string) => {
+      if (table === "device_usage") {
+        deviceFromCallCount++;
+        if (deviceFromCallCount === 1) return deviceGuardChain;
+        if (deviceFromCallCount === 2) return deviceCountChain;
+        if (deviceFromCallCount === 3) return deviceFetchChain;
+        return deviceDeleteChain;
+      }
+      if (table === "daily_usage") return dailyChain;
+      if (table === "posts") return postChain;
+      return dailyChain;
+    });
+    (getServiceClient as any).mockReturnValue({ from: fromFn, rpc: vi.fn().mockResolvedValue({ data: null, error: null }) });
+
+    const res = await POST(
+      mockRequest({
+        entries: [makeEntry(todayStr(), {
+          models: ["claude-opus-4-20250505", "gpt-5-codex"],
+          costUSD: 90,
+          inputTokens: 80000,
+          outputTokens: 1000,
+          cacheReadTokens: 10000,
+          totalTokens: 91000,
+          modelBreakdown: [
+            { model: "claude-opus-4-20250505", cost_usd: 80 },
+            { model: "gpt-5-codex", cost_usd: 10 },
+          ],
+        })],
+        source: "cli",
+        collector: { codex: "straude-codex-native-v2", claude: "ccusage-v18" },
+      })
+    );
+    const json = await res.json();
+
+    expect(res.status).toBe(200);
+    expect(deviceUpsertChain.upsert).not.toHaveBeenCalled();
+    expect(deviceDeleteChain.delete).not.toHaveBeenCalled();
+    expect(dailyChain.upsert.mock.calls[0][0].cost_usd).toBe(120);
+    expect(json.results[0].daily_total).toBe(120);
+  });
+
+  it.each([
+    ["legacy repair", { repair: "codex_inflation_repair", previous_cost_usd: 100 }],
+    ["v3 codex repair", { repair_v3_codex_only: "true", cost_before_v3: 100 }],
+    ["Claude restore", { claude_restore_2026_05_07: "true", cost_before_claude_restore: 5 }],
+  ])("preserves %s metadata and blocks stale v1 reinflation", async (_label, repairMeta) => {
+    (verifyCliToken as any).mockReturnValue(`user-repair-${String(_label).replaceAll(" ", "-")}`);
+
+    const repairedRow = {
+      cost_usd: 10,
+      input_tokens: 10000,
+      output_tokens: 100,
+      cache_creation_tokens: 0,
+      cache_read_tokens: 0,
+      total_tokens: 10100,
+      models: ["gpt-5-codex"],
+      model_breakdown: [{ model: "gpt-5-codex", cost_usd: 10 }],
+      collector_meta: repairMeta,
+    };
+    const deviceGuardChain: Record<string, any> = {
+      select: vi.fn().mockReturnThis(),
+      eq: vi.fn().mockReturnThis(),
+      maybeSingle: vi.fn().mockResolvedValue({ data: repairedRow, error: null }),
+    };
+    const deviceCountChain: Record<string, any> = {
+      select: vi.fn().mockReturnThis(),
+      eq: vi.fn().mockImplementation(() => ({
+        eq: vi.fn().mockResolvedValue({ count: 1, data: null, error: null }),
+      })),
+    };
+    const deviceUpsertChain: Record<string, any> = {
+      upsert: vi.fn().mockReturnThis(),
+      select: vi.fn().mockReturnThis(),
+      single: vi.fn().mockResolvedValue({ data: { id: "dev-1" }, error: null }),
+    };
+    const deviceFetchChain: Record<string, any> = {
+      select: vi.fn().mockReturnThis(),
+      eq: vi.fn().mockImplementation(() => ({
+        eq: vi.fn().mockResolvedValue({ data: [repairedRow], error: null }),
+      })),
+    };
+    const dailyChain: Record<string, any> = {
+      select: vi.fn().mockReturnThis(),
+      upsert: vi.fn().mockReturnThis(),
+      eq: vi.fn().mockReturnThis(),
+      maybeSingle: vi.fn().mockResolvedValue({
+        data: {
+          id: "usage-1",
+          cost_usd: 10,
+          models: repairedRow.models,
+          model_breakdown: repairedRow.model_breakdown,
+          collector_meta: repairMeta,
+        },
+        error: null,
+      }),
+      single: vi.fn().mockResolvedValue({ data: { id: "usage-1" }, error: null }),
+    };
+    const postChain: Record<string, any> = {
+      select: vi.fn().mockReturnThis(),
+      update: vi.fn().mockReturnThis(),
+      eq: vi.fn().mockReturnThis(),
+      maybeSingle: vi.fn().mockResolvedValue({ data: { id: "post-1", title: "Apr 24" }, error: null }),
+      single: vi.fn().mockResolvedValue({ data: { id: "post-1" }, error: null }),
+    };
+
+    let deviceFromCallCount = 0;
+    const fromFn = vi.fn((table: string) => {
+      if (table === "device_usage") {
+        deviceFromCallCount++;
+        if (deviceFromCallCount === 1) return deviceGuardChain;
+        if (deviceFromCallCount === 2) return deviceCountChain;
+        if (deviceFromCallCount === 3) return deviceFetchChain;
+        return deviceUpsertChain;
+      }
+      if (table === "daily_usage") return dailyChain;
+      if (table === "posts") return postChain;
+      return dailyChain;
+    });
+    (getServiceClient as any).mockReturnValue({ from: fromFn, rpc: vi.fn().mockResolvedValue({ data: null, error: null }) });
+
+    const res = await POST(
+      mockRequest({
+        entries: [makeEntry(todayStr(), {
+          models: ["gpt-5-codex"],
+          costUSD: 100,
+          inputTokens: 100000,
+          outputTokens: 1000,
+          totalTokens: 101000,
+          modelBreakdown: [{ model: "gpt-5-codex", cost_usd: 100 }],
+        })],
+        source: "cli",
+        collector: { codex: "straude-codex-native-v1" },
+      })
+    );
+    const json = await res.json();
+
+    expect(res.status).toBe(200);
+    expect(deviceUpsertChain.upsert).not.toHaveBeenCalled();
+    expect(dailyChain.upsert.mock.calls[0][0].cost_usd).toBe(10);
+    expect(dailyChain.upsert.mock.calls[0][0].collector_meta).toMatchObject(repairMeta);
+    expect(json.results[0].daily_total).toBe(10);
   });
 
   it("rejects requests without device_id", async () => {

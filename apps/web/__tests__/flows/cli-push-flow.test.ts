@@ -467,7 +467,7 @@ describe("Flow: CLI Push", () => {
     const postChain = chainBuilder({ data: { id: "post-1" }, error: null });
 
     // Stateless device_usage mock — routes by query shape, not call order:
-    // Guard:  .select("cost_usd,models").eq().eq().eq().maybeSingle()
+    // Guard:  .select("cost_usd,models,model_breakdown,collector_meta").eq().eq().eq().maybeSingle()
     // Count:  .select("id", { count, head }).eq().eq()
     // Upsert: .upsert({}, {}).select().single()
     // Fetch:  .select("cost_usd,...").eq().eq()
@@ -480,7 +480,7 @@ describe("Flow: CLI Push", () => {
           })),
         };
       }
-      if (columns === "cost_usd,models") {
+      if (columns === "cost_usd,models,model_breakdown,collector_meta") {
         return {
           eq: vi.fn(() => ({
             eq: vi.fn(() => ({
