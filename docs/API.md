@@ -314,9 +314,13 @@ Submit daily usage data. Primary endpoint for CLI syncs and web imports.
   ```json
   {
     "source": "cli" | "web",
-    "device_id": "uuid (optional, enables multi-device aggregation)",
+    "device_id": "uuid (required for current CLI/web import clients)",
     "device_name": "string (optional)",
     "hash": "sha256 hex string (optional)",
+    "collector": {
+      "claude": "ccusage-v18 | agentsview-v1",
+      "codex": "straude-codex-native-v1"
+    },
     "entries": [
       {
         "date": "YYYY-MM-DD",
@@ -334,10 +338,10 @@ Submit daily usage data. Primary endpoint for CLI syncs and web imports.
     ]
   }
   ```
-- **Validation**: Dates must be valid ISO format within a 7-day backfill window. No negative values.
+- **Validation**: Dates must be valid ISO format within a 30-day backfill window. No negative values. Collector metadata is allow-listed.
 - **Response**: `{ results: [{ date, usage_id, post_id, post_url, action }] }`
 - **Status codes**: `200` success, `207` partial failure (some entries failed), `400` validation error, `401` unauthorized.
-- **Side effects**: Creates/updates `daily_usage` rows, creates posts with auto-generated titles, triggers achievement checks, multi-device aggregation when `device_id` provided.
+- **Side effects**: Creates/updates `device_usage` and aggregated `daily_usage` rows, creates posts with auto-generated titles, triggers achievement checks.
 
 ### `GET /api/usage/status`
 

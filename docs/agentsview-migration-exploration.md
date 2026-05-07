@@ -8,6 +8,21 @@
 
 ---
 
+## 2026-05-01 update: CLI 1.0 implementation plan
+
+The follow-up verification pass found that this exploration is too optimistic about retiring Straude's native Codex collector in the 1.0 PR. Agentsview v0.26.1 is still the right long-term consolidation target, but it does not yet appear to preserve the fork-heavy Codex accounting repair that fixed [issue #87](https://github.com/ohong/straude/issues/87). In particular, the public implementation does not appear to read Codex `forked_from_id` ancestry the way `packages/cli/src/lib/codex-native.ts` does.
+
+CLI 1.0 therefore uses a safer hybrid plan:
+
+- agentsview can replace the Claude-side collector when agentsview >= 0.26.1 is installed;
+- Codex stays on `straude-codex-native-v1` until upstream parity is proven;
+- `auto` falls back to the existing legacy path when agentsview is missing, outdated, or a one-time native Codex repair is pending;
+- the server accepts `agentsview-v1` collector metadata but does not trust it to lower existing spend totals.
+
+The detailed implementation and follow-up consolidation plan lives in `docs/agentsview-cli-1.0-migration-plan.md`.
+
+---
+
 ## 1. The ask, in one paragraph
 
 Straude's CLI reads users' local Claude Code and Codex usage with two collectors we maintain ourselves (`ccusage` for Claude — an external npm binary we shell out to; `codex-native` for Codex — 577 lines of bespoke JSONL parsing, pricing, and dedup we wrote in-house). [`agentsview`](https://github.com/wesm/agentsview) is a third-party local-first telemetry tool, MIT-licensed, by Wes McKinney (creator of pandas), that does both jobs from one binary, plus 13 other agents (Cursor, Copilot, Gemini, Warp, etc.). Its `usage daily --json` output is schema-compatible with ccusage v18 — the format our parser already consumes. **Should we migrate?**

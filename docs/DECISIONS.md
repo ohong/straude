@@ -1,5 +1,18 @@
 # Architecture & Design Decisions
 
+## CLI 1.0 Uses AgentsView For Claude, Native Collector For Codex (2026-05-01)
+
+**Decision:** CLI 1.0 introduces an agentsview adapter but does not retire `codex-native.ts`. In `STRAUDE_COLLECTOR=auto`, the CLI uses agentsview >= 0.26.1 for Claude Code collection when available and keeps Straude's native Codex collector for Codex. If the one-time native Codex repair is pending, `auto` uses the existing legacy path for that run. `STRAUDE_COLLECTOR=legacy` keeps ccusage + native Codex. `STRAUDE_COLLECTOR=agentsview` requires agentsview >= 0.26.1 and still keeps native Codex for Codex.
+
+**Why:** Agentsview is the right consolidation target, but the 2026-05-01 verification pass did not prove parity with Straude's issue #87 fix for fork-heavy Codex sessions. Replacing native Codex accounting before agentsview handles `forked_from_id` ancestry and cumulative token deltas would risk reintroducing inflated spend totals. The hybrid migration offloads the safe Claude-side collector work while preserving the accuracy repair users already depend on.
+
+**Alternatives considered:**
+1. **Hard cutover to agentsview for all agents.** Simpler and more maintainable, but unsafe until fork-heavy Codex parity is proven.
+2. **Keep agentsview opt-in only.** Lowest risk, but weak for a 1.0 migration and does not reduce the default Claude-side collector surface for users with a supported agentsview install.
+3. **Agentsview for Claude + native Codex (chosen).** Gives Straude a safe 1.0 migration path, keeps `npx straude@latest` working without agentsview, and leaves a clear future gate for full consolidation.
+
+**Server rule:** `agentsview-v1` metadata is accepted for provenance, but only `collector.codex = "straude-codex-native-v1"` from CLI-authenticated requests can lower existing spend totals.
+
 ## CLI auto-installs `ccusage` on first interactive run (2026-05-04)
 
 **Decision:** When `straude push` runs and `ccusage` is not on PATH, prompt the user (TTY only) and run `bun add -g ccusage` (or `npm install -g ccusage`) on consent. Non-TTY contexts continue to throw with the explicit install command.

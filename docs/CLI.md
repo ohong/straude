@@ -1,6 +1,6 @@
 # CLI Reference
 
-The `straude` CLI pushes Claude Code and Codex usage data to Straude. Published on npm as [`straude`](https://www.npmjs.com/package/straude).
+The `straude` CLI pushes AI coding usage data to Straude. Published on npm as [`straude`](https://www.npmjs.com/package/straude).
 
 ## Installation
 
@@ -15,7 +15,7 @@ bunx straude
 npm install -g straude
 ```
 
-**Requirements**: Node.js >= 18
+**Requirements**: Node.js >= 18. `ccusage` remains the fallback Claude Code collector. Agentsview >= 0.26.1 is optional and used automatically when installed.
 
 ## Quick Start
 
@@ -61,8 +61,8 @@ straude push --dry-run        # Preview without posting
 
 | Flag | Description |
 |------|-------------|
-| `--date YYYY-MM-DD` | Push a specific date (must be within last 7 days) |
-| `--days N` | Push last N days (max 7) |
+| `--date YYYY-MM-DD` | Push a specific date (must be within last 30 days) |
+| `--days N` | Push last N days (max 30) |
 | `--dry-run` | Preview what would be submitted without actually posting |
 
 **Date range logic:**
@@ -70,7 +70,7 @@ straude push --dry-run        # Preview without posting
 | Condition | Range pushed |
 |-----------|-------------|
 | `--date` specified | That single date |
-| `--days N` specified | Last N days (capped at 7) |
+| `--days N` specified | Last N days (capped at 30) |
 | Previously pushed today | Today only (re-sync) |
 | Previously pushed before today | Days since last push (capped at 7) |
 | Never pushed before | Last 3 days (first-run backfill) |
@@ -106,27 +106,29 @@ Last push: 2026-03-11 (today)
 
 ## Data Sources
 
-The CLI collects usage from two sources in parallel:
+The CLI 1.0 collector mode is controlled by `STRAUDE_COLLECTOR=auto|agentsview|legacy`.
 
-### Claude Code (via `ccusage`)
+### `auto` (default)
 
-Reads local Claude Code session data using the `ccusage` binary. Resolution order:
+`auto` prefers agentsview for Claude Code when agentsview >= 0.26.1 is installed, while keeping Straude's native Codex collector for Codex. If agentsview is missing/outdated, or if the one-time native Codex repair is pending, `auto` uses the legacy ccusage + native Codex path.
 
-1. Direct `ccusage` binary on PATH (fastest, ~0.3s)
-2. `bunx --bun ccusage@17` if running under Bun
-3. `npx --yes ccusage@17` fallback
+Agentsview is invoked as:
 
-Runs: `ccusage daily --json --breakdown --since YYYYMMDD --until YYYYMMDD`
+```bash
+agentsview usage daily --json --breakdown --agent claude --offline --since YYYY-MM-DD --until YYYY-MM-DD --timezone <IANA>
+```
 
-If no local Claude Code data directories exist, this source is silently skipped (enabling Codex-only users).
+`--offline` keeps the CLI deterministic and avoids a network pricing fetch. Broader online LiteLLM pricing coverage is a future product decision because it trades cost coverage against latency and network dependency.
 
-### Codex (via `@ccusage/codex`)
+### `agentsview`
 
-Reads OpenAI Codex usage data using `@ccusage/codex@18`.
+Requires agentsview >= 0.26.1. Uses agentsview for Claude Code and Straude native Codex for Codex. This is not a full Codex cutover: native Codex remains because it contains the fork/session dedup repair for inflated Codex totals.
 
-Runs: `@ccusage/codex daily --json --since YYYYMMDD --until YYYYMMDD`
+### `legacy`
 
-Failures are silent — Codex data is optional. Both sources run concurrently via `Promise.all`.
+Uses `ccusage daily --json --breakdown --since YYYYMMDD --until YYYYMMDD` for Claude Code and Straude's native Codex collector for Codex.
+
+If no local Claude Code data directories exist, the Claude source is skipped when possible so Codex-only users can still sync.
 
 ### Merge Logic
 
@@ -137,7 +139,7 @@ When both sources return data for the same date:
 - Costs are summed
 - Per-model cost breakdowns are merged (falls back to even distribution when per-model data is unavailable)
 
-A SHA-256 hash of the concatenated raw JSON output is sent for dedup.
+A SHA-256 hash of the raw collector output plus the native Codex aggregate fingerprint is sent for dedup.
 
 ### Token Normalization
 
@@ -201,10 +203,18 @@ This is non-fatal. The CLI will sync Codex usage only. If you expected Claude da
 
 ### ccusage is slow
 
-If you see slow startup times, install ccusage globally for faster resolution:
+If you see slow startup times and do not use agentsview, install ccusage globally for faster fallback collection:
 
 ```bash
 npm install -g ccusage
+```
+
+### agentsview is ignored
+
+Straude only uses agentsview when `agentsview version` reports v0.26.1 or newer. Upgrade agentsview, or force the fallback path:
+
+```bash
+export STRAUDE_COLLECTOR=legacy
 ```
 
 ### Windows support
