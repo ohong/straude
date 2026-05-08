@@ -1,0 +1,6 @@
+-- Intentionally no-op.
+--
+-- Historical Codex rows must not be rewritten by heuristic SQL. Inflated rows
+-- are corrected only when the owning user pushes again from the fixed CLI,
+-- which can re-read that user's local source logs and submit authoritative
+-- per-day usage.

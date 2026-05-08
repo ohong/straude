@@ -120,4 +120,22 @@ describe("ActivityCard", () => {
     expect(screen.getByLabelText("Model usage: 100% Claude Opus")).toBeInTheDocument();
     expect(screen.queryByText(/GPT-5\.3-Codex/)).not.toBeInTheDocument();
   });
+
+  it("does not surface abandoned SQL repair metadata on the card", () => {
+    render(
+      <ActivityCard
+        post={makePost({
+          daily_usage: {
+            ...makePost().daily_usage,
+            collector_meta: {
+              repair_v3_codex_only: "true",
+              cost_before_v3: 100,
+            },
+          },
+        }) as any}
+      />
+    );
+
+    expect(screen.queryByText(/Repaired/)).not.toBeInTheDocument();
+  });
 });

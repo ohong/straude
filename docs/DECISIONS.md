@@ -1,5 +1,88 @@
 # Architecture & Design Decisions
 
+## Roll back SQL Codex repairs; heal only from CLI source data (2026-05-07)
+
+**Decision:** Do not repair historical Codex usage by direct SQL rescaling. The 2026-05-06/07 repair migrations are now no-ops, and `20260507000200_rollback_codex_sql_repairs.sql` restores any environment that briefly ran them from the original `corrections_log.previous_values` snapshots. Accurate Codex healing happens only when the owning user pushes again with the fixed CLI collector.
+
+**Why:** The SQL repair path did not have the source data needed to distinguish genuinely billed input from cached context snapshots. On real rows it produced impossible public data, for example `input_tokens = 0` and `cache_read_tokens = 0` while `total_tokens` remained hundreds of millions. It also split the UI: auto-generated post titles and card costs could disagree because the database row was rewritten after the post was created. That is worse than showing an inflated stale row because it creates silent data loss and erodes trust.
+
+**Policy:** SQL migrations may add schema, audit tables, and server-side safeguards, but they must not heuristically overwrite user usage totals. CI guards future migrations from adding direct `daily_usage` / `device_usage` DML after the rollback migration. A trusted fixed CLI push can lower Codex spend only for entries that contain Codex usage and prove non-Codex cost is preserved. Claude accounting stays delegated to `ccusage`.
+
+**Operational result:** Existing bad SQL-repaired rows were restored to their pre-repair values, including `cost_usd`, audited token bucket columns, `model_breakdown`, `collector_meta`, and auto-generated post titles. When the audit snapshot lacks a bucket that the repair never touched, the rollback preserves the current value instead of guessing. The rollback skips rows already written by the fixed Codex collector, so a user re-push cannot be undone by a later rollback run. Rows may still look inflated until their owner pushes again; that is intentional because the local session logs are the source of truth.
+
+## Superseded: re-price legacy Codex inflation under inclusive-cache, don't delete (2026-05-06)
+
+**Status:** Rolled back on 2026-05-07. This section is retained as incident history, not current policy.
+
+**Decision:** For the 2,683 legacy `daily_usage` rows (`collector_meta IS NULL`) and 418 rows tagged with the previous native Codex collector marker (`collector_meta->>'codex' = 'straude-codex-native-v1'`) where `cache_read_tokens > input_tokens`, retroactively re-classify under "cache is a subset of input" semantics: clamp `cache_read = min(cache_read, input)`, reduce `input` by that amount, then rescale `model_breakdown[*].cost_usd` by the ratio of corrected-vs-original cost estimates per model. Preserve total tokens directionally (we don't have ground-truth raw sessions to recompute from), set `is_verified = TRUE`, and tag `collector_meta.repair` with the correction reason.
+
+**Why:** The visible $7,821 May-4 post on `ohong`'s feed turned out to be one of many: a query for `cost_usd > 1000 OR cache_read > input_tokens * 100` returned 24+ rows totaling > $80k of obviously inflated cost, and the broader filter `cache_read > input` returned 2,683+418 rows totaling $480k — about 80% of the project's then-$515k North Star. Legacy rows were written before the native collector existed; the source raw sessions are no longer reachable. We had to choose between (1) deleting the rows, (2) leaving them inflated and gating downstream reads on `is_verified`, or (3) rescaling them under the correct convention. We picked (3) for trust.
+
+**Alternatives considered:**
+
+1. **Delete inflated rows entirely.** Simpler, easier to defend ("we threw out anything we couldn't verify"). Rejected because it deletes real activity (kudos, comments, streaks). The token totals are directionally real — only the *classification* is wrong — so the correction can be principled instead of nuclear.
+2. **Set `is_verified = false` and exclude from leaderboards.** Soft fix. Rejected because the post still shows the inflated number on the feed; users with kudos and comments on those posts notice. The fix should be visible everywhere the cost is.
+3. **Wait for users to re-upload with the fixed CLI and only fix rows tagged with the previous native Codex collector marker.** Most patient option. Rejected because (a) legacy rows have no source data to re-upload from, and (b) accuracy on the headline metric matters now, not after every user happens to update.
+
+**Why the proportional-rescale math works:** The bug never mis-priced a bucket — `cache_read` was always priced at the cache rate, `input` at the input rate. The bug was that *both* token counts were inflated (cumulative cached drifted above cumulative input across forked / replayed sessions). So the recorded `cost_usd` matches `Σ(per-model token splits) × (correct rates)` to within rounding. The migration computes:
+
+- `old_estimate = Σ_m (input_share_m × input_rate_m + cache_share_m × cache_read_rate_m + output_share_m × output_rate_m)` over the inflated buckets — this reproduces the recorded cost.
+- `new_estimate = Σ_m (max(0, input_share_m − cache_share_m) × input_rate_m + min(input_share_m, cache_share_m) × cache_read_rate_m + output_share_m × output_rate_m)` over the inclusive-cache buckets.
+- `correction_factor = new_estimate / old_estimate` — applied to both `daily_usage.cost_usd` and each `model_breakdown[*].cost_usd` so per-model proportions are preserved.
+
+Per-model token splits aren't stored, so the migration approximates each model's input/cache/output share from its `cost_usd` share of `model_breakdown` (best available proxy without re-aggregating from device rows). For the row that prompted the investigation (April 10, $16,714) the corrected cost lands at $2,521 (factor 0.151) — still elevated for that user but plausible given their genuine usage volume. This first pass dropped Aggregate North Star from $515,225.95 to $157,264.61; the later Claude-restore migration put legitimate ccusage-derived Claude spend back, so re-pushing with the fixed Codex collector remains the authoritative path for exact Codex repair on mixed rows.
+
+**Defaults / safeguards:**
+
+- `correction_factor` is clamped to `[0.01, 1.0]` — repair never *increases* cost and never zeroes a row.
+- `is_verified = TRUE` is set unconditionally on repaired rows so leaderboards continue to count them.
+- Superseded: `collector_meta.repair` and `previous_*` fields were going to power a visible repair hint, but this was rolled back with the SQL repair path.
+- A separate `corrections_log` table stores `(user_id, date, table_name, previous_values, new_values)` per affected row (5,578 entries) for full reversibility.
+- The native collector repair migration preserves existing `collector_meta.codex` and `collector_meta.claude` keys (it merges instead of overwriting) so the trusted-collector overwrite path still works on user re-upload. Legacy rows have no such keys, so their `collector_meta` is built fresh.
+- Both migrations are idempotent: the legacy migration's `collector_meta IS NULL` filter excludes already-repaired rows; the native collector repair migration uses an explicit `repair` tag check.
+- Materialized leaderboard views are refreshed at the end of each migration (independent `DO` blocks so a single CONCURRENTLY failure doesn't abort).
+
+## Codex collector uses a deterministic inclusive-cache clamp, not a dual-candidate inference (2026-05-06)
+
+**Decision:** In `packages/cli/src/lib/codex-native.ts:normalizeBucket`, replace the call to the shared `normalizeTokenBuckets({source:"codex", cacheSemantics:"subset_of_input"})` (which builds two candidates — "separate cache" vs "inclusive cache" — and picks based on consistency error against `total_tokens`) with a direct, hard-coded `cache_read = min(cached, input); input = input - cache_read` clamp. Emit a `NormalizationAnomaly` with `confidence: low` when source data violates the invariant rather than silently letting cache exceed input.
+
+**Why:** Codex's documented schema (OpenAI Responses API) says `cached_input_tokens` is a subset of `input_tokens`, full stop. There is exactly one valid interpretation; the dual-candidate logic exists for sources where semantics are genuinely ambiguous (`ccusage` for Claude). Under bucket-level summation across multi-event sessions, the dual-candidate consistency check could pick the "separate" candidate when arithmetic drift made it look more consistent — and once "separate" wins, there's no clamp, so cache_read can exceed input by orders of magnitude. At gpt-5.5's $0.50/M cache-read rate, billions of phantom cache tokens added thousands of dollars per row.
+
+**Alternatives considered:**
+
+1. **Add a `subset_of_input_strict` mode to `normalizeTokenBuckets` that always picks the inclusive candidate.** Cleaner separation, but it concentrates Codex-specific semantics in a generic util that doesn't otherwise know about Codex. Rejected — the codex path is short enough to inline the clamp directly, and the inline version is easier to read and harder to misuse.
+2. **Keep the dual-candidate logic but tighten the tie-breaks.** Hard to verify exhaustively. The bug only surfaced because real production data tripped a tie-break path that no test fixture covered. Rejected — deterministic > correct-for-the-cases-we-tested.
+3. **Move normalization to per-event instead of per-bucket aggregation.** Mathematically equivalent for an inclusive-only path (sum of per-event clamps == clamp of summed buckets when the invariant holds), and it doesn't fix the bucket-level arithmetic drift that breaks the dual-candidate logic. Rejected as unnecessary; the deterministic clamp handles drift directly.
+
+**Update (2026-05-07): the inclusive-cache clamp wasn't the load-bearing fix.** Verifying the fixed native Codex collector against real sessions on disk revealed the actual root cause is one layer deeper. See the "Codex `total_token_usage` is per-request, not session-cumulative" decision below — that's the fix that actually drops the May-4 ohong row from $7,743 to $228 against ground truth. The cache clamp still ships (defense in depth), but the headline win comes from switching to `last_token_usage`-based per-event billing.
+
+## Codex `total_token_usage` is per-request context, not session-cumulative (2026-05-07)
+
+**Decision:** In `parseSessionFile`, prefer `last_token_usage` (the per-event delta Codex emits alongside `total_token_usage`) over computing a delta via `subtractRawUsage(total_now, previous_total)`. Dedupe consecutive events only when both `total_token_usage` and `last_token_usage` are identical (Codex re-emits the same event ~50% of the time on heavy-usage days). Fall back to cumulative-delta semantics only when `last_token_usage` is missing entirely.
+
+**Why:** The original code assumed `total_token_usage.input_tokens` was a session-cumulative counter that grows monotonically. Verified against real `~/.codex/sessions/2026/05/04/*.jsonl`: it isn't. It's the *current request's context snapshot* — prompt size + cache hits + output for the request that just finished. The IDE periodically prunes the conversation context (system prompt re-anchoring, tool-call budget management, summarization), which causes the snapshot to drop. When it grows again, the legacy cumulative-delta logic added the entire regrowth on top of the pre-prune peak. On a session with 352 prune events out of 1,381 token_count emissions, this inflated the bucket sum by **70x** — and across all 9 May-4 sessions, by 18x at the day level.
+
+The smoking-gun numbers, all from the same May-4 session file (3,691 token_count events):
+
+| Interpretation | input | cached | output |
+|---|---|---|---|
+| End-of-session cumulative | 148.8M | 144.5M | 344.9k |
+| Sum of `last_token_usage` (no dedup) | 525.8M | 511.0M | 1.21M |
+| Sum of cumulative deltas (legacy logic) | **10,368.9M** | 10,006.8M | 29.1M |
+| Sum of `last_token_usage` w/ dedup (new logic) | ≈296M | ≈296M | ≈782k |
+
+Pricing the new-logic numbers at gpt-5.5 rates: $228.68 — matches what OpenAI actually billed.
+
+**Alternatives considered:**
+
+1. **Trust `total_token_usage` as cumulative + treat backwards steps as resets.** I.e., when `total < previous`, snapshot the previous as a "turn complete" amount and start a new accumulator. Mechanically possible but fragile — small prunes (200k-token shifts in a multi-megabyte context) aren't really "turn boundaries", and the heuristic would still mis-bill. Rejected.
+2. **Sum `last_token_usage` without dedup.** Simpler, but in real data 51% of events are duplicate emissions of the same `last_token_usage` (verified: 2,236 of 2,240 same-`total` pairs also have same `last`). That'd over-count by 2x. Rejected.
+3. **Dedup only on `total_token_usage`.** Initially tempting, but the remaining same-total/different-`last_token_usage` events are real billed requests. Rejected because billing truth lives in `last_token_usage`, not the context snapshot.
+
+**Why the previous test suite missed it:** the synthetic fixtures all happened to satisfy *both* interpretations (last == total when only one event, only one of the two fields set, or two events with same total + same last). Regression tests now cover prune-then-regrow billing, same-total/different-`last_token_usage`, true duplicate emissions, and forked child sessions whose parent keeps running after the fork.
+
+**Implication for the legacy / native collector SQL repair migrations:** they still scale from the (inflated) token counts that were already written to `daily_usage`. They produce a *directionally-correct* repair (May-4 ohong row went $7,821 → $1,071) but not the ground-truth value ($228 + $82 ccusage ≈ $310). The full fix requires users to re-upload with the fixed CLI so the server's trusted-collector overwrite path can replace the heuristic with the real number. The auto-trigger on `codex_native_last_token_usage_repair_completed_at` does this on the user's next `straude` run.
+
 ## CLI auto-installs `ccusage` on first interactive run (2026-05-04)
 
 **Decision:** When `straude push` runs and `ccusage` is not on PATH, prompt the user (TTY only) and run `bun add -g ccusage` (or `npm install -g ccusage`) on consent. Non-TTY contexts continue to throw with the explicit install command.

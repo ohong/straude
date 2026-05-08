@@ -265,8 +265,12 @@ export async function pushCommand(options: PushOptions, apiUrlOverride?: string)
   }
 
   const today = new Date();
+  // Trigger a one-time 30-day backfill when the user has not yet re-collected
+  // Codex sessions with the last_token_usage accounting fix. The older repair
+  // marker is kept only so users who already ran the first repair still get
+  // this more accurate re-collection.
   const shouldRunCodexRepair = !options.date
-    && !config.codex_native_repair_completed_at
+    && (!config.codex_native_repair_completed_at || !config.codex_native_last_token_usage_repair_completed_at)
     && await containsSessionFile();
 
   const resolution = resolvePushDateRange({
@@ -509,7 +513,9 @@ export async function pushCommand(options: PushOptions, apiUrlOverride?: string)
     entries[0]!.date,
   );
   if (shouldRunCodexRepair && !codexCollectFailed && blockedDates.size === 0) {
-    config.codex_native_repair_completed_at = new Date().toISOString();
+    const stamp = new Date().toISOString();
+    config.codex_native_repair_completed_at = stamp;
+    config.codex_native_last_token_usage_repair_completed_at = stamp;
     config.last_push_date = latestDate;
     saveConfig(config);
   } else {

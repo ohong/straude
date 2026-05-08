@@ -1,0 +1,6 @@
+-- Intentionally no-op.
+--
+-- Rows tagged by the previous native Codex collector are healed by a future CLI
+-- push from the same user, not by direct SQL rescaling. The server still accepts
+-- trusted fixed-collector submissions that lower Codex totals when the incoming
+-- row proves non-Codex cost is preserved.

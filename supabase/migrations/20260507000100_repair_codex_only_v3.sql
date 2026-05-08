@@ -1,0 +1,5 @@
+-- Intentionally no-op.
+--
+-- Do not apply heuristic Codex-only SQL repairs. Accurate Codex corrections
+-- require the fixed CLI collector to re-read local Codex session JSONL and push
+-- the corrected usage data.

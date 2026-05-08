@@ -1,0 +1,7 @@
+-- Intentionally no-op.
+--
+-- This PR originally added a corrections_log table to support direct SQL
+-- rewrites of historical Codex usage. We no longer repair usage by rewriting
+-- daily_usage/device_usage from SQL; the user's next CLI push is the source of
+-- truth for healing Codex accounting. The filename is retained so environments
+-- that already saw the migration version do not drift from the repo.

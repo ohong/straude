@@ -1,0 +1,5 @@
+-- Intentionally no-op.
+--
+-- This follow-up existed only because the direct SQL Codex repair also scaled
+-- Claude model_breakdown entries. Since the SQL repair path is removed, there
+-- is no Claude restore pass to run.

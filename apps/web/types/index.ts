@@ -195,7 +195,23 @@ export interface DeviceUsage {
 
 export interface UsageCollectorMeta {
   claude?: "ccusage-v18" | string;
-  codex?: "straude-codex-native-v1" | string;
+  codex?: "straude-codex-native-last-token-usage" | "straude-codex-native-v1" | string;
+  // Set when a row was repaired retroactively (legacy or previous native Codex inflation fix).
+  // Surfaced on the post card so kudos/comments stay attached but the user can
+  // see why their cost changed.
+  repair?: string;
+  previous_cost_usd?: number;
+  previous_input_tokens?: number;
+  previous_cache_read_tokens?: number;
+  repaired_at?: string;
+  repair_v3_codex_only?: string;
+  cost_before_v3?: number;
+  total_tokens_before_v3?: number;
+  cache_read_before_v3?: number;
+  model_breakdown_before_v3?: ModelBreakdownEntry[];
+  repaired_at_v3?: string;
+  claude_restore_2026_05_07?: string;
+  cost_before_claude_restore?: number;
 }
 
 // API request/response types

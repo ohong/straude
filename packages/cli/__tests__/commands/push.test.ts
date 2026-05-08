@@ -21,7 +21,7 @@ vi.mock("../../src/lib/ccusage.js", () => ({
 }));
 
 vi.mock("../../src/lib/codex-native.js", () => ({
-  CODEX_NATIVE_COLLECTOR: "straude-codex-native-v1",
+  CODEX_NATIVE_COLLECTOR: "straude-codex-native-last-token-usage",
   collectCodexUsageAsync: vi.fn(),
   containsSessionFile: vi.fn(),
 }));
@@ -381,6 +381,7 @@ describe("pushCommand", () => {
     expect(untilArg).toBe(fmt(now));
     expect(mockSaveConfig).toHaveBeenCalledWith(expect.objectContaining({
       codex_native_repair_completed_at: expect.any(String),
+      codex_native_last_token_usage_repair_completed_at: expect.any(String),
       last_push_date: today,
     }));
   });
@@ -430,7 +431,7 @@ describe("pushCommand", () => {
     expect(entry.modelBreakdown[1]).toEqual({ model: "gpt-5-codex", cost_usd: 3.0 });
     expect(body.collector).toEqual({
       claude: "ccusage-v18",
-      codex: "straude-codex-native-v1",
+      codex: "straude-codex-native-last-token-usage",
     });
   });
 
@@ -610,7 +611,7 @@ describe("pushCommand", () => {
     expect(body.entries).toHaveLength(1);
     expect(body.entries[0]!.data.models).toEqual(["gpt-5-codex"]);
     expect(body.entries[0]!.data.costUSD).toBe(3.0);
-    expect(body.collector).toEqual({ codex: "straude-codex-native-v1" });
+    expect(body.collector).toEqual({ codex: "straude-codex-native-last-token-usage" });
   });
 
   it("shows no usage when Claude local data is missing and Codex has no data", async () => {

@@ -3,6 +3,8 @@ import { readFileSync, readdirSync } from "fs";
 import { join } from "path";
 
 const MIGRATIONS_DIR = join(__dirname, "../../../../supabase/migrations");
+const DIRECT_USAGE_REPAIR_ROLLBACK =
+  "20260507000200_rollback_codex_sql_repairs.sql";
 
 function getAllMigrations(): { name: string; content: string }[] {
   const files = readdirSync(MIGRATIONS_DIR)
@@ -203,5 +205,66 @@ describe("Migration safety", () => {
     expect(/ON\s+public\.kudos\s+FOR\s+INSERT[\s\S]*WITH\s+CHECK[\s\S]*public\.posts[\s\S]*kudos\.post_id/i.test(content)).toBe(true);
     expect(/ON\s+public\.comments\s+FOR\s+INSERT[\s\S]*WITH\s+CHECK[\s\S]*public\.posts[\s\S]*comments\.post_id/i.test(content)).toBe(true);
     expect(/ON\s+public\.comment_reactions\s+FOR\s+INSERT[\s\S]*WITH\s+CHECK[\s\S]*public\.comments[\s\S]*comment_reactions\.comment_id/i.test(content)).toBe(true);
+  });
+
+  it("does not ship heuristic SQL repairs for historical Codex usage", () => {
+    const abandonedRepairMigrations = migrations.filter((m) =>
+      /repair_(legacy|native).*codex_inflation|restore_claude_costs_after_codex_repair|repair_codex_only_v3/i.test(m.name)
+    );
+
+    expect(abandonedRepairMigrations.length).toBeGreaterThan(0);
+
+    for (const migration of abandonedRepairMigrations) {
+      expect(
+        migration.content,
+        `${migration.name} must stay no-op; Codex healing belongs to the user's next CLI push.`,
+      ).toMatch(/Intentionally no-op/i);
+      expect(migration.content).not.toMatch(/UPDATE\s+public\.(daily_usage|device_usage)/i);
+      expect(migration.content).not.toMatch(/INSERT\s+INTO\s+public\.corrections_log/i);
+    }
+  });
+
+  it("does not add future migrations that rewrite usage totals directly", () => {
+    const futureMigrations = migrations.filter(
+      (migration) =>
+        migration.name > DIRECT_USAGE_REPAIR_ROLLBACK
+        && migration.name !== DIRECT_USAGE_REPAIR_ROLLBACK,
+    );
+
+    for (const migration of futureMigrations) {
+      expect(
+        migration.content,
+        `${migration.name} must not directly rewrite usage totals. Heal incorrect Codex usage by re-pushing from the CLI source logs instead.`,
+      ).not.toMatch(
+        /\b(UPDATE|INSERT\s+INTO|DELETE\s+FROM)\s+public\.(daily_usage|device_usage)\b/i,
+      );
+    }
+  });
+
+  it("rollback migration does not undo rows already healed by the fixed CLI collector", () => {
+    const rollbackMigration = migrations.find(
+      (migration) => migration.name === DIRECT_USAGE_REPAIR_ROLLBACK,
+    );
+
+    expect(rollbackMigration, "Expected direct SQL repair rollback migration").toBeTruthy();
+    const content = rollbackMigration!.content;
+
+    expect(content).toMatch(/v_fixed_codex_collector\s+text\s*:=\s*'straude-codex-native-last-token-usage'/i);
+    expect(
+      content.match(/COALESCE\(du\.collector_meta->>'codex', ''\)\s*<>\s*v_fixed_codex_collector/gi)?.length,
+    ).toBeGreaterThanOrEqual(3);
+    for (const column of [
+      "cost_usd",
+      "input_tokens",
+      "output_tokens",
+      "cache_creation_tokens",
+      "cache_read_tokens",
+      "total_tokens",
+    ]) {
+      expect(
+        content.match(new RegExp(`${column}\\s*=`, "gi"))?.length,
+        `rollback must restore ${column} on daily_usage and device_usage`,
+      ).toBeGreaterThanOrEqual(2);
+    }
   });
 });
