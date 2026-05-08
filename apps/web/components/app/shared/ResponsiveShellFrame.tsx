@@ -54,13 +54,13 @@ export function ResponsiveShellFrame({
         }
       />
 
-      <div className="mx-auto flex min-h-0 w-full max-w-[1600px] flex-1 border-x border-border">
+      <div className="mx-auto flex min-h-0 w-full max-w-[1600px] flex-1 overflow-hidden border-x border-border">
         {showLeftRail && (
           <div 
             className={cn("relative shrink-0 border-r border-border", leftCollapsed && "w-6")}
           >
             <aside
-              className="h-full overflow-y-auto overflow-x-hidden overscroll-contain transition-[width] duration-200"
+              className="scrollbar-none h-full min-h-0 overflow-y-auto overflow-x-hidden overscroll-contain transition-[width] duration-200"
               style={{ width: leftCollapsed ? 0 : "var(--app-left-panel-width)" }}
             >
               <div style={{ width: "var(--app-left-panel-width)" }}>
@@ -85,8 +85,7 @@ export function ResponsiveShellFrame({
 
         <main
           id="main-content"
-          className="min-w-0 flex-1 overflow-y-auto overflow-x-hidden"
-          style={{ scrollbarWidth: "none", overscrollBehavior: "contain" }}
+          className="scrollbar-none min-w-0 flex-1 overflow-y-auto overflow-x-hidden overscroll-contain"
         >
           <div className="flex h-full flex-col pb-[var(--app-main-bottom-offset)]">
             {children}
@@ -98,7 +97,7 @@ export function ResponsiveShellFrame({
             className={cn("relative shrink-0 border-l border-border", rightCollapsed && "w-6")}
           >
             <aside
-              className="h-full overflow-y-auto overflow-x-hidden overscroll-contain transition-[width] duration-200"
+              className="scrollbar-none h-full min-h-0 overflow-y-auto overflow-x-hidden overscroll-contain transition-[width] duration-200"
               style={{ width: rightCollapsed ? 0 : "var(--app-right-panel-width)" }}
             >
               <div style={{ width: "var(--app-right-panel-width)" }}>

@@ -313,8 +313,8 @@ export default async function AppLayout({
     return (
       <div className="fixed inset-0 flex flex-col overflow-hidden">
         <GuestHeader />
-          <div className="mx-auto flex min-h-0 w-full max-w-[1600px] flex-1 border-x border-border">
-            <main id="main-content" className="min-w-0 flex-1 overflow-y-auto" style={{ scrollbarWidth: "none", overscrollBehavior: "contain" }}>
+          <div className="mx-auto flex min-h-0 w-full max-w-[1600px] flex-1 overflow-hidden border-x border-border">
+            <main id="main-content" className="scrollbar-none min-w-0 flex-1 overflow-y-auto overflow-x-hidden overscroll-contain">
               <div className="pb-[var(--mobile-nav-height)] sm:pb-0">
                 {children}
               </div>

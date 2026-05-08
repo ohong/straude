@@ -20,9 +20,13 @@ vi.mock("@/lib/supabase/service", () => ({
 vi.mock("@/lib/email/send-comment-email", () => ({
   sendNotificationEmail: vi.fn().mockResolvedValue(undefined),
 }));
+vi.mock("@/lib/achievements", () => ({
+  checkAndAwardAchievements: vi.fn().mockResolvedValue(undefined),
+}));
 
 import { GET, PATCH, DELETE } from "@/app/api/posts/[id]/route";
 import { createClient } from "@/lib/supabase/server";
+import { checkAndAwardAchievements } from "@/lib/achievements";
 import { NextRequest } from "next/server";
 
 function buildChain(overrides: Record<string, any> = {}) {
@@ -290,6 +294,55 @@ describe("PATCH /api/posts/[id]", () => {
 
     expect(res.status).toBe(200);
     expect(insertFn).not.toHaveBeenCalled();
+  });
+
+  it("waits for first-photo achievement awarding when images are saved", async () => {
+    let resolveAchievement!: () => void;
+    const achievementPromise = new Promise<void>((resolve) => {
+      resolveAchievement = resolve;
+    });
+    const awardMock = vi.mocked(checkAndAwardAchievements);
+    awardMock.mockReturnValueOnce(achievementPromise);
+
+    mockSupabase({
+      user: { id: "user-1" },
+      tableHandlers: {
+        posts: (c) => {
+          c.single.mockResolvedValue({
+            data: {
+              id: "post-1",
+              description: null,
+              title: null,
+              images: [
+                "https://test.supabase.co/storage/v1/object/public/post-images/user-1/img1.jpg",
+              ],
+            },
+            error: null,
+          });
+        },
+      },
+    });
+
+    let settled = false;
+    const responsePromise = PATCH(
+      makeRequest("PATCH", {
+        images: [
+          "https://test.supabase.co/storage/v1/object/public/post-images/user-1/img1.jpg",
+        ],
+      }),
+      makeContext("post-1"),
+    ).finally(() => {
+      settled = true;
+    });
+
+    await new Promise((resolve) => setTimeout(resolve, 0));
+    expect(settled).toBe(false);
+    expect(awardMock).toHaveBeenCalledExactlyOnceWith("user-1", "photo");
+
+    resolveAchievement();
+    const res = await responsePromise;
+
+    expect(res.status).toBe(200);
   });
 
   it("rejects external image URLs", async () => {
