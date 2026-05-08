@@ -1,6 +1,18 @@
 # Architecture & Design Decisions
 
-## Re-price legacy Codex inflation under inclusive-cache, don't delete (2026-05-06)
+## Roll back SQL Codex repairs; heal only from CLI source data (2026-05-07)
+
+**Decision:** Do not repair historical Codex usage by direct SQL rescaling. The 2026-05-06/07 repair migrations are now no-ops, and `20260507000200_rollback_codex_sql_repairs.sql` restores any environment that briefly ran them from the original `corrections_log.previous_values` snapshots. Accurate Codex healing happens only when the owning user pushes again with the fixed CLI collector.
+
+**Why:** The SQL repair path did not have the source data needed to distinguish genuinely billed input from cached context snapshots. On real rows it produced impossible public data, for example `input_tokens = 0` and `cache_read_tokens = 0` while `total_tokens` remained hundreds of millions. It also split the UI: auto-generated post titles and card costs could disagree because the database row was rewritten after the post was created. That is worse than showing an inflated stale row because it creates silent data loss and erodes trust.
+
+**Policy:** SQL migrations may add schema, audit tables, and server-side safeguards, but they must not heuristically overwrite user usage totals. A trusted fixed CLI push can lower Codex spend only for entries that contain Codex usage and prove non-Codex cost is preserved. Claude accounting stays delegated to `ccusage`.
+
+**Operational result:** Existing bad SQL-repaired rows were restored to their pre-repair values, including `cost_usd`, `input_tokens`, `cache_read_tokens`, `model_breakdown`, `collector_meta`, and auto-generated post titles. Rows may still look inflated until their owner pushes again; that is intentional because the local session logs are the source of truth.
+
+## Superseded: re-price legacy Codex inflation under inclusive-cache, don't delete (2026-05-06)
+
+**Status:** Rolled back on 2026-05-07. This section is retained as incident history, not current policy.
 
 **Decision:** For the 2,683 legacy `daily_usage` rows (`collector_meta IS NULL`) and 418 rows tagged with the previous native Codex collector marker (`collector_meta->>'codex' = 'straude-codex-native-v1'`) where `cache_read_tokens > input_tokens`, retroactively re-classify under "cache is a subset of input" semantics: clamp `cache_read = min(cache_read, input)`, reduce `input` by that amount, then rescale `model_breakdown[*].cost_usd` by the ratio of corrected-vs-original cost estimates per model. Preserve total tokens directionally (we don't have ground-truth raw sessions to recompute from), set `is_verified = TRUE`, and tag `collector_meta.repair` with the correction reason.
 
@@ -24,7 +36,7 @@ Per-model token splits aren't stored, so the migration approximates each model's
 
 - `correction_factor` is clamped to `[0.01, 1.0]` — repair never *increases* cost and never zeroes a row.
 - `is_verified = TRUE` is set unconditionally on repaired rows so leaderboards continue to count them.
-- `collector_meta.repair` and `previous_*` fields are persisted, so we can answer "why did my number change?" in the UI without re-deriving and so the post card can render a "Repaired (was $X)" hint without a separate audit lookup.
+- Superseded: `collector_meta.repair` and `previous_*` fields were going to power a visible repair hint, but this was rolled back with the SQL repair path.
 - A separate `corrections_log` table stores `(user_id, date, table_name, previous_values, new_values)` per affected row (5,578 entries) for full reversibility.
 - The native collector repair migration preserves existing `collector_meta.codex` and `collector_meta.claude` keys (it merges instead of overwriting) so the trusted-collector overwrite path still works on user re-upload. Legacy rows have no such keys, so their `collector_meta` is built fresh.
 - Both migrations are idempotent: the legacy migration's `collector_meta IS NULL` filter excludes already-repaired rows; the native collector repair migration uses an explicit `repair` tag check.

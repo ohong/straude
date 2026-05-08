@@ -13,7 +13,7 @@ export { prettifyModel } from "@straude/shared/models";
 import { cn } from "@/lib/utils/cn";
 import { formatCurrency, formatTokens } from "@/lib/utils/format";
 import { mentionsToMarkdownLinks } from "@/lib/utils/mentions";
-import type { Post, ModelBreakdownEntry, UsageCollectorMeta } from "@/types";
+import type { Post, ModelBreakdownEntry } from "@/types";
 import dynamic from "next/dynamic";
 import { useState } from "react";
 import remarkBreaks from "remark-breaks";
@@ -112,29 +112,6 @@ function isUnpricedSession(usage: {
   total_tokens: number;
 }): boolean {
   return usage.is_verified && usage.cost_usd === 0 && usage.total_tokens > 0;
-}
-
-function repairHint(meta: UsageCollectorMeta | null | undefined): { previousCost: number; title: string } | null {
-  const previousCost = typeof meta?.previous_cost_usd === "number"
-    ? meta.previous_cost_usd
-    : typeof meta?.cost_before_v3 === "number"
-      ? meta.cost_before_v3
-      : typeof meta?.cost_before_claude_restore === "number"
-        ? meta.cost_before_claude_restore
-        : null;
-
-  if (previousCost == null) return null;
-
-  const reason = meta?.claude_restore_2026_05_07 === "true"
-    ? "Claude costs were restored from the audit log while preserving Codex repairs."
-    : meta?.repair_v3_codex_only === "true"
-      ? "Codex costs were repaired retroactively while preserving non-Codex usage."
-      : "This row was repaired retroactively; the original value is shown for auditability.";
-
-  return {
-    previousCost,
-    title: `Originally logged at $${formatCurrency(previousCost)}. ${reason}`,
-  };
 }
 
 interface ModelUsageSegment {
@@ -275,7 +252,6 @@ export function ActivityCard({ post, userId, hideShareMenu }: { post: Post; user
   const usage = post.daily_usage;
   const modelSegments = buildModelUsageSegments(usage?.model_breakdown);
   const modelSummary = formatModels(usage?.models, usage?.model_breakdown);
-  const costRepairHint = repairHint(usage?.collector_meta);
 
   async function toggleKudos() {
     const prevKudosed = kudosed;
@@ -430,14 +406,6 @@ export function ActivityCard({ post, userId, hideShareMenu }: { post: Post; user
                   <p className="font-[family-name:var(--font-mono)] text-[1.1rem] font-medium tabular-nums text-accent">
                     ${formatCurrency(usage.cost_usd)}
                   </p>
-                  {costRepairHint && (
-                    <p
-                      className="mt-0.5 text-[0.65rem] uppercase tracking-wider text-muted"
-                      title={costRepairHint.title}
-                    >
-                      Repaired (was ${formatCurrency(costRepairHint.previousCost)})
-                    </p>
-                  )}
                 </div>
               )
             ) : (

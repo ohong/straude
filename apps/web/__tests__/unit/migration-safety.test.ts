@@ -204,4 +204,21 @@ describe("Migration safety", () => {
     expect(/ON\s+public\.comments\s+FOR\s+INSERT[\s\S]*WITH\s+CHECK[\s\S]*public\.posts[\s\S]*comments\.post_id/i.test(content)).toBe(true);
     expect(/ON\s+public\.comment_reactions\s+FOR\s+INSERT[\s\S]*WITH\s+CHECK[\s\S]*public\.comments[\s\S]*comment_reactions\.comment_id/i.test(content)).toBe(true);
   });
+
+  it("does not ship heuristic SQL repairs for historical Codex usage", () => {
+    const abandonedRepairMigrations = migrations.filter((m) =>
+      /repair_(legacy|native).*codex_inflation|restore_claude_costs_after_codex_repair|repair_codex_only_v3/i.test(m.name)
+    );
+
+    expect(abandonedRepairMigrations.length).toBeGreaterThan(0);
+
+    for (const migration of abandonedRepairMigrations) {
+      expect(
+        migration.content,
+        `${migration.name} must stay no-op; Codex healing belongs to the user's next CLI push.`,
+      ).toMatch(/Intentionally no-op/i);
+      expect(migration.content).not.toMatch(/UPDATE\s+public\.(daily_usage|device_usage)/i);
+      expect(migration.content).not.toMatch(/INSERT\s+INTO\s+public\.corrections_log/i);
+    }
+  });
 });
