@@ -1,19 +1,21 @@
 # Architecture & Design Decisions
 
-## CLI 1.0 Uses AgentsView For Claude, Native Collector For Codex (2026-05-01)
+## CLI Pins AgentsView v0.28.0 As The Collector Boundary (2026-05-08)
 
-**Decision:** CLI 1.0 introduces an agentsview adapter but does not retire `codex-native.ts`. In `STRAUDE_COLLECTOR=auto`, the CLI uses agentsview >= 0.26.1 for Claude Code collection when available and keeps Straude's native Codex collector for Codex. If the one-time native Codex repair is pending, `auto` uses the existing legacy path for that run. `STRAUDE_COLLECTOR=legacy` keeps ccusage + native Codex. `STRAUDE_COLLECTOR=agentsview` requires agentsview >= 0.26.1 and still keeps native Codex for Codex.
+**Decision:** The agentsview migration branch pins Straude CLI collection work to agentsview >= 0.28.0, the latest stable upstream release as of 2026-05-08. The target architecture is agentsview as the single local collector for every coding agent it supports. Straude should remove the default ccusage and native Codex collector paths, call `agentsview usage daily --json --breakdown --offline` without an `--agent` filter, and submit rows with `collector.unified = "agentsview-v1"`.
 
-**Why:** Agentsview is the right consolidation target, but the 2026-05-01 verification pass did not prove parity with Straude's issue #87 fix for fork-heavy Codex sessions. Replacing native Codex accounting before agentsview handles `forked_from_id` ancestry and cumulative token deltas would risk reintroducing inflated spend totals. The hybrid migration offloads the safe Claude-side collector work while preserving the accuracy repair users already depend on.
+**Why:** The point of the migration is separation of concerns. Token extraction, local session discovery, model pricing, and per-agent log compatibility should be owned by agentsview, not Straude. The prior hybrid plan kept too much accounting logic in Straude and still left multiple failure points.
 
 **Alternatives considered:**
-1. **Hard cutover to agentsview for all agents.** Simpler and more maintainable, but unsafe until fork-heavy Codex parity is proven.
-2. **Keep agentsview opt-in only.** Lowest risk, but weak for a 1.0 migration and does not reduce the default Claude-side collector surface for users with a supported agentsview install.
-3. **Agentsview for Claude + native Codex (chosen).** Gives Straude a safe 1.0 migration path, keeps `npx straude@latest` working without agentsview, and leaves a clear future gate for full consolidation.
+1. **Keep the 2026-05-01 hybrid plan.** Agentsview for Claude plus native Codex was lower risk, but it kept the most complex collector code in Straude.
+2. **Keep ccusage as fallback.** Better first-run ergonomics for npm-native users, but it preserves a second accounting dependency and weakens the ownership boundary.
+3. **Agentsview-only with a stable-version pin (chosen).** One collector dependency, one output shape, one upstream place for token/spend fixes.
 
-**Server rule:** `agentsview-v1` metadata is accepted for provenance, but only `collector.codex = "straude-codex-native-v1"` from CLI-authenticated requests can lower existing spend totals.
+**Server rule:** once the agentsview-only CLI path lands, CLI-authenticated `collector.unified = "agentsview-v1"` is trusted collector provenance. Older `collector.claude = "ccusage-v18"` and `collector.codex = "straude-codex-native-v1"` metadata remain accepted only for backward compatibility with already-published CLI versions.
 
 ## CLI auto-installs `ccusage` on first interactive run (2026-05-04)
+
+**Status:** superseded for the agentsview-only migration. This decision remains as history for older CLI versions.
 
 **Decision:** When `straude push` runs and `ccusage` is not on PATH, prompt the user (TTY only) and run `bun add -g ccusage` (or `npm install -g ccusage`) on consent. Non-TTY contexts continue to throw with the explicit install command.
 

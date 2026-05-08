@@ -10,7 +10,7 @@ interface ExecError extends Error {
 }
 
 export const AGENTSVIEW_COLLECTOR = "agentsview-v1" as const;
-export const MIN_AGENTSVIEW_VERSION = "0.26.1";
+export const MIN_AGENTSVIEW_VERSION = "0.28.0";
 
 let _resolved: { cmd: string; args: string[] } | undefined;
 
@@ -23,7 +23,7 @@ function resolveAgentsViewCommand(): { cmd: string; args: string[] } {
   }
 
   throw new Error(
-    "agentsview is not installed or not on PATH. Install it from https://www.agentsview.io/ or set STRAUDE_COLLECTOR=legacy.",
+    "agentsview is not installed or not on PATH. Install it from https://www.agentsview.io/.",
   );
 }
 
@@ -70,7 +70,7 @@ function execAgentsViewAsync(args: string[], timeoutMs?: number): Promise<string
 
 export function parseAgentsViewVersion(raw: string): string | null {
   // Capture `vX.Y.Z` plus optional `-prerelease` and `+build` suffixes so we
-  // tolerate values like `0.26.1-rc.1` or `0.27.0+build.1`. The captured
+  // tolerate values like `0.28.0-rc.1` or `0.28.0+build.1`. The captured
   // string preserves the suffix; `compareVersions` strips it before comparing.
   const match = raw.match(/\bv?(\d+\.\d+\.\d+(?:-[A-Za-z0-9.-]+)?(?:\+[A-Za-z0-9.-]+)?)\b/);
   return match ? match[1]! : null;
@@ -78,7 +78,7 @@ export function parseAgentsViewVersion(raw: string): string | null {
 
 function compareVersions(a: string, b: string): number {
   // Strip pre-release (`-…`) and build (`+…`) suffixes — we treat a release
-  // candidate like `0.26.1-rc.1` as equivalent to `0.26.1` so RCs of a
+  // candidate like `0.28.0-rc.1` as equivalent to `0.28.0` so RCs of a
   // supported version pass the gate. Strict semver would order pre-releases
   // before the final release, but for our gating purposes that's stricter
   // than we want.

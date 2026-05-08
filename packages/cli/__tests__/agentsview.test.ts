@@ -126,34 +126,35 @@ describe("runAgentsViewRawAsync", () => {
   });
 
   it("parses and compares agentsview versions", () => {
-    expect(parseAgentsViewVersion("agentsview v0.26.1 (commit abc)")).toBe("0.26.1");
-    expect(isSupportedAgentsViewVersion("0.26.1")).toBe(true);
-    expect(isSupportedAgentsViewVersion("0.27.0")).toBe(true);
+    expect(parseAgentsViewVersion("agentsview v0.28.0 (commit abc)")).toBe("0.28.0");
+    expect(isSupportedAgentsViewVersion("0.28.0")).toBe(true);
+    expect(isSupportedAgentsViewVersion("0.29.0")).toBe(true);
+    expect(isSupportedAgentsViewVersion("0.27.0")).toBe(false);
     expect(isSupportedAgentsViewVersion("0.25.0")).toBe(false);
     expect(isSupportedAgentsViewVersion(null)).toBe(false);
   });
 
   it("captures pre-release and build suffixes and treats RCs as equal to the base version", () => {
-    // Pre-release: capture the full `0.26.1-rc.1` string, but compareVersions
-    // strips the suffix so it's treated as `0.26.1` (passes the gate).
-    expect(parseAgentsViewVersion("agentsview v0.26.1-rc.1")).toBe("0.26.1-rc.1");
-    expect(isSupportedAgentsViewVersion("0.26.1-rc.1")).toBe(true);
+    // Pre-release: capture the full `0.28.0-rc.1` string, but compareVersions
+    // strips the suffix so it's treated as `0.28.0` (passes the gate).
+    expect(parseAgentsViewVersion("agentsview v0.28.0-rc.1")).toBe("0.28.0-rc.1");
+    expect(isSupportedAgentsViewVersion("0.28.0-rc.1")).toBe(true);
 
     // Build metadata: same idea — captured then stripped for comparison.
-    expect(parseAgentsViewVersion("agentsview v0.27.0+build.1")).toBe("0.27.0+build.1");
-    expect(isSupportedAgentsViewVersion("0.27.0+build.1")).toBe(true);
+    expect(parseAgentsViewVersion("agentsview v0.28.0+build.1")).toBe("0.28.0+build.1");
+    expect(isSupportedAgentsViewVersion("0.28.0+build.1")).toBe(true);
 
     // Pre-release of an unsupported version is still unsupported.
-    expect(isSupportedAgentsViewVersion("0.25.9-rc.1")).toBe(false);
+    expect(isSupportedAgentsViewVersion("0.27.9-rc.1")).toBe(false);
   });
 
   it("captures only the X.Y.Z core when a fourth component is present", () => {
-    // Documents the deliberate behavior: `0.26.1.1` matches as `0.26.1` (the
+    // Documents the deliberate behavior: `0.28.0.1` matches as `0.28.0` (the
     // `\b` boundary stops capture before the `.1`). We accept this — a 4-part
     // version is non-standard and treating it as the leading 3-part version
     // is preferable to crashing.
-    expect(parseAgentsViewVersion("agentsview v0.26.1.1")).toBe("0.26.1");
-    expect(isSupportedAgentsViewVersion("0.26.1")).toBe(true);
+    expect(parseAgentsViewVersion("agentsview v0.28.0.1")).toBe("0.28.0");
+    expect(isSupportedAgentsViewVersion("0.28.0")).toBe(true);
   });
 
   it("reports availability from PATH without spawning a process", () => {

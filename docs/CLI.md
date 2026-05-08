@@ -15,7 +15,7 @@ bunx straude
 npm install -g straude
 ```
 
-**Requirements**: Node.js >= 18. `ccusage` remains the fallback Claude Code collector. Agentsview >= 0.26.1 is optional and used automatically when installed.
+**Requirements**: Node.js >= 18. `ccusage` remains the fallback Claude Code collector. Agentsview >= 0.28.0 is optional and used automatically when installed.
 
 ## Quick Start
 
@@ -110,7 +110,7 @@ The CLI 1.0 collector mode is controlled by `STRAUDE_COLLECTOR=auto|agentsview|l
 
 ### `auto` (default)
 
-`auto` prefers agentsview for Claude Code when agentsview >= 0.26.1 is installed, while keeping Straude's native Codex collector for Codex. If agentsview is missing/outdated, or if the one-time native Codex repair is pending, `auto` uses the legacy ccusage + native Codex path.
+`auto` prefers agentsview for Claude Code when agentsview >= 0.28.0 is installed, while keeping Straude's native Codex collector for Codex. If agentsview is missing/outdated, or if the one-time native Codex repair is pending, `auto` uses the legacy ccusage + native Codex path.
 
 Agentsview is invoked as:
 
@@ -122,7 +122,7 @@ agentsview usage daily --json --breakdown --agent claude --offline --since YYYY-
 
 ### `agentsview`
 
-Requires agentsview >= 0.26.1. Uses agentsview for Claude Code and Straude native Codex for Codex. This is not a full Codex cutover: native Codex remains because it contains the fork/session dedup repair for inflated Codex totals.
+Requires agentsview >= 0.28.0. Uses agentsview for Claude Code and Straude native Codex for Codex. This is not a full Codex cutover: native Codex remains because it contains the fork/session dedup repair for inflated Codex totals.
 
 ### `legacy`
 
@@ -211,7 +211,7 @@ npm install -g ccusage
 
 ### agentsview is ignored
 
-Straude only uses agentsview when `agentsview version` reports v0.26.1 or newer. Upgrade agentsview, or force the fallback path:
+Straude only uses agentsview when `agentsview version` reports v0.28.0 or newer. Upgrade agentsview, or force the fallback path:
 
 ```bash
 export STRAUDE_COLLECTOR=legacy

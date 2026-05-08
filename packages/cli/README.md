@@ -15,7 +15,7 @@ Running with no arguments performs a smart sync: logs you in if needed, then pus
 ## Requirements
 
 - Node 18+
-- Optional: [agentsview](https://www.agentsview.io/) >= 0.26.1 for Claude Code collection
+- Optional: [agentsview](https://www.agentsview.io/) >= 0.28.0 for Claude Code collection
 - Fallback: `ccusage` on PATH for Claude Code collection
 
 ## Commands
@@ -56,8 +56,8 @@ Push usage data to Straude.
 
 CLI 1.0 uses `STRAUDE_COLLECTOR=auto|agentsview|legacy`.
 
-- `auto` (default): use agentsview >= 0.26.1 for Claude Code when available; keep Straude's native Codex collector for Codex; fall back to legacy when agentsview is missing/outdated.
-- `agentsview`: require agentsview >= 0.26.1 for Claude Code; still keep native Codex for Codex accuracy.
+- `auto` (default): use agentsview >= 0.28.0 for Claude Code when available; keep Straude's native Codex collector for Codex; fall back to legacy when agentsview is missing/outdated.
+- `agentsview`: require agentsview >= 0.28.0 for Claude Code; still keep native Codex for Codex accuracy.
 - `legacy`: force ccusage for Claude Code plus native Codex.
 
 Native Codex remains in place because it contains Straude's fork-heavy session repair for inflated Codex totals.
