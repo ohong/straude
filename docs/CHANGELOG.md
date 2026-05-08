@@ -2,6 +2,10 @@
 
 ## Unreleased
 
+### Security
+
+- **Upgraded Next.js to 16.2.6** (from 16.1.6) and `eslint-config-next` to match. Next.js 16.2.6 / 15.5.18 ship fixes for multiple high/moderate/low-severity vulnerabilities and an upstream React issue (Next.js security advisory, 2026-05-07). All 578 web unit tests and the typecheck pass on the new version.
+
 ### Fixed
 
 - **Codex collector token accounting.** Two bugs collapsed into one user-visible symptom:
@@ -13,6 +17,8 @@
 ### Changed
 
 - **Rolled back the abandoned SQL Codex repair path.** Historical `daily_usage` / `device_usage` rows are no longer rescaled by heuristic migrations. The attempted 2026-05-06/07 repair passes produced impossible token buckets on real rows (`input_tokens = 0` while `total_tokens` stayed huge), so the repair migrations are now explicit no-ops and `20260507000200_rollback_codex_sql_repairs.sql` restores any environment that briefly ran them from the audit snapshots. Going forward, inflated Codex rows are healed only when the owning user re-pushes from the fixed CLI, which can read that user's local Codex session JSONL and submit authoritative usage.
+
+- **CLI now bundled with tsup before publish.** `packages/cli/src` started importing `@straude/shared` after the workspace extraction in `fd17c01` (2026-05-01), but the CLI's build was plain `tsc` — so `dist/` retained literal `from '@straude/shared/...'` import paths and `@straude/shared` is `private: true`. A `straude@0.1.24` publish under that setup would have shipped a tarball that fails to install for end users. Switched `packages/cli/package.json` `build` to invoke a shared-package `tsc` first and then `tsup` to bundle `src/index.ts` → `dist/index.js` with `@straude/shared` inlined (`noExternal`) and runtime deps (ink/react/posthog-node/chalk/@pppp606/ink-chart) external. `@straude/shared` moved from `dependencies` to `devDependencies` since it's build-time only after bundling. `prepublishOnly` runs the full build chain. Confirmed via `bun pm pack`: the published manifest no longer carries `workspace:*` in `dependencies`, and `dist/index.js` has zero `@straude/shared` references. All 272 CLI tests still pass, including the e2e binary smoke tests.
 
 - **Replaced mock-heavy CLI tests with pure unit + real-I/O integration tests.** PostHog audit of the test suite found 503 of 794 tests (63%) lived in files that mocked something. Three of the worst offenders are now honest: (a) `first-run.test.ts` was 100% `vi.mock("node:fs")` — replaced with `mkdtempSync` and real fs operations, exercising actual mode bits (0o600 / 0o700), real permission-denied paths, and the round-trip between `isFirstRun` and `markFirstRun`. (b) `api.test.ts` stubbed `globalThis.fetch` — replaced with a real `http.createServer` so every test exercises actual fetch / Authorization-header serialization / JSON parsing / response-header reading, including the sliding-token-refresh and 401-retry paths. (c) `ccusage-install.test.ts` had its decision logic (`bun add -g` vs `npm install -g`) split into a new pure helper `pickInstallCommand({ hasBun })` and `resolvePushDateRange()` — both unit-tested with zero mocks. The orchestration test in `ccusage-install.test.ts` is trimmed to branches that genuinely depend on process state (PATH, isatty). CLI test count is now 265 (was 240); 25 new pure tests, 7 retired mock tests.
 
