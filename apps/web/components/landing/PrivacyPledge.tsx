@@ -59,15 +59,6 @@ export function PrivacyPledge() {
             conversations, and file contents never leave your machine. The
             CLI runs{" "}
             <a
-              href="https://deepwiki.com/ryoppippi/ccusage"
-              target="_blank"
-              rel="noopener noreferrer"
-              className="text-accent underline underline-offset-2 hover:no-underline"
-            >
-              ccusage
-            </a>{" "}
-            or{" "}
-            <a
               href="https://www.agentsview.io/"
               target="_blank"
               rel="noopener noreferrer"
@@ -75,8 +66,8 @@ export function PrivacyPledge() {
             >
               agentsview
             </a>{" "}
-            locally to aggregate daily totals from Claude Code&apos;s log
-            files — only those totals are sent.
+            locally to aggregate daily totals from supported coding-agent logs
+            — only those totals are sent.
           </p>
           <div className="pt-1">
             <Link

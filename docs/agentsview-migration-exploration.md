@@ -1,13 +1,13 @@
 # Migrating Straude's Local Usage Collector to AgentsView
 
 **Audience:** engineering and product
-**Status:** revised direction for the active agentsview migration branch
+**Status:** target end-state for the active agentsview migration branch
 **Last updated:** 2026-05-08
-**Decision:** use agentsview as Straude CLI's single local collector for all supported coding agents.
+**Decision:** make agentsview Straude CLI's single routed local collector for all supported coding agents, while retaining the old collector modules as dormant revert code for now.
 
 ## Recommendation
 
-Proceed with the agentsview-only migration and pin the branch to agentsview v0.28.0, the latest stable upstream release as of 2026-05-08.
+Proceed with the agentsview-only runtime migration and pin the branch to agentsview v0.28.0, the latest stable upstream release as of 2026-05-08.
 
 The older hybrid plan, agentsview for Claude plus Straude-native Codex plus ccusage fallback, solved the wrong problem. It reduced a little surface area while preserving most of the maintenance burden. If Straude still owns Codex parsing, Claude fallback behavior, model pricing exceptions, and merge semantics, then agentsview is not really the boundary. It is just another moving part.
 
@@ -88,9 +88,10 @@ Each could fail differently, produce different pricing, or require different tru
 - Require agentsview v0.28.0+.
 - Run `agentsview usage daily --json --breakdown --offline --since YYYY-MM-DD --until YYYY-MM-DD --timezone <local IANA timezone>`.
 - Do not pass `--agent`; collect all supported agents by default.
-- Remove `STRAUDE_COLLECTOR=auto|agentsview|legacy`.
-- Remove ccusage install prompts and subprocess wrappers.
-- Remove native Codex scanning, pricing, repair flags, and merge logic.
+- Remove `STRAUDE_COLLECTOR=auto|agentsview|legacy` from the routed CLI path.
+- Stop calling ccusage install prompts and subprocess wrappers.
+- Stop calling native Codex scanning, pricing, repair flags, and merge logic.
+- Keep the ccusage and native Codex modules in the repo temporarily as dormant revert code.
 - Submit only `collector.unified = "agentsview-v1"`.
 
 ### Server
@@ -130,8 +131,8 @@ These are exactly the kind of issues that should live upstream. Straude should m
 
 - Do not build a Straude model-pricing table.
 - Do not maintain per-agent parsers.
-- Do not keep ccusage as a fallback.
-- Do not keep native Codex as a fallback.
+- Do not route to ccusage as a fallback.
+- Do not route to native Codex as a fallback.
 - Do not require Straude code changes when agentsview adds another supported agent.
 
 ## Decision Aid

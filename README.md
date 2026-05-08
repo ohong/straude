@@ -18,7 +18,7 @@ Sync your stats with a single command — no install needed:
 npx straude@latest
 ```
 
-The CLI reads local aggregate usage data, uploads it to Straude, and auto-creates a post on your feed. CLI 1.0 can use [agentsview](https://www.agentsview.io/) for Claude Code when installed and keeps Straude's native Codex collector for accurate Codex accounting. First run opens a browser login; after that, just run `npx straude@latest` daily. It automatically pushes new stats since your last sync.
+The CLI reads local aggregate usage data from [agentsview](https://www.agentsview.io/), uploads it to Straude, and auto-creates a post on your feed. First run opens a browser login; after that, just run `npx straude@latest` daily. It automatically pushes new stats since your last sync.
 
 Options: `--date YYYY-MM-DD` to push a specific date, `--days N` to backfill the last N days (max 30), `--dry-run` to preview without posting. Run `npx straude@latest status` to check your streak and rank.
 
@@ -87,7 +87,7 @@ That's it. **We have zero access to your prompts, code, conversations, file cont
 
 ### Where does the usage data come from?
 
-The CLI runs local collectors on your machine: agentsview or ccusage for Claude Code, and Straude's native collector for Codex. These collectors aggregate token counts and cost into daily totals, and the Straude CLI sends only those totals to the server. The raw logs never leave your machine.
+The CLI runs agentsview locally on your machine. Agentsview aggregates supported coding-agent token counts and estimated cost into daily totals, and the Straude CLI sends only those totals to the server. The raw logs never leave your machine.
 
 ### Can Straude see my code or prompts?
 

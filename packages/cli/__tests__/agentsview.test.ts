@@ -89,7 +89,7 @@ describe("parseAgentsViewOutput", () => {
 });
 
 describe("runAgentsViewRawAsync", () => {
-  it("runs agentsview usage daily with deterministic pricing and dashed dates", async () => {
+  it("runs one offline agentsview daily command for all supported agents", async () => {
     mockExecFile.mockImplementation(((_cmd, _args, _options, callback) => {
       callback(null, agentsViewOutput(), "");
       return {} as ReturnType<typeof execFile>;
@@ -99,7 +99,7 @@ describe("runAgentsViewRawAsync", () => {
       "2026-04-01",
       "2026-04-12",
       10_000,
-      { agent: "claude", timezone: "America/Vancouver" },
+      { timezone: "America/Vancouver" },
     );
 
     expect(result).toBe(agentsViewOutput());
@@ -110,8 +110,6 @@ describe("runAgentsViewRawAsync", () => {
         "daily",
         "--json",
         "--breakdown",
-        "--agent",
-        "claude",
         "--offline",
         "--since",
         "2026-04-01",
@@ -123,6 +121,7 @@ describe("runAgentsViewRawAsync", () => {
       expect.objectContaining({ timeout: 10_000 }),
       expect.any(Function),
     );
+    expect(mockExecFile.mock.calls[0]?.[1]).not.toContain("--agent");
   });
 
   it("parses and compares agentsview versions", () => {

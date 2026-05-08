@@ -15,7 +15,7 @@ bunx straude
 npm install -g straude
 ```
 
-**Requirements**: Node.js >= 18. `ccusage` remains the fallback Claude Code collector. Agentsview >= 0.28.0 is optional and used automatically when installed.
+**Requirements**: Node.js >= 18 and agentsview >= 0.28.0 on PATH.
 
 ## Quick Start
 
@@ -104,50 +104,21 @@ Last push: 2026-03-11 (today)
 | `--help`, `-h` | Show help text |
 | `--version`, `-v` | Show CLI version |
 
-## Data Sources
+## Data Source
 
-The CLI 1.0 collector mode is controlled by `STRAUDE_COLLECTOR=auto|agentsview|legacy`.
+The CLI uses agentsview as its routed local collector for every coding agent agentsview supports. The old ccusage and native Codex collector modules remain in the package as dormant revert code, but `straude push` no longer routes to them.
 
-### `auto` (default)
-
-`auto` prefers agentsview for Claude Code when agentsview >= 0.28.0 is installed, while keeping Straude's native Codex collector for Codex. If agentsview is missing/outdated, or if the one-time native Codex repair is pending, `auto` uses the legacy ccusage + native Codex path.
-
-Agentsview is invoked as:
+Agentsview is invoked without an agent filter:
 
 ```bash
-agentsview usage daily --json --breakdown --agent claude --offline --since YYYY-MM-DD --until YYYY-MM-DD --timezone <IANA>
+agentsview usage daily --json --breakdown --offline --since YYYY-MM-DD --until YYYY-MM-DD --timezone <IANA>
 ```
 
-`--offline` keeps the CLI deterministic and avoids a network pricing fetch. Broader online LiteLLM pricing coverage is a future product decision because it trades cost coverage against latency and network dependency.
+`--offline` keeps the CLI deterministic and avoids a network pricing fetch. A SHA-256 hash of the raw agentsview output is sent for dedup.
 
-### `agentsview`
+### Daily JSON Adaptation
 
-Requires agentsview >= 0.28.0. Uses agentsview for Claude Code and Straude native Codex for Codex. This is not a full Codex cutover: native Codex remains because it contains the fork/session dedup repair for inflated Codex totals.
-
-### `legacy`
-
-Uses `ccusage daily --json --breakdown --since YYYYMMDD --until YYYYMMDD` for Claude Code and Straude's native Codex collector for Codex.
-
-If no local Claude Code data directories exist, the Claude source is skipped when possible so Codex-only users can still sync.
-
-### Merge Logic
-
-When both sources return data for the same date:
-
-- Tokens (input, output, cache) are summed
-- Models are unioned
-- Costs are summed
-- Per-model cost breakdowns are merged (falls back to even distribution when per-model data is unavailable)
-
-A SHA-256 hash of the raw collector output plus the native Codex aggregate fingerprint is sent for dedup.
-
-### Token Normalization
-
-The CLI includes a normalization engine that handles differences in how ccusage and Codex report token counts (e.g., Codex includes cached tokens inside `inputTokens` rather than reporting them separately). Anomalies are detected and reported:
-
-- **High confidence**: Data is reliable
-- **Medium/low confidence**: Warning printed, data still submitted
-- **Unresolved**: Codex rows for that date are skipped entirely
+The CLI only adapts agentsview's daily JSON into Straude's submit shape. Agentsview owns agent discovery, token accounting, model mapping, and estimated spend. Straude records normalization anomaly counts for debug/telemetry, but `straude push` does not maintain per-agent pricing or parsing branches.
 
 ## Configuration
 
@@ -197,25 +168,11 @@ Your CLI version may be outdated. Update:
 npx straude@latest
 ```
 
-### "No valid Claude data directories found"
+### "agentsview 0.28.0 or newer is required"
 
-This is non-fatal. The CLI will sync Codex usage only. If you expected Claude data, ensure you've used Claude Code on this machine (it stores sessions in `~/.config/claude/` or `~/.claude/`).
+Install or upgrade agentsview, then retry:
 
-### ccusage is slow
-
-If you see slow startup times and do not use agentsview, install ccusage globally for faster fallback collection:
-
-```bash
-npm install -g ccusage
-```
-
-### agentsview is ignored
-
-Straude only uses agentsview when `agentsview version` reports v0.28.0 or newer. Upgrade agentsview, or force the fallback path:
-
-```bash
-export STRAUDE_COLLECTOR=legacy
-```
+https://www.agentsview.io/
 
 ### Windows support
 

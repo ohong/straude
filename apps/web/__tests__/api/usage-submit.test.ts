@@ -184,7 +184,7 @@ describe("POST /api/usage/submit", () => {
     expect(json.error).toContain("Unknown collector metadata key");
   });
 
-  it("accepts agentsview collector metadata", async () => {
+  it("accepts unified agentsview collector metadata", async () => {
     (verifyCliToken as any).mockReturnValue("cli-user-id");
     mockSupabaseAuth(null);
     const svc = mockServiceClient();
@@ -198,7 +198,7 @@ describe("POST /api/usage/submit", () => {
         {
           entries: [makeEntry(todayStr())],
           source: "cli",
-          collector: { claude: "agentsview-v1", codex: "straude-codex-native-v1" },
+          collector: { unified: "agentsview-v1" },
         },
         { authorization: "Bearer some-token" }
       )
@@ -206,8 +206,7 @@ describe("POST /api/usage/submit", () => {
 
     expect(res.status).toBe(200);
     expect(svc.upsert.mock.calls[0][0].collector_meta).toEqual({
-      claude: "agentsview-v1",
-      codex: "straude-codex-native-v1",
+      unified: "agentsview-v1",
     });
   });
 
@@ -577,6 +576,9 @@ describe("POST /api/usage/submit", () => {
     const deviceUpsertChain: Record<string, any> = {
       upsert: vi.fn().mockReturnThis(),
       select: vi.fn().mockReturnThis(),
+      eq: vi.fn().mockImplementation(() => ({
+        eq: vi.fn().mockResolvedValue({ data: deviceRows, error: null }),
+      })),
       single: vi.fn().mockResolvedValue({ data: { id: "dev-1" }, error: null }),
     };
     const deviceFetchChain: Record<string, any> = {
@@ -790,6 +792,15 @@ describe("POST /api/usage/submit", () => {
         eq: vi.fn().mockResolvedValue({ count: 1, data: null, error: null }),
       })),
     };
+    const deviceWriteProbeChain: Record<string, any> = {
+      upsert: vi.fn().mockReturnThis(),
+      delete: vi.fn().mockReturnThis(),
+      select: vi.fn().mockReturnThis(),
+      eq: vi.fn().mockImplementation(() => ({
+        eq: vi.fn().mockResolvedValue({ data: [existingDeviceRow], error: null }),
+      })),
+      single: vi.fn().mockResolvedValue({ data: { id: "dev-1" }, error: null }),
+    };
     const deviceFetchChain: Record<string, any> = {
       select: vi.fn().mockReturnThis(),
       eq: vi.fn().mockImplementation(() => ({
@@ -817,6 +828,7 @@ describe("POST /api/usage/submit", () => {
         deviceFromCallCount++;
         if (deviceFromCallCount === 1) return deviceGuardChain;
         if (deviceFromCallCount === 2) return deviceCountChain;
+        if (deviceFromCallCount === 3) return deviceWriteProbeChain;
         return deviceFetchChain;
       }
       if (table === "daily_usage") return dailyChain;
@@ -840,12 +852,18 @@ describe("POST /api/usage/submit", () => {
     const json = await res.json();
 
     expect(res.status).toBe(200);
+    expect(deviceWriteProbeChain.upsert).not.toHaveBeenCalled();
+    expect(deviceWriteProbeChain.delete).not.toHaveBeenCalled();
     expect(json.results[0].daily_total).toBe(100);
     expect(dailyChain.upsert.mock.calls[0][0].cost_usd).toBe(100);
   });
 
-  it("allows native Codex repair submissions to lower inflated device and daily rows", async () => {
-    (verifyCliToken as any).mockReturnValue("user-1");
+  it.each([
+    ["native Codex repair", { codex: "straude-codex-native-v1" }],
+    ["unified agentsview", { unified: "agentsview-v1" }],
+  ])("allows %s submissions to lower inflated device and daily rows", async (label, collector) => {
+    const userId = `repair-${label.toLowerCase().replaceAll(" ", "-")}`;
+    (verifyCliToken as any).mockReturnValue(userId);
 
     const correctedDeviceRow = {
       cost_usd: 10,
@@ -869,6 +887,9 @@ describe("POST /api/usage/submit", () => {
     const deviceUpsertChain: Record<string, any> = {
       upsert: vi.fn().mockReturnThis(),
       select: vi.fn().mockReturnThis(),
+      eq: vi.fn().mockImplementation(() => ({
+        eq: vi.fn().mockResolvedValue({ data: [existingDeviceRow], error: null }),
+      })),
       single: vi.fn().mockResolvedValue({ data: { id: "dev-1" }, error: null }),
     };
     const deviceCountChain: Record<string, any> = {
@@ -929,17 +950,17 @@ describe("POST /api/usage/submit", () => {
           modelBreakdown: [{ model: "gpt-5-codex", cost_usd: 10 }],
         })],
         source: "cli",
-        collector: { codex: "straude-codex-native-v1" },
+        collector,
       })
     );
     const json = await res.json();
 
     expect(res.status).toBe(200);
     expect(deviceUpsertChain.upsert).toHaveBeenCalled();
-    expect(deviceUpsertChain.upsert.mock.calls[0][0].collector_meta).toEqual({ codex: "straude-codex-native-v1" });
+    expect(deviceUpsertChain.upsert.mock.calls[0][0].collector_meta).toEqual(collector);
     expect(deviceDeleteChain.delete).toHaveBeenCalled();
     expect(dailyChain.upsert.mock.calls[0][0].cost_usd).toBe(10);
-    expect(dailyChain.upsert.mock.calls[0][0].collector_meta).toEqual({ codex: "straude-codex-native-v1" });
+    expect(dailyChain.upsert.mock.calls[0][0].collector_meta).toEqual(collector);
     expect(json.results[0].previous_cost).toBe(100);
     expect(json.results[0].daily_total).toBe(10);
   });
@@ -979,6 +1000,9 @@ describe("POST /api/usage/submit", () => {
     const deviceUpsertChain: Record<string, any> = {
       upsert: vi.fn().mockReturnThis(),
       select: vi.fn().mockReturnThis(),
+      eq: vi.fn().mockImplementation(() => ({
+        eq: vi.fn().mockResolvedValue({ data: [existingDeviceRow], error: null }),
+      })),
       single: vi.fn().mockResolvedValue({ data: { id: "dev-1" }, error: null }),
     };
     const deviceDeleteChain: Record<string, any> = {
@@ -1012,6 +1036,8 @@ describe("POST /api/usage/submit", () => {
         deviceFromCallCount++;
         if (deviceFromCallCount === 1) return deviceGuardChain;
         if (deviceFromCallCount === 2) return deviceCountChain;
+        if (deviceFromCallCount === 3) return deviceUpsertChain;
+        if (deviceFromCallCount === 4) return deviceDeleteChain;
         return deviceFetchChain;
       }
       if (table === "daily_usage") return dailyChain;

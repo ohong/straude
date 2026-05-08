@@ -326,12 +326,11 @@ straude auto logs`}</Pre>
                 Data Sources
               </h2>
               <p className="mt-2">
-                The CLI collects from two local collectors in parallel:
+                The CLI collects from agentsview locally:
               </p>
               <ul className="mt-3 list-disc pl-6 space-y-1">
                 <li>
-                  <strong>Claude Code</strong> — in <Code>auto</Code> mode,
-                  prefers{" "}
+                  <strong>Supported coding agents</strong> — via{" "}
                   <a
                     href="https://www.agentsview.io/"
                     target="_blank"
@@ -340,25 +339,16 @@ straude auto logs`}</Pre>
                   >
                     agentsview
                   </a>{" "}
-                  &ge; 0.26.1 when installed, falls back to{" "}
-                  <a
-                    href="https://github.com/ryoppippi/ccusage"
-                    target="_blank"
-                    rel="noopener noreferrer"
-                    className="text-accent underline underline-offset-2 hover:no-underline"
-                  >
-                    ccusage
-                  </a>
-                  .
+                  0.28.0 or newer.
                 </li>
                 <li>
-                  <strong>Codex</strong> — Straude&apos;s native collector,
-                  always.
+                  <strong>Collector scope</strong> — Claude Code, Codex, Cursor,
+                  Copilot, Gemini, Warp, and the other agents agentsview
+                  supports.
                 </li>
               </ul>
               <p className="mt-2">
-                Entries are merged by date. If one source is unavailable, the
-                other is used alone. The server deduplicates — pushing the same
+                The server deduplicates by device and date, so pushing the same
                 date twice is safe.
               </p>
             </section>

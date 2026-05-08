@@ -146,7 +146,7 @@ export interface ModelBreakdownEntry {
   cost_usd: number;
 }
 
-// ccusage integration types
+// Local usage collector integration types
 export interface CcusageDailyEntry {
   date: string;
   models: string[];

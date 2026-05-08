@@ -226,8 +226,11 @@ export async function POST(request: Request) {
 
   const deviceId = body.device_id;
   const deviceName = body.device_name;
+  const isTrustedUnifiedCollector = auth.source === "cli"
+    && body.collector?.unified === AGENTSVIEW_COLLECTOR;
   const isTrustedCodexCorrection = auth.source === "cli"
     && body.collector?.codex === TRUSTED_CODEX_COLLECTOR;
+  const isTrustedCollectorCorrection = isTrustedUnifiedCollector || isTrustedCodexCorrection;
 
   if (!deviceId) {
     return NextResponse.json(
@@ -254,9 +257,10 @@ export async function POST(request: Request) {
       let usageErrorMessage: string | null = null;
       const entryHasNonCodexModels = containsNonCodexModel(entry.data.models);
 
-      // Guard against decreasing values (e.g., ccusage log rotation). The native
-      // Codex collector is allowed to lower totals because it repairs inflated
-      // rows produced by the older upstream Codex aggregation behavior.
+      // Guard against decreasing values from older collector paths. The current
+      // agentsview path and the legacy native Codex repair path are trusted to
+      // replace same-device totals because they are CLI-authenticated collector
+      // sources of truth for their respective eras.
       const { data: existingDevice } = await db
         .from("device_usage")
         .select("cost_usd,models")
@@ -285,7 +289,7 @@ export async function POST(request: Request) {
       const mayOverwriteDevice = (
         !existingDevice
         || entry.data.costUSD >= Number(existingDevice.cost_usd)
-        || isTrustedCodexCorrection
+        || isTrustedCollectorCorrection
       ) && !codexOnlyRepairWouldDropMixedDevice;
 
       // Only upsert if new data is >= existing, unless this is a trusted repair.
@@ -324,8 +328,11 @@ export async function POST(request: Request) {
       const existingHasNonCodexModels = existing
         ? hasNonCodexModels((existing as { models?: unknown }).models)
         : false;
-      const canDropLegacyDevice = isTrustedCodexCorrection
-        && (!existingHasNonCodexModels || entryHasNonCodexModels);
+      const canDropLegacyDevice = isTrustedUnifiedCollector
+        || (
+          isTrustedCodexCorrection
+          && (!existingHasNonCodexModels || entryHasNonCodexModels)
+        );
 
       if (canDropLegacyDevice) {
         await db

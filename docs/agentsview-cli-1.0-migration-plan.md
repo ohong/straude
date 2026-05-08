@@ -48,8 +48,9 @@ Important details:
 
 - Replace collector selection with a single agentsview path.
 - Remove `STRAUDE_COLLECTOR=auto|agentsview|legacy` from the public interface.
-- Remove `ccusage` install prompts, fallback logic, subprocess wrappers, and telemetry.
-- Remove native Codex collection, repair flags, Codex pricing tables, fork/dedup code, and merge logic.
+- Stop routing to `ccusage` install prompts, fallback logic, subprocess wrappers, and telemetry.
+- Stop routing to native Codex collection, repair flags, Codex pricing tables, fork/dedup code, and merge logic.
+- Keep the old collector modules in the repo temporarily as dormant revert code.
 - Keep a generic parser for the agentsview daily JSON shape and rename ccusage-shaped types where practical.
 - Submit all rows with `collector.unified = "agentsview-v1"`.
 - Keep local date-range behavior: explicit `--date`, `--days`, smart sync from `last_push_date`, and max 30-day backfill.
@@ -59,7 +60,7 @@ Important details:
 - Treat CLI-authenticated `collector.unified = "agentsview-v1"` as the trusted collector provenance for the new default CLI.
 - Preserve validation for older `collector.claude = "ccusage-v18"` and `collector.codex = "straude-codex-native-v1"` only as backward compatibility for already-published CLI versions.
 - Allow trusted agentsview rows to replace lower or higher same-device totals, because agentsview becomes the source of truth for that device/date.
-- Keep the 30-day backfill window, `device_id` requirement, device aggregation, and post creation behavior unchanged.
+- Keep the 30-day backfill window, `device_id` requirement, device aggregation, and post-creation behavior unchanged.
 
 ### Product Copy And Docs
 
@@ -131,8 +132,9 @@ Required coverage for this branch:
 
 ## Explicit Non-Goals
 
-- No Straude-maintained pricing table for agent usage.
-- No fallback to ccusage.
-- No fallback to native Codex parsing.
-- No per-agent collection logic in Straude.
-- No server-side recomputation of local collector costs.
+This migration explicitly leaves these out of scope:
+
+- Straude-maintained pricing tables for agent usage.
+- Fallback routing to ccusage or native Codex parsing.
+- Per-agent collection logic in Straude.
+- Server-side recomputation of local collector costs.

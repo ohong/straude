@@ -159,11 +159,12 @@ Now that `device_usage` stores per-device data, future work could expose this in
 
 ### Cost Tracking for Non-Claude/GPT Models
 
-`ccusage` (the upstream pricing source the CLI relies on) only ships per-token pricing for Anthropic models, so Claude Code sessions routed through DeepSeek, Qwen, Kimi, GLM, gpt-5.x-codex-spark, etc. land in `daily_usage` with `cost_usd = 0` despite real token counts. We currently surface this honestly in the UI (`ActivityCard` shows an em-dash and "Pricing soon" instead of `$0.00`), but the underlying spend is missing from leaderboards, recaps, and the North Star metric.
+Agentsview now owns local model pricing for CLI-collected usage. If it reports token counts with `cost_usd = 0` for a model, Straude should surface that honestly in the UI (`ActivityCard` shows an em-dash and "Pricing soon" instead of `$0.00`) while treating the missing spend as an upstream collector/pricing gap.
 
 Options when we pick this up:
-- Maintain a server-side model→pricing table on the API and recompute `cost_usd` (and per-model breakdown costs) at submit time when ccusage emits 0 but `total_tokens > 0`. Keeps a single canonical cost column. Ongoing maintenance as new models ship.
-- Pull pricing from LiteLLM's `model_prices_and_context_window.json` (CC-BY-4.0) on a daily refresh job and cache it in `model_prices` so we don't hard-code rates. Same approach Helicone, OpenRouter, etc. use.
+- Bump agentsview to a version with the missing model pricing or contribute the pricing fix upstream.
+- As a fallback only, maintain a server-side model→pricing table on the API and recompute `cost_usd` (and per-model breakdown costs) at submit time when agentsview emits 0 but `total_tokens > 0`. Keeps a single canonical cost column, but reintroduces pricing ownership in Straude.
+- Pull pricing from LiteLLM's `model_prices_and_context_window.json` (CC-BY-4.0) on a daily refresh job and cache it in `model_prices` so we don't hard-code rates, if we decide the server-side fallback is worth the maintenance.
 - Re-aggregate `daily_usage.cost_usd` for historical zero-cost rows once we have prices, so leaderboards backfill correctly.
 
 Track usage of unpriced models via the existing `model_breakdown` jsonb column to prioritize which providers to add first.

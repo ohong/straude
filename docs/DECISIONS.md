@@ -2,7 +2,7 @@
 
 ## CLI Pins AgentsView v0.28.0 As The Collector Boundary (2026-05-08)
 
-**Decision:** The agentsview migration branch pins Straude CLI collection work to agentsview >= 0.28.0, the latest stable upstream release as of 2026-05-08. The target architecture is agentsview as the single local collector for every coding agent it supports. Straude should remove the default ccusage and native Codex collector paths, call `agentsview usage daily --json --breakdown --offline` without an `--agent` filter, and submit rows with `collector.unified = "agentsview-v1"`.
+**Decision:** The agentsview migration branch pins Straude CLI collection work to agentsview >= 0.28.0, the latest stable upstream release as of 2026-05-08. The target architecture is agentsview as the single routed local collector for every coding agent it supports. Straude should stop routing to ccusage and native Codex collector paths, call `agentsview usage daily --json --breakdown --offline` without an `--agent` filter, and submit rows with `collector.unified = "agentsview-v1"`. The old collector modules can stay in the package temporarily as dormant revert code.
 
 **Why:** The point of the migration is separation of concerns. Token extraction, local session discovery, model pricing, and per-agent log compatibility should be owned by agentsview, not Straude. The prior hybrid plan kept too much accounting logic in Straude and still left multiple failure points.
 

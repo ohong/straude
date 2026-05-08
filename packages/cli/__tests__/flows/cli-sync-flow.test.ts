@@ -1,66 +1,42 @@
 /**
- * CLI flow integration tests.
+ * CLI flow tests for the agentsview-backed push path.
  *
- * These test the full sync/push paths end-to-end, mocking only at boundaries:
- *   - `fetch` (global) — API responses
- *   - `node:child_process` — ccusage binary
- *   - `node:fs` — config persistence
- *
- * This catches issues like wrong API paths (404), expired tokens (401),
- * missing config fields, and broken flow sequencing that unit tests miss.
+ * These keep the broad login/config/fetch/subprocess wiring covered without
+ * preserving the old ccusage + native Codex selector machinery.
  */
 import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
-
-// ---------------------------------------------------------------------------
-// Boundary mocks
-// ---------------------------------------------------------------------------
 
 const mockFetch = vi.fn();
 vi.stubGlobal("fetch", mockFetch);
 
-const { _execFileSync } = vi.hoisted(() => ({
-  _execFileSync: vi.fn(),
-}));
-
-const { _collectCodexUsageAsync, _hasCodexLogs } = vi.hoisted(() => ({
-  _collectCodexUsageAsync: vi.fn(),
-  _hasCodexLogs: vi.fn(),
-}));
+let agentsviewRaw = "";
 
 vi.mock("node:child_process", () => ({
   exec: vi.fn(),
-  execFileSync: _execFileSync,
-  // Async execFile delegates to execFileSync's mock implementation via callback
-  execFile: vi.fn((...args: unknown[]) => {
-    const callback = args[args.length - 1] as (err: Error | null, stdout: string, stderr: string) => void;
-    try {
-      const result = _execFileSync(...(args.slice(0, -1) as [string, string[]]));
-      callback(null, result as string, "");
-    } catch (err) {
-      callback(err as Error, "", "");
+  execFile: vi.fn((cmd: string, args: string[], _options: unknown, callback: (err: Error | null, stdout: string, stderr: string) => void) => {
+    if (cmd !== "agentsview") {
+      callback(new Error(`unexpected command: ${cmd}`), "", "");
+      return {};
     }
+    if (args[0] === "version") {
+      callback(null, "agentsview v0.28.0\n", "");
+      return {};
+    }
+    if (args[0] === "usage" && args[1] === "daily") {
+      callback(null, agentsviewRaw, "");
+      return {};
+    }
+    callback(new Error(`unexpected agentsview args: ${args.join(" ")}`), "", "");
+    return {};
   }),
 }));
 
-vi.mock("../../src/lib/codex-native.js", () => ({
-  CODEX_NATIVE_COLLECTOR: "straude-codex-native-v1",
-  collectCodexUsageAsync: _collectCodexUsageAsync,
-  containsSessionFile: _hasCodexLogs,
-}));
-
-// Speed up login polling in tests
-vi.mock("../../src/config.js", async (importOriginal) => {
-  const actual = await importOriginal<typeof import("../../src/config.js")>();
-  return { ...actual, POLL_INTERVAL_MS: 1 };
-});
-
-// In-memory config store
 let configStore: Record<string, string> = {};
 
 vi.mock("node:fs", () => ({
   existsSync: vi.fn((path: string) =>
     path in configStore
-    || /(^|[\\/])ccusage(\.cmd|\.exe)?$/.test(path),
+    || /(^|[\\/])agentsview(\.cmd|\.exe)?$/.test(path),
   ),
   readFileSync: vi.fn((path: string) => configStore[path] ?? ""),
   writeFileSync: vi.fn((path: string, data: string) => {
@@ -69,21 +45,19 @@ vi.mock("node:fs", () => ({
   mkdirSync: vi.fn(),
 }));
 
-// ---------------------------------------------------------------------------
-// Imports (after mocks)
-// ---------------------------------------------------------------------------
+vi.mock("../../src/config.js", async (importOriginal) => {
+  const actual = await importOriginal<typeof import("../../src/config.js")>();
+  return { ...actual, POLL_INTERVAL_MS: 1 };
+});
 
+import { execFile } from "node:child_process";
+import { existsSync } from "node:fs";
 import { pushCommand } from "../../src/commands/push.js";
 import { CONFIG_FILE } from "../../src/config.js";
-import { _resetCcusageResolver } from "../../src/lib/ccusage.js";
+import { _resetAgentsViewResolver } from "../../src/lib/agentsview.js";
 
-const mockExecFileSync = _execFileSync;
-const mockCollectCodexUsageAsync = _collectCodexUsageAsync;
-const mockHasCodexLogs = _hasCodexLogs;
-
-// ---------------------------------------------------------------------------
-// Helpers
-// ---------------------------------------------------------------------------
+const mockExecFile = vi.mocked(execFile);
+const mockExistsSync = vi.mocked(existsSync);
 
 class ExitError extends Error {
   code: number;
@@ -109,6 +83,8 @@ function makeConfig(overrides: Record<string, unknown> = {}) {
     token: "tok-123",
     username: "alice",
     api_url: "https://straude.com",
+    device_id: "device-1",
+    device_name: "MacBook",
     ...overrides,
   };
 }
@@ -121,18 +97,21 @@ function readPersistedConfig(): Record<string, unknown> {
   return JSON.parse(configStore[CONFIG_FILE] ?? "{}");
 }
 
-/** Builds the JSON that ccusage would emit for a single day. */
-function ccusageJson(dates: string[]) {
+function agentsviewJson(dates: string[]) {
   return JSON.stringify({
     daily: dates.map((date) => ({
       date,
-      modelsUsed: ["claude-sonnet-4-6"],
+      modelsUsed: ["claude-sonnet-4-6", "gpt-5-codex"],
       inputTokens: 1000,
       outputTokens: 500,
       cacheCreationTokens: 0,
       cacheReadTokens: 0,
       totalTokens: 1500,
       totalCost: 0.05,
+      modelBreakdowns: [
+        { modelName: "claude-sonnet-4-6", cost: 0.03 },
+        { modelName: "gpt-5-codex", cost: 0.02 },
+      ],
     })),
     totals: {
       inputTokens: 1000,
@@ -145,36 +124,7 @@ function ccusageJson(dates: string[]) {
   });
 }
 
-function mockCcusageOnly(json: string) {
-  mockExecFileSync.mockImplementation(((cmd: string, args: string[]) => {
-    return json;
-  }) as typeof execFileSync);
-}
-
-function codexOutput(dates: string[] = [], extra: Record<string, unknown> = {}) {
-  return {
-    data: dates.map((date) => ({
-      date,
-      models: ["gpt-5-codex"],
-      inputTokens: 2000,
-      outputTokens: 800,
-      cacheCreationTokens: 0,
-      cacheReadTokens: 0,
-      totalTokens: 2800,
-      costUSD: 3.0,
-      modelBreakdown: [{ model: "gpt-5-codex", cost_usd: 3.0 }],
-    })),
-    anomalies: [],
-    entryMeta: [],
-    fingerprint: dates.length > 0 ? "codex-native-fingerprint" : "",
-    scannedFiles: dates.length > 0 ? 1 : 0,
-    parsedEvents: dates.length,
-    ...extra,
-  };
-}
-
 function mockSuccessfulSubmit(dates: string[]) {
-  // 1st fetch: POST /api/usage/submit
   mockFetch.mockResolvedValueOnce({
     ok: true,
     json: () =>
@@ -184,24 +134,23 @@ function mockSuccessfulSubmit(dates: string[]) {
           usage_id: `u-${i}`,
           post_id: `p-${i}`,
           post_url: `https://straude.com/post/p-${i}`,
+          action: "created",
         })),
       }),
   });
-  // 2nd fetch: GET /api/cli/dashboard (visual summary — fail triggers fallback)
   mockFetch.mockRejectedValueOnce(new Error("dashboard not mocked"));
 }
 
-// ---------------------------------------------------------------------------
-// Setup / Teardown
-// ---------------------------------------------------------------------------
-
 beforeEach(() => {
-  vi.useFakeTimers({ now: new Date('2026-03-13T12:00:00Z'), toFake: ['Date'] });
+  vi.useFakeTimers({ now: new Date("2026-03-13T12:00:00Z"), toFake: ["Date"] });
   vi.clearAllMocks();
-  _resetCcusageResolver();
-  mockHasCodexLogs.mockResolvedValue(false);
-  mockCollectCodexUsageAsync.mockResolvedValue(codexOutput());
+  _resetAgentsViewResolver();
   configStore = {};
+  agentsviewRaw = agentsviewJson([todayStr()]);
+  mockExistsSync.mockImplementation((path: string) =>
+    path in configStore
+    || /(^|[\\/])agentsview(\.cmd|\.exe)?$/.test(path),
+  );
   vi.spyOn(console, "log").mockImplementation(() => {});
   vi.spyOn(console, "error").mockImplementation(() => {});
   vi.spyOn(process.stdout, "write").mockImplementation(() => true);
@@ -215,14 +164,8 @@ afterEach(() => {
   vi.restoreAllMocks();
 });
 
-// ===========================================================================
-// 1. SYNC FLOW — Happy paths
-// ===========================================================================
-
-describe("sync flow", () => {
-  it("first-time user: login → push today", async () => {
-    // No config → triggers login
-    // Mock login init + poll (two fetch calls)
+describe("agentsview sync flow", () => {
+  it("first-time user: login, save config, push usage", async () => {
     mockFetch
       .mockResolvedValueOnce({
         ok: true,
@@ -241,285 +184,70 @@ describe("sync flow", () => {
             username: "alice",
           }),
       });
-
-    // After login, loadConfig is called again — config now exists
-    // The login flow writes config via saveConfig, which uses our fs mock
-    // Then push runs ccusage + submit
-    const today = todayStr();
-    mockCcusageOnly(ccusageJson([today]));
-    mockSuccessfulSubmit([today]);
+    mockSuccessfulSubmit([todayStr()]);
 
     await pushCommand({}, "https://straude.com");
 
-    // Login was called (init + poll = 2 fetches), then push (submit + dashboard = 2 fetches)
     expect(mockFetch).toHaveBeenCalledTimes(4);
-    // Config was saved with token
     const saved = readPersistedConfig();
     expect(saved.token).toBe("tok-new");
-    expect(saved.last_push_date).toBe(today);
-  });
-
-  it("returning user with no last_push_date: backfills 3 days", async () => {
-    seedConfig(); // has token, no last_push_date
-    const today = todayStr();
-    mockCcusageOnly(ccusageJson([today]));
-    mockSuccessfulSubmit([today]);
-
-    await pushCommand({});
-
-    expect(mockFetch).toHaveBeenCalledTimes(2);
-    const saved = readPersistedConfig();
-    expect(saved.last_push_date).toBe(today);
-  });
-
-  it("returning user already synced today: re-syncs with days=1", async () => {
-    seedConfig({ last_push_date: todayStr() });
-    const today = todayStr();
-    mockCcusageOnly(ccusageJson([today]));
-    mockSuccessfulSubmit([today]);
-
-    await pushCommand({});
-
-    // Re-syncs today's data (1 API call)
-    expect(mockFetch).toHaveBeenCalledTimes(2);
-    expect(mockExecFileSync).toHaveBeenCalledTimes(1);
-    const saved = readPersistedConfig();
-    expect(saved.last_push_date).toBe(today);
-  });
-
-  it("returning user with stale last_push_date: pushes diff days", async () => {
-    const threeDaysAgo = daysAgoStr(3);
-    seedConfig({ last_push_date: threeDaysAgo });
-
-    const dates = [daysAgoStr(2), daysAgoStr(1), todayStr()];
-    mockCcusageOnly(ccusageJson(dates));
-    mockSuccessfulSubmit(dates);
-
-    await pushCommand({});
-
-    expect(mockExecFileSync).toHaveBeenCalledTimes(1);
-    expect(mockFetch).toHaveBeenCalledTimes(2);
-
-    const saved = readPersistedConfig();
     expect(saved.last_push_date).toBe(todayStr());
   });
 
-  it("returning user with very stale last_push_date: caps at 7 days", async () => {
+  it("returning user with no last_push_date backfills 3 days through agentsview", async () => {
+    seedConfig();
+    mockSuccessfulSubmit([todayStr()]);
+
+    await pushCommand({});
+
+    const usageCall = mockExecFile.mock.calls.find((call) => call[1]?.[0] === "usage")!;
+    const args = usageCall[1] as string[];
+    expect(args).toContain("--breakdown");
+    expect(args).toContain("--offline");
+    expect(args).not.toContain("--agent");
+    expect(args[args.indexOf("--since") + 1]).toBe("2026-03-11");
+    expect(args[args.indexOf("--until") + 1]).toBe("2026-03-13");
+  });
+
+  it("caps smart sync at DEFAULT_SYNC_DAYS for stale last_push_date", async () => {
     seedConfig({ last_push_date: daysAgoStr(30) });
-
-    const today = todayStr();
-    mockCcusageOnly(ccusageJson([today]));
-    mockSuccessfulSubmit([today]);
+    mockSuccessfulSubmit([todayStr()]);
 
     await pushCommand({});
 
-    expect(mockExecFileSync).toHaveBeenCalledTimes(1);
-    // calls[0] = actual ccusage daily
-    const args = mockExecFileSync.mock.calls[0]!;
-    // ccusage is called with: ["daily", "--json", "--since", ..., "--until", ...]
-    const sinceIdx = (args[1] as string[]).indexOf("--since");
-    const sinceDate = (args[1] as string[])[sinceIdx + 1]!;
-    // Since date should be 6 days ago (7 days including today)
-    const sixDaysAgo = new Date();
-    sixDaysAgo.setDate(sixDaysAgo.getDate() - 6);
-    const expectedSince = `${sixDaysAgo.getFullYear()}${String(sixDaysAgo.getMonth() + 1).padStart(2, "0")}${String(sixDaysAgo.getDate()).padStart(2, "0")}`;
-    expect(sinceDate).toBe(expectedSince);
+    const usageCall = mockExecFile.mock.calls.find((call) => call[1]?.[0] === "usage")!;
+    const args = usageCall[1] as string[];
+    expect(args[args.indexOf("--since") + 1]).toBe(daysAgoStr(6));
   });
-});
 
-// ===========================================================================
-// 1b. CODEX INTEGRATION — merged Claude + Codex data
-// ===========================================================================
-
-describe("Codex integration", () => {
-  it("merges Claude + Codex data when both are available", async () => {
+  it("submits unified collector metadata to /api/usage/submit", async () => {
     seedConfig();
-    const today = todayStr();
-    mockCcusageOnly(ccusageJson([today]));
-    mockCollectCodexUsageAsync.mockResolvedValue(codexOutput([today]));
-    mockSuccessfulSubmit([today]);
+    mockSuccessfulSubmit([todayStr()]);
 
     await pushCommand({});
 
-    // Verify the API call was made
-    expect(mockFetch).toHaveBeenCalledTimes(2);
-    const [, options] = mockFetch.mock.calls[0]!;
+    const [url, options] = mockFetch.mock.calls[0]!;
+    expect(url).toBe("https://straude.com/api/usage/submit");
+    expect(options.method).toBe("POST");
+    expect(options.headers.Authorization).toBe("Bearer tok-123");
     const body = JSON.parse(options.body);
-
-    // Should have merged data
-    expect(body.entries).toHaveLength(1);
-    const data = body.entries[0].data;
-    expect(data.costUSD).toBe(3.05); // 0.05 (Claude) + 3.0 (Codex)
-    expect(data.inputTokens).toBe(3000); // 1000 + 2000
-    expect(data.outputTokens).toBe(1300); // 500 + 800
-    expect(data.totalTokens).toBe(4300); // 1500 + 2800
-    expect(data.models).toContain("claude-sonnet-4-6");
-    expect(data.models).toContain("gpt-5-codex");
-
-    // model_breakdown should have per-source cost entries
-    expect(data.modelBreakdown).toHaveLength(2);
-    expect(data.modelBreakdown).toContainEqual({ model: "claude-sonnet-4-6", cost_usd: 0.05 });
-    expect(data.modelBreakdown).toContainEqual({ model: "gpt-5-codex", cost_usd: 3.0 });
-    expect(body.collector).toEqual({
-      claude: "ccusage-v18",
-      codex: "straude-codex-native-v1",
-    });
+    expect(body.collector).toEqual({ unified: "agentsview-v1" });
+    expect(body.entries[0].data.models).toEqual(["claude-sonnet-4-6", "gpt-5-codex"]);
   });
 
-  it("hash includes Claude raw JSON and Codex native fingerprint", async () => {
-    seedConfig();
-    const today = todayStr();
-    const ccRaw = ccusageJson([today]);
-    mockCcusageOnly(ccRaw);
-    mockCollectCodexUsageAsync.mockResolvedValue(codexOutput([today], { fingerprint: "native-fp" }));
-    mockSuccessfulSubmit([today]);
-
-    await pushCommand({});
-
-    const [, options] = mockFetch.mock.calls[0]!;
-    const body = JSON.parse(options.body);
-
-    // Hash should be SHA-256 of Claude raw JSON plus native aggregate fingerprint.
-    const { createHash } = await import("node:crypto");
-    const expectedHash = createHash("sha256").update(ccRaw + "native-fp").digest("hex");
-    expect(body.hash).toBe(expectedHash);
-  });
-
-  it("Codex-only day (no Claude data) still submits", async () => {
-    seedConfig();
-    const today = todayStr();
-
-    mockCcusageOnly("[]");
-    mockCollectCodexUsageAsync.mockResolvedValue(codexOutput([today]));
-
-    mockSuccessfulSubmit([today]);
-
-    await pushCommand({});
-
-    expect(mockFetch).toHaveBeenCalledTimes(2);
-    const [, options] = mockFetch.mock.calls[0]!;
-    const body = JSON.parse(options.body);
-    const data = body.entries[0].data;
-
-    expect(data.models).toEqual(["gpt-5-codex"]);
-    expect(data.costUSD).toBe(3.0);
-    expect(data.modelBreakdown).toEqual([{ model: "gpt-5-codex", cost_usd: 3.0 }]);
-    expect(body.collector).toEqual({ codex: "straude-codex-native-v1" });
-  });
-
-  it("dry-run fetches dashboard but skips submit", async () => {
-    seedConfig();
-    const today = todayStr();
-    mockCcusageOnly(ccusageJson([today]));
-    mockCollectCodexUsageAsync.mockResolvedValue(codexOutput([today]));
+  it("dry-run fetches the dashboard but skips submit and last_push_date persistence", async () => {
+    seedConfig({ last_push_date: "2026-03-10" });
+    mockFetch.mockRejectedValueOnce(new Error("dashboard unavailable"));
 
     await pushCommand({ dryRun: true });
 
-    // Dry run calls dashboard API for full history, but no submit
     expect(mockFetch).toHaveBeenCalledTimes(1);
-    const [url] = mockFetch.mock.calls[0]!;
-    expect(url).toContain("/api/cli/dashboard");
-    expect(console.log).toHaveBeenCalledWith(
-      expect.stringContaining("dry run"),
-    );
+    expect(String(mockFetch.mock.calls[0]![0])).toContain("/api/cli/dashboard");
+    expect(readPersistedConfig().last_push_date).toBe("2026-03-10");
   });
 
-  it("Codex failure is silent — Claude data still pushes", async () => {
+  it("surfaces API errors after agentsview succeeds", async () => {
     seedConfig();
-    const today = todayStr();
-    // ccusage works, codex throws
-    mockCcusageOnly(ccusageJson([today]));
-    mockSuccessfulSubmit([today]);
-
-    await pushCommand({});
-
-    expect(mockFetch).toHaveBeenCalledTimes(2);
-    const [, options] = mockFetch.mock.calls[0]!;
-    const body = JSON.parse(options.body);
-    const data = body.entries[0].data;
-
-    // Only Claude data
-    expect(data.models).toEqual(["claude-sonnet-4-6"]);
-    expect(data.costUSD).toBe(0.05);
-    // No console.error about Codex
-    const errorCalls = (console.error as any).mock.calls.map((c: any[]) => c[0]);
-    expect(errorCalls.every((msg: string) => !msg.includes("codex"))).toBe(true);
-  });
-
-  it("missing local Claude data falls back to Codex-only sync", async () => {
-    seedConfig();
-    const today = todayStr();
-
-    mockExecFileSync.mockImplementation(((cmd: string, args: string[]) => {
-      throw new Error(`No valid Claude data directories found. Please ensure at least one of the following exists:
-- /Users/test/.config/claude/projects
-- /Users/test/.claude/projects`);
-    }) as typeof execFileSync);
-    mockCollectCodexUsageAsync.mockResolvedValue(codexOutput([today]));
-
-    mockSuccessfulSubmit([today]);
-
-    await pushCommand({});
-
-    expect(mockFetch).toHaveBeenCalledTimes(2);
-    expect(console.log).toHaveBeenCalledWith(
-      "No Claude Code data found locally; syncing Codex usage only.",
-    );
-
-    const [, options] = mockFetch.mock.calls[0]!;
-    const body = JSON.parse(options.body);
-    const data = body.entries[0].data;
-
-    expect(data.models).toEqual(["gpt-5-codex"]);
-    expect(data.costUSD).toBe(3.0);
-    expect(data.modelBreakdown).toEqual([{ model: "gpt-5-codex", cost_usd: 3.0 }]);
-  });
-});
-
-// ===========================================================================
-// 2. API ERROR HANDLING — the kind of bug that prompted this test suite
-// ===========================================================================
-
-describe("API error handling during push", () => {
-  it("404 Not Found — surfaces error clearly", async () => {
-    seedConfig();
-    const today = todayStr();
-    mockCcusageOnly(ccusageJson([today]));
-
-    mockFetch.mockResolvedValueOnce({
-      ok: false,
-      status: 404,
-      json: () => Promise.resolve({}),
-    });
-
-    await expect(pushCommand({})).rejects.toThrow(ExitError);
-    expect(console.error).toHaveBeenCalledWith(
-      expect.stringContaining("Endpoint not found"),
-    );
-  });
-
-  it("401 Unauthorized — surfaces auth error", async () => {
-    seedConfig();
-    const today = todayStr();
-    mockCcusageOnly(ccusageJson([today]));
-
-    mockFetch.mockResolvedValueOnce({
-      ok: false,
-      status: 401,
-      json: () => Promise.resolve({ error: "Unauthorized" }),
-    });
-
-    await expect(pushCommand({})).rejects.toThrow(ExitError);
-    expect(console.error).toHaveBeenCalledWith(
-      expect.stringContaining("Session expired"),
-    );
-  });
-
-  it("500 Internal Server Error — surfaces server error", async () => {
-    seedConfig();
-    const today = todayStr();
-    mockCcusageOnly(ccusageJson([today]));
-
     mockFetch.mockResolvedValueOnce({
       ok: false,
       status: 500,
@@ -527,269 +255,30 @@ describe("API error handling during push", () => {
     });
 
     await expect(pushCommand({})).rejects.toThrow(ExitError);
+
     expect(console.error).toHaveBeenCalledWith(
       expect.stringContaining("Internal server error"),
     );
   });
 
-  it("network failure — surfaces connection error", async () => {
+  it("fails clearly when agentsview is missing", async () => {
     seedConfig();
-    const today = todayStr();
-    mockCcusageOnly(ccusageJson([today]));
-
-    mockFetch.mockRejectedValueOnce(new TypeError("fetch failed"));
+    mockExistsSync.mockImplementation((path: string) => path in configStore);
 
     await expect(pushCommand({})).rejects.toThrow(ExitError);
+
     expect(console.error).toHaveBeenCalledWith(
-      expect.stringContaining("fetch failed"),
+      "agentsview 0.28.0 or newer is required. Install or upgrade it from https://www.agentsview.io/.",
     );
+    expect(mockFetch).not.toHaveBeenCalled();
   });
 
-  it("404 during sync flow — surfaces error, does not save last_push_date", async () => {
-    seedConfig();
-    const today = todayStr();
-    mockCcusageOnly(ccusageJson([today]));
+  it("uses apiUrlOverride for submit", async () => {
+    seedConfig({ api_url: "https://stored.example" });
+    mockSuccessfulSubmit([todayStr()]);
 
-    mockFetch.mockResolvedValueOnce({
-      ok: false,
-      status: 404,
-      json: () => Promise.resolve({}),
-    });
+    await pushCommand({}, "https://override.example");
 
-    await expect(pushCommand({})).rejects.toThrow(ExitError);
-
-    const saved = readPersistedConfig();
-    expect(saved.last_push_date).toBeUndefined();
-  });
-});
-
-// ===========================================================================
-// 3. API ENDPOINT VERIFICATION — exact paths matter
-// ===========================================================================
-
-describe("API endpoint paths", () => {
-  it("push submits to /api/usage/submit", async () => {
-    seedConfig();
-    const today = todayStr();
-    mockCcusageOnly(ccusageJson([today]));
-    mockSuccessfulSubmit([today]);
-
-    await pushCommand({});
-
-    const [url] = mockFetch.mock.calls[0]!;
-    expect(url).toBe("https://straude.com/api/usage/submit");
-  });
-
-  it("push sends POST method", async () => {
-    seedConfig();
-    const today = todayStr();
-    mockCcusageOnly(ccusageJson([today]));
-    mockSuccessfulSubmit([today]);
-
-    await pushCommand({});
-
-    const [, options] = mockFetch.mock.calls[0]!;
-    expect(options.method).toBe("POST");
-  });
-
-  it("push sends Authorization header", async () => {
-    seedConfig({ token: "my-jwt-token" });
-    const today = todayStr();
-    mockCcusageOnly(ccusageJson([today]));
-    mockSuccessfulSubmit([today]);
-
-    await pushCommand({});
-
-    const [, options] = mockFetch.mock.calls[0]!;
-    expect(options.headers.Authorization).toBe("Bearer my-jwt-token");
-  });
-
-  it("push sends correct body shape", async () => {
-    seedConfig();
-    const today = todayStr();
-    mockCcusageOnly(ccusageJson([today]));
-    mockSuccessfulSubmit([today]);
-
-    await pushCommand({});
-
-    const [, options] = mockFetch.mock.calls[0]!;
-    const body = JSON.parse(options.body);
-    expect(body).toHaveProperty("entries");
-    expect(body).toHaveProperty("hash");
-    expect(body).toHaveProperty("source", "cli");
-    expect(body.entries).toHaveLength(1);
-    expect(body.entries[0]).toHaveProperty("date", today);
-    expect(body.entries[0]).toHaveProperty("data");
-    expect(body.entries[0].data).toHaveProperty("costUSD", 0.05);
-    expect(body.entries[0].data).toHaveProperty("models", ["claude-sonnet-4-6"]);
-  });
-
-  it("login init calls /api/auth/cli/init", async () => {
-    // No config → triggers login
-    mockFetch
-      .mockResolvedValueOnce({
-        ok: true,
-        json: () =>
-          Promise.resolve({
-            code: "ABCD-EFGH",
-            verify_url: "https://straude.com/cli/verify?code=ABCD-EFGH",
-          }),
-      })
-      .mockResolvedValueOnce({
-        ok: true,
-        json: () =>
-          Promise.resolve({ status: "completed", token: "tok-1", username: "alice" }),
-      });
-
-    const today = todayStr();
-    mockCcusageOnly(ccusageJson([today]));
-    mockSuccessfulSubmit([today]);
-
-    await pushCommand({}, "https://straude.com");
-
-    const [initUrl] = mockFetch.mock.calls[0]!;
-    expect(initUrl).toBe("https://straude.com/api/auth/cli/init");
-
-    const [pollUrl] = mockFetch.mock.calls[1]!;
-    expect(pollUrl).toBe("https://straude.com/api/auth/cli/poll");
-  });
-});
-
-// ===========================================================================
-// 4. CONFIG PERSISTENCE — last_push_date tracking
-// ===========================================================================
-
-describe("config persistence", () => {
-  it("saves last_push_date after successful push", async () => {
-    seedConfig();
-    const today = todayStr();
-    mockCcusageOnly(ccusageJson([today]));
-    mockSuccessfulSubmit([today]);
-
-    await pushCommand({});
-
-    const saved = readPersistedConfig();
-    expect(saved.last_push_date).toBe(today);
-  });
-
-  it("saves latest date when pushing multiple days", async () => {
-    seedConfig();
-    const dates = [daysAgoStr(2), daysAgoStr(1), todayStr()];
-    mockCcusageOnly(ccusageJson(dates));
-    mockSuccessfulSubmit(dates);
-
-    await pushCommand({ days: 3 });
-
-    const saved = readPersistedConfig();
-    expect(saved.last_push_date).toBe(todayStr());
-  });
-
-  it("does not save last_push_date on dry run", async () => {
-    seedConfig();
-    const today = todayStr();
-    mockCcusageOnly(ccusageJson([today]));
-
-    await pushCommand({ dryRun: true });
-
-    const saved = readPersistedConfig();
-    expect(saved.last_push_date).toBeUndefined();
-  });
-
-  it("does not save last_push_date when no data found", async () => {
-    seedConfig();
-    mockExecFileSync.mockReturnValue("[]");
-
-    await pushCommand({});
-
-    const saved = readPersistedConfig();
-    expect(saved.last_push_date).toBeUndefined();
-  });
-
-  it("does not overwrite other config fields", async () => {
-    seedConfig({ token: "original-token", username: "bob" });
-    const today = todayStr();
-    mockCcusageOnly(ccusageJson([today]));
-    mockSuccessfulSubmit([today]);
-
-    await pushCommand({});
-
-    const saved = readPersistedConfig();
-    expect(saved.token).toBe("original-token");
-    expect(saved.username).toBe("bob");
-    expect(saved.last_push_date).toBe(today);
-  });
-});
-
-// ===========================================================================
-// 5. --api-url OVERRIDE — the bug that prompted this test suite
-// ===========================================================================
-
-describe("--api-url override", () => {
-  it("sync uses override URL instead of stored config URL", async () => {
-    // Config saved with port 3000, but dev server is on 3001
-    seedConfig({ api_url: "http://localhost:3000" });
-    const today = todayStr();
-    mockCcusageOnly(ccusageJson([today]));
-    mockSuccessfulSubmit([today]);
-
-    await pushCommand({}, "http://localhost:3001");
-
-    const [url] = mockFetch.mock.calls[0]!;
-    expect(url).toBe("http://localhost:3001/api/usage/submit");
-  });
-
-  it("push with apiUrlOverride uses override URL", async () => {
-    seedConfig({ api_url: "http://localhost:3000" });
-    const today = todayStr();
-    mockCcusageOnly(ccusageJson([today]));
-    mockSuccessfulSubmit([today]);
-
-    await pushCommand({}, "http://localhost:3001");
-
-    const [url] = mockFetch.mock.calls[0]!;
-    expect(url).toBe("http://localhost:3001/api/usage/submit");
-  });
-
-  it("sync without override uses stored config URL", async () => {
-    seedConfig({ api_url: "http://localhost:3000" });
-    const today = todayStr();
-    mockCcusageOnly(ccusageJson([today]));
-    mockSuccessfulSubmit([today]);
-
-    await pushCommand({}); // no override
-
-    const [url] = mockFetch.mock.calls[0]!;
-    expect(url).toBe("http://localhost:3000/api/usage/submit");
-  });
-});
-
-// ===========================================================================
-// 6. CCUSAGE FAILURE HANDLING
-// ===========================================================================
-
-describe("ccusage failures during flow", () => {
-  it("ccusage not installed — clear error message", async () => {
-    seedConfig();
-    mockExecFileSync.mockImplementation(() => {
-      const err = new Error("ccusage not found") as Error & { status: number; stderr: string };
-      err.status = 127;
-      err.stderr = "ccusage: not found";
-      throw err;
-    });
-
-    await expect(pushCommand({})).rejects.toThrow(ExitError);
-    expect(console.error).toHaveBeenCalledWith(
-      expect.stringContaining("ccusage failed"),
-    );
-  });
-
-  it("ccusage returns invalid JSON — clear error message", async () => {
-    seedConfig();
-    mockCcusageOnly("not json at all");
-
-    await expect(pushCommand({})).rejects.toThrow(ExitError);
-    expect(console.error).toHaveBeenCalledWith(
-      expect.stringContaining("parse"),
-    );
+    expect(String(mockFetch.mock.calls[0]![0])).toBe("https://override.example/api/usage/submit");
   });
 });

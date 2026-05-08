@@ -125,29 +125,33 @@ export default function ImportPage() {
       data: toCanonicalEntry(d),
     }));
 
-    const res = await fetch("/api/usage/submit", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        entries,
-        source: "web",
-        device_id: "00000000-0000-0000-0000-000000000001",
-        device_name: "web-import",
-      }),
-    });
-
-    if (!res.ok) {
-      const body = await res.json();
-      setError(body.error ?? "Import failed");
-    } else {
-      const body = await res.json();
-      setResults(body.results);
-      posthog.capture("usage_imported", {
-        days_imported: (body.results as ImportResult[]).length,
-        source: "web",
+    try {
+      const res = await fetch("/api/usage/submit", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          entries,
+          source: "web",
+          device_id: "00000000-0000-0000-0000-000000000001",
+          device_name: "web-import",
+        }),
       });
+
+      const body = await res.json();
+      if (!res.ok) {
+        setError(body.error ?? "Import failed");
+      } else {
+        setResults(body.results);
+        posthog.capture("usage_imported", {
+          days_imported: (body.results as ImportResult[]).length,
+          source: "web",
+        });
+      }
+    } catch {
+      setError("Import failed. Please try again.");
+    } finally {
+      setLoading(false);
     }
-    setLoading(false);
   }
 
   return (

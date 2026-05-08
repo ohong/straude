@@ -20,7 +20,6 @@ describe("resolvePushDateRange", () => {
       const r = resolvePushDateRange({
         today: dateAt("2026-05-04"),
         options: { date: "2026-05-01" },
-        shouldRunCodexRepair: false,
       });
       expect(r.ok).toBe(true);
       if (!r.ok) return;
@@ -32,7 +31,6 @@ describe("resolvePushDateRange", () => {
       const r = resolvePushDateRange({
         today: dateAt("2026-05-04"),
         options: { date: "2025-12-01" },
-        shouldRunCodexRepair: false,
       });
       expect(r.ok).toBe(false);
       if (r.ok) return;
@@ -46,7 +44,6 @@ describe("resolvePushDateRange", () => {
       const r = resolvePushDateRange({
         today: dateAt("2026-05-04"),
         options: { date: "2026-05-05" },
-        shouldRunCodexRepair: false,
       });
       expect(r.ok).toBe(false);
       if (r.ok) return;
@@ -57,7 +54,6 @@ describe("resolvePushDateRange", () => {
       const r = resolvePushDateRange({
         today: dateAt("2026-05-04"),
         options: { date: "2099-01-01" },
-        shouldRunCodexRepair: false,
       });
       expect(r.ok).toBe(false);
       if (r.ok) return;
@@ -68,45 +64,8 @@ describe("resolvePushDateRange", () => {
       const r = resolvePushDateRange({
         today: dateAt("2026-05-04"),
         options: { date: "2026-04-04" },
-        shouldRunCodexRepair: false,
       });
       expect(r.ok).toBe(true);
-    });
-
-    it("--date wins over codex repair when both would apply", () => {
-      const r = resolvePushDateRange({
-        today: dateAt("2026-05-04"),
-        options: { date: "2026-05-03" },
-        shouldRunCodexRepair: true,
-      });
-      expect(r.ok).toBe(true);
-      if (!r.ok) return;
-      expect(isoDay(r.since)).toBe("2026-05-03");
-    });
-  });
-
-  describe("codex repair branch", () => {
-    it("backfills the full 30-day window when codex repair runs", () => {
-      const r = resolvePushDateRange({
-        today: dateAt("2026-05-04"),
-        options: {},
-        shouldRunCodexRepair: true,
-      });
-      expect(r.ok).toBe(true);
-      if (!r.ok) return;
-      expect(isoDay(r.since)).toBe("2026-04-05"); // today - 29 days
-      expect(isoDay(r.until)).toBe("2026-05-04");
-    });
-
-    it("ignores --days when codex repair runs", () => {
-      const r = resolvePushDateRange({
-        today: dateAt("2026-05-04"),
-        options: { days: 5 },
-        shouldRunCodexRepair: true,
-      });
-      expect(r.ok).toBe(true);
-      if (!r.ok) return;
-      expect(isoDay(r.since)).toBe("2026-04-05"); // 30-day backfill, not 5
     });
   });
 
@@ -115,7 +74,6 @@ describe("resolvePushDateRange", () => {
       const r = resolvePushDateRange({
         today: dateAt("2026-05-04"),
         options: { days: 7 },
-        shouldRunCodexRepair: false,
       });
       expect(r.ok).toBe(true);
       if (!r.ok) return;
@@ -127,7 +85,6 @@ describe("resolvePushDateRange", () => {
       const r = resolvePushDateRange({
         today: dateAt("2026-05-04"),
         options: { days: 90 },
-        shouldRunCodexRepair: false,
       });
       expect(r.ok).toBe(true);
       if (!r.ok) return;
@@ -141,7 +98,6 @@ describe("resolvePushDateRange", () => {
         today: dateAt("2026-05-04"),
         options: {},
         lastPushDate: "2026-05-01",
-        shouldRunCodexRepair: false,
       });
       expect(r.ok).toBe(true);
       if (!r.ok) return;
@@ -154,7 +110,6 @@ describe("resolvePushDateRange", () => {
         today: dateAt("2026-05-04"),
         options: {},
         lastPushDate: "2026-04-15",
-        shouldRunCodexRepair: false,
       });
       expect(r.ok).toBe(true);
       if (!r.ok) return;
@@ -166,7 +121,6 @@ describe("resolvePushDateRange", () => {
         today: dateAt("2026-05-04"),
         options: {},
         lastPushDate: "2026-05-04",
-        shouldRunCodexRepair: false,
       });
       expect(r.ok).toBe(true);
       if (!r.ok) return;
@@ -180,7 +134,6 @@ describe("resolvePushDateRange", () => {
       const r = resolvePushDateRange({
         today: dateAt("2026-05-04"),
         options: {},
-        shouldRunCodexRepair: false,
       });
       expect(r.ok).toBe(true);
       if (!r.ok) return;

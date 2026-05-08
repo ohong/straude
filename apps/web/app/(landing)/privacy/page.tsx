@@ -29,20 +29,11 @@ export default function PrivacyPage() {
               <p className="mt-2">
                 Straude has <strong>zero access</strong> to your prompts,
                 conversations, code, file contents, or anything you do inside
-                Claude Code or Codex. We cannot read them, store them, or
+                your coding agents. We cannot read them, store them, or
                 transmit them — the data simply never leaves your machine.
               </p>
               <p className="mt-2">
                 The CLI runs{" "}
-                <a
-                  href="https://github.com/ryoppippi/ccusage"
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  className="text-accent underline underline-offset-2 hover:no-underline"
-                >
-                  ccusage
-                </a>{" "}
-                or{" "}
                 <a
                   href="https://www.agentsview.io/"
                   target="_blank"
@@ -51,7 +42,7 @@ export default function PrivacyPage() {
                 >
                   agentsview
                 </a>{" "}
-                locally to aggregate your session logs into daily totals — token
+                locally to aggregate supported coding-agent logs into daily totals — token
                 counts, cost, model names, and session count. Those totals are
                 all that ever get sent. The raw logs, your project files, and
                 every conversation stay on your device.

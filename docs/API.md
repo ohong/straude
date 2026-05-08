@@ -318,8 +318,7 @@ Submit daily usage data. Primary endpoint for CLI syncs and web imports.
     "device_name": "string (optional)",
     "hash": "sha256 hex string (optional)",
     "collector": {
-      "claude": "ccusage-v18 | agentsview-v1",
-      "codex": "straude-codex-native-v1"
+      "unified": "agentsview-v1"
     },
     "entries": [
       {
@@ -339,6 +338,7 @@ Submit daily usage data. Primary endpoint for CLI syncs and web imports.
   }
   ```
 - **Validation**: Dates must be valid ISO format within a 30-day backfill window. No negative values. Collector metadata is allow-listed.
+- **Collector metadata**: current CLI clients submit `collector.unified = "agentsview-v1"`. Older `collector.claude = "ccusage-v18"` and `collector.codex = "straude-codex-native-v1"` values remain accepted for backward compatibility.
 - **Response**: `{ results: [{ date, usage_id, post_id, post_url, action }] }`
 - **Status codes**: `200` success, `207` partial failure (some entries failed), `400` validation error, `401` unauthorized.
 - **Side effects**: Creates/updates `device_usage` and aggregated `daily_usage` rows, creates posts with auto-generated titles, triggers achievement checks.

@@ -105,33 +105,19 @@ export async function getAgentsViewVersion(timeoutMs?: number): Promise<string> 
   return version;
 }
 
-export async function isSupportedAgentsViewInstalled(timeoutMs?: number): Promise<boolean> {
-  if (!hasAgentsView()) return false;
-  try {
-    return isSupportedAgentsViewVersion(await getAgentsViewVersion(timeoutMs));
-  } catch {
-    return false;
-  }
-}
-
 export async function runAgentsViewRawAsync(
   sinceDate: string,
   untilDate: string,
   timeoutMs?: number,
-  options: { timezone?: string; agent?: string; offline?: boolean } = {},
+  options: { timezone?: string } = {},
 ): Promise<string> {
   const args = [
     "usage",
     "daily",
     "--json",
     "--breakdown",
+    "--offline",
   ];
-  if (options.agent) {
-    args.push("--agent", options.agent);
-  }
-  if (options.offline !== false) {
-    args.push("--offline");
-  }
   args.push(
     "--since",
     sinceDate,
