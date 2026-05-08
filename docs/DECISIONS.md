@@ -6,9 +6,9 @@
 
 **Why:** The SQL repair path did not have the source data needed to distinguish genuinely billed input from cached context snapshots. On real rows it produced impossible public data, for example `input_tokens = 0` and `cache_read_tokens = 0` while `total_tokens` remained hundreds of millions. It also split the UI: auto-generated post titles and card costs could disagree because the database row was rewritten after the post was created. That is worse than showing an inflated stale row because it creates silent data loss and erodes trust.
 
-**Policy:** SQL migrations may add schema, audit tables, and server-side safeguards, but they must not heuristically overwrite user usage totals. A trusted fixed CLI push can lower Codex spend only for entries that contain Codex usage and prove non-Codex cost is preserved. Claude accounting stays delegated to `ccusage`.
+**Policy:** SQL migrations may add schema, audit tables, and server-side safeguards, but they must not heuristically overwrite user usage totals. CI guards future migrations from adding direct `daily_usage` / `device_usage` DML after the rollback migration. A trusted fixed CLI push can lower Codex spend only for entries that contain Codex usage and prove non-Codex cost is preserved. Claude accounting stays delegated to `ccusage`.
 
-**Operational result:** Existing bad SQL-repaired rows were restored to their pre-repair values, including `cost_usd`, `input_tokens`, `cache_read_tokens`, `model_breakdown`, `collector_meta`, and auto-generated post titles. Rows may still look inflated until their owner pushes again; that is intentional because the local session logs are the source of truth.
+**Operational result:** Existing bad SQL-repaired rows were restored to their pre-repair values, including `cost_usd`, `input_tokens`, `cache_read_tokens`, `model_breakdown`, `collector_meta`, and auto-generated post titles. The rollback skips rows already written by the fixed Codex collector, so a user re-push cannot be undone by a later rollback run. Rows may still look inflated until their owner pushes again; that is intentional because the local session logs are the source of truth.
 
 ## Superseded: re-price legacy Codex inflation under inclusive-cache, don't delete (2026-05-06)
 

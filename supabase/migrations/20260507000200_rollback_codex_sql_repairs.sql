@@ -10,6 +10,7 @@
 
 DO $rollback$
 DECLARE
+  v_fixed_codex_collector text := 'straude-codex-native-last-token-usage';
   v_restored_daily int := 0;
   v_restored_device int := 0;
   v_post_titles int := 0;
@@ -74,7 +75,8 @@ BEGIN
       du.collector_meta ? 'repair'
       OR du.collector_meta ? 'repair_v3_codex_only'
       OR du.collector_meta ? 'claude_restore_2026_05_07'
-    );
+    )
+    AND COALESCE(du.collector_meta->>'codex', '') <> v_fixed_codex_collector;
   GET DIAGNOSTICS v_restored_daily = ROW_COUNT;
 
   UPDATE public.device_usage du
@@ -97,7 +99,8 @@ BEGIN
       updated_at = now()
   FROM _codex_repair_device_restore r
   LEFT JOIN _codex_repair_daily_restore dr ON dr.user_id = r.user_id AND dr.date = r.date
-  WHERE du.id = r.id;
+  WHERE du.id = r.id
+    AND COALESCE(du.collector_meta->>'codex', '') <> v_fixed_codex_collector;
   GET DIAGNOSTICS v_restored_device = ROW_COUNT;
 
   -- Auto-generated post titles include the old cost. Keep user-authored titles
@@ -144,7 +147,8 @@ BEGIN
     FROM public.posts p
     JOIN public.daily_usage du ON du.id = p.daily_usage_id
     JOIN _codex_repair_daily_restore r ON r.user_id = du.user_id AND r.date = du.date
-    WHERE p.title IS NULL OR p.title ~ '^[A-Z][a-z]{2} [0-9]{1,2}( — .+)?$'
+    WHERE (p.title IS NULL OR p.title ~ '^[A-Z][a-z]{2} [0-9]{1,2}( — .+)?$')
+      AND COALESCE(du.collector_meta->>'codex', '') <> v_fixed_codex_collector
   ),
   titled AS (
     SELECT
