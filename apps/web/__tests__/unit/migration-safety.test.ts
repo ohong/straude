@@ -253,5 +253,18 @@ describe("Migration safety", () => {
     expect(
       content.match(/COALESCE\(du\.collector_meta->>'codex', ''\)\s*<>\s*v_fixed_codex_collector/gi)?.length,
     ).toBeGreaterThanOrEqual(3);
+    for (const column of [
+      "cost_usd",
+      "input_tokens",
+      "output_tokens",
+      "cache_creation_tokens",
+      "cache_read_tokens",
+      "total_tokens",
+    ]) {
+      expect(
+        content.match(new RegExp(`${column}\\s*=`, "gi"))?.length,
+        `rollback must restore ${column} on daily_usage and device_usage`,
+      ).toBeGreaterThanOrEqual(2);
+    }
   });
 });
