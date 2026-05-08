@@ -52,8 +52,8 @@ BEGIN
   UPDATE public.daily_usage du
   SET cost_usd = (r.previous_values->>'cost_usd')::numeric,
       input_tokens = (r.previous_values->>'input_tokens')::bigint,
-      output_tokens = (r.previous_values->>'output_tokens')::bigint,
-      cache_creation_tokens = COALESCE((r.previous_values->>'cache_creation_tokens')::bigint, 0),
+      output_tokens = COALESCE((r.previous_values->>'output_tokens')::bigint, du.output_tokens),
+      cache_creation_tokens = COALESCE((r.previous_values->>'cache_creation_tokens')::bigint, du.cache_creation_tokens, 0),
       cache_read_tokens = (r.previous_values->>'cache_read_tokens')::bigint,
       total_tokens = COALESCE(
         (r.previous_values->>'total_tokens')::bigint,
@@ -84,8 +84,8 @@ BEGIN
   UPDATE public.device_usage du
   SET cost_usd = (r.previous_values->>'cost_usd')::numeric,
       input_tokens = (r.previous_values->>'input_tokens')::bigint,
-      output_tokens = (r.previous_values->>'output_tokens')::bigint,
-      cache_creation_tokens = COALESCE((r.previous_values->>'cache_creation_tokens')::bigint, 0),
+      output_tokens = COALESCE((r.previous_values->>'output_tokens')::bigint, du.output_tokens),
+      cache_creation_tokens = COALESCE((r.previous_values->>'cache_creation_tokens')::bigint, du.cache_creation_tokens, 0),
       cache_read_tokens = (r.previous_values->>'cache_read_tokens')::bigint,
       total_tokens = COALESCE(
         (r.previous_values->>'total_tokens')::bigint,

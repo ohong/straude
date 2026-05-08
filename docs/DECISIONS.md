@@ -8,7 +8,7 @@
 
 **Policy:** SQL migrations may add schema, audit tables, and server-side safeguards, but they must not heuristically overwrite user usage totals. CI guards future migrations from adding direct `daily_usage` / `device_usage` DML after the rollback migration. A trusted fixed CLI push can lower Codex spend only for entries that contain Codex usage and prove non-Codex cost is preserved. Claude accounting stays delegated to `ccusage`.
 
-**Operational result:** Existing bad SQL-repaired rows were restored to their pre-repair values, including `cost_usd`, all token bucket columns, `model_breakdown`, `collector_meta`, and auto-generated post titles. The rollback skips rows already written by the fixed Codex collector, so a user re-push cannot be undone by a later rollback run. Rows may still look inflated until their owner pushes again; that is intentional because the local session logs are the source of truth.
+**Operational result:** Existing bad SQL-repaired rows were restored to their pre-repair values, including `cost_usd`, audited token bucket columns, `model_breakdown`, `collector_meta`, and auto-generated post titles. When the audit snapshot lacks a bucket that the repair never touched, the rollback preserves the current value instead of guessing. The rollback skips rows already written by the fixed Codex collector, so a user re-push cannot be undone by a later rollback run. Rows may still look inflated until their owner pushes again; that is intentional because the local session logs are the source of truth.
 
 ## Superseded: re-price legacy Codex inflation under inclusive-cache, don't delete (2026-05-06)
 
