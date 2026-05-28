@@ -134,7 +134,7 @@ describe("Flow: Privacy and Visibility", () => {
     const costChain = chainBuilder();
     (costChain.select as ReturnType<typeof vi.fn>).mockReturnValue(costChain);
     (costChain.eq as ReturnType<typeof vi.fn>).mockResolvedValue({
-      data: [{ cost_usd: 50.0 }],
+      data: [{ total_cost: 50.0 }],
     });
 
     const weeklyChain = chainBuilder();
