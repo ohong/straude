@@ -1,40 +1,23 @@
 "use client";
 
 import Link from "next/link";
-import { useCallback, useState } from "react";
+import { Check } from "lucide-react";
 import { ProductHuntBadge } from "./ProductHuntBadge";
+import { useClipboardFeedback } from "@/lib/utils/useClipboardFeedback";
 
 function CopySnippet({ command }: { command: string }) {
-  const [copied, setCopied] = useState(false);
-
-  const copy = useCallback(() => {
-    navigator.clipboard.writeText(command).then(() => {
-      setCopied(true);
-      setTimeout(() => setCopied(false), 2000);
-    });
-  }, [command]);
+  const { copied, copyText } = useClipboardFeedback();
 
   return (
     <button
-      onClick={copy}
+      type="button"
+      onClick={() => void copyText(command)}
       className="inline-flex cursor-pointer items-center gap-4 border border-landing-border bg-landing-panel px-4 py-3 font-[family-name:var(--font-mono)] text-sm text-landing-muted transition-[border-color,transform] hover:border-landing-dim active:scale-[0.97]"
     >
       ${" "}
       <span className="text-landing-text">{command}</span>
       {copied && (
-        <svg
-          className="h-4 w-4 text-accent"
-          fill="none"
-          viewBox="0 0 24 24"
-          stroke="currentColor"
-          strokeWidth={2}
-        >
-          <path
-            strokeLinecap="round"
-            strokeLinejoin="round"
-            d="M5 13l4 4L19 7"
-          />
-        </svg>
+        <Check size={16} className="text-accent" aria-hidden="true" />
       )}
     </button>
   );

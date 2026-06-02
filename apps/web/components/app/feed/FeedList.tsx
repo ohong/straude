@@ -6,19 +6,13 @@ import { ChevronDown, Copy, Check } from "lucide-react";
 import { ActivityCard } from "./ActivityCard";
 import { PendingPostsNudge } from "./PendingPostsNudge";
 import { cn } from "@/lib/utils/cn";
+import { useClipboardFeedback } from "@/lib/utils/useClipboardFeedback";
 import type { Post } from "@/types";
 
 const SYNC_COMMAND = "npx straude@latest";
 
 function SyncCommandHint() {
-  const [copied, setCopied] = useState(false);
-
-  function handleCopy() {
-    navigator.clipboard.writeText(SYNC_COMMAND).then(() => {
-      setCopied(true);
-      setTimeout(() => setCopied(false), 2000);
-    });
-  }
+  const { copied, copyText } = useClipboardFeedback();
 
   return (
     <div className="hidden items-center gap-2.5 sm:flex">
@@ -27,7 +21,7 @@ function SyncCommandHint() {
       </span>
       <button
         type="button"
-        onClick={handleCopy}
+        onClick={() => void copyText(SYNC_COMMAND)}
         className="flex items-center gap-2 rounded border border-border bg-background px-3 py-1 font-mono text-xs text-foreground hover:border-accent hover:text-accent transition-colors"
         aria-label="Copy sync command"
       >

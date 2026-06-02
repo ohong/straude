@@ -14,6 +14,11 @@ import {
 import { MAX_BACKFILL_DAYS, DEFAULT_SYNC_DAYS } from "../config.js";
 import { Spinner } from "../lib/spinner.js";
 import type { DashboardData as DashboardResponse } from "../components/PushSummary.js";
+import {
+  printDryRunEntries,
+  printSubmittedResults,
+  renderPushSummary,
+} from "./push-output.js";
 import { posthog } from "../lib/posthog.js";
 import { getDistinctId } from "../lib/machine-id.js";
 import { isDebug, debugLog } from "../lib/debug.js";
@@ -170,16 +175,6 @@ export function resolvePushDateRange(args: {
   const since = new Date(today);
   since.setDate(since.getDate() - FIRST_RUN_BACKFILL_DAYS + 1);
   return { ok: true, since, until: today };
-}
-
-function formatTokens(n: number): string {
-  if (n >= 1_000_000) return `${(n / 1_000_000).toFixed(1)}M`;
-  if (n >= 1_000) return `${Math.round(n / 1_000)}k`;
-  return String(n);
-}
-
-function formatCost(n: number): string {
-  return `$${n.toFixed(2)}`;
 }
 
 /**
@@ -429,24 +424,10 @@ export async function pushCommand(options: PushOptions, apiUrlOverride?: string)
     // Dry run: fetch full dashboard from API (skip submit only)
     try {
       const dashboard = await apiRequest<DashboardResponse>(config, "/api/cli/dashboard");
-      const { render } = await import("ink");
-      const { createElement } = await import("react");
-      const { PushSummary } = await import("../components/PushSummary.js");
-
-      const { waitUntilExit } = render(
-        createElement(PushSummary, { dashboard }),
-      );
-      await waitUntilExit();
+      await renderPushSummary(dashboard);
     } catch {
       // Fallback: plain text if API or Ink fails
-      for (const entry of entries) {
-        console.log(`  ${entry.date}:`);
-        console.log(`    Cost: ${formatCost(entry.costUSD)}`);
-        console.log(
-          `    Tokens: ${formatTokens(entry.totalTokens)} (input: ${formatTokens(entry.inputTokens)}, output: ${formatTokens(entry.outputTokens)})`,
-        );
-        console.log(`    Models: ${entry.models.join(", ")}`);
-      }
+      printDryRunEntries(entries);
     }
     console.log("\n(dry run — nothing submitted)");
     return;
@@ -545,24 +526,10 @@ export async function pushCommand(options: PushOptions, apiUrlOverride?: string)
   // Render visual dashboard
   try {
     const dashboard = await apiRequest<DashboardResponse>(config, "/api/cli/dashboard");
-    const { render } = await import("ink");
-    const { createElement } = await import("react");
-    const { PushSummary } = await import("../components/PushSummary.js");
-
-    const { waitUntilExit } = render(
-      createElement(PushSummary, {
-        dashboard,
-        results: response.results,
-      }),
-    );
-    await waitUntilExit();
+    await renderPushSummary(dashboard, response.results);
   } catch {
     // Fallback: if dashboard fetch or Ink render fails, show plain text
-    console.log("");
-    for (const result of response.results) {
-      const verb = result.action === "updated" ? "Updated" : "Posted";
-      console.log(`${verb} ${result.date}: ${result.post_url}?edit=1`);
-    }
+    printSubmittedResults(response.results);
   }
 }
 
