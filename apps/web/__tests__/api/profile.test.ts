@@ -86,7 +86,7 @@ describe("GET /api/users/[username]", () => {
           return {
             select: vi.fn().mockReturnValue({
               eq: vi.fn().mockResolvedValue({
-                data: [{ cost_usd: 15 }],
+                data: [{ total_cost: 15 }],
                 error: null,
               }),
             }),
