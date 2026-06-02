@@ -56,9 +56,8 @@ export function CookieConsentModal() {
   if (!checked || !open) return null;
 
   return (
-    <Dialog.Root open>
+    <Dialog.Root open modal={false}>
       <Dialog.Portal>
-        <Dialog.Backdrop className="fixed inset-0 z-[90] bg-black/55 backdrop-blur-[2px]" />
         <Dialog.Popup className="fixed inset-x-4 bottom-4 z-[100] mx-auto w-auto max-w-lg rounded-md border border-landing-border bg-landing-surface p-4 text-landing-text shadow-2xl sm:bottom-6 sm:p-5">
           <div className="flex gap-3">
             <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-[4px] border border-landing-border bg-landing-panel text-accent">
