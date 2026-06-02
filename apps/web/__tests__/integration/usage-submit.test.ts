@@ -112,6 +112,7 @@ describe("POST /api/usage/submit (real Supabase)", () => {
               models: ["claude-sonnet-4-5-20250929"],
               inputTokens: 1000,
               outputTokens: 500,
+              reasoningOutputTokens: 125,
               cacheCreationTokens: 100,
               cacheReadTokens: 200,
               totalTokens: 1800,
@@ -138,11 +139,12 @@ describe("POST /api/usage/submit (real Supabase)", () => {
       cost_usd: string;
       input_tokens: string;
       output_tokens: string;
+      reasoning_output_tokens: number;
       total_tokens: string;
       models: string[];
       session_count: number;
     }>(
-      `SELECT cost_usd, input_tokens, output_tokens, total_tokens, models, session_count
+      `SELECT cost_usd, input_tokens, output_tokens, reasoning_output_tokens, total_tokens, models, session_count
        FROM public.daily_usage
        WHERE user_id = $1 AND date = $2`,
       [userId, today],
@@ -153,16 +155,19 @@ describe("POST /api/usage/submit (real Supabase)", () => {
     expect(Number(rows[0].cost_usd)).toBeCloseTo(0.05, 6);
     expect(Number(rows[0].input_tokens)).toBe(1000);
     expect(Number(rows[0].output_tokens)).toBe(500);
+    expect(rows[0].reasoning_output_tokens).toBe(125);
     expect(Number(rows[0].total_tokens)).toBe(1800);
     expect(rows[0].models).toContain("claude-sonnet-4-5-20250929");
 
     // The route also writes a device_usage row keyed by device_id.
     const dev = await db.query(
-      `SELECT count(*)::int AS n FROM public.device_usage
+      `SELECT count(*)::int AS n, max(reasoning_output_tokens)::int AS reasoning_output_tokens
+       FROM public.device_usage
        WHERE user_id = $1 AND date = $2 AND device_id = $3`,
       [userId, today, DEVICE_ID],
     );
     expect(dev.rows[0].n).toBe(1);
+    expect(dev.rows[0].reasoning_output_tokens).toBe(125);
 
     // And a post row.
     const posts = await db.query(

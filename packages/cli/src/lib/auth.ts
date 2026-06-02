@@ -13,6 +13,7 @@ export interface StraudeConfig {
   username: string;
   api_url: string;
   last_push_date?: string;
+  ccusage_v20_migration_completed_at?: string;
   codex_native_repair_completed_at?: string;
   // Set after the one-time 30-day backfill that re-collects Codex sessions with
   // the last_token_usage accounting fix. Distinct from the older repair flag
@@ -34,6 +35,7 @@ export function loadConfig(): StraudeConfig | null {
       username: parsed.username ?? "",
       api_url: parsed.api_url ?? DEFAULT_API_URL,
       last_push_date: parsed.last_push_date ?? undefined,
+      ccusage_v20_migration_completed_at: parsed.ccusage_v20_migration_completed_at ?? undefined,
       codex_native_repair_completed_at: parsed.codex_native_repair_completed_at ?? undefined,
       codex_native_last_token_usage_repair_completed_at:
         parsed.codex_native_last_token_usage_repair_completed_at

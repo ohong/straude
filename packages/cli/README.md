@@ -1,6 +1,6 @@
 # straude CLI
 
-Push your Claude Code usage stats to [Straude](https://straude.com).
+Push your Claude Code and Codex usage stats to [Straude](https://straude.com).
 
 ## Quick start
 
@@ -15,7 +15,9 @@ Running with no arguments performs a smart sync: logs you in if needed, then pus
 ## Requirements
 
 - Node 18+
-- [Claude Code](https://claude.ai/code) installed (provides the `ccusage` binary)
+- Local Claude Code and/or Codex session data.
+
+Straude bundles `ccusage@20.0.6` and invokes that bundled binary directly. It does not rely on a globally installed `ccusage` command.
 
 ## Commands
 
@@ -26,6 +28,7 @@ straude
 ```
 
 - First run: opens a browser tab to authenticate, then pushes today's usage.
+- First run after the ccusage v20 migration: backfills the last 30 days once.
 - Subsequent runs: pushes all days since the last sync (up to 7 days).
 - Already synced today: prints today's stats and exits.
 
@@ -47,8 +50,8 @@ Push usage data to Straude.
 
 | Flag | Description |
 |---|---|
-| `--date YYYY-MM-DD` | Push a specific date (must be within the last 7 days) |
-| `--days N` | Push the last N days (max 7) |
+| `--date YYYY-MM-DD` | Push a specific date (must be within the last 30 days) |
+| `--days N` | Push the last N days (max 30) |
 | `--dry-run` | Preview what would be submitted without posting |
 
 ### `status`
@@ -88,9 +91,8 @@ Credentials are stored in `~/.straude/config.json` (mode `0600`, owner-only).
 ## Debug mode
 
 Pass `--debug` (or export `STRAUDE_DEBUG=1`) to surface diagnostic detail
-that's hidden by default — for example, per-row token-normalization
-anomalies. Most of the time you don't need it; reach for it when something
-in the output looks off and you want to know why.
+that's hidden by default. Most of the time you don't need it; reach for it
+when something in the output looks off and you want to know why.
 
 ```sh
 straude push --debug
