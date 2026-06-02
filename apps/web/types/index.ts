@@ -194,8 +194,8 @@ export interface DeviceUsage {
 }
 
 export interface UsageCollectorMeta {
-  claude?: "ccusage-v18" | string;
-  codex?: "straude-codex-native-last-token-usage" | "straude-codex-native-v1" | string;
+  claude?: "ccusage-v18" | "ccusage-claude-v20" | string;
+  codex?: "straude-codex-native-last-token-usage" | "straude-codex-native-v1" | "ccusage-codex-v20" | string;
   // Set when a row was repaired retroactively (legacy or previous native Codex inflation fix).
   // Surfaced on the post card so kudos/comments stay attached but the user can
   // see why their cost changed.

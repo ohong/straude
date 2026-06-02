@@ -4,13 +4,15 @@ import { loadConfig, updateLastPushDate, saveConfig } from "../lib/auth.js";
 import type { StraudeConfig } from "../lib/auth.js";
 import { loginCommand } from "./login.js";
 import { apiRequest } from "../lib/api.js";
-import { runCcusageRawAsync, parseCcusageOutput, ensureCcusageInstalled } from "../lib/ccusage.js";
-import type { CcusageDailyEntry, ModelBreakdownEntry } from "../lib/ccusage.js";
 import {
-  CODEX_NATIVE_COLLECTOR,
-  collectCodexUsageAsync,
-  containsSessionFile,
-} from "../lib/codex-native.js";
+  CCUSAGE_CLAUDE_COLLECTOR,
+  CCUSAGE_CODEX_COLLECTOR,
+  runCcusageAgentRawAsync,
+  parseCcusageOutput,
+  ensureCcusageInstalled,
+} from "../lib/ccusage.js";
+import type { CcusageAgent, CcusageDailyEntry, CcusageOutput, ModelBreakdownEntry } from "../lib/ccusage.js";
+import { containsSessionFile } from "../lib/codex-native.js";
 import { MAX_BACKFILL_DAYS, DEFAULT_SYNC_DAYS } from "../config.js";
 import { Spinner } from "../lib/spinner.js";
 import type { DashboardData as DashboardResponse } from "../components/PushSummary.js";
@@ -32,8 +34,8 @@ interface UsageSubmitRequest {
   }>;
   hash?: string;
   collector?: {
-    claude?: "ccusage-v18";
-    codex?: typeof CODEX_NATIVE_COLLECTOR;
+    claude?: typeof CCUSAGE_CLAUDE_COLLECTOR;
+    codex?: typeof CCUSAGE_CODEX_COLLECTOR;
   };
   source: "cli" | "web";
   device_id?: string;
@@ -60,13 +62,19 @@ interface PushOptions {
   timeoutMs?: number;
 }
 
-function isMissingClaudeDataError(error: Error): boolean {
-  return error.message.includes("No valid Claude data directories found");
-}
-
-function isCcusageNotInstalledError(error: Error): boolean {
-  return error.message.includes("ccusage is not installed or not on PATH");
-}
+type SourceScan =
+  | {
+    ok: true;
+    agent: CcusageAgent;
+    raw: string;
+    parsed: CcusageOutput;
+  }
+  | {
+    ok: false;
+    agent: CcusageAgent;
+    error: Error;
+    missingData: boolean;
+  };
 
 function formatDate(d: Date): string {
   const y = d.getFullYear();
@@ -234,6 +242,36 @@ export function mergeEntries(
   return merged;
 }
 
+function isMissingSourceDataError(err: Error): boolean {
+  return /(?:no valid|no|missing).{0,80}(?:data|jsonl|session|director(?:y|ies))|(?:data|jsonl|session|director(?:y|ies)).{0,80}(?:not found|missing)/i
+    .test(err.message);
+}
+
+async function scanCcusageSource(
+  agent: CcusageAgent,
+  sinceStr: string,
+  untilStr: string,
+  timeoutMs?: number,
+): Promise<SourceScan> {
+  try {
+    const raw = await runCcusageAgentRawAsync(agent, sinceStr, untilStr, timeoutMs);
+    return {
+      ok: true,
+      agent,
+      raw,
+      parsed: parseCcusageOutput(raw, agent),
+    };
+  } catch (err) {
+    const error = err instanceof Error ? err : new Error(String(err));
+    return {
+      ok: false,
+      agent,
+      error,
+      missingData: isMissingSourceDataError(error),
+    };
+  }
+}
+
 export async function pushCommand(options: PushOptions, apiUrlOverride?: string): Promise<void> {
   let config = loadConfig();
 
@@ -290,69 +328,28 @@ export async function pushCommand(options: PushOptions, apiUrlOverride?: string)
       : `Pushing usage for ${formatDate(sinceDate)} to ${formatDate(untilDate)}...`,
   );
 
-  // Try to ensure ccusage is installed. In a TTY this prompts the user and
-  // runs `bun add -g` / `npm install -g`. We catch the throw rather than
-  // propagating it: Codex-only users (no Claude data) shouldn't be blocked by
-  // a missing ccusage. If ccusage is genuinely required, the runCcusage call
-  // below will surface the "not installed" error and we treat it the same as
-  // missing Claude data.
-  let ccusageReady = true;
   try {
     await ensureCcusageInstalled(config);
-  } catch {
-    ccusageReady = false;
+  } catch (err) {
+    console.error((err as Error).message);
+    process.exit(1);
   }
 
-  // Run ccusage + codex in parallel — the single biggest perf win
   const scanSpinner = new Spinner("scan");
   scanSpinner.start();
-  let codexCollectFailed = false;
-  const [claudeResult, codexParsed] = await Promise.all([
-    ccusageReady
-      ? runCcusageRawAsync(sinceStr, untilStr, options.timeoutMs).catch((err: Error) => err)
-      : Promise.resolve(
-          new Error("ccusage is not installed or not on PATH"),
-        ),
-    collectCodexUsageAsync(sinceStr, untilStr).catch(() => {
-      codexCollectFailed = true;
-      return {
-        data: [],
-        anomalies: [],
-        entryMeta: [],
-        fingerprint: "",
-        scannedFiles: 0,
-        parsedEvents: 0,
-      };
-    }),
+  const scans = await Promise.all([
+    scanCcusageSource("claude", sinceStr, untilStr, options.timeoutMs),
+    scanCcusageSource("codex", sinceStr, untilStr, options.timeoutMs),
   ]);
   scanSpinner.stop();
 
-  let claudeRaw = "";
-  let claudeEntries: CcusageDailyEntry[] = [];
-  let claudeAnomalies: NormalizationAnomaly[] = [];
-
-  if (claudeResult instanceof Error) {
-    // Codex-only users do not have local Claude data; keep other Claude failures fatal.
-    if (
-      isMissingClaudeDataError(claudeResult) ||
-      isCcusageNotInstalledError(claudeResult)
-    ) {
-      console.log("No Claude Code data found locally; syncing Codex usage only.");
-    } else {
-      console.error(claudeResult.message);
-      process.exit(1);
-    }
-  } else {
-    claudeRaw = claudeResult;
-    try {
-      const parsed = parseCcusageOutput(claudeRaw);
-      claudeEntries = parsed.data;
-      claudeAnomalies = parsed.anomalies ?? [];
-    } catch (err) {
-      console.error((err as Error).message);
-      process.exit(1);
-    }
+  const fatalScan = scans.find((scan) => !scan.ok && !scan.missingData);
+  if (fatalScan && !fatalScan.ok) {
+    console.error(fatalScan.error.message);
+    process.exit(1);
   }
+
+  const successfulScans = scans.filter((scan): scan is Extract<SourceScan, { ok: true }> => scan.ok);
 
   // Token-normalization anomalies are diagnostic, not user-actionable: rows
   // tagged medium/low confidence still get pushed (we just had to infer
@@ -360,10 +357,9 @@ export async function pushCommand(options: PushOptions, apiUrlOverride?: string)
   // those have their own warning below. So keep these counts quiet by
   // default and surface them only under --debug; ship the counts to PostHog
   // either way so we can monitor normalization quality across users.
-  const allAnomalies: NormalizationAnomaly[] = [
-    ...claudeAnomalies,
-    ...(codexParsed.anomalies ?? []),
-  ];
+  const allAnomalies: NormalizationAnomaly[] = successfulScans.flatMap(
+    (scan) => scan.parsed.anomalies ?? [],
+  );
   const anomalyCounts = countAnomalies(allAnomalies);
 
   if (isDebug() && anomalyCounts.mediumLow > 0) {
@@ -381,34 +377,23 @@ export async function pushCommand(options: PushOptions, apiUrlOverride?: string)
     }
   }
 
-  const codexMetaByDate = new Map((codexParsed.entryMeta ?? []).map((row) => [row.date, row.meta]));
-  const blockedDates = new Set<string>();
-
-  for (const [date, meta] of codexMetaByDate) {
-    if (meta.mode === "unresolved") {
-      blockedDates.add(date);
-    }
-  }
-
-  if (blockedDates.size > 0) {
-    const blocked = [...blockedDates].sort();
-    const reason = "unresolved codex normalization";
-    console.log(`Warning: skipping Codex rows for ${blocked.length} date(s) due to ${reason}: ${blocked.join(", ")}`);
-  }
-
-  const codexEntries = codexParsed.data.filter((entry) => !blockedDates.has(entry.date));
-
-  // Merge Claude + Codex entries by date
-  const merged = mergeEntries(claudeEntries, codexEntries);
-
   // Drop entries the server would reject as out-of-window. Pre-filtering keeps
   // a single edge-case row from failing the whole batch with HTTP 400.
   const droppedDates: string[] = [];
-  const entries = merged.filter((entry) => {
+  const filterEntry = (entry: CcusageDailyEntry) => {
     if (isWithinBackfillWindow(entry.date)) return true;
     droppedDates.push(entry.date);
     return false;
-  });
+  };
+  const claudeEntries = successfulScans
+    .filter((scan) => scan.agent === "claude")
+    .flatMap((scan) => scan.parsed.data)
+    .filter(filterEntry);
+  const codexEntries = successfulScans
+    .filter((scan) => scan.agent === "codex")
+    .flatMap((scan) => scan.parsed.data)
+    .filter(filterEntry);
+  const entries = mergeEntries(claudeEntries, codexEntries);
   if (droppedDates.length > 0) {
     console.log(
       `Note: skipping ${droppedDates.length} date(s) outside the ${MAX_BACKFILL_DAYS}-day backfill window: ${droppedDates.join(", ")}`,
@@ -433,12 +418,12 @@ export async function pushCommand(options: PushOptions, apiUrlOverride?: string)
     return;
   }
 
-  // Compute SHA-256 hash of Claude raw JSON plus native Codex aggregate fingerprint.
-  const hashInput = codexParsed.fingerprint ? claudeRaw + codexParsed.fingerprint : claudeRaw;
-  const hash = createHash("sha256").update(hashInput).digest("hex");
+  const hash = createHash("sha256")
+    .update(successfulScans.map((scan) => `${scan.agent}\0${scan.raw}`).join("\0"))
+    .digest("hex");
   const collector: UsageSubmitRequest["collector"] = {};
-  if (claudeEntries.length > 0) collector.claude = "ccusage-v18";
-  if (codexEntries.length > 0) collector.codex = CODEX_NATIVE_COLLECTOR;
+  if (claudeEntries.length > 0) collector.claude = CCUSAGE_CLAUDE_COLLECTOR;
+  if (codexEntries.length > 0) collector.codex = CCUSAGE_CODEX_COLLECTOR;
 
   const body: UsageSubmitRequest = {
     entries: entries.map((entry) => ({
@@ -493,7 +478,7 @@ export async function pushCommand(options: PushOptions, apiUrlOverride?: string)
     (latest, e) => (e.date > latest ? e.date : latest),
     entries[0]!.date,
   );
-  if (shouldRunCodexRepair && !codexCollectFailed && blockedDates.size === 0) {
+  if (shouldRunCodexRepair) {
     const stamp = new Date().toISOString();
     config.codex_native_repair_completed_at = stamp;
     config.codex_native_last_token_usage_repair_completed_at = stamp;

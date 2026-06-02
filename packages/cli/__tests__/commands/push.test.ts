@@ -15,15 +15,22 @@ vi.mock("../../src/lib/api.js", () => ({
 }));
 
 vi.mock("../../src/lib/ccusage.js", () => ({
-  runCcusageRawAsync: vi.fn(),
+  CCUSAGE_CLAUDE_COLLECTOR: "ccusage-claude-v20",
+  CCUSAGE_CODEX_COLLECTOR: "ccusage-codex-v20",
+  runCcusageAgentRawAsync: vi.fn(),
   parseCcusageOutput: vi.fn(),
   ensureCcusageInstalled: vi.fn(() => Promise.resolve()),
 }));
 
 vi.mock("../../src/lib/codex-native.js", () => ({
-  CODEX_NATIVE_COLLECTOR: "straude-codex-native-last-token-usage",
-  collectCodexUsageAsync: vi.fn(),
   containsSessionFile: vi.fn(),
+}));
+
+vi.mock("../../src/lib/posthog.js", () => ({
+  posthog: {
+    capture: vi.fn(),
+    _shutdown: vi.fn(() => Promise.resolve()),
+  },
 }));
 
 vi.mock("../../src/lib/telemetry.js", () => ({
@@ -31,51 +38,31 @@ vi.mock("../../src/lib/telemetry.js", () => ({
   errorMessage: (error: unknown) => error instanceof Error ? error.message : String(error),
 }));
 
+vi.mock("../../src/commands/push-output.js", () => ({
+  printDryRunEntries: vi.fn(),
+  printSubmittedResults: vi.fn(),
+  renderPushSummary: vi.fn(() => Promise.resolve()),
+}));
+
 import { pushCommand, mergeEntries } from "../../src/commands/push.js";
-import { loadConfig, saveConfig } from "../../src/lib/auth.js";
+import { loadConfig, saveConfig, updateLastPushDate } from "../../src/lib/auth.js";
 import { loginCommand } from "../../src/commands/login.js";
 import { apiRequest } from "../../src/lib/api.js";
-import { runCcusageRawAsync, parseCcusageOutput } from "../../src/lib/ccusage.js";
-import { collectCodexUsageAsync, containsSessionFile } from "../../src/lib/codex-native.js";
+import { runCcusageAgentRawAsync, parseCcusageOutput } from "../../src/lib/ccusage.js";
+import { containsSessionFile } from "../../src/lib/codex-native.js";
 import { reportUsagePushFailed } from "../../src/lib/telemetry.js";
 
 const mockLoadConfig = vi.mocked(loadConfig);
-const mockLoginCommand = vi.mocked(loginCommand);
 const mockSaveConfig = vi.mocked(saveConfig);
+const mockUpdateLastPushDate = vi.mocked(updateLastPushDate);
+const mockLoginCommand = vi.mocked(loginCommand);
 const mockApiRequest = vi.mocked(apiRequest);
-const mockRunCcusageRawAsync = vi.mocked(runCcusageRawAsync);
+const mockRunCcusageAgentRawAsync = vi.mocked(runCcusageAgentRawAsync);
 const mockParseCcusageOutput = vi.mocked(parseCcusageOutput);
-const mockCollectCodexUsageAsync = vi.mocked(collectCodexUsageAsync);
 const mockHasCodexLogs = vi.mocked(containsSessionFile);
 const mockReportUsagePushFailed = vi.mocked(reportUsagePushFailed);
 
 const fakeConfig = { token: "tok", username: "alice", api_url: "https://straude.com" };
-
-function codexOutput(data: any[] = [], extra: Record<string, any> = {}) {
-  return {
-    data,
-    anomalies: [],
-    entryMeta: [],
-    fingerprint: data.length > 0 ? "codex-native-fingerprint" : "",
-    scannedFiles: data.length > 0 ? 1 : 0,
-    parsedEvents: data.length,
-    ...extra,
-  };
-}
-
-function codexEntry(date: string, overrides: Record<string, any> = {}) {
-  return {
-    date,
-    models: ["gpt-5-codex"],
-    inputTokens: 2000,
-    outputTokens: 800,
-    cacheCreationTokens: 0,
-    cacheReadTokens: 0,
-    totalTokens: 2800,
-    costUSD: 3.0,
-    ...overrides,
-  };
-}
 
 class ExitError extends Error {
   code: number;
@@ -93,13 +80,60 @@ function todayStr(): string {
   return `${y}-${m}-${day}`;
 }
 
+function usageEntry(date: string, overrides: Record<string, unknown> = {}) {
+  return {
+    date,
+    models: ["claude-sonnet-4-5-20250929"],
+    inputTokens: 1000,
+    outputTokens: 500,
+    cacheCreationTokens: 0,
+    cacheReadTokens: 0,
+    totalTokens: 1500,
+    costUSD: 0.05,
+    ...overrides,
+  };
+}
+
+function mockSourceData(args: {
+  claude?: ReturnType<typeof usageEntry>[];
+  codex?: ReturnType<typeof usageEntry>[];
+} = {}) {
+  const claude = args.claude ?? [];
+  const codex = args.codex ?? [];
+
+  mockRunCcusageAgentRawAsync.mockImplementation(async (agent) => `${agent}-raw`);
+  mockParseCcusageOutput.mockImplementation((_raw, agent) => ({
+    data: agent === "codex" ? codex : claude,
+    rowMetadata: (agent === "codex" ? codex : claude).map((entry) => ({
+      date: entry.date,
+      agents: [agent],
+    })),
+    anomalies: [],
+  }));
+}
+
+function submitCallBody() {
+  const submitCall = mockApiRequest.mock.calls.find(([, path]) => path === "/api/usage/submit");
+  expect(submitCall).toBeDefined();
+  return JSON.parse((submitCall![2] as { body: string }).body);
+}
+
 beforeEach(() => {
-  vi.useFakeTimers({ now: new Date('2026-03-13T12:00:00Z'), toFake: ['Date'] });
+  vi.useFakeTimers({ now: new Date("2026-03-13T12:00:00Z"), toFake: ["Date"] });
   vi.clearAllMocks();
   mockLoadConfig.mockReturnValue(fakeConfig);
-  // Default: no Codex data
   mockHasCodexLogs.mockResolvedValue(false);
-  mockCollectCodexUsageAsync.mockResolvedValue(codexOutput());
+  mockSourceData();
+  mockApiRequest.mockImplementation(async (_config, path) => {
+    if (path === "/api/usage/submit") {
+      return {
+        results: [
+          { date: todayStr(), usage_id: "u-1", post_id: "p-1", post_url: "https://straude.com/post/p-1", action: "created" },
+        ],
+      };
+    }
+    return { days: [] };
+  });
   vi.spyOn(console, "log").mockImplementation(() => {});
   vi.spyOn(console, "error").mockImplementation(() => {});
   vi.spyOn(process, "exit").mockImplementation((code) => {
@@ -113,160 +147,197 @@ afterEach(() => {
 });
 
 describe("pushCommand", () => {
-  it("dry-run prints summary without API call", async () => {
-    mockRunCcusageRawAsync.mockResolvedValue("{}");
-    mockParseCcusageOutput.mockReturnValue({
-      data: [
-        {
-          date: todayStr(),
-          models: ["claude-sonnet-4-5-20250929"],
-          inputTokens: 1000,
-          outputTokens: 500,
-          cacheCreationTokens: 0,
-          cacheReadTokens: 0,
-          totalTokens: 1500,
-          costUSD: 0.05,
-        },
-      ],
-    });
-
-    // Dashboard call will fail in test (not mocked) — triggers fallback
-    await pushCommand({ dryRun: true });
-
-    // Dry run fetches dashboard for full history, but skips submit
-    expect(mockApiRequest).toHaveBeenCalledTimes(1);
-    expect(mockApiRequest).toHaveBeenCalledWith(
-      expect.anything(),
-      "/api/cli/dashboard",
-    );
-    expect(console.log).toHaveBeenCalledWith(
-      expect.stringContaining("dry run"),
-    );
-  });
-
-  it("submits today's data and prints post URL", async () => {
+  it("submits source-focused Claude usage with v20 collector metadata", async () => {
     const today = todayStr();
-
-    mockRunCcusageRawAsync.mockResolvedValue("{}");
-    mockParseCcusageOutput.mockReturnValue({
-      data: [
-        {
-          date: today,
-          models: ["claude-sonnet-4-5-20250929"],
-          inputTokens: 1000,
-          outputTokens: 500,
-          cacheCreationTokens: 0,
-          cacheReadTokens: 0,
-          totalTokens: 1500,
-          costUSD: 0.05,
-        },
-      ],
-    });
-
-    mockApiRequest.mockResolvedValue({
-      results: [
-        { date: today, usage_id: "u-1", post_id: "p-1", post_url: "https://straude.com/post/p-1" },
-      ],
-    });
+    mockSourceData({ claude: [usageEntry(today)] });
 
     await pushCommand({});
 
-    expect(mockApiRequest).toHaveBeenCalledWith(
-      fakeConfig,
-      "/api/usage/submit",
-      expect.objectContaining({ method: "POST" }),
+    expect(mockRunCcusageAgentRawAsync).toHaveBeenCalledWith(
+      "claude",
+      expect.any(String),
+      expect.any(String),
+      undefined,
     );
-    expect(console.log).toHaveBeenCalledWith(
-      expect.stringContaining("https://straude.com/post/p-1"),
+    expect(mockRunCcusageAgentRawAsync).toHaveBeenCalledWith(
+      "codex",
+      expect.any(String),
+      expect.any(String),
+      undefined,
     );
-  });
 
-  it("handles empty ccusage output", async () => {
-    mockRunCcusageRawAsync.mockResolvedValue("[]");
-    mockParseCcusageOutput.mockReturnValue({ data: [] });
-
-    await pushCommand({});
-
-    expect(mockApiRequest).not.toHaveBeenCalled();
-    expect(console.log).toHaveBeenCalledWith(
-      expect.stringContaining("No usage data found"),
-    );
-  });
-
-  it("rejects future dates", async () => {
-    await expect(pushCommand({ date: "2099-01-01" })).rejects.toThrow(ExitError);
-    expect(process.exit).toHaveBeenCalledWith(1);
-  });
-
-  it("rejects dates outside backfill window", async () => {
-    await expect(pushCommand({ date: "2020-01-01" })).rejects.toThrow(ExitError);
-    expect(process.exit).toHaveBeenCalledWith(1);
-  });
-
-  it("filters out-of-window entries client-side and warns", async () => {
-    // Faked date: 2026-03-13. 60 days back is 2026-01-12.
-    const today = todayStr();
-    const oldDate = "2026-01-12";
-
-    mockRunCcusageRawAsync.mockResolvedValue("{}");
-    mockParseCcusageOutput.mockReturnValue({
-      data: [
-        {
-          date: oldDate,
-          models: ["claude-sonnet-4-5-20250929"],
-          inputTokens: 100, outputTokens: 50,
-          cacheCreationTokens: 0, cacheReadTokens: 0,
-          totalTokens: 150, costUSD: 0.01,
-        },
-        {
-          date: today,
-          models: ["claude-sonnet-4-5-20250929"],
-          inputTokens: 1000, outputTokens: 500,
-          cacheCreationTokens: 0, cacheReadTokens: 0,
-          totalTokens: 1500, costUSD: 0.05,
-        },
-      ],
-    });
-    mockApiRequest.mockResolvedValue({
-      results: [
-        { date: today, usage_id: "u-1", post_id: "p-1", post_url: "https://straude.com/post/p-1" },
-      ],
-    });
-
-    await pushCommand({ days: 30 });
-
-    // The submit body must contain only the in-window entry.
-    const submitCall = mockApiRequest.mock.calls.find(
-      ([, path]) => path === "/api/usage/submit",
-    );
-    expect(submitCall).toBeDefined();
-    const body = JSON.parse((submitCall![2] as { body: string }).body);
+    const body = submitCallBody();
     expect(body.entries).toHaveLength(1);
-    expect(body.entries[0].date).toBe(today);
-
-    // And the user got a heads-up about the dropped row.
-    expect(console.log).toHaveBeenCalledWith(
-      expect.stringContaining(`skipping 1 date(s) outside the 30-day backfill window: ${oldDate}`),
-    );
+    expect(body.entries[0].data.costUSD).toBe(0.05);
+    expect(body.collector).toEqual({ claude: "ccusage-claude-v20" });
+    expect(body.source).toBe("cli");
   });
 
-  it("handles API submission failure", async () => {
-    mockRunCcusageRawAsync.mockResolvedValue("{}");
-    mockParseCcusageOutput.mockReturnValue({
-      data: [
-        {
-          date: todayStr(),
-          models: ["claude-sonnet-4-5-20250929"],
+  it("merges Claude and Codex data for the same day", async () => {
+    const today = todayStr();
+    mockSourceData({
+      claude: [
+        usageEntry(today, {
+          models: ["claude-opus-4-20250505"],
           inputTokens: 1000,
           outputTokens: 500,
-          cacheCreationTokens: 0,
-          cacheReadTokens: 0,
-          totalTokens: 1500,
-          costUSD: 0.05,
-        },
+          cacheCreationTokens: 100,
+          cacheReadTokens: 50,
+          totalTokens: 1650,
+          costUSD: 10,
+          modelBreakdown: [{ model: "claude-opus-4-20250505", cost_usd: 10 }],
+        }),
+      ],
+      codex: [
+        usageEntry(today, {
+          models: ["gpt-5-codex"],
+          inputTokens: 2000,
+          outputTokens: 800,
+          totalTokens: 2800,
+          costUSD: 3,
+          modelBreakdown: [{ model: "gpt-5-codex", cost_usd: 3 }],
+        }),
       ],
     });
 
+    await pushCommand({});
+
+    const body = submitCallBody();
+    const entry = body.entries[0].data;
+    expect(entry.costUSD).toBe(13);
+    expect(entry.totalTokens).toBe(4450);
+    expect(entry.models).toEqual(["claude-opus-4-20250505", "gpt-5-codex"]);
+    expect(entry.modelBreakdown).toEqual([
+      { model: "claude-opus-4-20250505", cost_usd: 10 },
+      { model: "gpt-5-codex", cost_usd: 3 },
+    ]);
+    expect(body.collector).toEqual({
+      claude: "ccusage-claude-v20",
+      codex: "ccusage-codex-v20",
+    });
+  });
+
+  it("continues with Codex usage when Claude source data is missing", async () => {
+    const today = todayStr();
+    mockRunCcusageAgentRawAsync.mockImplementation(async (agent) => {
+      if (agent === "claude") {
+        throw new Error("ccusage failed: No valid Claude data directories found");
+      }
+      return "codex-raw";
+    });
+    mockParseCcusageOutput.mockImplementation((_raw, agent) => ({
+      data: agent === "codex" ? [
+        usageEntry(today, { models: ["gpt-5-codex"], costUSD: 3 }),
+      ] : [],
+      rowMetadata: [],
+      anomalies: [],
+    }));
+
+    await pushCommand({});
+
+    const body = submitCallBody();
+    expect(body.entries).toHaveLength(1);
+    expect(body.entries[0].data.models).toEqual(["gpt-5-codex"]);
+    expect(body.collector).toEqual({ codex: "ccusage-codex-v20" });
+  });
+
+  it("fails on generic source errors even if the other source has data", async () => {
+    mockRunCcusageAgentRawAsync.mockImplementation(async (agent) => {
+      if (agent === "claude") throw new Error("ccusage failed: unexpected runtime error");
+      return "codex-raw";
+    });
+    mockParseCcusageOutput.mockReturnValue({
+      data: [usageEntry(todayStr(), { models: ["gpt-5-codex"], costUSD: 3 })],
+      rowMetadata: [],
+      anomalies: [],
+    });
+
+    await expect(pushCommand({})).rejects.toThrow(ExitError);
+    expect(process.exit).toHaveBeenCalledWith(1);
+    expect(mockApiRequest).not.toHaveBeenCalled();
+  });
+
+  it("forwards date ranges and timeout to both source scans", async () => {
+    await pushCommand({ date: "2026-03-12", timeoutMs: 300_000 });
+
+    expect(mockRunCcusageAgentRawAsync).toHaveBeenCalledWith(
+      "claude",
+      "20260312",
+      "20260312",
+      300_000,
+    );
+    expect(mockRunCcusageAgentRawAsync).toHaveBeenCalledWith(
+      "codex",
+      "20260312",
+      "20260312",
+      300_000,
+    );
+  });
+
+  it("runs one-time 30-day Codex repair range and persists repair markers", async () => {
+    const today = todayStr();
+    mockHasCodexLogs.mockResolvedValue(true);
+    mockLoadConfig.mockReturnValue({
+      ...fakeConfig,
+      device_id: "device-1",
+      device_name: "work-laptop",
+    });
+    mockSourceData({ codex: [usageEntry(today, { models: ["gpt-5-codex"], costUSD: 3 })] });
+
+    await pushCommand({ days: 3 });
+
+    expect(mockRunCcusageAgentRawAsync).toHaveBeenCalledWith(
+      "claude",
+      "20260212",
+      "20260313",
+      undefined,
+    );
+    expect(mockRunCcusageAgentRawAsync).toHaveBeenCalledWith(
+      "codex",
+      "20260212",
+      "20260313",
+      undefined,
+    );
+    expect(mockSaveConfig).toHaveBeenCalledWith(expect.objectContaining({
+      codex_native_repair_completed_at: expect.any(String),
+      codex_native_last_token_usage_repair_completed_at: expect.any(String),
+      last_push_date: today,
+    }));
+  });
+
+  it("generates device_id on first push and includes it in submit body", async () => {
+    const today = todayStr();
+    mockLoadConfig.mockReturnValue({ token: "tok", username: "alice", api_url: "https://straude.com" });
+    mockSourceData({ claude: [usageEntry(today)] });
+
+    await pushCommand({});
+
+    expect(mockSaveConfig).toHaveBeenCalled();
+    const savedConfig = mockSaveConfig.mock.calls[0]![0];
+    const body = submitCallBody();
+    expect(savedConfig.device_id).toMatch(/^[0-9a-f-]{36}$/i);
+    expect(body.device_id).toBe(savedConfig.device_id);
+    expect(body.device_name).toBe(savedConfig.device_name);
+  });
+
+  it("updates last push date after a successful normal push", async () => {
+    const today = todayStr();
+    mockLoadConfig.mockReturnValue({
+      ...fakeConfig,
+      device_id: "device-1",
+      device_name: "work-laptop",
+      codex_native_repair_completed_at: "2026-03-01T00:00:00.000Z",
+      codex_native_last_token_usage_repair_completed_at: "2026-03-01T00:00:00.000Z",
+    });
+    mockSourceData({ claude: [usageEntry(today)] });
+
+    await pushCommand({});
+
+    expect(mockUpdateLastPushDate).toHaveBeenCalledWith(today);
+  });
+
+  it("reports API submission failures", async () => {
+    mockSourceData({ claude: [usageEntry(todayStr())] });
     mockApiRequest.mockRejectedValue(new Error("Server error"));
 
     await expect(pushCommand({})).rejects.toThrow(ExitError);
@@ -275,712 +346,39 @@ describe("pushCommand", () => {
       expect.any(Error),
       { command: "push", stage: "submit" },
     );
-    expect(process.exit).toHaveBeenCalledWith(1);
   });
 
-  it("passes --date option correctly", async () => {
-    const yesterday = new Date();
-    yesterday.setDate(yesterday.getDate() - 1);
-    const y = yesterday.getFullYear();
-    const m = String(yesterday.getMonth() + 1).padStart(2, "0");
-    const d = String(yesterday.getDate()).padStart(2, "0");
-    const dateStr = `${y}-${m}-${d}`;
-    const compactStr = `${y}${m}${d}`;
-
-    mockRunCcusageRawAsync.mockResolvedValue("[]");
-    mockParseCcusageOutput.mockReturnValue({ data: [] });
-
-    await pushCommand({ date: dateStr });
-
-    expect(mockRunCcusageRawAsync).toHaveBeenCalledWith(compactStr, compactStr, undefined);
-  });
-
-  it("forwards --timeout to ccusage and scans Codex natively", async () => {
-    mockRunCcusageRawAsync.mockResolvedValue("[]");
-    mockParseCcusageOutput.mockReturnValue({ data: [] });
-
-    await pushCommand({ timeoutMs: 300_000 });
-
-    expect(mockRunCcusageRawAsync).toHaveBeenCalledWith(
-      expect.any(String), expect.any(String), 300_000,
-    );
-    expect(mockCollectCodexUsageAsync).toHaveBeenCalledWith(
-      expect.any(String), expect.any(String),
-    );
-  });
-
-  it("passes --days option correctly", async () => {
-    mockRunCcusageRawAsync.mockResolvedValue("[]");
-    mockParseCcusageOutput.mockReturnValue({ data: [] });
-
-    await pushCommand({ days: 3 });
-
-    expect(mockRunCcusageRawAsync).toHaveBeenCalledTimes(1);
-    const [sinceArg, untilArg] = mockRunCcusageRawAsync.mock.calls[0]!;
-    const today = new Date();
-    const todayCompact = `${today.getFullYear()}${String(today.getMonth() + 1).padStart(2, "0")}${String(today.getDate()).padStart(2, "0")}`;
-    expect(untilArg).toBe(todayCompact);
-    expect(sinceArg).not.toBe(untilArg);
-  });
-
-  it("--days 30 uses the full backfill window", async () => {
-    mockRunCcusageRawAsync.mockResolvedValue("[]");
-    mockParseCcusageOutput.mockReturnValue({ data: [] });
-
-    await pushCommand({ days: 30 });
-
-    const [sinceArg, untilArg] = mockRunCcusageRawAsync.mock.calls[0]!;
-    const today = new Date();
-    const fmt = (d: Date) =>
-      `${d.getFullYear()}${String(d.getMonth() + 1).padStart(2, "0")}${String(d.getDate()).padStart(2, "0")}`;
-    const twentyNineDaysAgo = new Date(today);
-    twentyNineDaysAgo.setDate(today.getDate() - 29);
-    expect(sinceArg).toBe(fmt(twentyNineDaysAgo));
-    expect(untilArg).toBe(fmt(today));
-  });
-
-  it("runs one-time 30-day Codex repair before normal incremental sync", async () => {
-    const today = todayStr();
-    mockHasCodexLogs.mockResolvedValue(true);
-    mockLoadConfig.mockReturnValue({
-      ...fakeConfig,
-      device_id: "device-1",
-      device_name: "work-laptop",
-    });
-    mockRunCcusageRawAsync.mockResolvedValue("{}");
-    mockParseCcusageOutput.mockReturnValue({
-      data: [
-        {
-          date: today,
-          models: ["claude-sonnet-4-5-20250929"],
-          inputTokens: 1000,
-          outputTokens: 500,
-          cacheCreationTokens: 0,
-          cacheReadTokens: 0,
-          totalTokens: 1500,
-          costUSD: 0.05,
-        },
-      ],
-    });
-    mockCollectCodexUsageAsync.mockResolvedValue(codexOutput([codexEntry(today)]));
-    mockApiRequest.mockResolvedValue({
-      results: [
-        { date: today, usage_id: "u-1", post_id: "p-1", post_url: "https://straude.com/post/p-1", action: "updated" },
-      ],
-    });
-
-    await pushCommand({ days: 3 });
-
-    const [sinceArg, untilArg] = mockRunCcusageRawAsync.mock.calls[0]!;
-    const now = new Date();
-    const fmt = (d: Date) =>
-      `${d.getFullYear()}${String(d.getMonth() + 1).padStart(2, "0")}${String(d.getDate()).padStart(2, "0")}`;
-    const twentyNineDaysAgo = new Date(now);
-    twentyNineDaysAgo.setDate(now.getDate() - 29);
-    expect(sinceArg).toBe(fmt(twentyNineDaysAgo));
-    expect(untilArg).toBe(fmt(now));
-    expect(mockSaveConfig).toHaveBeenCalledWith(expect.objectContaining({
-      codex_native_repair_completed_at: expect.any(String),
-      codex_native_last_token_usage_repair_completed_at: expect.any(String),
-      last_push_date: today,
-    }));
-  });
-
-  it("merges Claude + Codex data for the same day", async () => {
-    const today = todayStr();
-
-    mockRunCcusageRawAsync.mockResolvedValue("{}");
-    mockParseCcusageOutput.mockReturnValue({
-      data: [
-        {
-          date: today,
-          models: ["claude-opus-4-20250505"],
-          inputTokens: 1000,
-          outputTokens: 500,
-          cacheCreationTokens: 100,
-          cacheReadTokens: 50,
-          totalTokens: 1650,
-          costUSD: 10.0,
-        },
-      ],
-    });
-
-    mockCollectCodexUsageAsync.mockResolvedValue(codexOutput([codexEntry(today)]));
-
-    mockApiRequest.mockResolvedValue({
-      results: [
-        { date: today, usage_id: "u-1", post_id: "p-1", post_url: "https://straude.com/post/p-1", action: "created" },
-      ],
-    });
-
-    await pushCommand({});
-
-    // Verify merged data was submitted
-    const submitCall = mockApiRequest.mock.calls[0]!;
-    const body = JSON.parse(submitCall[2]!.body as string);
-    const entry = body.entries[0].data;
-
-    expect(entry.costUSD).toBe(13.0);
-    expect(entry.totalTokens).toBe(4450);
-    expect(entry.inputTokens).toBe(3000);
-    expect(entry.outputTokens).toBe(1300);
-    expect(entry.models).toContain("claude-opus-4-20250505");
-    expect(entry.models).toContain("gpt-5-codex");
-    expect(entry.modelBreakdown).toHaveLength(2);
-    expect(entry.modelBreakdown[0]).toEqual({ model: "claude-opus-4-20250505", cost_usd: 10.0 });
-    expect(entry.modelBreakdown[1]).toEqual({ model: "gpt-5-codex", cost_usd: 3.0 });
-    expect(body.collector).toEqual({
-      claude: "ccusage-v18",
-      codex: "straude-codex-native-last-token-usage",
-    });
-  });
-
-  it("generates device_id on first push and persists to config", async () => {
-    const today = todayStr();
-    // Config without device_id
-    const configWithoutDevice = { token: "tok", username: "alice", api_url: "https://straude.com" };
-    mockLoadConfig.mockReturnValue(configWithoutDevice);
-
-    mockRunCcusageRawAsync.mockResolvedValue("{}");
-    mockParseCcusageOutput.mockReturnValue({
-      data: [
-        {
-          date: today,
-          models: ["claude-sonnet-4-5-20250929"],
-          inputTokens: 1000, outputTokens: 500,
-          cacheCreationTokens: 0, cacheReadTokens: 0,
-          totalTokens: 1500, costUSD: 0.05,
-        },
-      ],
-    });
-
-    mockApiRequest.mockResolvedValue({
-      results: [
-        { date: today, usage_id: "u-1", post_id: "p-1", post_url: "https://straude.com/post/p-1", action: "created" },
-      ],
-    });
-
-    await pushCommand({});
-
-    // saveConfig should have been called with the generated device_id
-    expect(mockSaveConfig).toHaveBeenCalled();
-    const savedConfig = mockSaveConfig.mock.calls[0]![0];
-    expect(savedConfig.device_id).toBeDefined();
-    expect(savedConfig.device_id).toMatch(/^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i);
-    expect(savedConfig.device_name).toBeDefined();
-
-    // device_id should be included in the API request body
-    const submitCall = mockApiRequest.mock.calls[0]!;
-    const body = JSON.parse(submitCall[2]!.body as string);
-    expect(body.device_id).toBe(savedConfig.device_id);
-    expect(body.device_name).toBe(savedConfig.device_name);
-  });
-
-  it("reuses existing device_id (does not regenerate)", async () => {
-    const today = todayStr();
-    const existingDeviceId = "11111111-2222-3333-4444-555555555555";
-    mockLoadConfig.mockReturnValue({
-      token: "tok", username: "alice", api_url: "https://straude.com",
-      device_id: existingDeviceId, device_name: "my-desktop",
-    });
-
-    mockRunCcusageRawAsync.mockResolvedValue("{}");
-    mockParseCcusageOutput.mockReturnValue({
-      data: [
-        {
-          date: today,
-          models: ["claude-sonnet-4-5-20250929"],
-          inputTokens: 1000, outputTokens: 500,
-          cacheCreationTokens: 0, cacheReadTokens: 0,
-          totalTokens: 1500, costUSD: 0.05,
-        },
-      ],
-    });
-
-    mockApiRequest.mockResolvedValue({
-      results: [
-        { date: today, usage_id: "u-1", post_id: "p-1", post_url: "https://straude.com/post/p-1", action: "created" },
-      ],
-    });
-
-    await pushCommand({});
-
-    // saveConfig should NOT have been called (device_id already existed)
-    expect(mockSaveConfig).not.toHaveBeenCalled();
-
-    // Existing device_id should be in the API request
-    const submitCall = mockApiRequest.mock.calls[0]!;
-    const body = JSON.parse(submitCall[2]!.body as string);
-    expect(body.device_id).toBe(existingDeviceId);
-    expect(body.device_name).toBe("my-desktop");
-  });
-
-  it("includes device_id and device_name in API request body", async () => {
-    const today = todayStr();
-    mockLoadConfig.mockReturnValue({
-      token: "tok", username: "alice", api_url: "https://straude.com",
-      device_id: "aaaa-bbbb-cccc-dddd", device_name: "work-laptop",
-    });
-
-    mockRunCcusageRawAsync.mockResolvedValue("{}");
-    mockParseCcusageOutput.mockReturnValue({
-      data: [
-        {
-          date: today,
-          models: ["claude-sonnet-4-5-20250929"],
-          inputTokens: 1000, outputTokens: 500,
-          cacheCreationTokens: 0, cacheReadTokens: 0,
-          totalTokens: 1500, costUSD: 0.05,
-        },
-      ],
-    });
-
-    mockApiRequest.mockResolvedValue({
-      results: [
-        { date: today, usage_id: "u-1", post_id: "p-1", post_url: "https://straude.com/post/p-1", action: "created" },
-      ],
-    });
-
-    await pushCommand({});
-
-    const submitCall = mockApiRequest.mock.calls[0]!;
-    const body = JSON.parse(submitCall[2]!.body as string);
-    expect(body.device_id).toBe("aaaa-bbbb-cccc-dddd");
-    expect(body.device_name).toBe("work-laptop");
-    expect(body.source).toBe("cli");
-    expect(body.entries).toHaveLength(1);
-  });
-
-  it("proceeds with Claude data only when Codex fails", async () => {
-    const today = todayStr();
-
-    mockRunCcusageRawAsync.mockResolvedValue("{}");
-    mockParseCcusageOutput.mockReturnValue({
-      data: [
-        {
-          date: today,
-          models: ["claude-sonnet-4-5-20250929"],
-          inputTokens: 1000,
-          outputTokens: 500,
-          cacheCreationTokens: 0,
-          cacheReadTokens: 0,
-          totalTokens: 1500,
-          costUSD: 0.05,
-        },
-      ],
-    });
-
-    // Codex fails silently
-    mockCollectCodexUsageAsync.mockResolvedValue(codexOutput());
-
-    mockApiRequest.mockResolvedValue({
-      results: [
-        { date: today, usage_id: "u-1", post_id: "p-1", post_url: "https://straude.com/post/p-1", action: "created" },
-      ],
-    });
-
-    await pushCommand({});
-
-    // Should still submit
-    expect(mockApiRequest).toHaveBeenCalled();
-  });
-
-  it("proceeds with Codex data only when Claude local data is missing", async () => {
-    const today = todayStr();
-
-    mockRunCcusageRawAsync.mockRejectedValue(
-      new Error("ccusage failed: No valid Claude data directories found"),
-    );
-    mockCollectCodexUsageAsync.mockResolvedValue(codexOutput([codexEntry(today)]));
-
-    mockApiRequest.mockResolvedValue({
-      results: [
-        { date: today, usage_id: "u-1", post_id: "p-1", post_url: "https://straude.com/post/p-1", action: "created" },
-      ],
-    });
-
-    await pushCommand({});
-
-    expect(mockParseCcusageOutput).not.toHaveBeenCalled();
-    expect(console.log).toHaveBeenCalledWith(
-      "No Claude Code data found locally; syncing Codex usage only.",
-    );
-
-    const submitCall = mockApiRequest.mock.calls[0]!;
-    const body = JSON.parse(submitCall[2]!.body as string);
-    expect(body.entries).toHaveLength(1);
-    expect(body.entries[0]!.data.models).toEqual(["gpt-5-codex"]);
-    expect(body.entries[0]!.data.costUSD).toBe(3.0);
-    expect(body.collector).toEqual({ codex: "straude-codex-native-last-token-usage" });
-  });
-
-  it("shows no usage when Claude local data is missing and Codex has no data", async () => {
-    mockRunCcusageRawAsync.mockRejectedValue(
-      new Error("ccusage failed: No valid Claude data directories found"),
-    );
-    mockCollectCodexUsageAsync.mockResolvedValue(codexOutput());
-
-    await pushCommand({});
-
-    expect(mockApiRequest).not.toHaveBeenCalled();
-    expect(console.log).toHaveBeenCalledWith(
-      "No Claude Code data found locally; syncing Codex usage only.",
-    );
-    expect(console.log).toHaveBeenCalledWith(
-      expect.stringContaining("No usage data found"),
-    );
-  });
-
-  it("still fails on generic Claude errors even if Codex has data", async () => {
-    const today = todayStr();
-
-    mockRunCcusageRawAsync.mockRejectedValue(
-      new Error("ccusage failed: unexpected runtime error"),
-    );
-    mockCollectCodexUsageAsync.mockResolvedValue(codexOutput([codexEntry(today)]));
-
-    await expect(pushCommand({})).rejects.toThrow(ExitError);
-    expect(process.exit).toHaveBeenCalledWith(1);
-    expect(mockApiRequest).not.toHaveBeenCalled();
-  });
-
-  it("skips unresolved codex rows without dropping Claude rows on the same date", async () => {
-    const today = todayStr();
-
-    mockRunCcusageRawAsync.mockResolvedValue("{}");
-    mockParseCcusageOutput.mockReturnValue({
-      data: [
-        {
-          date: today,
-          models: ["claude-sonnet-4-5-20250929"],
-          inputTokens: 1000,
-          outputTokens: 500,
-          cacheCreationTokens: 0,
-          cacheReadTokens: 0,
-          totalTokens: 1500,
-          costUSD: 0.05,
-        },
-      ],
-    });
-
-    mockCollectCodexUsageAsync.mockResolvedValue(codexOutput(
-      [codexEntry(today)],
-      {
-      anomalies: [
-        {
-          date: today,
-          source: "codex",
-          mode: "unresolved",
-          confidence: "low",
-          consistencyError: 42,
-          warnings: ["Unable to infer split"],
-        },
-      ],
-      entryMeta: [
-        {
-          date: today,
-          meta: {
-            mode: "unresolved",
-            confidence: "low",
-            warnings: ["Unable to infer split"],
-            consistencyError: 42,
-          },
-        },
-      ],
-      },
-    ));
-
-    mockApiRequest.mockResolvedValue({
-      results: [
-        { date: today, usage_id: "u-1", post_id: "p-1", post_url: "https://straude.com/post/p-1", action: "created" },
-      ],
-    });
-
-    await pushCommand({});
-
-    const submitCall = mockApiRequest.mock.calls[0]!;
-    const body = JSON.parse(submitCall[2]!.body as string);
-    expect(body.entries).toHaveLength(1);
-    expect(body.entries[0]!.data.models).toEqual(["claude-sonnet-4-5-20250929"]);
-    expect(body.entries[0]!.data.costUSD).toBe(0.05);
-  });
-
-});
-
-// ---------------------------------------------------------------------------
-// login-if-needed (absorbed from syncCommand)
-// ---------------------------------------------------------------------------
-
-function daysAgoStr(n: number): string {
-  const d = new Date();
-  d.setDate(d.getDate() - n);
-  const y = d.getFullYear();
-  const m = String(d.getMonth() + 1).padStart(2, "0");
-  const day = String(d.getDate()).padStart(2, "0");
-  return `${y}-${m}-${day}`;
-}
-
-describe("pushCommand — login-if-needed", () => {
-  it("runs login when not authenticated, then pushes today", async () => {
+  it("runs login when not authenticated", async () => {
     mockLoadConfig
       .mockReturnValueOnce(null)
       .mockReturnValueOnce(fakeConfig);
     mockLoginCommand.mockResolvedValue(undefined);
 
-    mockRunCcusageRawAsync.mockResolvedValue("[]");
-    mockParseCcusageOutput.mockReturnValue({ data: [] });
-
     await pushCommand({});
 
     expect(mockLoginCommand).toHaveBeenCalledTimes(1);
   });
-
-  it("exits if login fails to produce config", async () => {
-    mockLoadConfig.mockReturnValue(null);
-    mockLoginCommand.mockResolvedValue(undefined);
-
-    await expect(pushCommand({})).rejects.toThrow(ExitError);
-    expect(process.exit).toHaveBeenCalledWith(1);
-  });
 });
-
-// ---------------------------------------------------------------------------
-// smart sync (no --days/--date flags)
-// ---------------------------------------------------------------------------
-
-describe("pushCommand — smart sync", () => {
-  it("backfills 3 days when no last_push_date", async () => {
-    mockLoadConfig.mockReturnValue(fakeConfig);
-    mockRunCcusageRawAsync.mockResolvedValue("[]");
-    mockParseCcusageOutput.mockReturnValue({ data: [] });
-
-    await pushCommand({});
-
-    expect(mockLoginCommand).not.toHaveBeenCalled();
-    // First push backfills 3 days: sinceDate = today - 2, untilDate = today
-    const [sinceArg, untilArg] = mockRunCcusageRawAsync.mock.calls[0]!;
-    const today = new Date();
-    const threeDaysAgo = new Date(today);
-    threeDaysAgo.setDate(threeDaysAgo.getDate() - 2);
-    const fmt = (d: Date) =>
-      `${d.getFullYear()}${String(d.getMonth() + 1).padStart(2, "0")}${String(d.getDate()).padStart(2, "0")}`;
-    expect(sinceArg).toBe(fmt(threeDaysAgo));
-    expect(untilArg).toBe(fmt(today));
-  });
-
-  it("re-syncs today when last_push_date is today", async () => {
-    mockLoadConfig.mockReturnValue({ ...fakeConfig, last_push_date: todayStr() });
-    mockRunCcusageRawAsync.mockResolvedValue("[]");
-    mockParseCcusageOutput.mockReturnValue({ data: [] });
-
-    await pushCommand({});
-
-    const [sinceArg, untilArg] = mockRunCcusageRawAsync.mock.calls[0]!;
-    expect(sinceArg).toBe(untilArg);
-  });
-
-  it("pushes diff days when last_push_date is in the past", async () => {
-    mockLoadConfig.mockReturnValue({ ...fakeConfig, last_push_date: daysAgoStr(3) });
-    mockRunCcusageRawAsync.mockResolvedValue("[]");
-    mockParseCcusageOutput.mockReturnValue({ data: [] });
-
-    await pushCommand({});
-
-    const [sinceArg, untilArg] = mockRunCcusageRawAsync.mock.calls[0]!;
-    const threeDaysAgoDate = new Date();
-    threeDaysAgoDate.setDate(threeDaysAgoDate.getDate() - 3);
-    const fmt = (d: Date) =>
-      `${d.getFullYear()}${String(d.getMonth() + 1).padStart(2, "0")}${String(d.getDate()).padStart(2, "0")}`;
-    // sinceDate should equal last_push_date (inclusive)
-    expect(sinceArg).toBe(fmt(threeDaysAgoDate));
-    expect(sinceArg).not.toBe(untilArg);
-  });
-
-  it("caps smart sync at DEFAULT_SYNC_DAYS (7) when gap is large", async () => {
-    mockLoadConfig.mockReturnValue({ ...fakeConfig, last_push_date: daysAgoStr(60) });
-    mockRunCcusageRawAsync.mockResolvedValue("[]");
-    mockParseCcusageOutput.mockReturnValue({ data: [] });
-
-    await pushCommand({});
-
-    const [sinceArg] = mockRunCcusageRawAsync.mock.calls[0]!;
-    // Since date should be 6 days ago (DEFAULT_SYNC_DAYS=7, including today)
-    const sixDaysAgo = new Date();
-    sixDaysAgo.setDate(sixDaysAgo.getDate() - 6);
-    const expectedSince = `${sixDaysAgo.getFullYear()}${String(sixDaysAgo.getMonth() + 1).padStart(2, "0")}${String(sixDaysAgo.getDate()).padStart(2, "0")}`;
-    expect(sinceArg).toBe(expectedSince);
-  });
-
-  it("includes last_push_date when gap is 1 day (to catch mid-day updates)", async () => {
-    const yesterday = daysAgoStr(1);
-    mockLoadConfig.mockReturnValue({ ...fakeConfig, last_push_date: yesterday });
-    mockRunCcusageRawAsync.mockResolvedValue("[]");
-    mockParseCcusageOutput.mockReturnValue({ data: [] });
-
-    await pushCommand({});
-
-    const [sinceArg, untilArg] = mockRunCcusageRawAsync.mock.calls[0]!;
-    const today = new Date();
-    const yesterdayDate = new Date(today);
-    yesterdayDate.setDate(yesterdayDate.getDate() - 1);
-    const fmt = (d: Date) =>
-      `${d.getFullYear()}${String(d.getMonth() + 1).padStart(2, "0")}${String(d.getDate()).padStart(2, "0")}`;
-
-    // Should sync from yesterday (last_push_date) to today
-    expect(sinceArg).toBe(fmt(yesterdayDate));
-    expect(untilArg).toBe(fmt(today));
-  });
-
-  it("includes last_push_date when gap equals DEFAULT_SYNC_DAYS (7)", async () => {
-    const sevenDaysAgo = daysAgoStr(7);
-    mockLoadConfig.mockReturnValue({ ...fakeConfig, last_push_date: sevenDaysAgo });
-    mockRunCcusageRawAsync.mockResolvedValue("[]");
-    mockParseCcusageOutput.mockReturnValue({ data: [] });
-
-    await pushCommand({});
-
-    const [sinceArg, untilArg] = mockRunCcusageRawAsync.mock.calls[0]!;
-    const sevenDaysAgoDate = new Date();
-    sevenDaysAgoDate.setDate(sevenDaysAgoDate.getDate() - 7);
-    const fmt = (d: Date) =>
-      `${d.getFullYear()}${String(d.getMonth() + 1).padStart(2, "0")}${String(d.getDate()).padStart(2, "0")}`;
-    const today = new Date();
-
-    // gap=7 equals DEFAULT_SYNC_DAYS — should still include last_push_date
-    expect(sinceArg).toBe(fmt(sevenDaysAgoDate));
-    expect(untilArg).toBe(fmt(today));
-  });
-});
-
-// ---------------------------------------------------------------------------
-// mergeEntries
-// ---------------------------------------------------------------------------
 
 describe("mergeEntries", () => {
-  it("merges entries for the same date", () => {
-    const claude = [{
-      date: "2025-06-01",
-      models: ["claude-opus-4-20250505"],
-      inputTokens: 1000, outputTokens: 500,
-      cacheCreationTokens: 100, cacheReadTokens: 50,
-      totalTokens: 1650, costUSD: 10.0,
-    }];
-    const codex = [{
-      date: "2025-06-01",
-      models: ["gpt-5-codex"],
-      inputTokens: 2000, outputTokens: 800,
-      cacheCreationTokens: 0, cacheReadTokens: 0,
-      totalTokens: 2800, costUSD: 3.0,
-    }];
+  it("keeps separate days sorted by date", () => {
+    const merged = mergeEntries(
+      [usageEntry("2026-03-13")],
+      [usageEntry("2026-03-12", { models: ["gpt-5-codex"], costUSD: 1 })],
+    );
 
-    const merged = mergeEntries(claude, codex);
-    expect(merged).toHaveLength(1);
-    expect(merged[0]!.costUSD).toBe(13.0);
-    expect(merged[0]!.totalTokens).toBe(4450);
-    expect(merged[0]!.models).toEqual(["claude-opus-4-20250505", "gpt-5-codex"]);
+    expect(merged.map((entry) => entry.date)).toEqual(["2026-03-12", "2026-03-13"]);
+  });
+
+  it("distributes cost across models when no source breakdown is available", () => {
+    const merged = mergeEntries(
+      [usageEntry("2026-03-13", { models: ["a", "b"], costUSD: 4 })],
+      [],
+    );
+
     expect(merged[0]!.modelBreakdown).toEqual([
-      { model: "claude-opus-4-20250505", cost_usd: 10.0 },
-      { model: "gpt-5-codex", cost_usd: 3.0 },
+      { model: "a", cost_usd: 2 },
+      { model: "b", cost_usd: 2 },
     ]);
-  });
-
-  it("keeps separate entries for different dates", () => {
-    const claude = [{
-      date: "2025-06-01",
-      models: ["claude-opus-4-20250505"],
-      inputTokens: 1000, outputTokens: 500,
-      cacheCreationTokens: 0, cacheReadTokens: 0,
-      totalTokens: 1500, costUSD: 5.0,
-    }];
-    const codex = [{
-      date: "2025-06-02",
-      models: ["gpt-5-codex"],
-      inputTokens: 2000, outputTokens: 800,
-      cacheCreationTokens: 0, cacheReadTokens: 0,
-      totalTokens: 2800, costUSD: 3.0,
-    }];
-
-    const merged = mergeEntries(claude, codex);
-    expect(merged).toHaveLength(2);
-    expect(merged[0]!.date).toBe("2025-06-01");
-    expect(merged[0]!.costUSD).toBe(5.0);
-    expect(merged[1]!.date).toBe("2025-06-02");
-    expect(merged[1]!.costUSD).toBe(3.0);
-  });
-
-  it("handles Claude-only days", () => {
-    const claude = [{
-      date: "2025-06-01",
-      models: ["claude-sonnet-4-20250514"],
-      inputTokens: 1000, outputTokens: 500,
-      cacheCreationTokens: 0, cacheReadTokens: 0,
-      totalTokens: 1500, costUSD: 0.05,
-    }];
-
-    const merged = mergeEntries(claude, []);
-    expect(merged).toHaveLength(1);
-    expect(merged[0]!.costUSD).toBe(0.05);
-    expect(merged[0]!.modelBreakdown).toEqual([
-      { model: "claude-sonnet-4-20250514", cost_usd: 0.05 },
-    ]);
-  });
-
-  it("handles Codex-only days", () => {
-    const codex = [{
-      date: "2025-06-01",
-      models: ["gpt-5-codex"],
-      inputTokens: 2000, outputTokens: 800,
-      cacheCreationTokens: 0, cacheReadTokens: 0,
-      totalTokens: 2800, costUSD: 3.0,
-    }];
-
-    const merged = mergeEntries([], codex);
-    expect(merged).toHaveLength(1);
-    expect(merged[0]!.costUSD).toBe(3.0);
-    expect(merged[0]!.modelBreakdown).toEqual([
-      { model: "gpt-5-codex", cost_usd: 3.0 },
-    ]);
-  });
-
-  it("distributes cost evenly across multiple models from same source", () => {
-    const claude = [{
-      date: "2025-06-01",
-      models: ["claude-opus-4-20250505", "claude-sonnet-4-20250514"],
-      inputTokens: 1000, outputTokens: 500,
-      cacheCreationTokens: 0, cacheReadTokens: 0,
-      totalTokens: 1500, costUSD: 10.0,
-    }];
-
-    const merged = mergeEntries(claude, []);
-    expect(merged[0]!.modelBreakdown).toEqual([
-      { model: "claude-opus-4-20250505", cost_usd: 5.0 },
-      { model: "claude-sonnet-4-20250514", cost_usd: 5.0 },
-    ]);
-  });
-
-  it("returns sorted by date", () => {
-    const claude = [{
-      date: "2025-06-03",
-      models: ["claude-opus-4-20250505"],
-      inputTokens: 0, outputTokens: 0,
-      cacheCreationTokens: 0, cacheReadTokens: 0,
-      totalTokens: 0, costUSD: 1.0,
-    }];
-    const codex = [{
-      date: "2025-06-01",
-      models: ["gpt-5-codex"],
-      inputTokens: 0, outputTokens: 0,
-      cacheCreationTokens: 0, cacheReadTokens: 0,
-      totalTokens: 0, costUSD: 2.0,
-    }];
-
-    const merged = mergeEntries(claude, codex);
-    expect(merged[0]!.date).toBe("2025-06-01");
-    expect(merged[1]!.date).toBe("2025-06-03");
-  });
-
-  it("handles both sources empty", () => {
-    const merged = mergeEntries([], []);
-    expect(merged).toEqual([]);
   });
 });

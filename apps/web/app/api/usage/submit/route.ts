@@ -8,10 +8,14 @@ import { formatCurrency } from "@/lib/utils/format";
 import type { UsageSubmitRequest, UsageSubmitResponse, CcusageDailyEntry, ModelBreakdownEntry, UsageCollectorMeta } from "@/types";
 
 const MAX_BACKFILL_DAYS = 30;
-// Bump in lockstep with CODEX_NATIVE_COLLECTOR in packages/cli/src/lib/codex-native.ts.
-// The trusted collector is the only one allowed to *lower* totals on UPSERT,
-// which is how the server accepts retroactive corrections from a fixed CLI.
+// Bump in lockstep with trusted Codex collectors in packages/cli/src/lib.
+// Trusted collectors are the only ones allowed to *lower* totals on UPSERT,
+// which is how the server accepts retroactive corrections from fixed CLIs.
 const TRUSTED_CODEX_COLLECTOR = "straude-codex-native-last-token-usage";
+const TRUSTED_CODEX_COLLECTORS = new Set([
+  TRUSTED_CODEX_COLLECTOR,
+  "ccusage-codex-v20",
+]);
 const LEGACY_DEVICE_ID = "00000000-0000-0000-0000-000000000000";
 const CODEX_MODEL_RE = /^(gpt-|o3|o4)/i;
 const COST_EPSILON_USD = 0.005;
@@ -346,7 +350,8 @@ export async function POST(request: Request) {
 
   const deviceId = body.device_id;
   const deviceName = body.device_name;
-  const requestHasTrustedCodexCollector = body.collector?.codex === TRUSTED_CODEX_COLLECTOR;
+  const requestHasTrustedCodexCollector = typeof body.collector?.codex === "string"
+    && TRUSTED_CODEX_COLLECTORS.has(body.collector.codex);
 
   if (!deviceId) {
     return NextResponse.json(

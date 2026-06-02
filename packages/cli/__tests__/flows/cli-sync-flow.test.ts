@@ -145,10 +145,45 @@ function ccusageJson(dates: string[]) {
   });
 }
 
+function ccusageCodexJson(dates: string[]) {
+  return JSON.stringify({
+    daily: dates.map((date) => ({
+      date,
+      inputTokens: 2000,
+      outputTokens: 800,
+      cachedInputTokens: 0,
+      reasoningOutputTokens: 0,
+      totalTokens: 2800,
+      costUSD: 3.0,
+      models: {
+        "gpt-5-codex": {
+          inputTokens: 2000,
+          cachedInputTokens: 0,
+          outputTokens: 800,
+          reasoningOutputTokens: 0,
+          totalTokens: 2800,
+          isFallback: false,
+        },
+      },
+    })),
+    totals: {},
+  });
+}
+
 function mockCcusageOnly(json: string) {
   mockExecFileSync.mockImplementation(((cmd: string, args: string[]) => {
+    if (args.includes("--version")) return "ccusage 20.0.6";
+    if (args.includes("codex")) return "[]";
     return json;
-  }) as typeof execFileSync);
+  }) as never);
+}
+
+function mockCcusageSources(claudeJson: string, codexJson = "[]") {
+  mockExecFileSync.mockImplementation(((cmd: string, args: string[]) => {
+    if (args.includes("--version")) return "ccusage 20.0.6";
+    if (args.includes("codex")) return codexJson;
+    return claudeJson;
+  }) as never);
 }
 
 function codexOutput(dates: string[] = [], extra: Record<string, unknown> = {}) {
@@ -198,6 +233,10 @@ function mockSuccessfulSubmit(dates: string[]) {
 beforeEach(() => {
   vi.useFakeTimers({ now: new Date('2026-03-13T12:00:00Z'), toFake: ['Date'] });
   vi.clearAllMocks();
+  mockFetch.mockReset();
+  mockExecFileSync.mockReset();
+  mockCollectCodexUsageAsync.mockReset();
+  mockHasCodexLogs.mockReset();
   _resetCcusageResolver();
   mockHasCodexLogs.mockResolvedValue(false);
   mockCollectCodexUsageAsync.mockResolvedValue(codexOutput());
@@ -282,7 +321,7 @@ describe("sync flow", () => {
 
     // Re-syncs today's data (1 API call)
     expect(mockFetch).toHaveBeenCalledTimes(2);
-    expect(mockExecFileSync).toHaveBeenCalledTimes(1);
+    expect(mockExecFileSync).toHaveBeenCalledTimes(3);
     const saved = readPersistedConfig();
     expect(saved.last_push_date).toBe(today);
   });
@@ -297,7 +336,7 @@ describe("sync flow", () => {
 
     await pushCommand({});
 
-    expect(mockExecFileSync).toHaveBeenCalledTimes(1);
+    expect(mockExecFileSync).toHaveBeenCalledTimes(3);
     expect(mockFetch).toHaveBeenCalledTimes(2);
 
     const saved = readPersistedConfig();
@@ -313,10 +352,10 @@ describe("sync flow", () => {
 
     await pushCommand({});
 
-    expect(mockExecFileSync).toHaveBeenCalledTimes(1);
-    // calls[0] = actual ccusage daily
-    const args = mockExecFileSync.mock.calls[0]!;
-    // ccusage is called with: ["daily", "--json", "--since", ..., "--until", ...]
+    expect(mockExecFileSync).toHaveBeenCalledTimes(3);
+    const args = mockExecFileSync.mock.calls.find(([, argv]) =>
+      Array.isArray(argv) && argv.includes("claude")
+    )!;
     const sinceIdx = (args[1] as string[]).indexOf("--since");
     const sinceDate = (args[1] as string[])[sinceIdx + 1]!;
     // Since date should be 6 days ago (7 days including today)
@@ -335,8 +374,7 @@ describe("Codex integration", () => {
   it("merges Claude + Codex data when both are available", async () => {
     seedConfig();
     const today = todayStr();
-    mockCcusageOnly(ccusageJson([today]));
-    mockCollectCodexUsageAsync.mockResolvedValue(codexOutput([today]));
+    mockCcusageSources(ccusageJson([today]), ccusageCodexJson([today]));
     mockSuccessfulSubmit([today]);
 
     await pushCommand({});
@@ -361,17 +399,17 @@ describe("Codex integration", () => {
     expect(data.modelBreakdown).toContainEqual({ model: "claude-sonnet-4-6", cost_usd: 0.05 });
     expect(data.modelBreakdown).toContainEqual({ model: "gpt-5-codex", cost_usd: 3.0 });
     expect(body.collector).toEqual({
-      claude: "ccusage-v18",
-      codex: "straude-codex-native-last-token-usage",
+      claude: "ccusage-claude-v20",
+      codex: "ccusage-codex-v20",
     });
   });
 
-  it("hash includes Claude raw JSON and Codex native fingerprint", async () => {
+  it("hash includes source-tagged Claude and Codex raw JSON", async () => {
     seedConfig();
     const today = todayStr();
     const ccRaw = ccusageJson([today]);
-    mockCcusageOnly(ccRaw);
-    mockCollectCodexUsageAsync.mockResolvedValue(codexOutput([today], { fingerprint: "native-fp" }));
+    const codexRaw = ccusageCodexJson([today]);
+    mockCcusageSources(ccRaw, codexRaw);
     mockSuccessfulSubmit([today]);
 
     await pushCommand({});
@@ -379,9 +417,10 @@ describe("Codex integration", () => {
     const [, options] = mockFetch.mock.calls[0]!;
     const body = JSON.parse(options.body);
 
-    // Hash should be SHA-256 of Claude raw JSON plus native aggregate fingerprint.
     const { createHash } = await import("node:crypto");
-    const expectedHash = createHash("sha256").update(ccRaw + "native-fp").digest("hex");
+    const expectedHash = createHash("sha256")
+      .update(`claude\0${ccRaw}\0codex\0${codexRaw}`)
+      .digest("hex");
     expect(body.hash).toBe(expectedHash);
   });
 
@@ -389,8 +428,7 @@ describe("Codex integration", () => {
     seedConfig();
     const today = todayStr();
 
-    mockCcusageOnly("[]");
-    mockCollectCodexUsageAsync.mockResolvedValue(codexOutput([today]));
+    mockCcusageSources("[]", ccusageCodexJson([today]));
 
     mockSuccessfulSubmit([today]);
 
@@ -404,14 +442,13 @@ describe("Codex integration", () => {
     expect(data.models).toEqual(["gpt-5-codex"]);
     expect(data.costUSD).toBe(3.0);
     expect(data.modelBreakdown).toEqual([{ model: "gpt-5-codex", cost_usd: 3.0 }]);
-    expect(body.collector).toEqual({ codex: "straude-codex-native-last-token-usage" });
+    expect(body.collector).toEqual({ codex: "ccusage-codex-v20" });
   });
 
   it("dry-run fetches dashboard but skips submit", async () => {
     seedConfig();
     const today = todayStr();
     mockCcusageOnly(ccusageJson([today]));
-    mockCollectCodexUsageAsync.mockResolvedValue(codexOutput([today]));
 
     await pushCommand({ dryRun: true });
 
@@ -451,21 +488,18 @@ describe("Codex integration", () => {
     const today = todayStr();
 
     mockExecFileSync.mockImplementation(((cmd: string, args: string[]) => {
+      if (args.includes("--version")) return "ccusage 20.0.6";
+      if (args.includes("codex")) return ccusageCodexJson([today]);
       throw new Error(`No valid Claude data directories found. Please ensure at least one of the following exists:
 - /Users/test/.config/claude/projects
 - /Users/test/.claude/projects`);
-    }) as typeof execFileSync);
-    mockCollectCodexUsageAsync.mockResolvedValue(codexOutput([today]));
+    }) as never);
 
     mockSuccessfulSubmit([today]);
 
     await pushCommand({});
 
     expect(mockFetch).toHaveBeenCalledTimes(2);
-    expect(console.log).toHaveBeenCalledWith(
-      "No Claude Code data found locally; syncing Codex usage only.",
-    );
-
     const [, options] = mockFetch.mock.calls[0]!;
     const body = JSON.parse(options.body);
     const data = body.entries[0].data;
@@ -697,7 +731,7 @@ describe("config persistence", () => {
 
   it("does not save last_push_date when no data found", async () => {
     seedConfig();
-    mockExecFileSync.mockReturnValue("[]");
+    mockCcusageOnly("[]");
 
     await pushCommand({});
 
@@ -779,7 +813,7 @@ describe("ccusage failures during flow", () => {
 
     await expect(pushCommand({})).rejects.toThrow(ExitError);
     expect(console.error).toHaveBeenCalledWith(
-      expect.stringContaining("ccusage failed"),
+      expect.stringContaining("Failed to validate bundled ccusage version"),
     );
   });
 

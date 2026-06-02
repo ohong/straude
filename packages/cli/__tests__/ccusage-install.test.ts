@@ -1,112 +1,93 @@
 import { describe, it, expect, vi, beforeEach } from "vitest";
-import { ensureCcusageInstalled, _resetCcusageResolver } from "../src/lib/ccusage.js";
-
-/**
- * Orchestration-only tests for `ensureCcusageInstalled`.
- *
- * The pure command-selection logic ("bun vs npm", "what args") is tested
- * separately in `pick-install-command.test.ts` against the real
- * `pickInstallCommand` function — no mocks needed there.
- *
- * What's left here is the orchestrator: which branch we take based on PATH
- * state + TTY state + the user's prompt response. Those decisions still
- * need mocks because the orchestrator's *job* is to read process state
- * (PATH, isatty(stdin/stdout)) and react. We mock at those true boundaries
- * (node:child_process, node:fs, prompt) but never at the system under test.
- */
+import {
+  ensureCcusageInstalled,
+  isCcusageInstalled,
+  validateCcusageVersion,
+  _resetCcusageResolver,
+} from "../src/lib/ccusage.js";
 
 vi.mock("node:child_process", () => ({
   execFileSync: vi.fn(),
   execFile: vi.fn(),
 }));
 
-vi.mock("node:fs", async (importOriginal) => {
-  const actual = await importOriginal<typeof import("node:fs")>();
-  return { ...actual, existsSync: vi.fn(() => false) };
-});
-
-vi.mock("../src/lib/prompt.js", () => ({
-  isInteractive: vi.fn(),
-  promptYesNo: vi.fn(),
-}));
-
-vi.mock("../src/lib/posthog.js", () => ({
-  posthog: {
-    capture: vi.fn(),
-    _shutdown: vi.fn(() => Promise.resolve()),
-  },
-}));
-
 import { execFileSync } from "node:child_process";
-import { existsSync } from "node:fs";
-import { isInteractive, promptYesNo } from "../src/lib/prompt.js";
 
 const mockExecFileSync = vi.mocked(execFileSync);
-const mockExistsSync = vi.mocked(existsSync);
-const mockIsInteractive = vi.mocked(isInteractive);
-const mockPromptYesNo = vi.mocked(promptYesNo);
 
 beforeEach(() => {
   vi.clearAllMocks();
   _resetCcusageResolver();
 });
 
-describe("ensureCcusageInstalled — orchestration branches", () => {
-  it("no-ops and skips the prompt when ccusage is already on PATH", async () => {
-    mockExistsSync.mockReturnValue(true);
+describe("ensureCcusageInstalled", () => {
+  it("validates the bundled ccusage binary and caches the resolved command", async () => {
+    mockExecFileSync.mockReturnValue("ccusage 20.0.6" as never);
+
     await expect(ensureCcusageInstalled()).resolves.toBeUndefined();
-    expect(mockIsInteractive).not.toHaveBeenCalled();
-    expect(mockExecFileSync).not.toHaveBeenCalled();
-  });
-
-  it("throws the manual-install error in non-TTY contexts (auto-push, CI)", async () => {
-    mockExistsSync.mockReturnValue(false);
-    mockIsInteractive.mockReturnValue(false);
-    await expect(ensureCcusageInstalled()).rejects.toThrow(/not installed or not on PATH/);
-    expect(mockPromptYesNo).not.toHaveBeenCalled();
-    expect(mockExecFileSync).not.toHaveBeenCalled();
-  });
-
-  it("throws cleanly when the user declines the prompt", async () => {
-    mockExistsSync.mockReturnValue(false);
-    mockIsInteractive.mockReturnValue(true);
-    mockPromptYesNo.mockResolvedValue(false);
-    await expect(ensureCcusageInstalled()).rejects.toThrow(/Install it manually/);
-    expect(mockExecFileSync).not.toHaveBeenCalled();
-  });
-
-  it("wraps install-time exec errors with a manual-fallback message", async () => {
-    mockExistsSync.mockReturnValue(false);
-    mockIsInteractive.mockReturnValue(true);
-    mockPromptYesNo.mockResolvedValue(true);
-    mockExecFileSync.mockImplementation(() => {
-      throw new Error("EACCES: permission denied");
-    });
-    await expect(ensureCcusageInstalled()).rejects.toThrow(/Install it manually/);
-  });
-
-  it("rechecks PATH after install and reports if the binary is still missing", async () => {
-    mockExistsSync.mockReturnValue(false); // never appears on PATH
-    mockIsInteractive.mockReturnValue(true);
-    mockPromptYesNo.mockResolvedValue(true);
-    mockExecFileSync.mockReturnValue(Buffer.from(""));
-    await expect(ensureCcusageInstalled()).rejects.toThrow(/may need to open a new shell/);
-  });
-
-  it("succeeds end-to-end when accepted, installed, and binary appears on PATH", async () => {
-    let installRan = false;
-    mockExistsSync.mockImplementation((p: unknown) => {
-      const path = String(p);
-      if (path.includes("ccusage")) return installRan;
-      return false;
-    });
-    mockIsInteractive.mockReturnValue(true);
-    mockPromptYesNo.mockResolvedValue(true);
-    mockExecFileSync.mockImplementation(() => {
-      installRan = true;
-      return Buffer.from("");
-    });
     await expect(ensureCcusageInstalled()).resolves.toBeUndefined();
+
     expect(mockExecFileSync).toHaveBeenCalledTimes(1);
+    expect(mockExecFileSync).toHaveBeenCalledWith(
+      process.execPath,
+      [expect.stringContaining("ccusage/dist/cli.js"), "--version"],
+      expect.objectContaining({ encoding: "utf-8" }),
+    );
+  });
+
+  it("reports true when the bundled binary is resolvable and new enough", () => {
+    mockExecFileSync.mockReturnValue("ccusage 20.0.6" as never);
+
+    expect(isCcusageInstalled()).toBe(true);
+  });
+
+  it("reports false when version validation fails", () => {
+    mockExecFileSync.mockReturnValue("ccusage 20.0.4" as never);
+
+    expect(isCcusageInstalled()).toBe(false);
+  });
+
+  it("throws when the bundled binary reports an old version", async () => {
+    mockExecFileSync.mockReturnValue("ccusage 20.0.4" as never);
+
+    await expect(ensureCcusageInstalled()).rejects.toThrow(
+      "ccusage 20.0.5 or newer is required; found 20.0.4.",
+    );
+  });
+
+  it("throws when version output cannot be parsed", async () => {
+    mockExecFileSync.mockReturnValue("not a version" as never);
+
+    await expect(ensureCcusageInstalled()).rejects.toThrow(
+      "Failed to parse bundled ccusage version",
+    );
+  });
+
+  it("wraps validation exec errors with stderr detail", async () => {
+    const err = new Error("failed") as Error & { stderr: string };
+    err.stderr = "permission denied";
+    mockExecFileSync.mockImplementation(() => {
+      throw err;
+    });
+
+    await expect(ensureCcusageInstalled()).rejects.toThrow(
+      "Failed to validate bundled ccusage version: permission denied",
+    );
+  });
+});
+
+describe("validateCcusageVersion", () => {
+  it("accepts the minimum supported version", () => {
+    expect(() => validateCcusageVersion("20.0.5")).not.toThrow();
+  });
+
+  it("accepts newer versions", () => {
+    expect(() => validateCcusageVersion("20.1.0")).not.toThrow();
+  });
+
+  it("rejects older versions", () => {
+    expect(() => validateCcusageVersion("20.0.4")).toThrow(
+      "ccusage 20.0.5 or newer is required; found 20.0.4.",
+    );
   });
 });

@@ -11,256 +11,223 @@ vi.mock("node:child_process", () => ({
   execFile: vi.fn(),
 }));
 
-vi.mock("node:fs", async (importOriginal) => {
-  const actual = await importOriginal<typeof import("node:fs")>();
-  return { ...actual, existsSync: vi.fn(() => false) };
-});
-
 import { execFileSync } from "node:child_process";
-import { existsSync } from "node:fs";
+
 const mockExecFileSync = vi.mocked(execFileSync);
-const mockExistsSync = vi.mocked(existsSync);
 
-beforeEach(() => {
-  // Default to ccusage being available; individual tests can override.
-  mockExistsSync.mockReturnValue(true);
-});
-
-/** Build a valid ccusage v18 JSON string. */
-function validOutput() {
+function claudeOutput() {
   return JSON.stringify({
     daily: [
       {
-        date: "2025-06-01",
-        modelsUsed: ["claude-sonnet-4-5-20250514"],
-        inputTokens: 1000,
-        outputTokens: 500,
-        cacheCreationTokens: 200,
-        cacheReadTokens: 100,
-        totalTokens: 1800,
-        totalCost: 0.05,
+        date: "2026-06-01",
+        modelsUsed: ["claude-opus-4-8"],
+        inputTokens: 223,
+        outputTokens: 9486,
+        cacheCreationTokens: 264403,
+        cacheReadTokens: 47523,
+        totalTokens: 321635,
+        totalCost: 1.91454525,
+        modelBreakdowns: [
+          {
+            modelName: "claude-opus-4-8",
+            inputTokens: 223,
+            outputTokens: 9486,
+            cacheCreationTokens: 264403,
+            cacheReadTokens: 47523,
+            cost: 1.91454525,
+          },
+        ],
       },
     ],
-    totals: {
-      inputTokens: 1000,
-      outputTokens: 500,
-      cacheCreationTokens: 200,
-      cacheReadTokens: 100,
-      totalTokens: 1800,
-      totalCost: 0.05,
-    },
+    totals: {},
   });
 }
 
-// ---------------------------------------------------------------------------
-// parseCcusageOutput
-// ---------------------------------------------------------------------------
+function codexOutput() {
+  return JSON.stringify({
+    daily: [
+      {
+        date: "2026-06-01",
+        inputTokens: 2217560,
+        outputTokens: 156872,
+        cachedInputTokens: 34676096,
+        reasoningOutputTokens: 58261,
+        totalTokens: 37050528,
+        costUSD: 33.132008,
+        models: {
+          "gpt-5.5": {
+            inputTokens: 2217560,
+            cachedInputTokens: 34676096,
+            outputTokens: 156872,
+            reasoningOutputTokens: 58261,
+            totalTokens: 37050528,
+            isFallback: false,
+          },
+        },
+      },
+    ],
+    totals: {},
+  });
+}
+
+beforeEach(() => {
+  vi.clearAllMocks();
+  _resetCcusageResolver();
+  mockExecFileSync.mockImplementation((_cmd, args) => {
+    const argv = Array.isArray(args) ? args.map(String) : [];
+    if (argv.includes("--version")) return "ccusage 20.0.6" as never;
+    if (argv.includes("claude")) return claudeOutput() as never;
+    if (argv.includes("codex")) return codexOutput() as never;
+    throw new Error(`unexpected ccusage args: ${argv.join(" ")}`);
+  });
+});
 
 describe("parseCcusageOutput", () => {
-  it("parses valid ccusage v18 JSON and normalizes fields", () => {
-    const result = parseCcusageOutput(validOutput());
+  it("parses source-focused Claude v20 output", () => {
+    const result = parseCcusageOutput(claudeOutput(), "claude");
+
     expect(result.data).toHaveLength(1);
-    expect(result.data[0]!.date).toBe("2025-06-01");
-    expect(result.data[0]!.costUSD).toBe(0.05);
-    expect(result.data[0]!.models).toEqual(["claude-sonnet-4-5-20250514"]);
+    expect(result.data[0]).toMatchObject({
+      date: "2026-06-01",
+      models: ["claude-opus-4-8"],
+      inputTokens: 223,
+      outputTokens: 9486,
+      cacheCreationTokens: 264403,
+      cacheReadTokens: 47523,
+      totalTokens: 321635,
+      costUSD: 1.91454525,
+    });
+    expect(result.data[0]!.modelBreakdown).toEqual([
+      { model: "claude-opus-4-8", cost_usd: 1.91454525 },
+    ]);
+    expect(result.rowMetadata).toEqual([
+      { date: "2026-06-01", agents: ["claude"] },
+    ]);
+  });
+
+  it("parses source-focused Codex v20 output with separate cached input semantics", () => {
+    const result = parseCcusageOutput(codexOutput(), "codex");
+
+    expect(result.data).toHaveLength(1);
+    expect(result.data[0]).toMatchObject({
+      date: "2026-06-01",
+      models: ["gpt-5.5"],
+      inputTokens: 2217560,
+      outputTokens: 156872,
+      cacheCreationTokens: 0,
+      cacheReadTokens: 34676096,
+      totalTokens: 37050528,
+      costUSD: 33.132008,
+      reasoningOutputTokens: 58261,
+    });
+    expect(result.data[0]!.modelBreakdown).toEqual([
+      { model: "gpt-5.5", cost_usd: 33.132008 },
+    ]);
+    expect(result.rowMetadata).toEqual([
+      { date: "2026-06-01", agents: ["codex"] },
+    ]);
+  });
+
+  it("returns empty data for an empty ccusage array", () => {
+    expect(parseCcusageOutput("[]", "claude").data).toEqual([]);
   });
 
   it("rejects non-JSON input", () => {
-    expect(() => parseCcusageOutput("not json")).toThrow(
+    expect(() => parseCcusageOutput("not json", "claude")).toThrow(
       "Failed to parse ccusage output as JSON",
     );
   });
 
-  it("rejects output without daily array", () => {
-    const bad = JSON.stringify({ something: "else" });
-    expect(() => parseCcusageOutput(bad)).toThrow(
+  it("rejects output without a daily array", () => {
+    expect(() => parseCcusageOutput(JSON.stringify({ totals: {} }), "claude")).toThrow(
       "Unexpected ccusage output format",
     );
   });
 
-  it("rejects output where daily is not an array", () => {
-    const bad = JSON.stringify({ daily: "not an array", totals: {} });
-    expect(() => parseCcusageOutput(bad)).toThrow(
-      "Unexpected ccusage output format",
-    );
-  });
-
-  it("returns empty data for empty array", () => {
-    const result = parseCcusageOutput("[]");
-    expect(result.data).toEqual([]);
-  });
-
-  it("rejects entry with missing date", () => {
-    const bad = JSON.stringify({
-      daily: [
-        { totalCost: 1, modelsUsed: [], totalTokens: 0, inputTokens: 0, outputTokens: 0, cacheCreationTokens: 0, cacheReadTokens: 0 },
-      ],
-      totals: {},
-    });
-    expect(() => parseCcusageOutput(bad)).toThrow("Invalid entry");
-  });
-
-  it("rejects entry with non-numeric cost", () => {
+  it("rejects rows with negative numeric fields", () => {
     const bad = JSON.stringify({
       daily: [
         {
-          date: "2025-06-01",
-          totalCost: "not a number",
+          date: "2026-06-01",
           modelsUsed: [],
-          totalTokens: 0,
           inputTokens: 0,
           outputTokens: 0,
           cacheCreationTokens: 0,
           cacheReadTokens: 0,
-        },
-      ],
-      totals: {},
-    });
-    expect(() => parseCcusageOutput(bad)).toThrow("Invalid entry");
-  });
-
-  it("rejects entry with negative cost", () => {
-    const bad = JSON.stringify({
-      daily: [
-        {
-          date: "2025-06-01",
+          totalTokens: 0,
           totalCost: -1,
-          modelsUsed: [],
-          totalTokens: 0,
-          inputTokens: 0,
-          outputTokens: 0,
-          cacheCreationTokens: 0,
-          cacheReadTokens: 0,
         },
       ],
-      totals: {},
     });
-    expect(() => parseCcusageOutput(bad)).toThrow("Negative cost");
-  });
 
-  it("normalizes negative token counts to non-negative values", () => {
-    const bad = JSON.stringify({
-      daily: [
-        {
-          date: "2025-06-01",
-          totalCost: 1,
-          modelsUsed: [],
-          totalTokens: -1,
-          inputTokens: 0,
-          outputTokens: 0,
-          cacheCreationTokens: 0,
-          cacheReadTokens: 0,
-        },
-      ],
-      totals: {},
-    });
-    const parsed = parseCcusageOutput(bad);
-    expect(parsed.data).toHaveLength(1);
-    expect(parsed.data[0]!.totalTokens).toBe(0);
-    expect(parsed.data[0]!.inputTokens).toBe(0);
-    expect(parsed.data[0]!.outputTokens).toBe(0);
+    expect(() => parseCcusageOutput(bad, "claude")).toThrow(
+      "totalCost must be non-negative",
+    );
   });
 });
 
-// ---------------------------------------------------------------------------
-// runCcusage
-// ---------------------------------------------------------------------------
-
 describe("runCcusage", () => {
-  beforeEach(() => {
-    vi.clearAllMocks();
-    _resetCcusageResolver();
-    mockExecFileSync.mockReturnValue(validOutput() as never);
-  });
+  it("executes the bundled ccusage package through the current Node runtime", () => {
+    const result = runCcusage("claude", "20260601", "20260602");
 
-  it("calls ccusage directly when globally installed", () => {
-    // Simulate ccusage binary found on PATH
-    mockExistsSync.mockReturnValue(true);
-
-    runCcusage("20250601", "20250601");
-    // No --version probe — PATH check is pure fs now
-    expect(mockExecFileSync).toHaveBeenCalledTimes(1);
-    expect(mockExecFileSync).toHaveBeenCalledWith(
-      "ccusage",
-      ["daily", "--json", "--breakdown", "--since", "20250601", "--until", "20250601"],
+    expect(result.data).toHaveLength(1);
+    expect(mockExecFileSync).toHaveBeenCalledTimes(2);
+    expect(mockExecFileSync).toHaveBeenNthCalledWith(
+      1,
+      process.execPath,
+      [expect.stringContaining("ccusage/dist/cli.js"), "--version"],
+      expect.objectContaining({ encoding: "utf-8" }),
+    );
+    expect(mockExecFileSync).toHaveBeenNthCalledWith(
+      2,
+      process.execPath,
+      [
+        expect.stringContaining("ccusage/dist/cli.js"),
+        "claude",
+        "daily",
+        "--json",
+        "--since",
+        "20260601",
+        "--until",
+        "20260602",
+        "--no-offline",
+      ],
       expect.objectContaining({ encoding: "utf-8" }),
     );
   });
 
-  it("throws when ccusage is not globally installed", () => {
-    // ccusage not found on PATH
-    mockExistsSync.mockReturnValue(false);
+  it("returns raw JSON for the requested agent", () => {
+    const result = runCcusageRaw("codex", "20260601", "20260602");
 
-    expect(() => runCcusage("20250601", "20250601")).toThrow(
-      "ccusage is not installed or not on PATH",
-    );
-    expect(mockExecFileSync).not.toHaveBeenCalled();
+    expect(result).toBe(codexOutput());
   });
 
-  it("reports timeout when killed", () => {
+  it("reports timeout with the source-focused command hint", () => {
     const err = new Error("killed") as Error & { killed: boolean; signal: string };
     err.killed = true;
     err.signal = "SIGTERM";
-    mockExecFileSync.mockImplementation(() => { throw err; });
+    mockExecFileSync.mockImplementation((_cmd, args) => {
+      const argv = Array.isArray(args) ? args.map(String) : [];
+      if (argv.includes("--version")) return "ccusage 20.0.6" as never;
+      throw err;
+    });
 
-    expect(() => runCcusage("20250601", "20250601")).toThrow("timed out");
-  });
-
-  it("includes stderr in error when available", () => {
-    const err = new Error("fail") as Error & { status: number; stderr: string };
-    err.status = 1;
-    err.stderr = "Error: no JSONL files found";
-    mockExecFileSync.mockImplementation(() => { throw err; });
-
-    expect(() => runCcusage("20250601", "20250601")).toThrow(
-      "ccusage failed: Error: no JSONL files found",
+    expect(() => runCcusage("claude", "20260601", "20260602")).toThrow(
+      "ccusage timed out. Try running `ccusage claude daily",
     );
   });
 
-  it("falls back to error.message when stderr is empty", () => {
-    const err = new Error("something went wrong") as Error & { status: number; stderr: string };
-    err.status = 1;
-    err.stderr = "";
-    mockExecFileSync.mockImplementation(() => { throw err; });
-
-    expect(() => runCcusage("20250601", "20250601")).toThrow(
-      "ccusage failed: something went wrong",
-    );
-  });
-});
-
-// ---------------------------------------------------------------------------
-// runCcusageRaw
-// ---------------------------------------------------------------------------
-
-describe("runCcusageRaw", () => {
-  beforeEach(() => {
-    vi.clearAllMocks();
-    _resetCcusageResolver();
-    mockExecFileSync.mockReturnValue(validOutput() as never);
-  });
-
-  it("returns raw JSON string on success", () => {
-    const result = runCcusageRaw("20250601", "20250601");
-    expect(result).toBe(validOutput());
-  });
-
-  it("reports timeout", () => {
-    const err = new Error("killed") as Error & { killed: boolean; signal: string };
-    err.killed = true;
-    err.signal = "SIGTERM";
-    mockExecFileSync.mockImplementation(() => { throw err; });
-
-    expect(() => runCcusageRaw("20250601", "20250601")).toThrow("timed out");
-  });
-
-  it("includes stderr detail on failure", () => {
+  it("includes stderr detail on failures", () => {
     const err = new Error("fail") as Error & { status: number; stderr: string };
     err.status = 1;
     err.stderr = "Error: invalid date range";
-    mockExecFileSync.mockImplementation(() => { throw err; });
+    mockExecFileSync.mockImplementation((_cmd, args) => {
+      const argv = Array.isArray(args) ? args.map(String) : [];
+      if (argv.includes("--version")) return "ccusage 20.0.6" as never;
+      throw err;
+    });
 
-    expect(() => runCcusageRaw("20250601", "20250601")).toThrow(
+    expect(() => runCcusageRaw("codex", "20260601", "20260601")).toThrow(
       "ccusage failed: Error: invalid date range",
     );
   });
