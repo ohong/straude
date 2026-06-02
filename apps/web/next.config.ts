@@ -1,5 +1,11 @@
 import type { NextConfig } from "next";
 
+const scriptSrc = [
+  "script-src 'self' 'unsafe-inline'",
+  process.env.NODE_ENV === "development" ? "'unsafe-eval'" : null,
+  "https://va.vercel-scripts.com",
+].filter(Boolean).join(" ");
+
 const nextConfig: NextConfig = {
   poweredByHeader: false,
   skipTrailingSlashRedirect: true,
@@ -56,7 +62,7 @@ const nextConfig: NextConfig = {
             key: "Content-Security-Policy",
             value: [
               "default-src 'self'",
-              "script-src 'self' 'unsafe-inline' https://va.vercel-scripts.com",
+              scriptSrc,
               "style-src 'self' 'unsafe-inline'",
               "img-src 'self' data: blob: https://avatars.githubusercontent.com https://unavatar.io https://*.supabase.co https://api.producthunt.com http://127.0.0.1:54321 http://localhost:54321",
               "font-src 'self' data:",

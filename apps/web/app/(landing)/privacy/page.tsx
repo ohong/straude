@@ -18,7 +18,7 @@ export default function PrivacyPage() {
             Privacy Policy
           </h1>
           <p className="mt-2 text-sm text-muted">
-            Last updated: April 8, 2026
+            Last updated: June 2, 2026
           </p>
 
           <div className="mt-10 space-y-8 text-[0.9375rem] leading-relaxed text-foreground/80">
@@ -81,8 +81,8 @@ export default function PrivacyPage() {
                   session count) — never prompts, code, or conversation content
                 </li>
                 <li>
-                  <strong>Analytics:</strong> page views and basic interaction
-                  data via Vercel Analytics
+                  <strong>Analytics, when you opt in:</strong> page views and
+                  basic interaction data via Vercel Analytics and PostHog
                 </li>
               </ul>
             </section>
@@ -136,6 +136,9 @@ export default function PrivacyPage() {
                   <strong>Vercel:</strong> application hosting and analytics
                 </li>
                 <li>
+                  <strong>PostHog:</strong> opt-in product analytics
+                </li>
+                <li>
                   <strong>GitHub:</strong> OAuth authentication (if you sign in
                   with GitHub)
                 </li>
@@ -159,7 +162,10 @@ export default function PrivacyPage() {
               </h2>
               <p className="mt-2">
                 We use essential cookies for authentication and session
-                management. We do not use third-party tracking cookies.
+                management through Supabase Auth, security, referral
+                attribution, and storing your cookie preference. Analytics
+                stays off unless you choose to accept all cookies. We do not use
+                third-party tracking cookies.
               </p>
             </section>
 

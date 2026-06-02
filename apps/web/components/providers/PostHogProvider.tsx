@@ -6,6 +6,7 @@ import posthog from "posthog-js";
 import { PostHogProvider as PHProvider } from "posthog-js/react";
 import type { User } from "@supabase/supabase-js";
 import { createClient } from "@/lib/supabase/client";
+import { useAnalyticsConsent } from "@/components/providers/useAnalyticsConsent";
 
 const POSTHOG_KEY = process.env.NEXT_PUBLIC_POSTHOG_KEY;
 
@@ -28,9 +29,10 @@ export function PostHogClientProvider({
 }) {
   const initialized = useRef(false);
   const [ready, setReady] = useState(false);
+  const analyticsConsent = useAnalyticsConsent();
 
   useEffect(() => {
-    if (!POSTHOG_KEY || initialized.current) return;
+    if (!analyticsConsent || !POSTHOG_KEY || initialized.current) return;
     let readyTimer: number | null = null;
     posthog.init(POSTHOG_KEY, {
       api_host: "/ingest",
@@ -62,7 +64,7 @@ export function PostHogClientProvider({
       if (readyTimer !== null) window.clearTimeout(readyTimer);
       subscription.unsubscribe();
     };
-  }, []);
+  }, [analyticsConsent]);
 
   return (
     <PHProvider client={posthog}>

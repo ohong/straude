@@ -1,4 +1,5 @@
 import type { Metadata } from "next";
+import { CookieConsentModal } from "@/components/landing/CookieConsentModal";
 
 export const metadata: Metadata = {
   title: { absolute: "Straude — Strava for Claude Code" },
@@ -11,5 +12,10 @@ export default function LandingLayout({
 }: {
   children: React.ReactNode;
 }) {
-  return <>{children}</>;
+  return (
+    <>
+      {children}
+      <CookieConsentModal />
+    </>
+  );
 }

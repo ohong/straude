@@ -141,7 +141,6 @@ export default async function Image({
             flexDirection: "column",
             alignItems: "center",
             position: "relative",
-            zIndex: 1,
           }}
         >
           {/* Avatar */}
