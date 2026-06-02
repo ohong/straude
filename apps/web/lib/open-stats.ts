@@ -180,6 +180,20 @@ function throwIfSupabaseError(label: string, error: SupabaseErrorLike) {
   throw new Error(`${label}: ${details}`);
 }
 
+function isLocalSupabaseConnectionError(error: unknown) {
+  const message = error instanceof Error ? error.message : String(error);
+  return (
+    (message.includes("127.0.0.1:54321") ||
+      message.includes("localhost:54321")) &&
+    (message.includes("ECONNREFUSED") || message.includes("fetch failed"))
+  );
+}
+
+function logOpenStatsError(message: string, error: unknown) {
+  if (isLocalSupabaseConnectionError(error)) return;
+  console.error(message, error);
+}
+
 function buildOpenStats(params: {
   usageRows: UsageRow[];
   concentrationRows: unknown;
@@ -409,7 +423,7 @@ export async function getOpenStatsForPage(
       // TODO(observability): forward to PostHog server-side capture once a
       // helper exists (context: "open-stats:snapshot-write"). For now, log
       // so prod failures are visible in server logs.
-      console.error("open stats snapshot write failed:", error);
+      logOpenStatsError("open stats snapshot write failed:", error);
     }
 
     return liveStats;
@@ -420,14 +434,14 @@ export async function getOpenStatsForPage(
     } catch (snapshotError) {
       // TODO(observability): forward to PostHog server-side capture once a
       // helper exists (context: "open-stats:snapshot-fallback").
-      console.error("open stats snapshot fallback failed:", snapshotError);
+      logOpenStatsError("open stats snapshot fallback failed:", snapshotError);
     }
 
     // Both live and snapshot failed (e.g. Supabase unreachable in CI).
     // Return an empty placeholder so the build doesn't crash.
     // TODO(observability): forward to PostHog server-side capture once a
     // helper exists (context: "open-stats:all-sources-failed").
-    console.error("open stats: all sources failed, returning placeholder", liveError);
+    logOpenStatsError("open stats: all sources failed, returning placeholder", liveError);
     const now = new Date().toISOString();
     return {
       trackedUsers: 0,

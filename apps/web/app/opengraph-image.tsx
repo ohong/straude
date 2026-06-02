@@ -69,7 +69,6 @@ export default async function Image() {
             alignItems: "center",
             justifyContent: "center",
             position: "relative",
-            zIndex: 1,
           }}
         >
           {/* Logo: orange trapezoid */}

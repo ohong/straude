@@ -1,8 +1,8 @@
 import type { Metadata, Viewport } from "next";
 import { Inter, JetBrains_Mono } from "next/font/google";
-import { Analytics } from "@vercel/analytics/next";
 import { Agentation } from "agentation";
 import Script from "next/script";
+import { ConsentAwareAnalytics } from "@/components/providers/ConsentAwareAnalytics";
 import { PostHogClientProvider } from "@/components/providers/PostHogProvider";
 import { QueryProvider } from "@/components/providers/QueryProvider";
 import { ThemeProvider } from "@/components/providers/ThemeProvider";
@@ -131,7 +131,7 @@ export default function RootLayout({
             <ThemeProvider>{children}</ThemeProvider>
           </QueryProvider>
         </PostHogClientProvider>
-        <Analytics />
+        <ConsentAwareAnalytics />
         {process.env.NODE_ENV === "development" && <Agentation />}
       </body>
     </html>
