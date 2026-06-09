@@ -114,7 +114,7 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
 
-  const limited = rateLimit("upload", user.id, { limit: 10 });
+  const limited = await rateLimit("upload", user.id, { limit: 10 });
   if (limited) return limited;
 
   const bucketParam = request.nextUrl.searchParams.get("bucket") ?? "post-images";

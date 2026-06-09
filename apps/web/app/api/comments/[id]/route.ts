@@ -15,7 +15,7 @@ export async function PATCH(request: NextRequest, context: RouteContext) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
 
-  const limited = rateLimit("social", user.id, { limit: 30 });
+  const limited = await rateLimit("social", user.id, { limit: 30 });
   if (limited) return limited;
 
   const { content } = await request.json();

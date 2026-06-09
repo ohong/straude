@@ -116,6 +116,11 @@ function makeServiceClient({ emailNotifications }: { emailNotifications: boolean
   };
 
   return {
+    rpc: vi.fn((fn: string) => Promise.resolve(
+      fn === "check_rate_limit"
+        ? { data: [{ allowed: true, retry_after_seconds: 0 }], error: null }
+        : { data: null, error: null },
+    )),
     from: vi.fn().mockImplementation((table: string) => {
       if (table === "users") return usersChain;
       if (table === "posts") return postsChain;
