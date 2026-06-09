@@ -2,6 +2,10 @@
 
 ## Unreleased
 
+### Changed
+
+- **Unified usage collection on ccusage v20 for both Claude Code and Codex.** The CLI now bundles `ccusage@20.0.8` and invokes its native binary directly (no global install, no PATH lookup), replacing Straude's native Codex collector, token normalizer, pricing aliases, and fingerprinting code (~1,500 lines removed). A single `ccusage daily --json --no-offline` run produces unified Claude+Codex rows with `metadata.agents`; ccusage owns raw-session parsing, dedupe, token accounting, and online pricing. The 20.0.7/20.0.8 releases specifically fix Codex accuracy: archived-session inclusion + dedupe, skipping replayed parent token history in `thread_spawn` subagent sessions, and goal-rollout event dedupe. New `reasoning_output_tokens` column on `daily_usage`/`device_usage` (derived as the residual of authoritative `totalTokens`), collector metadata (`ccusage_version`, `ccusage_agents`, `pricing_mode`) persisted per row, and a one-time 30-day backfill on the first post-migration push (`ccusage_v20_migration_completed_at` config marker). The server rejects unsupported agents and non-online pricing; the new `ccusage-codex-v20` collector joins the trusted set so corrected uploads can lower inflated Codex totals.
+
 ### Security
 
 - **Upgraded Next.js to 16.2.6** (from 16.1.6) and `eslint-config-next` to match. Next.js 16.2.6 / 15.5.18 ship fixes for multiple high/moderate/low-severity vulnerabilities and an upstream React issue (Next.js security advisory, 2026-05-07). All 578 web unit tests and the typecheck pass on the new version.

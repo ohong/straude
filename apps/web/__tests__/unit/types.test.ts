@@ -70,6 +70,7 @@ describe("type shapes", () => {
       cost_usd: 12.5,
       input_tokens: 1000,
       output_tokens: 500,
+      reasoning_output_tokens: 125,
       cache_creation_tokens: 200,
       cache_read_tokens: 100,
       total_tokens: 1800,
@@ -123,12 +124,14 @@ describe("type shapes", () => {
       models: ["claude-sonnet-4-5-20250514"],
       inputTokens: 1000,
       outputTokens: 500,
+      reasoningOutputTokens: 125,
       cacheCreationTokens: 200,
       cacheReadTokens: 100,
       totalTokens: 1800,
       costUSD: 0.05,
     };
     expect(entry.costUSD).toBe(0.05);
+    expect(entry.reasoningOutputTokens).toBe(125);
     expect(entry.totalTokens).toBe(1800);
   });
 
@@ -139,6 +142,7 @@ describe("type shapes", () => {
       summary: {
         totalInputTokens: 0,
         totalOutputTokens: 0,
+        totalReasoningOutputTokens: 0,
         totalCacheCreationTokens: 0,
         totalCacheReadTokens: 0,
         totalTokens: 0,

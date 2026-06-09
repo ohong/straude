@@ -1,236 +1,42 @@
-import { execFileSync, execFile as execFileCb } from "node:child_process";
-import { existsSync } from "node:fs";
-import { delimiter, join } from "node:path";
-import {
-  normalizeTokenBuckets,
-  summarizeNormalization,
-  type NormalizationMeta,
-  type NormalizationSummary,
-  type TokenNormalizationConfidence,
-  type TokenNormalizationMode,
-} from "./token-normalization.js";
+import { execFile as execFileCb } from "node:child_process";
+import { chmodSync, readFileSync, statSync } from "node:fs";
+import { createRequire } from "node:module";
 import { DEFAULT_SUBPROCESS_TIMEOUT_MS } from "../config.js";
-import { isInteractive, promptYesNo } from "./prompt.js";
-import { posthog } from "./posthog.js";
-import { getDistinctId } from "./machine-id.js";
-import type { StraudeConfig } from "./auth.js";
 
-/** Type-safe representation of the error thrown by execFileSync / execFile. */
+export const CCUSAGE_MIN_VERSION = "20.0.5";
+export const CCUSAGE_CLAUDE_COLLECTOR = "ccusage-claude-v20" as const;
+export const CCUSAGE_CODEX_COLLECTOR = "ccusage-codex-v20" as const;
+export const CCUSAGE_PRICING_MODE = "online" as const;
+
+const SUPPORTED_AGENTS = ["claude", "codex"] as const;
+const MAX_CCUSAGE_BUFFER = 20 * 1024 * 1024;
+const MISSING_PRICING_RE = /(missing|unavailable|unknown|could not fetch|failed to fetch).{0,80}(pricing|price|cost)|pricing.{0,80}(missing|unavailable|unknown)|cost excludes/i;
+
+export type CcusageAgent = typeof SUPPORTED_AGENTS[number];
+
+/** Type-safe representation of the error surfaced by execFile. */
 interface ExecError extends Error {
   code?: string;
   status?: number | null;
-  stderr?: string;
+  stderr?: string | Buffer;
+  stdout?: string | Buffer;
   signal?: string | null;
   killed?: boolean;
 }
 
-/** Resolved ccusage command. Cached after first resolution. */
-let _resolved: { cmd: string; args: string[] } | undefined;
-
-/** Check if a binary exists on PATH without spawning a subprocess. */
-function isOnPath(binary: string): boolean {
-  const dirs = (process.env.PATH || "").split(delimiter);
-  const suffixes = process.platform === "win32" ? ["", ".cmd", ".exe"] : [""];
-  return dirs.some((dir) =>
-    suffixes.some((ext) => existsSync(join(dir, binary + ext))),
-  );
+interface ExecResult {
+  stdout: string;
+  stderr: string;
 }
 
-/**
- * Resolve how to run ccusage.
- * For security reasons we only execute an explicitly installed `ccusage`
- * binary from PATH and do not auto-install/execute package-runner fallbacks.
- */
-function resolveCcusageCommand(): { cmd: string; args: string[] } {
-  if (_resolved) return _resolved;
-
-  // Check if ccusage binary exists on PATH (pure fs, no subprocess)
-  if (isOnPath("ccusage")) {
-    _resolved = { cmd: "ccusage", args: [] };
-    return _resolved;
-  }
-
-  throw new Error(
-    "ccusage is not installed or not on PATH. Install it globally and retry (e.g. `npm install -g ccusage`).",
-  );
+interface ResolvedCcusageCommand {
+  cmd: string;
+  args: string[];
+  version: string;
 }
 
-/** Reset resolver cache — for testing only. */
-export function _resetCcusageResolver(): void {
-  _resolved = undefined;
-}
-
-/** Whether ccusage is currently resolvable on PATH. */
-export function isCcusageInstalled(): boolean {
-  return isOnPath("ccusage");
-}
-
-/**
- * Pick the right global-install command for ccusage. Pure: takes a snapshot of
- * environment state and returns the command/args to run. Extracted so the
- * decision logic is unit-testable without spawning processes or mocking PATH.
- */
-export function pickInstallCommand(env: { hasBun: boolean }): { cmd: string; args: string[]; manager: "bun" | "npm" } {
-  if (env.hasBun) {
-    return { cmd: "bun", args: ["add", "-g", "ccusage"], manager: "bun" };
-  }
-  return { cmd: "npm", args: ["install", "-g", "ccusage"], manager: "npm" };
-}
-
-/**
- * Best-effort install of ccusage globally. Prefers `bun add -g` when bun is
- * present (faster, and Straude is bun-first), falls back to `npm install -g`.
- * stdio is inherited so the user sees install progress.
- */
-function installCcusage(): void {
-  const { cmd, args } = pickInstallCommand({ hasBun: isOnPath("bun") });
-  execFileSync(cmd, args, {
-    stdio: "inherit",
-    timeout: 5 * 60 * 1000,
-    // npm/bun on Windows are .cmd shims; execFileSync skips PATHEXT lookup.
-    shell: process.platform === "win32",
-  });
-}
-
-/**
- * Make sure ccusage is installed and runnable. If missing and we're attached to
- * an interactive TTY, prompt to install. Non-TTY callers (auto-push, CI) get
- * the same throw as before so they can recover by installing manually.
- *
- * Pass `config` so PostHog events are attributed to the logged-in user when
- * possible; falls back to the machine UUID otherwise.
- */
-export async function ensureCcusageInstalled(
-  config: StraudeConfig | null = null,
-): Promise<void> {
-  if (isCcusageInstalled()) return;
-
-  const distinctId = getDistinctId(config);
-
-  if (!isInteractive()) {
-    posthog.capture({
-      distinctId,
-      event: "ccusage_install_skipped",
-      properties: { reason: "non_interactive" },
-    });
-    throw new Error(
-      "ccusage is not installed or not on PATH. Install it globally and retry (e.g. `npm install -g ccusage`).",
-    );
-  }
-
-  console.log("\nStraude needs `ccusage` to read your Claude Code usage.");
-  const accepted = await promptYesNo(
-    "Install ccusage globally now? [Y/n] ",
-    true,
-  );
-
-  if (!accepted) {
-    posthog.capture({
-      distinctId,
-      event: "ccusage_install_declined",
-    });
-    throw new Error(
-      "ccusage is required. Install it manually with `npm install -g ccusage` and run straude again.",
-    );
-  }
-
-  posthog.capture({
-    distinctId,
-    event: "ccusage_install_attempted",
-    properties: { manager: pickInstallCommand({ hasBun: isOnPath("bun") }).manager },
-  });
-
-  try {
-    installCcusage();
-  } catch (err) {
-    posthog.capture({
-      distinctId,
-      event: "ccusage_install_failed",
-      properties: { error: (err as Error).message?.slice(0, 200) ?? "unknown" },
-    });
-    throw new Error(
-      `Failed to install ccusage automatically: ${(err as Error).message}\n` +
-        "Install it manually with `npm install -g ccusage` and run straude again.",
-    );
-  }
-
-  // Reset resolver cache so the freshly installed binary is picked up.
-  _resolved = undefined;
-
-  if (!isCcusageInstalled()) {
-    posthog.capture({
-      distinctId,
-      event: "ccusage_install_failed",
-      properties: { error: "not_on_path_after_install" },
-    });
-    throw new Error(
-      "ccusage installed but not found on PATH. You may need to open a new shell, then re-run straude.",
-    );
-  }
-
-  posthog.capture({
-    distinctId,
-    event: "ccusage_install_succeeded",
-  });
-  console.log("ccusage installed successfully.\n");
-}
-
-/** Run ccusage via the resolved binary. */
-function execCcusage(args: string[], timeoutMs?: number): string {
-  const { cmd, args: prefix } = resolveCcusageCommand();
-  const cmdArgs = [...prefix, ...args];
-
-  try {
-    return execFileSync(cmd, cmdArgs, {
-      encoding: "utf-8",
-      timeout: timeoutMs ?? DEFAULT_SUBPROCESS_TIMEOUT_MS,
-      maxBuffer: 10 * 1024 * 1024,
-      shell: process.platform === "win32",
-    });
-  } catch (err: unknown) {
-    const error = err as ExecError;
-
-    if (error.killed || error.signal === "SIGTERM") {
-      const hint = `${cmd} ${[...prefix, "daily", "--json"].join(" ")}`;
-      throw new Error(
-        `ccusage timed out. Try running \`${hint}\` directly to verify it works.`,
-      );
-    }
-
-    const detail = error.stderr?.trim() || error.message || "unknown error";
-    throw new Error(`ccusage failed: ${detail}`);
-  }
-}
-
-/** Async version of execCcusage — runs ccusage in a child process without blocking. */
-function execCcusageAsync(args: string[], timeoutMs?: number): Promise<string> {
-  const { cmd, args: prefix } = resolveCcusageCommand();
-  const cmdArgs = [...prefix, ...args];
-
-  return new Promise((resolve, reject) => {
-    execFileCb(cmd, cmdArgs, {
-      encoding: "utf-8",
-      timeout: timeoutMs ?? DEFAULT_SUBPROCESS_TIMEOUT_MS,
-      maxBuffer: 10 * 1024 * 1024,
-      shell: process.platform === "win32",
-    }, (err, stdout) => {
-      if (!err) {
-        resolve(stdout);
-        return;
-      }
-      const error = err as ExecError;
-      if (error.killed || error.signal === "SIGTERM") {
-        const hint = `${cmd} ${[...prefix, "daily", "--json"].join(" ")}`;
-        reject(new Error(
-          `ccusage timed out. Try running \`${hint}\` directly to verify it works.`,
-        ));
-        return;
-      }
-      const detail = error.stderr?.trim() || error.message || "unknown error";
-      reject(new Error(`ccusage failed: ${detail}`));
-    });
-  });
-}
+let resolvedCommand: ResolvedCcusageCommand | undefined;
+let forcedCommandForTests: ResolvedCcusageCommand | undefined;
 
 /** Per-model cost entry for breakdown tracking. */
 export interface ModelBreakdownEntry {
@@ -252,144 +58,405 @@ export interface CcusageDailyEntry {
   modelBreakdown?: ModelBreakdownEntry[];
 }
 
-/** Raw shape returned by ccusage v18+ (`ccusage daily --json`). */
-interface CcusageV18Entry {
-  date: string;
-  modelsUsed: string[];
-  inputTokens: number;
-  outputTokens: number;
-  cacheCreationTokens: number;
-  cacheReadTokens: number;
-  totalTokens: number;
-  totalCost: number;
-  modelBreakdowns?: Array<{ modelName: string; cost: number }>;
-}
-
-interface CcusageV18Output {
-  daily: CcusageV18Entry[];
-  totals: {
-    inputTokens: number;
-    outputTokens: number;
-    cacheCreationTokens: number;
-    cacheReadTokens: number;
-    totalTokens: number;
-    totalCost: number;
-  };
+export interface CcusageCollectorMeta {
+  claude?: typeof CCUSAGE_CLAUDE_COLLECTOR;
+  codex?: typeof CCUSAGE_CODEX_COLLECTOR;
+  ccusage_version: string;
+  ccusage_agents: CcusageAgent[];
+  pricing_mode: typeof CCUSAGE_PRICING_MODE;
 }
 
 export interface CcusageOutput {
   data: CcusageDailyEntry[];
-  anomalies?: NormalizationAnomaly[];
-  normalizationSummary?: NormalizationSummary;
-}
-
-export interface NormalizationAnomaly {
-  date: string;
-  source: "ccusage" | "codex";
-  mode: TokenNormalizationMode;
-  confidence: TokenNormalizationConfidence;
-  consistencyError: number;
-  warnings: string[];
-}
-
-/**
- * Runs `ccusage daily --json` for the given date range and returns parsed output.
- * Dates should be in YYYYMMDD format (no dashes) as ccusage expects.
- */
-export function runCcusage(sinceDate: string, untilDate: string, timeoutMs?: number): CcusageOutput {
-  const args = ["daily", "--json", "--breakdown", "--since", sinceDate, "--until", untilDate];
-  return parseCcusageOutput(execCcusage(args, timeoutMs));
-}
-
-/** Returns the raw JSON string from ccusage (for hashing). */
-export function runCcusageRaw(sinceDate: string, untilDate: string, timeoutMs?: number): string {
-  const args = ["daily", "--json", "--breakdown", "--since", sinceDate, "--until", untilDate];
-  return execCcusage(args, timeoutMs);
-}
-
-/** Async version — returns raw JSON string without blocking the event loop. */
-export function runCcusageRawAsync(sinceDate: string, untilDate: string, timeoutMs?: number): Promise<string> {
-  const args = ["daily", "--json", "--breakdown", "--since", sinceDate, "--until", untilDate];
-  return execCcusageAsync(args, timeoutMs);
-}
-
-/** Normalize a v18 entry into our canonical format. */
-function normalizeEntry(raw: CcusageV18Entry): { entry: CcusageDailyEntry; meta: NormalizationMeta } {
-  const normalized = normalizeTokenBuckets(
-    {
-      inputTokens: raw.inputTokens,
-      outputTokens: raw.outputTokens,
-      cacheCreationTokens: raw.cacheCreationTokens,
-      cacheReadTokens: raw.cacheReadTokens,
-      totalTokens: raw.totalTokens,
-    },
-    { source: "ccusage", cacheSemantics: "separate" },
-  );
-
-  return {
-    entry: {
-      date: raw.date,
-      models: raw.modelsUsed,
-      inputTokens: normalized.normalized.inputTokens,
-      outputTokens: normalized.normalized.outputTokens,
-      cacheCreationTokens: normalized.normalized.cacheCreationTokens,
-      cacheReadTokens: normalized.normalized.cacheReadTokens,
-      totalTokens: normalized.normalized.totalTokens,
-      costUSD: raw.totalCost,
-      reasoningOutputTokens: normalized.normalized.reasoningOutputTokens,
-      modelBreakdown: raw.modelBreakdowns?.map((b) => ({ model: b.modelName, cost_usd: b.cost })),
-    },
-    meta: normalized.meta,
+  summary: {
+    totalInputTokens: number;
+    totalOutputTokens: number;
+    totalReasoningOutputTokens: number;
+    totalCacheCreationTokens: number;
+    totalCacheReadTokens: number;
+    totalTokens: number;
+    totalCostUSD: number;
   };
+  agents: CcusageAgent[];
+  collector: CcusageCollectorMeta;
+  version: string;
+  raw: string;
+  stderr: string;
 }
 
-export function parseCcusageOutput(raw: string): CcusageOutput {
+interface ParseOptions {
+  version?: string;
+  stderr?: string;
+}
+
+interface CcusageRawEntry {
+  period?: unknown;
+  date?: unknown;
+  modelsUsed?: unknown;
+  modelBreakdowns?: unknown;
+  inputTokens?: unknown;
+  outputTokens?: unknown;
+  cacheCreationTokens?: unknown;
+  cacheReadTokens?: unknown;
+  totalTokens?: unknown;
+  totalCost?: unknown;
+  costUSD?: unknown;
+  metadata?: unknown;
+}
+
+interface CcusageRawModelBreakdown {
+  modelName?: unknown;
+  model?: unknown;
+  cost?: unknown;
+  cost_usd?: unknown;
+}
+
+function packageNameForPlatform(platform = process.platform, arch = process.arch): string | undefined {
+  if (platform === "darwin") {
+    if (arch === "arm64") return "@ccusage/ccusage-darwin-arm64";
+    if (arch === "x64") return "@ccusage/ccusage-darwin-x64";
+  }
+  if (platform === "linux") {
+    if (arch === "arm64") return "@ccusage/ccusage-linux-arm64";
+    if (arch === "x64") return "@ccusage/ccusage-linux-x64";
+  }
+  if (platform === "win32") {
+    if (arch === "arm64") return "@ccusage/ccusage-win32-arm64";
+    if (arch === "x64") return "@ccusage/ccusage-win32-x64";
+  }
+  return undefined;
+}
+
+function binaryRelativePath(platform = process.platform): string {
+  return platform === "win32" ? "bin/ccusage.exe" : "bin/ccusage";
+}
+
+function ensureExecutable(path: string): void {
+  if (process.platform === "win32") return;
+  try {
+    const mode = statSync(path).mode;
+    if ((mode & 0o111) !== 0) return;
+    chmodSync(path, mode | 0o755);
+  } catch {
+    // Let execFile surface the actionable failure.
+  }
+}
+
+function resolveBundledCcusageCommand(): ResolvedCcusageCommand {
+  if (forcedCommandForTests) return forcedCommandForTests;
+  if (resolvedCommand) return resolvedCommand;
+
+  const projectRequire = createRequire(import.meta.url);
+  let ccusagePackageJson: string;
+  let version = "unknown";
+  try {
+    ccusagePackageJson = projectRequire.resolve("ccusage/package.json");
+    const packageJson = JSON.parse(readFileSync(ccusagePackageJson, "utf8")) as { version?: string };
+    if (typeof packageJson.version === "string") version = packageJson.version;
+  } catch {
+    throw new Error(
+      "Bundled ccusage dependency is missing. Reinstall Straude dependencies and retry.",
+    );
+  }
+
+  const nativePackage = packageNameForPlatform();
+  if (!nativePackage) {
+    throw new Error(
+      `ccusage native binary is not available for ${process.platform}-${process.arch}.`,
+    );
+  }
+
+  const ccusageRequire = createRequire(ccusagePackageJson);
+  let binaryPath: string;
+  try {
+    binaryPath = ccusageRequire.resolve(`${nativePackage}/${binaryRelativePath()}`);
+  } catch {
+    throw new Error(
+      `Bundled ccusage native binary is missing for ${process.platform}-${process.arch}. Reinstall Straude so optional ccusage dependencies are installed.`,
+    );
+  }
+
+  ensureExecutable(binaryPath);
+  resolvedCommand = { cmd: binaryPath, args: [], version };
+  return resolvedCommand;
+}
+
+/** Reset resolver cache — for testing only. */
+export function _resetCcusageResolver(): void {
+  resolvedCommand = undefined;
+  forcedCommandForTests = undefined;
+}
+
+/** Override resolver — for testing only. */
+export function _setCcusageCommandForTests(command: { cmd: string; args: string[]; version?: string }): void {
+  forcedCommandForTests = { ...command, version: command.version ?? "20.0.8" };
+  resolvedCommand = undefined;
+}
+
+function compareSemver(a: string, b: string): number {
+  const left = a.split(".").map((part) => Number(part));
+  const right = b.split(".").map((part) => Number(part));
+  for (let i = 0; i < 3; i += 1) {
+    const diff = (left[i] ?? 0) - (right[i] ?? 0);
+    if (diff !== 0) return diff;
+  }
+  return 0;
+}
+
+function assertSupportedVersion(version: string): void {
+  if (compareSemver(version, CCUSAGE_MIN_VERSION) < 0) {
+    throw new Error(
+      `ccusage ${version} is unsupported. Straude requires ccusage >=${CCUSAGE_MIN_VERSION} for accurate Codex accounting.`,
+    );
+  }
+}
+
+function stringifyBuffer(value: unknown): string {
+  if (Buffer.isBuffer(value)) return value.toString("utf8");
+  return typeof value === "string" ? value : "";
+}
+
+function formatCommand(args: string[]): string {
+  const { cmd, args: prefix } = resolveBundledCcusageCommand();
+  return [cmd, ...prefix, ...args].join(" ");
+}
+
+function execCcusageAsync(args: string[], timeoutMs?: number): Promise<ExecResult> {
+  const { cmd, args: prefix } = resolveBundledCcusageCommand();
+  const cmdArgs = [...prefix, ...args];
+
+  return new Promise((resolve, reject) => {
+    execFileCb(cmd, cmdArgs, {
+      encoding: "utf-8",
+      timeout: timeoutMs ?? DEFAULT_SUBPROCESS_TIMEOUT_MS,
+      maxBuffer: MAX_CCUSAGE_BUFFER,
+      shell: false,
+    }, (err, stdout, stderr) => {
+      if (!err) {
+        resolve({ stdout, stderr });
+        return;
+      }
+      const error = err as ExecError;
+      if (error.killed || error.signal === "SIGTERM") {
+        reject(new Error(
+          `ccusage timed out. Try running \`${formatCommand(["daily", "--json"])}\` directly to verify it works.`,
+        ));
+        return;
+      }
+      const detail = stderr.trim()
+        || stringifyBuffer(error.stderr).trim()
+        || stringifyBuffer(error.stdout).trim()
+        || error.message
+        || "unknown error";
+      reject(new Error(`ccusage failed: ${detail}`));
+    });
+  });
+}
+
+function rejectMissingPricing(stderr: string): void {
+  if (MISSING_PRICING_RE.test(stderr)) {
+    throw new Error(
+      `ccusage did not produce fully priced online cost data: ${stderr.trim()}`,
+    );
+  }
+}
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === "object" && value !== null && !Array.isArray(value);
+}
+
+function asFiniteNumber(value: unknown, field: string, date: string): number {
+  if (typeof value !== "number" || !Number.isFinite(value)) {
+    throw new Error(`Invalid ccusage row for ${date}: ${field} must be a finite number.`);
+  }
+  if (value < 0) {
+    throw new Error(`Invalid ccusage row for ${date}: ${field} must be non-negative.`);
+  }
+  return value;
+}
+
+function asStringArray(value: unknown, field: string, date: string): string[] {
+  if (!Array.isArray(value)) {
+    throw new Error(`Invalid ccusage row for ${date}: ${field} must be an array.`);
+  }
+  return value.filter((item): item is string => typeof item === "string" && item.length > 0);
+}
+
+function parseAgents(row: CcusageRawEntry, date: string): CcusageAgent[] {
+  if (!isRecord(row.metadata) || !Array.isArray(row.metadata.agents)) {
+    throw new Error(`Invalid ccusage row for ${date}: metadata.agents is required.`);
+  }
+
+  const rawAgents = row.metadata.agents;
+  if (rawAgents.length === 0 || rawAgents.some((agent) => typeof agent !== "string")) {
+    throw new Error(`Invalid ccusage row for ${date}: metadata.agents must contain agent names.`);
+  }
+
+  const unsupported = rawAgents.filter((agent): agent is string =>
+    typeof agent === "string" && !SUPPORTED_AGENTS.includes(agent as CcusageAgent),
+  );
+  if (unsupported.length > 0) {
+    throw new Error(
+      `Unsupported ccusage agents detected for ${date}: ${[...new Set(unsupported)].join(", ")}. Straude currently supports Claude Code and Codex only.`,
+    );
+  }
+
+  return [...new Set(rawAgents as CcusageAgent[])].sort((a, b) =>
+    SUPPORTED_AGENTS.indexOf(a) - SUPPORTED_AGENTS.indexOf(b),
+  );
+}
+
+function parseModelBreakdown(value: unknown, date: string): ModelBreakdownEntry[] | undefined {
+  if (value == null) return undefined;
+  if (!Array.isArray(value)) {
+    throw new Error(`Invalid ccusage row for ${date}: modelBreakdowns must be an array.`);
+  }
+
+  const breakdown = value.map((item, index) => {
+    if (!isRecord(item)) {
+      throw new Error(`Invalid ccusage row for ${date}: modelBreakdowns[${index}] must be an object.`);
+    }
+    const raw = item as CcusageRawModelBreakdown;
+    const model = raw.modelName ?? raw.model;
+    if (typeof model !== "string" || model.length === 0) {
+      throw new Error(`Invalid ccusage row for ${date}: modelBreakdowns[${index}].modelName is required.`);
+    }
+    const cost = asFiniteNumber(raw.cost ?? raw.cost_usd, `modelBreakdowns[${index}].cost`, date);
+    return { model, cost_usd: cost };
+  });
+
+  return breakdown.length > 0 ? breakdown : undefined;
+}
+
+function normalizeRawDaily(raw: unknown): CcusageRawEntry[] {
+  if (Array.isArray(raw)) return raw as CcusageRawEntry[];
+  if (isRecord(raw) && Array.isArray(raw.daily)) return raw.daily as CcusageRawEntry[];
+  throw new Error("Unexpected ccusage output format: expected a JSON object with a daily array.");
+}
+
+function collectorForAgents(agents: CcusageAgent[], version: string): CcusageCollectorMeta {
+  const collector: CcusageCollectorMeta = {
+    ccusage_version: version,
+    ccusage_agents: agents,
+    pricing_mode: CCUSAGE_PRICING_MODE,
+  };
+  if (agents.includes("claude")) collector.claude = CCUSAGE_CLAUDE_COLLECTOR;
+  if (agents.includes("codex")) collector.codex = CCUSAGE_CODEX_COLLECTOR;
+  return collector;
+}
+
+function summarizeEntries(entries: CcusageDailyEntry[]): CcusageOutput["summary"] {
+  return entries.reduce<CcusageOutput["summary"]>((summary, entry) => {
+    summary.totalInputTokens += entry.inputTokens;
+    summary.totalOutputTokens += entry.outputTokens;
+    summary.totalReasoningOutputTokens += entry.reasoningOutputTokens ?? 0;
+    summary.totalCacheCreationTokens += entry.cacheCreationTokens;
+    summary.totalCacheReadTokens += entry.cacheReadTokens;
+    summary.totalTokens += entry.totalTokens;
+    summary.totalCostUSD += entry.costUSD;
+    return summary;
+  }, {
+    totalInputTokens: 0,
+    totalOutputTokens: 0,
+    totalReasoningOutputTokens: 0,
+    totalCacheCreationTokens: 0,
+    totalCacheReadTokens: 0,
+    totalTokens: 0,
+    totalCostUSD: 0,
+  });
+}
+
+export function parseCcusageOutput(raw: string, options: ParseOptions = {}): CcusageOutput {
   let parsed: unknown;
   try {
     parsed = JSON.parse(raw);
   } catch (err) {
-    throw new Error("Failed to parse ccusage output as JSON", { cause: err });
+    throw new Error(`Failed to parse ccusage output as JSON: ${(err as Error).message}`);
   }
 
-  // ccusage returns `[]` when there's no data for the period
-  if (Array.isArray(parsed) && (parsed as unknown[]).length === 0) {
-    return { data: [] };
-  }
-
-  const v18 = parsed as CcusageV18Output;
-  if (!Array.isArray(v18.daily)) {
-    throw new Error("Unexpected ccusage output format (expected 'daily' array)");
-  }
-
-  const normalizedRows = v18.daily.map(normalizeEntry);
-  const data = normalizedRows.map((row) => row.entry);
-
-  for (const entry of data) {
-    if (!entry.date || typeof entry.costUSD !== "number") {
-      throw new Error(`Invalid entry in ccusage output for date: ${entry.date}`);
+  const rawRows = normalizeRawDaily(parsed);
+  const seenAgents = new Set<CcusageAgent>();
+  const data = rawRows.map((row, index) => {
+    if (!isRecord(row)) {
+      throw new Error(`Invalid ccusage row at index ${index}: expected an object.`);
     }
-    if (entry.costUSD < 0) {
-      throw new Error(`Negative cost for date: ${entry.date}`);
-    }
-    if (entry.totalTokens < 0 || entry.inputTokens < 0 || entry.outputTokens < 0) {
-      throw new Error(`Negative token count for date: ${entry.date}`);
-    }
-  }
 
-  const anomalies: NormalizationAnomaly[] = normalizedRows
-    .filter((row) => row.meta.mode === "unresolved" || row.meta.confidence !== "high" || row.meta.warnings.length > 0)
-    .map((row) => ({
-      date: row.entry.date,
-      source: "ccusage",
-      mode: row.meta.mode,
-      confidence: row.meta.confidence,
-      consistencyError: row.meta.consistencyError,
-      warnings: row.meta.warnings,
-    }));
+    const date = row.period ?? row.date;
+    if (typeof date !== "string" || !/^\d{4}-\d{2}-\d{2}$/.test(date)) {
+      throw new Error(`Invalid ccusage row at index ${index}: period must be YYYY-MM-DD.`);
+    }
+
+    const rowAgents = parseAgents(row, date);
+    rowAgents.forEach((agent) => seenAgents.add(agent));
+
+    const inputTokens = asFiniteNumber(row.inputTokens, "inputTokens", date);
+    const outputTokens = asFiniteNumber(row.outputTokens, "outputTokens", date);
+    const cacheCreationTokens = asFiniteNumber(row.cacheCreationTokens, "cacheCreationTokens", date);
+    const cacheReadTokens = asFiniteNumber(row.cacheReadTokens, "cacheReadTokens", date);
+    const totalTokens = asFiniteNumber(row.totalTokens, "totalTokens", date);
+    const costUSD = asFiniteNumber(row.totalCost ?? row.costUSD, "totalCost", date);
+    const modelBreakdown = parseModelBreakdown(row.modelBreakdowns, date);
+    const models = asStringArray(row.modelsUsed, "modelsUsed", date);
+
+    if (costUSD > 0 && (!modelBreakdown || modelBreakdown.length === 0)) {
+      throw new Error(`Invalid ccusage row for ${date}: priced rows must include modelBreakdowns.`);
+    }
+
+    const modelNames = new Set<string>(models);
+    for (const breakdown of modelBreakdown ?? []) modelNames.add(breakdown.model);
+    const reasoningOutputTokens = Math.max(
+      totalTokens - inputTokens - outputTokens - cacheCreationTokens - cacheReadTokens,
+      0,
+    );
+
+    return {
+      date,
+      models: [...modelNames],
+      inputTokens,
+      outputTokens,
+      cacheCreationTokens,
+      cacheReadTokens,
+      totalTokens,
+      costUSD,
+      reasoningOutputTokens,
+      modelBreakdown,
+    };
+  });
+
+  data.sort((a, b) => a.date.localeCompare(b.date));
+
+  const agents = [...seenAgents].sort((a, b) =>
+    SUPPORTED_AGENTS.indexOf(a) - SUPPORTED_AGENTS.indexOf(b),
+  );
+  const version = options.version ?? "unknown";
 
   return {
     data,
-    anomalies,
-    normalizationSummary: summarizeNormalization(normalizedRows.map((row) => row.meta)),
+    summary: summarizeEntries(data),
+    agents,
+    collector: collectorForAgents(agents, version),
+    version,
+    raw,
+    stderr: options.stderr ?? "",
   };
+}
+
+export async function collectCcusageUsageAsync(
+  sinceDate: string,
+  untilDate: string,
+  timeoutMs?: number,
+): Promise<CcusageOutput> {
+  const { version } = resolveBundledCcusageCommand();
+  assertSupportedVersion(version);
+
+  const result = await execCcusageAsync(
+    ["daily", "--json", "--since", sinceDate, "--until", untilDate, "--no-offline"],
+    timeoutMs,
+  );
+  rejectMissingPricing(result.stderr);
+
+  return parseCcusageOutput(result.stdout, {
+    version,
+    stderr: result.stderr,
+  });
 }

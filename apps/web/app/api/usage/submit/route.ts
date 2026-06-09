@@ -8,10 +8,12 @@ import { formatCurrency } from "@/lib/utils/format";
 import type { UsageSubmitRequest, UsageSubmitResponse, CcusageDailyEntry, ModelBreakdownEntry, UsageCollectorMeta } from "@/types";
 
 const MAX_BACKFILL_DAYS = 30;
-// Bump in lockstep with CODEX_NATIVE_COLLECTOR in packages/cli/src/lib/codex-native.ts.
-// The trusted collector is the only one allowed to *lower* totals on UPSERT,
-// which is how the server accepts retroactive corrections from a fixed CLI.
-const TRUSTED_CODEX_COLLECTOR = "straude-codex-native-last-token-usage";
+// Trusted collectors are the only ones allowed to *lower* Codex totals on
+// UPSERT, which is how the server accepts retroactive collector corrections.
+const TRUSTED_CODEX_COLLECTORS = new Set([
+  "straude-codex-native-last-token-usage",
+  "ccusage-codex-v20",
+]);
 const LEGACY_DEVICE_ID = "00000000-0000-0000-0000-000000000000";
 const CODEX_MODEL_RE = /^(gpt-|o3|o4)/i;
 const COST_EPSILON_USD = 0.005;
@@ -50,7 +52,25 @@ function validateEntry(entry: CcusageDailyEntry): string | null {
   if (entry.costUSD < 0) return `Negative cost for ${entry.date}`;
   if (entry.inputTokens < 0) return `Negative input tokens for ${entry.date}`;
   if (entry.outputTokens < 0) return `Negative output tokens for ${entry.date}`;
+  if ((entry.reasoningOutputTokens ?? 0) < 0) return `Negative reasoning output tokens for ${entry.date}`;
   if (entry.totalTokens < 0) return `Negative total tokens for ${entry.date}`;
+  return null;
+}
+
+function validateCollectorMeta(collector: UsageCollectorMeta | undefined): string | null {
+  if (!collector) return null;
+  if (collector.pricing_mode != null && collector.pricing_mode !== "online") {
+    return "Unsupported pricing mode; ccusage submissions must use online pricing";
+  }
+  if (collector.ccusage_agents != null) {
+    if (!Array.isArray(collector.ccusage_agents)) {
+      return "Invalid ccusage_agents collector metadata";
+    }
+    const unsupported = collector.ccusage_agents.filter((agent) => agent !== "claude" && agent !== "codex");
+    if (unsupported.length > 0) {
+      return `Unsupported ccusage agents: ${[...new Set(unsupported)].join(", ")}`;
+    }
+  }
   return null;
 }
 
@@ -118,15 +138,18 @@ function collectorForEntry(
 ): UsageCollectorMeta | undefined {
   if (!collector) return undefined;
 
-  const entryCollector: UsageCollectorMeta = {};
+  const entryCollector: Record<string, unknown> = {};
   if (collector.claude && entryContainsNonCodexUsage(entry)) {
     entryCollector.claude = collector.claude;
   }
   if (collector.codex && entryContainsCodexUsage(entry)) {
     entryCollector.codex = collector.codex;
   }
+  if (Object.keys(entryCollector).length > 0) {
+    mergeCollectorRunMeta(entryCollector, collector);
+  }
 
-  return Object.keys(entryCollector).length > 0 ? entryCollector : undefined;
+  return Object.keys(entryCollector).length > 0 ? entryCollector as UsageCollectorMeta : undefined;
 }
 
 function nonCodexCostIsPreserved(
@@ -171,10 +194,20 @@ function mergeRepairMeta(target: Record<string, unknown>, meta: unknown): void {
   }
 }
 
+function mergeCollectorRunMeta(target: Record<string, unknown>, meta: unknown): void {
+  if (!isRecord(meta)) return;
+  if (typeof meta.ccusage_version === "string") target.ccusage_version = meta.ccusage_version;
+  if (Array.isArray(meta.ccusage_agents) && meta.ccusage_agents.every((agent) => typeof agent === "string")) {
+    target.ccusage_agents = meta.ccusage_agents;
+  }
+  if (typeof meta.pricing_mode === "string") target.pricing_mode = meta.pricing_mode;
+}
+
 function mergeCollectorSourceMeta(target: Record<string, unknown>, meta: unknown): void {
   if (!isRecord(meta)) return;
   if (typeof meta.claude === "string") target.claude = meta.claude;
   if (typeof meta.codex === "string") target.codex = meta.codex;
+  mergeCollectorRunMeta(target, meta);
 }
 
 function mergeDailyCollectorMeta(
@@ -238,6 +271,7 @@ interface DeviceUsageRow {
   cost_usd: number;
   input_tokens: number;
   output_tokens: number;
+  reasoning_output_tokens?: number;
   cache_creation_tokens: number;
   cache_read_tokens: number;
   total_tokens: number;
@@ -255,6 +289,7 @@ export function aggregateDeviceRows(rows: DeviceUsageRow[]) {
   let cost_usd = 0;
   let input_tokens = 0;
   let output_tokens = 0;
+  let reasoning_output_tokens = 0;
   let cache_creation_tokens = 0;
   let cache_read_tokens = 0;
   let total_tokens = 0;
@@ -265,6 +300,7 @@ export function aggregateDeviceRows(rows: DeviceUsageRow[]) {
     cost_usd += Number(row.cost_usd);
     input_tokens += Number(row.input_tokens);
     output_tokens += Number(row.output_tokens);
+    reasoning_output_tokens += Number(row.reasoning_output_tokens ?? 0);
     cache_creation_tokens += Number(row.cache_creation_tokens ?? 0);
     cache_read_tokens += Number(row.cache_read_tokens ?? 0);
     total_tokens += Number(row.total_tokens);
@@ -288,6 +324,7 @@ export function aggregateDeviceRows(rows: DeviceUsageRow[]) {
     cost_usd,
     input_tokens,
     output_tokens,
+    reasoning_output_tokens,
     cache_creation_tokens,
     cache_read_tokens,
     total_tokens,
@@ -311,6 +348,11 @@ export async function POST(request: Request) {
 
   if (!body.source || !["cli", "web"].includes(body.source)) {
     return NextResponse.json({ error: "Invalid source" }, { status: 400 });
+  }
+
+  const collectorValidationError = validateCollectorMeta(body.collector);
+  if (collectorValidationError) {
+    return NextResponse.json({ error: collectorValidationError }, { status: 400 });
   }
 
   const auth = await resolveAuthContext(request);
@@ -346,7 +388,8 @@ export async function POST(request: Request) {
 
   const deviceId = body.device_id;
   const deviceName = body.device_name;
-  const requestHasTrustedCodexCollector = body.collector?.codex === TRUSTED_CODEX_COLLECTOR;
+  const requestHasTrustedCodexCollector = typeof body.collector?.codex === "string"
+    && TRUSTED_CODEX_COLLECTORS.has(body.collector.codex);
 
   if (!deviceId) {
     return NextResponse.json(
@@ -374,9 +417,9 @@ export async function POST(request: Request) {
       const entryIsTrustedCodexCorrection = requestHasTrustedCodexCollector && entryContainsCodexUsage(entry.data);
       const entryCollector = collectorForEntry(body.collector, entry.data);
 
-      // Guard against decreasing values (e.g., ccusage log rotation). The native
-      // Codex collector is allowed to lower totals because it repairs inflated
-      // rows produced by the older upstream Codex aggregation behavior.
+      // Guard against decreasing values (e.g., ccusage log rotation). Trusted
+      // Codex collectors may lower totals because they repair inflated rows
+      // produced by older Codex aggregation behavior.
       const { data: existingDevice } = await db
         .from("device_usage")
         .select("cost_usd,models,model_breakdown,collector_meta")
@@ -429,6 +472,7 @@ export async function POST(request: Request) {
               cost_usd: entry.data.costUSD,
               input_tokens: entry.data.inputTokens,
               output_tokens: entry.data.outputTokens,
+              reasoning_output_tokens: entry.data.reasoningOutputTokens ?? 0,
               cache_creation_tokens: entry.data.cacheCreationTokens,
               cache_read_tokens: entry.data.cacheReadTokens,
               total_tokens: entry.data.totalTokens,
@@ -477,7 +521,7 @@ export async function POST(request: Request) {
         if (preexistingDeviceCount === 0) {
           const { data: legacyRow } = await db
             .from("daily_usage")
-            .select("cost_usd,input_tokens,output_tokens,cache_creation_tokens,cache_read_tokens,total_tokens,models,model_breakdown,raw_hash")
+            .select("cost_usd,input_tokens,output_tokens,reasoning_output_tokens,cache_creation_tokens,cache_read_tokens,total_tokens,models,model_breakdown,raw_hash")
             .eq("id", existing.id)
             .single();
 
@@ -490,6 +534,7 @@ export async function POST(request: Request) {
               cost_usd: legacyRow.cost_usd,
               input_tokens: legacyRow.input_tokens,
               output_tokens: legacyRow.output_tokens,
+              reasoning_output_tokens: legacyRow.reasoning_output_tokens ?? 0,
               cache_creation_tokens: legacyRow.cache_creation_tokens ?? 0,
               cache_read_tokens: legacyRow.cache_read_tokens ?? 0,
               total_tokens: legacyRow.total_tokens,
@@ -507,7 +552,7 @@ export async function POST(request: Request) {
       // Fetch all device rows for this (user_id, date) and aggregate
       const { data: deviceRows, error: fetchError } = await db
         .from("device_usage")
-        .select("cost_usd,input_tokens,output_tokens,cache_creation_tokens,cache_read_tokens,total_tokens,models,model_breakdown,collector_meta")
+        .select("cost_usd,input_tokens,output_tokens,reasoning_output_tokens,cache_creation_tokens,cache_read_tokens,total_tokens,models,model_breakdown,collector_meta")
         .eq("user_id", userId)
         .eq("date", entry.date);
 
@@ -531,6 +576,7 @@ export async function POST(request: Request) {
             cost_usd: agg.cost_usd,
             input_tokens: agg.input_tokens,
             output_tokens: agg.output_tokens,
+            reasoning_output_tokens: agg.reasoning_output_tokens,
             cache_creation_tokens: agg.cache_creation_tokens,
             cache_read_tokens: agg.cache_read_tokens,
             total_tokens: agg.total_tokens,

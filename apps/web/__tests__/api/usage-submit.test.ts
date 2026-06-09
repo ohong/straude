@@ -21,6 +21,7 @@ import { POST, aggregateDeviceRows } from "@/app/api/usage/submit/route";
 import { createClient } from "@/lib/supabase/server";
 import { verifyCliToken, verifyCliTokenWithRefresh } from "@/lib/api/cli-auth";
 import { getServiceClient } from "@/lib/supabase/service";
+import { resetRateLimiters } from "@/lib/rate-limit";
 
 function makeEntry(dateStr: string, overrides: Record<string, any> = {}) {
   return {
@@ -121,6 +122,7 @@ function mockRequestRaw(body: any, headers: Record<string, string> = {}) {
 
 beforeEach(() => {
   vi.clearAllMocks();
+  resetRateLimiters();
   process.env.NEXT_PUBLIC_SUPABASE_URL = "https://test.supabase.co";
   process.env.SUPABASE_SECRET_KEY = "secret";
   process.env.NEXT_PUBLIC_APP_URL = "https://straude.com";
@@ -301,6 +303,65 @@ describe("POST /api/usage/submit", () => {
     expect(json.error).toContain("Negative input tokens");
   });
 
+  it("rejects negative reasoning output tokens", async () => {
+    (verifyCliToken as any).mockReturnValue("user-1");
+    mockServiceClient();
+
+    const res = await POST(
+      mockRequest({
+        entries: [makeEntry(todayStr(), { reasoningOutputTokens: -1 })],
+        source: "cli",
+      })
+    );
+    const json = await res.json();
+
+    expect(res.status).toBe(400);
+    expect(json.error).toContain("Negative reasoning output tokens");
+  });
+
+  it("rejects unsupported ccusage collector agents", async () => {
+    (verifyCliToken as any).mockReturnValue("user-1");
+    mockServiceClient();
+
+    const res = await POST(
+      mockRequest({
+        entries: [makeEntry(todayStr())],
+        source: "cli",
+        collector: {
+          ccusage_version: "20.0.6",
+          ccusage_agents: ["claude", "gemini"],
+          pricing_mode: "online",
+        },
+      })
+    );
+    const json = await res.json();
+
+    expect(res.status).toBe(400);
+    expect(json.error).toContain("Unsupported ccusage agents");
+  });
+
+  it("rejects non-online ccusage pricing metadata", async () => {
+    (verifyCliToken as any).mockReturnValue("user-1");
+    mockServiceClient();
+
+    const res = await POST(
+      mockRequest({
+        entries: [makeEntry(todayStr())],
+        source: "cli",
+        collector: {
+          ccusage_version: "20.0.6",
+          ccusage_agents: ["claude"],
+          pricing_mode: "auto",
+        },
+      })
+    );
+    const json = await res.json();
+
+    expect(res.status).toBe(400);
+    expect(json.error).toContain("Unsupported pricing mode");
+  });
+
+
   it("uses upsert on conflict for device_usage and daily_usage", async () => {
     (verifyCliToken as any).mockReturnValue("user-1");
     const svc = mockServiceClient();
@@ -431,6 +492,47 @@ describe("POST /api/usage/submit", () => {
     expect(res.status).toBe(200);
     const upsertCall = svc.upsert.mock.calls[0];
     expect(upsertCall[0].model_breakdown).toBeNull();
+  });
+
+  it("stores and aggregates reasoning output tokens", async () => {
+    (verifyCliToken as any).mockReturnValue("user-1");
+    const deviceRow = {
+      cost_usd: 3.0,
+      input_tokens: 2000,
+      output_tokens: 800,
+      reasoning_output_tokens: 250,
+      cache_creation_tokens: 0,
+      cache_read_tokens: 0,
+      total_tokens: 2800,
+      models: ["gpt-5-codex"],
+      model_breakdown: [{ model: "gpt-5-codex", cost_usd: 3.0 }],
+    };
+    const svc = mockServiceClient({ data: [deviceRow] });
+    svc.single
+      .mockResolvedValueOnce({ data: { id: "dev-1" }, error: null })
+      .mockResolvedValueOnce({ data: { id: "usage-1" }, error: null })
+      .mockResolvedValueOnce({ data: { id: "post-1" }, error: null });
+
+    const res = await POST(
+      mockRequest({
+        entries: [
+          makeEntry(todayStr(), {
+            models: ["gpt-5-codex"],
+            costUSD: 3.0,
+            inputTokens: 2000,
+            outputTokens: 800,
+            reasoningOutputTokens: 250,
+            totalTokens: 2800,
+            modelBreakdown: [{ model: "gpt-5-codex", cost_usd: 3.0 }],
+          }),
+        ],
+        source: "cli",
+      })
+    );
+
+    expect(res.status).toBe(200);
+    expect(svc.upsert.mock.calls[0][0].reasoning_output_tokens).toBe(250);
+    expect(svc.upsert.mock.calls[1][0].reasoning_output_tokens).toBe(250);
   });
 
   it("accepts Codex-only usage (no Claude models)", async () => {
@@ -1234,7 +1336,10 @@ describe("POST /api/usage/submit", () => {
     expect(json.results[0].daily_total).toBe(20);
   });
 
-  it("allows a mixed trusted Codex correction when non-Codex cost is preserved", async () => {
+  it.each([
+    ["native last-token collector", "straude-codex-native-last-token-usage"],
+    ["ccusage Codex v20 collector", "ccusage-codex-v20"],
+  ])("allows a mixed trusted Codex correction from the %s when non-Codex cost is preserved", async (_label, codexCollector) => {
     (verifyCliToken as any).mockReturnValue("user-mixed-preserved");
 
     const existingMixedRow = {
@@ -1260,7 +1365,7 @@ describe("POST /api/usage/submit", () => {
         { model: "claude-opus-4-20250505", cost_usd: 90 },
         { model: "gpt-5-codex", cost_usd: 10 },
       ],
-      collector_meta: { claude: "ccusage-v18", codex: "straude-codex-native-last-token-usage" },
+      collector_meta: { claude: "ccusage-v18", codex: codexCollector },
     };
     const deviceGuardChain: Record<string, any> = {
       select: vi.fn().mockReturnThis(),
@@ -1339,7 +1444,7 @@ describe("POST /api/usage/submit", () => {
           modelBreakdown: correctedMixedRow.model_breakdown,
         })],
         source: "cli",
-        collector: { codex: "straude-codex-native-last-token-usage", claude: "ccusage-v18" },
+        collector: { codex: codexCollector, claude: "ccusage-claude-v20" },
       })
     );
 
@@ -1348,9 +1453,41 @@ describe("POST /api/usage/submit", () => {
     expect(deviceDeleteChain.delete).toHaveBeenCalled();
     expect(dailyChain.upsert.mock.calls[0][0].cost_usd).toBe(100);
     expect(dailyChain.upsert.mock.calls[0][0].collector_meta).toEqual({
-      claude: "ccusage-v18",
-      codex: "straude-codex-native-last-token-usage",
+      claude: "ccusage-claude-v20",
+      codex: codexCollector,
     });
+  });
+
+  it("stores ccusage collector metadata fields with the source collector", async () => {
+    (verifyCliToken as any).mockReturnValue("user-collector-meta");
+    const svc = mockServiceClient();
+    svc.single
+      .mockResolvedValueOnce({ data: { id: "dev-1" }, error: null })
+      .mockResolvedValueOnce({ data: { id: "usage-1" }, error: null })
+      .mockResolvedValueOnce({ data: { id: "post-1" }, error: null });
+
+    const res = await POST(
+      mockRequest({
+        entries: [makeEntry(todayStr())],
+        source: "cli",
+        collector: {
+          claude: "ccusage-claude-v20",
+          ccusage_version: "20.0.6",
+          ccusage_agents: ["claude"],
+          pricing_mode: "online",
+        },
+      })
+    );
+
+    const expectedMeta = {
+      claude: "ccusage-claude-v20",
+      ccusage_version: "20.0.6",
+      ccusage_agents: ["claude"],
+      pricing_mode: "online",
+    };
+    expect(res.status).toBe(200);
+    expect(svc.upsert.mock.calls[0][0].collector_meta).toEqual(expectedMeta);
+    expect(svc.upsert.mock.calls[1][0].collector_meta).toEqual(expectedMeta);
   });
 
   it("blocks a mixed trusted Codex correction when non-Codex cost would fall", async () => {
@@ -1628,6 +1765,7 @@ describe("aggregateDeviceRows", () => {
         cost_usd: 5.0,
         input_tokens: 1000,
         output_tokens: 500,
+        reasoning_output_tokens: 125,
         cache_creation_tokens: 100,
         cache_read_tokens: 50,
         total_tokens: 1650,
@@ -1638,6 +1776,7 @@ describe("aggregateDeviceRows", () => {
         cost_usd: 3.0,
         input_tokens: 2000,
         output_tokens: 800,
+        reasoning_output_tokens: 75,
         cache_creation_tokens: 0,
         cache_read_tokens: 0,
         total_tokens: 2800,
@@ -1651,6 +1790,7 @@ describe("aggregateDeviceRows", () => {
     expect(agg.cost_usd).toBe(8.0);
     expect(agg.input_tokens).toBe(3000);
     expect(agg.output_tokens).toBe(1300);
+    expect(agg.reasoning_output_tokens).toBe(200);
     expect(agg.cache_creation_tokens).toBe(100);
     expect(agg.cache_read_tokens).toBe(50);
     expect(agg.total_tokens).toBe(4450);
