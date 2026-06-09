@@ -178,6 +178,17 @@ describe("cli-auth", () => {
       expect(result!.refreshedToken).toBeNull();
     });
 
+    it("does not extend lifetime beyond the original 30 days", () => {
+      const token = createCliToken("user-1", "alice");
+      vi.setSystemTime(new Date(Date.now() + 8 * 24 * 60 * 60 * 1000));
+      const first = verifyCliTokenWithRefresh(`Bearer ${token}`);
+      expect(first?.refreshedToken).toBeTypeOf("string");
+
+      vi.setSystemTime(new Date(Date.now() + 23 * 24 * 60 * 60 * 1000));
+      const second = verifyCliTokenWithRefresh(`Bearer ${first!.refreshedToken!}`);
+      expect(second?.refreshedToken).toBeNull();
+    });
+
     it("returns null for invalid tokens", () => {
       expect(verifyCliTokenWithRefresh("Bearer not.a.token")).toBeNull();
       expect(verifyCliTokenWithRefresh(null)).toBeNull();
