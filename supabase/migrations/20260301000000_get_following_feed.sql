@@ -24,7 +24,14 @@ STABLE
 SECURITY DEFINER
 SET search_path TO 'public'
 AS $$
+DECLARE
+  v_auth_user uuid := auth.uid();
+  v_limit int := LEAST(GREATEST(COALESCE(p_limit, 20), 1), 100);
 BEGIN
+  IF v_auth_user IS NULL OR v_auth_user <> p_user_id THEN
+    RAISE EXCEPTION USING MESSAGE = 'Unauthorized', ERRCODE = '42501';
+  END IF;
+
   RETURN QUERY
   SELECT
     p.id,
@@ -51,7 +58,7 @@ BEGIN
   )
   AND (p_cursor IS NULL OR p.created_at < p_cursor)
   ORDER BY p.created_at DESC
-  LIMIT p_limit;
+  LIMIT v_limit;
 END;
 $$;
 -- Allow authenticated users to call this function (runs under their session).
