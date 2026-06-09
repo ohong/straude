@@ -139,7 +139,7 @@ describe("POST /api/usage/submit (real Supabase)", () => {
       cost_usd: string;
       input_tokens: string;
       output_tokens: string;
-      reasoning_output_tokens: number;
+      reasoning_output_tokens: string;
       total_tokens: string;
       models: string[];
       session_count: number;
@@ -155,7 +155,7 @@ describe("POST /api/usage/submit (real Supabase)", () => {
     expect(Number(rows[0].cost_usd)).toBeCloseTo(0.05, 6);
     expect(Number(rows[0].input_tokens)).toBe(1000);
     expect(Number(rows[0].output_tokens)).toBe(500);
-    expect(rows[0].reasoning_output_tokens).toBe(125);
+    expect(Number(rows[0].reasoning_output_tokens)).toBe(125);
     expect(Number(rows[0].total_tokens)).toBe(1800);
     expect(rows[0].models).toContain("claude-sonnet-4-5-20250929");
 

@@ -90,12 +90,10 @@ function ccusageJson(date = todayStr()) {
   });
 }
 
+const TEST_CCUSAGE_VERSION = "20.0.8";
+
 function mockCcusage(json = ccusageJson()) {
-  execFileMock.mockImplementation((cmd: string, args: string[], _options: unknown, callback: (err: Error | null, stdout: string, stderr: string) => void) => {
-    if (args.includes("--version")) {
-      callback(null, "ccusage 20.0.6\n", "");
-      return;
-    }
+  execFileMock.mockImplementation((_cmd: string, _args: string[], _options: unknown, callback: (err: Error | null, stdout: string, stderr: string) => void) => {
     callback(null, json, "");
   });
 }
@@ -123,7 +121,7 @@ beforeEach(() => {
   vi.useFakeTimers({ now: new Date("2026-03-13T12:00:00Z"), toFake: ["Date"] });
   vi.clearAllMocks();
   _resetCcusageResolver();
-  _setCcusageCommandForTests({ cmd: "/bundled/ccusage", args: [] });
+  _setCcusageCommandForTests({ cmd: "/bundled/ccusage", args: [], version: TEST_CCUSAGE_VERSION });
   configStore = {};
   mockCcusage();
   vi.spyOn(console, "log").mockImplementation(() => {});
@@ -159,7 +157,7 @@ describe("unified ccusage CLI flow", () => {
     expect(body.collector).toEqual({
       claude: "ccusage-claude-v20",
       codex: "ccusage-codex-v20",
-      ccusage_version: "20.0.6",
+      ccusage_version: TEST_CCUSAGE_VERSION,
       ccusage_agents: ["claude", "codex"],
       pricing_mode: "online",
     });

@@ -1,5 +1,13 @@
 # Architecture & Design Decisions
 
+## Delegate all usage accounting to bundled ccusage v20 (2026-06-09)
+
+**Decision:** Both Claude Code and Codex ingestion run through a single bundled `ccusage` (pinned, currently 20.0.8) invoked as a native binary, with a `>=20.0.5` accuracy floor validated against the bundled package version. Straude's native Codex collector, token normalizer, and pricing aliases are deleted; Straude only parses ccusage's daily JSON into storage rows.
+
+**Alternatives considered:** (a) Keep the native Codex collector in parallel with ccusage Claude collection — rejected because it duplicates upstream parsing/dedupe/pricing work that ccusage now does correctly (v20 ships `metadata.agents`, archived-session dedupe, `thread_spawn` replay skipping) and was the source of two past inflation incidents. (b) Use a global `ccusage` from PATH — rejected because version skew on user machines breaks the accuracy floor; bundling pins the exact behavior we tested.
+
+**Trade-off accepted:** The unified all-agent ccusage report benchmarked ~9.5% slower (median +152ms on a three-day mixed fixture) than the old parallel native path. Accepted: accuracy and a single owner for token accounting outweigh sub-second CLI latency. `reasoning_output_tokens` is derived as the residual `totalTokens - (input + output + cacheCreate + cacheRead)` because ccusage's `totalTokens` is authoritative and includes reasoning.
+
 ## Roll back SQL Codex repairs; heal only from CLI source data (2026-05-07)
 
 **Decision:** Do not repair historical Codex usage by direct SQL rescaling. The 2026-05-06/07 repair migrations are now no-ops, and `20260507000200_rollback_codex_sql_repairs.sql` restores any environment that briefly ran them from the original `corrections_log.previous_values` snapshots. Accurate Codex healing happens only when the owning user pushes again with the fixed CLI collector.

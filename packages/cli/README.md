@@ -17,7 +17,7 @@ Running with no arguments performs a smart sync: logs you in if needed, then pus
 - Node 18+
 - Local Claude Code and/or Codex session data.
 
-Straude bundles `ccusage@20.0.6` and invokes that bundled binary directly. It does not rely on a globally installed `ccusage` command.
+Straude bundles a pinned copy of [`ccusage`](https://github.com/ryoppippi/ccusage) (v20+) and invokes that bundled binary directly. It does not rely on a globally installed `ccusage` command.
 
 ## Commands
 

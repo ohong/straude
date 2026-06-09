@@ -1,12 +1,10 @@
 import { describe, it, expect, vi, beforeEach } from "vitest";
 
-const { execFileSyncMock, execFileMock } = vi.hoisted(() => ({
-  execFileSyncMock: vi.fn(),
+const { execFileMock } = vi.hoisted(() => ({
   execFileMock: vi.fn(),
 }));
 
 vi.mock("node:child_process", () => ({
-  execFileSync: execFileSyncMock,
   execFile: execFileMock,
 }));
 
@@ -15,8 +13,6 @@ import {
   CCUSAGE_CODEX_COLLECTOR,
   collectCcusageUsageAsync,
   parseCcusageOutput,
-  parseCcusageVersion,
-  runCcusageRaw,
   _resetCcusageResolver,
   _setCcusageCommandForTests,
 } from "../src/lib/ccusage.js";
@@ -156,21 +152,21 @@ describe("parseCcusageOutput", () => {
 });
 
 describe("version and execution", () => {
-  it("parses ccusage version output", () => {
-    expect(parseCcusageVersion("ccusage 20.0.6\n")).toBe("20.0.6");
-  });
+  it("invokes the bundled ccusage binary with online unified daily args", async () => {
+    execFileMock.mockImplementationOnce((...args: unknown[]) => {
+      const cb = args.at(-1) as (err: Error | null, stdout: string, stderr: string) => void;
+      cb(null, rawOutput(), "");
+    });
 
-  it("invokes the bundled ccusage binary with online unified daily args", () => {
-    execFileSyncMock.mockReturnValueOnce(rawOutput());
+    const collected = await collectCcusageUsageAsync("20260513", "20260513", 10_000);
 
-    const raw = runCcusageRaw("20260513", "20260513", 10_000);
-
-    expect(raw).toBe(rawOutput());
-    expect(execFileSyncMock).toHaveBeenCalledTimes(1);
-    expect(execFileSyncMock).toHaveBeenCalledWith(
+    expect(collected.raw).toBe(rawOutput());
+    expect(execFileMock).toHaveBeenCalledTimes(1);
+    expect(execFileMock).toHaveBeenCalledWith(
       "/bundled/ccusage",
       ["daily", "--json", "--since", "20260513", "--until", "20260513", "--no-offline"],
       expect.objectContaining({ shell: false }),
+      expect.any(Function),
     );
   });
 

@@ -1,4 +1,4 @@
-import { execFileSync, execFile as execFileCb } from "node:child_process";
+import { execFile as execFileCb } from "node:child_process";
 import { chmodSync, readFileSync, statSync } from "node:fs";
 import { createRequire } from "node:module";
 import { DEFAULT_SUBPROCESS_TIMEOUT_MS } from "../config.js";
@@ -14,7 +14,7 @@ const MISSING_PRICING_RE = /(missing|unavailable|unknown|could not fetch|failed 
 
 export type CcusageAgent = typeof SUPPORTED_AGENTS[number];
 
-/** Type-safe representation of the error thrown by execFileSync / execFile. */
+/** Type-safe representation of the error surfaced by execFile. */
 interface ExecError extends Error {
   code?: string;
   status?: number | null;
@@ -82,15 +82,6 @@ export interface CcusageOutput {
   version: string;
   raw: string;
   stderr: string;
-}
-
-export interface NormalizationAnomaly {
-  date: string;
-  source: string;
-  mode: string;
-  confidence: string;
-  consistencyError: number;
-  warnings: string[];
 }
 
 interface ParseOptions {
@@ -198,16 +189,8 @@ export function _resetCcusageResolver(): void {
 
 /** Override resolver — for testing only. */
 export function _setCcusageCommandForTests(command: { cmd: string; args: string[]; version?: string }): void {
-  forcedCommandForTests = { ...command, version: command.version ?? "20.0.6" };
+  forcedCommandForTests = { ...command, version: command.version ?? "20.0.8" };
   resolvedCommand = undefined;
-}
-
-export function parseCcusageVersion(output: string): string {
-  const match = output.match(/(\d+)\.(\d+)\.(\d+)/);
-  if (!match) {
-    throw new Error(`Unable to determine ccusage version from: ${output.trim() || "<empty>"}`);
-  }
-  return `${match[1]}.${match[2]}.${match[3]}`;
 }
 
 function compareSemver(a: string, b: string): number {
@@ -236,33 +219,6 @@ function stringifyBuffer(value: unknown): string {
 function formatCommand(args: string[]): string {
   const { cmd, args: prefix } = resolveBundledCcusageCommand();
   return [cmd, ...prefix, ...args].join(" ");
-}
-
-function execCcusage(args: string[], timeoutMs?: number): ExecResult {
-  const { cmd, args: prefix } = resolveBundledCcusageCommand();
-  const cmdArgs = [...prefix, ...args];
-
-  try {
-    const stdout = execFileSync(cmd, cmdArgs, {
-      encoding: "utf-8",
-      timeout: timeoutMs ?? DEFAULT_SUBPROCESS_TIMEOUT_MS,
-      maxBuffer: MAX_CCUSAGE_BUFFER,
-      shell: false,
-    });
-    return { stdout, stderr: "" };
-  } catch (err: unknown) {
-    const error = err as ExecError;
-    if (error.killed || error.signal === "SIGTERM") {
-      throw new Error(
-        `ccusage timed out. Try running \`${formatCommand(["daily", "--json"])}\` directly to verify it works.`,
-      );
-    }
-    const detail = stringifyBuffer(error.stderr).trim()
-      || stringifyBuffer(error.stdout).trim()
-      || error.message
-      || "unknown error";
-    throw new Error(`ccusage failed: ${detail}`);
-  }
 }
 
 function execCcusageAsync(args: string[], timeoutMs?: number): Promise<ExecResult> {
@@ -485,28 +441,6 @@ export function parseCcusageOutput(raw: string, options: ParseOptions = {}): Ccu
   };
 }
 
-export function runCcusageRaw(sinceDate: string, untilDate: string, timeoutMs?: number): string {
-  const { version } = resolveBundledCcusageCommand();
-  assertSupportedVersion(version);
-  const result = execCcusage(
-    ["daily", "--json", "--since", sinceDate, "--until", untilDate, "--no-offline"],
-    timeoutMs,
-  );
-  rejectMissingPricing(result.stderr);
-  return result.stdout;
-}
-
-export function runCcusage(sinceDate: string, untilDate: string, timeoutMs?: number): CcusageOutput {
-  const raw = runCcusageRaw(sinceDate, untilDate, timeoutMs);
-  const { version } = resolveBundledCcusageCommand();
-  return parseCcusageOutput(raw, { version });
-}
-
-export async function runCcusageRawAsync(sinceDate: string, untilDate: string, timeoutMs?: number): Promise<string> {
-  const collected = await collectCcusageUsageAsync(sinceDate, untilDate, timeoutMs);
-  return collected.raw;
-}
-
 export async function collectCcusageUsageAsync(
   sinceDate: string,
   untilDate: string,
@@ -525,9 +459,4 @@ export async function collectCcusageUsageAsync(
     version,
     stderr: result.stderr,
   });
-}
-
-export async function ensureCcusageInstalled(): Promise<void> {
-  const { version } = resolveBundledCcusageCommand();
-  assertSupportedVersion(version);
 }
