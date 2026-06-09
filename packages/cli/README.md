@@ -19,6 +19,14 @@ Running with no arguments performs a smart sync: logs you in if needed, then pus
 
 Straude bundles a pinned copy of [`ccusage`](https://github.com/ryoppippi/ccusage) (v20+) and invokes that bundled binary directly. It does not rely on a globally installed `ccusage` command.
 
+Usage capture runs through one unified `ccusage daily --json` report for Claude Code and Codex. Straude uses ccusage's embedded pricing cache first for low-latency capture, then retries with online pricing if ccusage reports missing embedded pricing. If ccusage still cannot price a model, the push aborts instead of submitting partial cost data.
+
+To re-check capture latency against the old native Codex collector baseline:
+
+```sh
+bun --cwd packages/cli benchmark:ccusage
+```
+
 ## Commands
 
 ### Default (smart sync)
@@ -106,7 +114,7 @@ normal output.
 
 ## Telemetry
 
-The CLI sends anonymous usage events (command name, CLI version, success/failure outcomes, aggregate counts like `days_pushed` and `total_cost_usd`) to Straude's PostHog project so we can prioritise features and catch regressions. We never send prompts, code, conversation content, file paths, or ccusage rows — home directory paths are scrubbed from any free-form payload before transmission.
+The CLI sends anonymous usage events (command name, CLI version, success/failure outcomes, aggregate counts like `days_pushed`, `total_cost_usd`, ccusage version, pricing mode, and capture duration) to Straude's PostHog project so we can prioritise features and catch regressions. We never send prompts, code, conversation content, file paths, or ccusage rows — home directory paths are scrubbed from any free-form payload before transmission.
 
 To opt out, set either env var:
 

@@ -18,7 +18,8 @@
     "dev": "tsup --watch",
     "typecheck": "tsc --noEmit",
     "prepublishOnly": "bun run build",
-    "test": "vitest run"
+    "test": "vitest run",
+    "benchmark:ccusage": "bun scripts/benchmark-ccusage-capture.ts --assert"
   },
   "devDependencies": {
     "@straude/shared": "workspace:*",

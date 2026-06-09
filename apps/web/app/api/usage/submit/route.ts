@@ -14,6 +14,7 @@ const TRUSTED_CODEX_COLLECTORS = new Set([
   "straude-codex-native-last-token-usage",
   "ccusage-codex-v20",
 ]);
+const TRUSTED_CCUSAGE_PRICING_MODES = new Set(["offline", "online"]);
 const LEGACY_DEVICE_ID = "00000000-0000-0000-0000-000000000000";
 const CODEX_MODEL_RE = /^(gpt-|o3|o4)/i;
 const COST_EPSILON_USD = 0.005;
@@ -59,8 +60,8 @@ function validateEntry(entry: CcusageDailyEntry): string | null {
 
 function validateCollectorMeta(collector: UsageCollectorMeta | undefined): string | null {
   if (!collector) return null;
-  if (collector.pricing_mode != null && collector.pricing_mode !== "online") {
-    return "Unsupported pricing mode; ccusage submissions must use online pricing";
+  if (collector.pricing_mode != null && !TRUSTED_CCUSAGE_PRICING_MODES.has(collector.pricing_mode)) {
+    return "Unsupported pricing mode; ccusage submissions must use ccusage offline or online pricing";
   }
   if (collector.ccusage_agents != null) {
     if (!Array.isArray(collector.ccusage_agents)) {

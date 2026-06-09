@@ -6,13 +6,16 @@ import { DEFAULT_SUBPROCESS_TIMEOUT_MS } from "../config.js";
 export const CCUSAGE_MIN_VERSION = "20.0.5";
 export const CCUSAGE_CLAUDE_COLLECTOR = "ccusage-claude-v20" as const;
 export const CCUSAGE_CODEX_COLLECTOR = "ccusage-codex-v20" as const;
-export const CCUSAGE_PRICING_MODE = "online" as const;
+export const CCUSAGE_DEFAULT_PRICING_MODE = "offline" as const;
+export const CCUSAGE_FALLBACK_PRICING_MODE = "online" as const;
 
 const SUPPORTED_AGENTS = ["claude", "codex"] as const;
+const SUPPORTED_PRICING_MODES = [CCUSAGE_DEFAULT_PRICING_MODE, CCUSAGE_FALLBACK_PRICING_MODE] as const;
 const MAX_CCUSAGE_BUFFER = 20 * 1024 * 1024;
 const MISSING_PRICING_RE = /(missing|unavailable|unknown|could not fetch|failed to fetch).{0,80}(pricing|price|cost)|pricing.{0,80}(missing|unavailable|unknown)|cost excludes/i;
 
 export type CcusageAgent = typeof SUPPORTED_AGENTS[number];
+export type CcusagePricingMode = typeof SUPPORTED_PRICING_MODES[number];
 
 /** Type-safe representation of the error surfaced by execFile. */
 interface ExecError extends Error {
@@ -63,7 +66,7 @@ export interface CcusageCollectorMeta {
   codex?: typeof CCUSAGE_CODEX_COLLECTOR;
   ccusage_version: string;
   ccusage_agents: CcusageAgent[];
-  pricing_mode: typeof CCUSAGE_PRICING_MODE;
+  pricing_mode: CcusagePricingMode;
 }
 
 export interface CcusageOutput {
@@ -80,6 +83,7 @@ export interface CcusageOutput {
   agents: CcusageAgent[];
   collector: CcusageCollectorMeta;
   version: string;
+  pricingMode: CcusagePricingMode;
   raw: string;
   stderr: string;
 }
@@ -87,6 +91,7 @@ export interface CcusageOutput {
 interface ParseOptions {
   version?: string;
   stderr?: string;
+  pricingMode?: CcusagePricingMode;
 }
 
 interface CcusageRawEntry {
@@ -253,10 +258,14 @@ function execCcusageAsync(args: string[], timeoutMs?: number): Promise<ExecResul
   });
 }
 
+function hasMissingPricing(stderr: string): boolean {
+  return MISSING_PRICING_RE.test(stderr);
+}
+
 function rejectMissingPricing(stderr: string): void {
   if (MISSING_PRICING_RE.test(stderr)) {
     throw new Error(
-      `ccusage did not produce fully priced online cost data: ${stderr.trim()}`,
+      `ccusage did not produce fully priced cost data: ${stderr.trim()}`,
     );
   }
 }
@@ -334,11 +343,15 @@ function normalizeRawDaily(raw: unknown): CcusageRawEntry[] {
   throw new Error("Unexpected ccusage output format: expected a JSON object with a daily array.");
 }
 
-function collectorForAgents(agents: CcusageAgent[], version: string): CcusageCollectorMeta {
+function collectorForAgents(
+  agents: CcusageAgent[],
+  version: string,
+  pricingMode: CcusagePricingMode,
+): CcusageCollectorMeta {
   const collector: CcusageCollectorMeta = {
     ccusage_version: version,
     ccusage_agents: agents,
-    pricing_mode: CCUSAGE_PRICING_MODE,
+    pricing_mode: pricingMode,
   };
   if (agents.includes("claude")) collector.claude = CCUSAGE_CLAUDE_COLLECTOR;
   if (agents.includes("codex")) collector.codex = CCUSAGE_CODEX_COLLECTOR;
@@ -429,13 +442,15 @@ export function parseCcusageOutput(raw: string, options: ParseOptions = {}): Ccu
     SUPPORTED_AGENTS.indexOf(a) - SUPPORTED_AGENTS.indexOf(b),
   );
   const version = options.version ?? "unknown";
+  const pricingMode = options.pricingMode ?? CCUSAGE_DEFAULT_PRICING_MODE;
 
   return {
     data,
     summary: summarizeEntries(data),
     agents,
-    collector: collectorForAgents(agents, version),
+    collector: collectorForAgents(agents, version, pricingMode),
     version,
+    pricingMode,
     raw,
     stderr: options.stderr ?? "",
   };
@@ -449,14 +464,25 @@ export async function collectCcusageUsageAsync(
   const { version } = resolveBundledCcusageCommand();
   assertSupportedVersion(version);
 
-  const result = await execCcusageAsync(
-    ["daily", "--json", "--since", sinceDate, "--until", untilDate, "--no-offline"],
+  let pricingMode: CcusagePricingMode = CCUSAGE_DEFAULT_PRICING_MODE;
+  let result = await execCcusageAsync(
+    ["daily", "--json", "--since", sinceDate, "--until", untilDate, "--offline"],
     timeoutMs,
   );
+
+  if (hasMissingPricing(result.stderr)) {
+    pricingMode = CCUSAGE_FALLBACK_PRICING_MODE;
+    result = await execCcusageAsync(
+      ["daily", "--json", "--since", sinceDate, "--until", untilDate, "--no-offline"],
+      timeoutMs,
+    );
+  }
+
   rejectMissingPricing(result.stderr);
 
   return parseCcusageOutput(result.stdout, {
     version,
+    pricingMode,
     stderr: result.stderr,
   });
 }

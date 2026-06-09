@@ -117,15 +117,44 @@ function ccusageOutput(entries = [usageEntry()], overrides: Record<string, unkno
     collector: {
       claude: "ccusage-claude-v20",
       codex: "ccusage-codex-v20",
-      ccusage_version: "20.0.6",
+      ccusage_version: "20.0.8",
       ccusage_agents: ["claude", "codex"],
-      pricing_mode: "online",
+      pricing_mode: "offline",
     },
-    version: "20.0.6",
+    version: "20.0.8",
+    pricingMode: "offline",
     raw: JSON.stringify({ daily: entries }),
     stderr: "",
     ...overrides,
   };
+}
+
+function updateHashPart(hash: ReturnType<typeof createHash>, label: string, value: string): void {
+  hash.update(label);
+  hash.update("\0");
+  hash.update(String(value.length));
+  hash.update("\0");
+  hash.update(value);
+  hash.update("\0");
+}
+
+function expectedCcusageHash(args: {
+  version: string;
+  agents: string[];
+  pricingMode: string;
+  since: string;
+  until: string;
+  raw: string;
+}): string {
+  const hash = createHash("sha256");
+  updateHashPart(hash, "collector", "ccusage-v20");
+  updateHashPart(hash, "version", args.version);
+  updateHashPart(hash, "agents", JSON.stringify(args.agents));
+  updateHashPart(hash, "pricingMode", args.pricingMode);
+  updateHashPart(hash, "since", args.since);
+  updateHashPart(hash, "until", args.until);
+  updateHashPart(hash, "raw", args.raw);
+  return hash.digest("hex");
 }
 
 beforeEach(() => {
@@ -183,9 +212,9 @@ describe("pushCommand", () => {
     expect(body.collector).toEqual({
       claude: "ccusage-claude-v20",
       codex: "ccusage-codex-v20",
-      ccusage_version: "20.0.6",
+      ccusage_version: "20.0.8",
       ccusage_agents: ["claude", "codex"],
-      pricing_mode: "online",
+      pricing_mode: "offline",
     });
     expect(body.device_id).toBe("device-1");
     expect(body.device_name).toBe("work-laptop");
@@ -202,14 +231,14 @@ describe("pushCommand", () => {
     const submitCall = mockApiRequest.mock.calls.find(([, path]) => path === "/api/usage/submit")!;
     const body = JSON.parse((submitCall[2] as { body: string }).body);
     const [since, until] = mockCollectCcusageUsageAsync.mock.calls[0]!;
-    const concreteHash = createHash("sha256").update(JSON.stringify({
-      collector: "ccusage-v20",
+    const concreteHash = expectedCcusageHash({
       version: output.version,
       agents: output.agents,
+      pricingMode: output.pricingMode,
       since,
       until,
       raw: output.raw,
-    })).digest("hex");
+    });
     expect(body.hash).toBe(concreteHash);
   });
 
@@ -301,7 +330,12 @@ describe("pushCommand", () => {
     expect(mockReportUsagePushFailed).toHaveBeenCalledWith(
       expect.objectContaining(fakeConfig),
       error,
-      { command: "push", stage: "scan" },
+      {
+        command: "push",
+        stage: "scan",
+        ccusage_capture_ms: expect.any(Number),
+        date_range_days: expect.any(Number),
+      },
     );
     expect(mockPosthog._shutdown).toHaveBeenCalled();
     expect(mockApiRequest).not.toHaveBeenCalled();
@@ -353,10 +387,11 @@ describe("pushCommand", () => {
     mockCollectCcusageUsageAsync.mockResolvedValue(ccusageOutput([], {
       agents: [],
       collector: {
-        ccusage_version: "20.0.6",
+        ccusage_version: "20.0.8",
         ccusage_agents: [],
-        pricing_mode: "online",
+        pricing_mode: "offline",
       },
+      pricingMode: "offline",
       raw: '{"daily":[]}',
     }) as never);
 

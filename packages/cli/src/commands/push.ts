@@ -1,5 +1,6 @@
 import { createHash, randomUUID } from "node:crypto";
 import { hostname } from "node:os";
+import { performance } from "node:perf_hooks";
 import { loadConfig, updateLastPushDate, saveConfig } from "../lib/auth.js";
 import type { StraudeConfig } from "../lib/auth.js";
 import { loginCommand } from "./login.js";
@@ -174,6 +175,38 @@ function formatCost(n: number): string {
   return `$${n.toFixed(2)}`;
 }
 
+function inclusiveDateRangeDays(since: Date, until: Date): number {
+  return daysBetween(since, until) + 1;
+}
+
+function updateHashPart(hash: ReturnType<typeof createHash>, label: string, value: string): void {
+  hash.update(label);
+  hash.update("\0");
+  hash.update(String(value.length));
+  hash.update("\0");
+  hash.update(value);
+  hash.update("\0");
+}
+
+function hashCcusageRun(args: {
+  version: string;
+  agents: string[];
+  pricingMode: string;
+  since: string;
+  until: string;
+  raw: string;
+}): string {
+  const hash = createHash("sha256");
+  updateHashPart(hash, "collector", "ccusage-v20");
+  updateHashPart(hash, "version", args.version);
+  updateHashPart(hash, "agents", JSON.stringify(args.agents));
+  updateHashPart(hash, "pricingMode", args.pricingMode);
+  updateHashPart(hash, "since", args.since);
+  updateHashPart(hash, "until", args.until);
+  updateHashPart(hash, "raw", args.raw);
+  return hash.digest("hex");
+}
+
 export async function pushCommand(options: PushOptions, apiUrlOverride?: string): Promise<void> {
   let config = loadConfig();
 
@@ -229,14 +262,20 @@ export async function pushCommand(options: PushOptions, apiUrlOverride?: string)
   const scanSpinner = new Spinner("scan");
   scanSpinner.start();
   let ccusage: Awaited<ReturnType<typeof collectCcusageUsageAsync>>;
+  const scanStartedAt = performance.now();
+  let ccusageCaptureMs = 0;
   try {
     ccusage = await collectCcusageUsageAsync(sinceStr, untilStr, options.timeoutMs);
+    ccusageCaptureMs = Math.round(performance.now() - scanStartedAt);
     scanSpinner.stop();
   } catch (err) {
+    ccusageCaptureMs = Math.round(performance.now() - scanStartedAt);
     scanSpinner.stop();
     reportUsagePushFailed(config, err, {
       command: "push",
       stage: "scan",
+      ccusage_capture_ms: ccusageCaptureMs,
+      date_range_days: inclusiveDateRangeDays(sinceDate, untilDate),
     });
     await posthog._shutdown();
     console.error(`\nFailed to collect usage: ${errorMessage(err)}`);
@@ -289,15 +328,14 @@ export async function pushCommand(options: PushOptions, apiUrlOverride?: string)
     return;
   }
 
-  const hashInput = JSON.stringify({
-    collector: "ccusage-v20",
+  const hash = hashCcusageRun({
     version: ccusage.version,
     agents: ccusage.agents,
+    pricingMode: ccusage.pricingMode,
     since: sinceStr,
     until: untilStr,
     raw: ccusage.raw,
   });
-  const hash = createHash("sha256").update(hashInput).digest("hex");
 
   const body: UsageSubmitRequest = {
     entries: entries.map((entry) => ({
@@ -377,6 +415,11 @@ export async function pushCommand(options: PushOptions, apiUrlOverride?: string)
       dry_run: false,
       ccusage_version: ccusage.version,
       ccusage_agents: ccusage.agents,
+      ccusage_pricing_mode: ccusage.pricingMode,
+      ccusage_capture_ms: ccusageCaptureMs,
+      ccusage_row_count: entries.length,
+      ccusage_raw_bytes: Buffer.byteLength(ccusage.raw, "utf8"),
+      date_range_days: inclusiveDateRangeDays(sinceDate, untilDate),
     },
   });
 

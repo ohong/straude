@@ -146,7 +146,7 @@ describe("unified ccusage CLI flow", () => {
 
     expect(execFileMock).toHaveBeenCalledWith(
       "/bundled/ccusage",
-      expect.arrayContaining(["daily", "--json", "--no-offline"]),
+      expect.arrayContaining(["daily", "--json", "--offline"]),
       expect.any(Object),
       expect.any(Function),
     );
@@ -159,7 +159,7 @@ describe("unified ccusage CLI flow", () => {
       codex: "ccusage-codex-v20",
       ccusage_version: TEST_CCUSAGE_VERSION,
       ccusage_agents: ["claude", "codex"],
-      pricing_mode: "online",
+      pricing_mode: "offline",
     });
     expect(readPersistedConfig().last_push_date).toBe(todayStr());
   });

@@ -54,7 +54,7 @@ beforeEach(() => {
 
 describe("parseCcusageOutput", () => {
   it("parses ccusage v20 daily rows and derives reasoning residuals", () => {
-    const parsed = parseCcusageOutput(rawOutput(), { version: "20.0.6" });
+    const parsed = parseCcusageOutput(rawOutput(), { version: "20.0.8" });
 
     expect(parsed.data).toHaveLength(1);
     expect(parsed.data[0]).toEqual({
@@ -73,9 +73,9 @@ describe("parseCcusageOutput", () => {
     expect(parsed.agents).toEqual(["codex"]);
     expect(parsed.collector).toEqual({
       codex: CCUSAGE_CODEX_COLLECTOR,
-      ccusage_version: "20.0.6",
+      ccusage_version: "20.0.8",
       ccusage_agents: ["codex"],
-      pricing_mode: "online",
+      pricing_mode: "offline",
     });
   });
 
@@ -96,15 +96,15 @@ describe("parseCcusageOutput", () => {
         ],
         metadata: { agents: ["claude", "codex"] },
       }),
-    ]), { version: "20.0.6" });
+    ]), { version: "20.0.8" });
 
     expect(parsed.agents).toEqual(["claude", "codex"]);
     expect(parsed.collector).toEqual({
       claude: CCUSAGE_CLAUDE_COLLECTOR,
       codex: CCUSAGE_CODEX_COLLECTOR,
-      ccusage_version: "20.0.6",
+      ccusage_version: "20.0.8",
       ccusage_agents: ["claude", "codex"],
-      pricing_mode: "online",
+      pricing_mode: "offline",
     });
     expect(parsed.data[0]!.reasoningOutputTokens).toBe(100);
   });
@@ -134,13 +134,13 @@ describe("parseCcusageOutput", () => {
   });
 
   it("returns empty output for an empty ccusage daily array", () => {
-    const parsed = parseCcusageOutput(rawOutput([]), { version: "20.0.6" });
+    const parsed = parseCcusageOutput(rawOutput([]), { version: "20.0.8" });
     expect(parsed.data).toEqual([]);
     expect(parsed.agents).toEqual([]);
     expect(parsed.collector).toEqual({
-      ccusage_version: "20.0.6",
+      ccusage_version: "20.0.8",
       ccusage_agents: [],
-      pricing_mode: "online",
+      pricing_mode: "offline",
     });
   });
 
@@ -152,7 +152,7 @@ describe("parseCcusageOutput", () => {
 });
 
 describe("version and execution", () => {
-  it("invokes the bundled ccusage binary with online unified daily args", async () => {
+  it("invokes the bundled ccusage binary with fast offline unified daily args", async () => {
     execFileMock.mockImplementationOnce((...args: unknown[]) => {
       const cb = args.at(-1) as (err: Error | null, stdout: string, stderr: string) => void;
       cb(null, rawOutput(), "");
@@ -164,10 +164,11 @@ describe("version and execution", () => {
     expect(execFileMock).toHaveBeenCalledTimes(1);
     expect(execFileMock).toHaveBeenCalledWith(
       "/bundled/ccusage",
-      ["daily", "--json", "--since", "20260513", "--until", "20260513", "--no-offline"],
+      ["daily", "--json", "--since", "20260513", "--until", "20260513", "--offline"],
       expect.objectContaining({ shell: false }),
       expect.any(Function),
     );
+    expect(collected.pricingMode).toBe("offline");
   });
 
   it("rejects ccusage versions below the v20 accuracy floor", async () => {
@@ -178,15 +179,51 @@ describe("version and execution", () => {
     );
   });
 
-  it("fails safely when ccusage reports missing online pricing", async () => {
+  it("falls back to online pricing when ccusage reports missing offline pricing", async () => {
     execFileMock
+      .mockImplementationOnce((...args: unknown[]) => {
+        const cb = args.at(-1) as (err: Error | null, stdout: string, stderr: string) => void;
+        cb(null, rawOutput(), "WARN Missing embedded pricing for gpt-5.2-codex; cost excludes this model");
+      })
+      .mockImplementationOnce((...args: unknown[]) => {
+        const cb = args.at(-1) as (err: Error | null, stdout: string, stderr: string) => void;
+        cb(null, rawOutput(), "");
+      });
+
+    const collected = await collectCcusageUsageAsync("20260513", "20260513");
+
+    expect(execFileMock).toHaveBeenCalledTimes(2);
+    expect(execFileMock).toHaveBeenNthCalledWith(
+      1,
+      "/bundled/ccusage",
+      ["daily", "--json", "--since", "20260513", "--until", "20260513", "--offline"],
+      expect.any(Object),
+      expect.any(Function),
+    );
+    expect(execFileMock).toHaveBeenNthCalledWith(
+      2,
+      "/bundled/ccusage",
+      ["daily", "--json", "--since", "20260513", "--until", "20260513", "--no-offline"],
+      expect.any(Object),
+      expect.any(Function),
+    );
+    expect(collected.pricingMode).toBe("online");
+    expect(collected.collector.pricing_mode).toBe("online");
+  });
+
+  it("fails safely when ccusage cannot price rows after online fallback", async () => {
+    execFileMock
+      .mockImplementationOnce((...args: unknown[]) => {
+        const cb = args.at(-1) as (err: Error | null, stdout: string, stderr: string) => void;
+        cb(null, rawOutput(), "WARN Missing embedded pricing for gpt-5.2-codex; cost excludes this model");
+      })
       .mockImplementationOnce((...args: unknown[]) => {
         const cb = args.at(-1) as (err: Error | null, stdout: string, stderr: string) => void;
         cb(null, rawOutput(), "Missing pricing for model gpt-5.2-codex");
       });
 
     await expect(collectCcusageUsageAsync("20260513", "20260513")).rejects.toThrow(
-      /fully priced online cost data/,
+      /fully priced cost data/,
     );
   });
 });
