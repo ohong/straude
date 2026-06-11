@@ -179,14 +179,34 @@ describe("cli-auth", () => {
     });
 
     it("does not extend lifetime beyond the original 30 days", () => {
+      const decodeExp = (token: string): number => {
+        const payloadB64 = token.split(".")[1]!;
+        const padded =
+          payloadB64 + "=".repeat((4 - (payloadB64.length % 4)) % 4);
+        return JSON.parse(
+          Buffer.from(
+            padded.replace(/-/g, "+").replace(/_/g, "/"),
+            "base64",
+          ).toString("utf-8"),
+        ).exp as number;
+      };
+
       const token = createCliToken("user-1", "alice");
+      const originalExp = decodeExp(token);
+
+      // Refresh once, a week into the token's life.
       vi.setSystemTime(new Date(Date.now() + 8 * 24 * 60 * 60 * 1000));
       const first = verifyCliTokenWithRefresh(`Bearer ${token}`);
       expect(first?.refreshedToken).toBeTypeOf("string");
 
+      // The refreshed token keeps the ORIGINAL absolute expiry: the 30-day
+      // window is anchored to first issuance, not pushed forward by the refresh.
+      expect(decodeExp(first!.refreshedToken!)).toBe(originalExp);
+
+      // Past the original 30-day window the refreshed token is rejected
+      // outright, so a leaked token can never be chained into a fresh lifetime.
       vi.setSystemTime(new Date(Date.now() + 23 * 24 * 60 * 60 * 1000));
-      const second = verifyCliTokenWithRefresh(`Bearer ${first!.refreshedToken!}`);
-      expect(second?.refreshedToken).toBeNull();
+      expect(verifyCliTokenWithRefresh(`Bearer ${first!.refreshedToken!}`)).toBeNull();
     });
 
     it("returns null for invalid tokens", () => {
