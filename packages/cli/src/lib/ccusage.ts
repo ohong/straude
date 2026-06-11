@@ -142,7 +142,7 @@ function ensureExecutable(path: string): void {
   }
 }
 
-function resolveBundledCcusageCommand(): ResolvedCcusageCommand {
+function resolveInstalledCcusageCommand(): ResolvedCcusageCommand {
   if (forcedCommandForTests) return forcedCommandForTests;
   if (resolvedCommand) return resolvedCommand;
 
@@ -155,7 +155,7 @@ function resolveBundledCcusageCommand(): ResolvedCcusageCommand {
     if (typeof packageJson.version === "string") version = packageJson.version;
   } catch {
     throw new Error(
-      "Bundled ccusage dependency is missing. Reinstall Straude dependencies and retry.",
+      "Installed ccusage dependency is missing. Reinstall Straude dependencies and retry.",
     );
   }
 
@@ -172,7 +172,7 @@ function resolveBundledCcusageCommand(): ResolvedCcusageCommand {
     binaryPath = ccusageRequire.resolve(`${nativePackage}/${binaryRelativePath()}`);
   } catch {
     throw new Error(
-      `Bundled ccusage native binary is missing for ${process.platform}-${process.arch}. Reinstall Straude so optional ccusage dependencies are installed.`,
+      `Installed ccusage native binary is missing for ${process.platform}-${process.arch}. Reinstall Straude so optional ccusage dependencies are installed.`,
     );
   }
 
@@ -189,7 +189,7 @@ export function _resetCcusageResolver(): void {
 
 /** Override resolver — for testing only. */
 export function _setCcusageCommandForTests(command: { cmd: string; args: string[]; version?: string }): void {
-  forcedCommandForTests = { ...command, version: command.version ?? "20.0.8" };
+  forcedCommandForTests = { ...command, version: command.version ?? CCUSAGE_MIN_VERSION };
   resolvedCommand = undefined;
 }
 
@@ -217,12 +217,12 @@ function stringifyBuffer(value: unknown): string {
 }
 
 function formatCommand(args: string[]): string {
-  const { cmd, args: prefix } = resolveBundledCcusageCommand();
+  const { cmd, args: prefix } = resolveInstalledCcusageCommand();
   return [cmd, ...prefix, ...args].join(" ");
 }
 
 function execCcusageAsync(args: string[], timeoutMs?: number): Promise<ExecResult> {
-  const { cmd, args: prefix } = resolveBundledCcusageCommand();
+  const { cmd, args: prefix } = resolveInstalledCcusageCommand();
   const cmdArgs = [...prefix, ...args];
 
   return new Promise((resolve, reject) => {
@@ -446,7 +446,7 @@ export async function collectCcusageUsageAsync(
   untilDate: string,
   timeoutMs?: number,
 ): Promise<CcusageOutput> {
-  const { version } = resolveBundledCcusageCommand();
+  const { version } = resolveInstalledCcusageCommand();
   assertSupportedVersion(version);
 
   const result = await execCcusageAsync(

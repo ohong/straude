@@ -152,7 +152,7 @@ describe("parseCcusageOutput", () => {
 });
 
 describe("version and execution", () => {
-  it("invokes the bundled ccusage binary with online unified daily args", async () => {
+  it("invokes the installed ccusage binary with online unified daily args", async () => {
     execFileMock.mockImplementationOnce((...args: unknown[]) => {
       const cb = args.at(-1) as (err: Error | null, stdout: string, stderr: string) => void;
       cb(null, rawOutput(), "");

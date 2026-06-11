@@ -90,7 +90,7 @@ function ccusageJson(date = todayStr()) {
   });
 }
 
-const TEST_CCUSAGE_VERSION = "20.0.8";
+const TEST_CCUSAGE_VERSION = "20.0.11";
 
 function mockCcusage(json = ccusageJson()) {
   execFileMock.mockImplementation((_cmd: string, _args: string[], _options: unknown, callback: (err: Error | null, stdout: string, stderr: string) => void) => {

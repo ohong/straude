@@ -17,7 +17,7 @@ Running with no arguments performs a smart sync: logs you in if needed, then pus
 - Node 18+
 - Local Claude Code and/or Codex session data.
 
-Straude bundles a pinned copy of [`ccusage`](https://github.com/ryoppippi/ccusage) (v20+) and invokes that bundled binary directly. It does not rely on a globally installed `ccusage` command.
+Straude invokes its installed [`ccusage`](https://github.com/ryoppippi/ccusage) dependency directly. Fresh installs resolve npm's current `ccusage@latest`, so new model parsing and pricing updates stay owned by ccusage instead of Straude.
 
 ## Commands
 
