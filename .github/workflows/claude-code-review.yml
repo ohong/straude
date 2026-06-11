@@ -31,14 +31,22 @@ jobs:
         with:
           fetch-depth: 1
 
+      - name: Validate Anthropic API key secret
+        env:
+          ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
+        run: |
+          if [ -z "$ANTHROPIC_API_KEY" ]; then
+            echo "::error::ANTHROPIC_API_KEY is required for Claude Code Review. CLAUDE_CODE_OAUTH_TOKEN is no longer usable because subscription access for Claude Code is disabled for this Anthropic organization."
+            exit 1
+          fi
+
       - name: Run Claude Code Review
         id: claude-review
         uses: anthropics/claude-code-action@v1
         with:
-          claude_code_oauth_token: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN }}
+          anthropic_api_key: ${{ secrets.ANTHROPIC_API_KEY }}
           plugin_marketplaces: 'https://github.com/anthropics/claude-code.git'
           plugins: 'code-review@claude-code-plugins'
           prompt: '/code-review:code-review ${{ github.repository }}/pull/${{ github.event.pull_request.number }}'
           # See https://github.com/anthropics/claude-code-action/blob/main/docs/usage.md
           # or https://code.claude.com/docs/en/cli-reference for available options
-
