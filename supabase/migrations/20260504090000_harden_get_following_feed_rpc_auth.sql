@@ -25,6 +25,7 @@ SET search_path TO 'public'
 AS $$
 DECLARE
   v_caller_id uuid;
+  v_limit     int;
 BEGIN
   v_caller_id := auth.uid();
 
@@ -37,6 +38,9 @@ BEGIN
     RAISE EXCEPTION 'Forbidden: p_user_id must match auth.uid()'
       USING ERRCODE = '42501';
   END IF;
+
+  -- Clamp the page size so a caller cannot request an unbounded result set.
+  v_limit := LEAST(GREATEST(COALESCE(p_limit, 20), 1), 100);
 
   RETURN QUERY
   SELECT
@@ -64,7 +68,7 @@ BEGIN
   )
   AND (p_cursor IS NULL OR p.created_at < p_cursor)
   ORDER BY p.created_at DESC
-  LIMIT p_limit;
+  LIMIT v_limit;
 END;
 $$;
 
