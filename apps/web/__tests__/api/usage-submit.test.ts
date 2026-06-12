@@ -609,6 +609,52 @@ describe("POST /api/usage/submit", () => {
     expect(postInsertCall[0].title).toContain("GPT-5.3-Codex");
   });
 
+  it("auto-title treats Claude Fable as the highest Claude tier", async () => {
+    (verifyCliToken as any).mockReturnValue("user-1");
+    const deviceRow = {
+      cost_usd: 15,
+      input_tokens: 2100,
+      output_tokens: 900,
+      cache_creation_tokens: 0,
+      cache_read_tokens: 0,
+      total_tokens: 3000,
+      models: ["claude-opus-4-20250505", "claude-fable-5"],
+      model_breakdown: [
+        { model: "claude-opus-4-20250505", cost_usd: 12 },
+        { model: "claude-fable-5", cost_usd: 3 },
+      ],
+    };
+    const svc = mockServiceClient({ data: [deviceRow] });
+    svc.single
+      .mockResolvedValueOnce({ data: { id: "dev-1" }, error: null })
+      .mockResolvedValueOnce({ data: { id: "usage-1" }, error: null })
+      .mockResolvedValueOnce({ data: { id: "post-1" }, error: null });
+
+    const res = await POST(
+      mockRequest({
+        entries: [
+          makeEntry(todayStr(), {
+            models: ["claude-opus-4-20250505", "claude-fable-5"],
+            costUSD: 15,
+            inputTokens: 2100,
+            outputTokens: 900,
+            totalTokens: 3000,
+            modelBreakdown: [
+              { model: "claude-opus-4-20250505", cost_usd: 12 },
+              { model: "claude-fable-5", cost_usd: 3 },
+            ],
+          }),
+        ],
+        source: "cli",
+      })
+    );
+
+    expect(res.status).toBe(200);
+    const postInsertCall = svc.insert.mock.calls[0];
+    expect(postInsertCall[0].title).toContain("Claude Fable");
+    expect(postInsertCall[0].title).not.toContain("Claude Opus");
+  });
+
   // -------------------------------------------------------------------------
   // Multi-device tests
   // -------------------------------------------------------------------------

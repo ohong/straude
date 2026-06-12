@@ -334,6 +334,16 @@ export function aggregateDeviceRows(rows: DeviceUsageRow[]) {
   };
 }
 
+function resolveClaudeTitleLabel(models: string[] | null | undefined): string | null {
+  if (!models || models.length === 0) return null;
+  const slugs = models.map((model) => model.trim().toLowerCase());
+  return slugs.some((slug) => slug.includes("fable")) ? "Claude Fable"
+    : slugs.some((slug) => slug.includes("opus")) ? "Claude Opus"
+    : slugs.some((slug) => slug.includes("sonnet")) ? "Claude Sonnet"
+    : slugs.some((slug) => slug.includes("haiku")) ? "Claude Haiku"
+    : null;
+}
+
 export async function POST(request: Request) {
   let body: UsageSubmitRequest;
   try {
@@ -602,10 +612,8 @@ export async function POST(request: Request) {
 
       // Build auto-title from aggregated usage data
       const models = agg.models;
-      const hasClaude = models?.some((m) => m.includes("claude") || m.includes("opus") || m.includes("sonnet") || m.includes("haiku"));
-      const claudeLabel = models?.some((m) => m.includes("opus")) ? "Claude Opus"
-        : models?.some((m) => m.includes("sonnet")) ? "Claude Sonnet"
-        : models?.some((m) => m.includes("haiku")) ? "Claude Haiku" : null;
+      const claudeLabel = resolveClaudeTitleLabel(models);
+      const hasClaude = Boolean(claudeLabel || models?.some((m) => m.toLowerCase().includes("claude")));
       const codexModel = models?.find((m) => /^gpt-/i.test(m) || /^o3/i.test(m) || /^o4/i.test(m));
       const codexLabel = codexModel
         ? /^gpt-/i.test(codexModel)
