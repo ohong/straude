@@ -9,6 +9,7 @@ import { Button } from "@/components/ui/Button";
 import { Input } from "@/components/ui/Input";
 import { Textarea } from "@/components/ui/Textarea";
 import { CountryPicker } from "@/components/ui/CountryPicker";
+import { trackActivationEvent } from "@/lib/analytics/client";
 import { formatCurrency } from "@/lib/utils/format";
 
 const SYNC_COMMAND = "npx straude@latest";
@@ -32,9 +33,16 @@ function Step3LogSession({ username }: { username: string }) {
   const [copied, setCopied] = useState(false);
   const [phase, setPhase] = useState<"waiting" | "success">("waiting");
   const [data, setData] = useState<UsageStatus | null>(null);
+  const activationTrackedRef = useRef(false);
 
   const handleCopy = useCallback(() => {
     navigator.clipboard.writeText(SYNC_COMMAND).then(() => {
+      trackActivationEvent("sync_command_copied", {
+        surface: "onboarding",
+        command: SYNC_COMMAND,
+        activation_state: "sync_command_copied",
+        is_authenticated: true,
+      });
       setCopied(true);
       setTimeout(() => setCopied(false), 2000);
     });
@@ -64,6 +72,17 @@ function Step3LogSession({ username }: { username: string }) {
         if (count > baselineRef.current && active) {
           setData(json);
           setPhase("success");
+          if (!activationTrackedRef.current) {
+            activationTrackedRef.current = true;
+            trackActivationEvent("activation_completed", {
+              surface: "onboarding",
+              activation_state: "activated",
+              is_authenticated: true,
+              session_count: count,
+              total_tokens: json.total_tokens,
+              total_cost_usd: json.cost_usd,
+            });
+          }
           if (intervalRef.current) clearInterval(intervalRef.current);
         }
       } catch {
@@ -414,7 +433,14 @@ export default function OnboardingPage() {
 
         <div className="mt-6 flex items-center gap-3">
           <Button
-            onClick={() => setStep(2)}
+            onClick={() => {
+              trackActivationEvent("onboarding_profile_started", {
+                surface: "onboarding",
+                activation_state: "profile_started",
+                is_authenticated: true,
+              });
+              setStep(2);
+            }}
             disabled={!canProceed}
             className="flex-1 py-3"
           >

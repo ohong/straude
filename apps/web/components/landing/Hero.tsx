@@ -3,12 +3,21 @@
 import Link from "next/link";
 import { useCallback, useState } from "react";
 import { ProductHuntBadge } from "./ProductHuntBadge";
+import { trackActivationEvent } from "@/lib/analytics/client";
+
+const SYNC_COMMAND = "npx straude@latest";
 
 function CopySnippet({ command }: { command: string }) {
   const [copied, setCopied] = useState(false);
 
   const copy = useCallback(() => {
     navigator.clipboard.writeText(command).then(() => {
+      trackActivationEvent("sync_command_copied", {
+        surface: "landing",
+        command,
+        activation_state: "sync_command_copied",
+        is_authenticated: false,
+      });
       setCopied(true);
       setTimeout(() => setCopied(false), 2000);
     });
@@ -65,17 +74,24 @@ export function Hero() {
         <div className="flex flex-wrap gap-4 mt-10">
           <Link
             href="/signup"
+            onClick={() => trackActivationEvent("landing_primary_cta_clicked", {
+              surface: "landing",
+              cta_location: "hero_primary",
+              destination: "/signup",
+              activation_state: "anonymous",
+              is_authenticated: false,
+            })}
             className="inline-flex items-center justify-center bg-accent text-landing-bg font-[family-name:var(--font-mono)] text-sm font-bold uppercase px-8 py-4 border border-accent hover:bg-transparent hover:text-accent active:scale-[0.97] transition-all duration-200"
           >
             Start Your Streak
           </Link>
-          <CopySnippet command="npx straude" />
+          <CopySnippet command={SYNC_COMMAND} />
         </div>
 
         {/* Terminal output */}
         <div className="mt-10 font-[family-name:var(--font-mono)] text-[0.8rem] text-landing-muted leading-relaxed max-w-[600px]">
           <span className="block text-landing-text">
-            &gt; npx straude
+            &gt; {SYNC_COMMAND}
           </span>
           <span className="block">Analyzing ~/.config/claude/projects/...</span>
           <span className="block">

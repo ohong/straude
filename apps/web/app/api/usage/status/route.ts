@@ -1,4 +1,6 @@
 import { NextResponse } from "next/server";
+import { after } from "@/lib/utils/after";
+import { captureServerActivationEvent } from "@/lib/analytics/server";
 import { createClient } from "@/lib/supabase/server";
 
 export async function GET() {
@@ -14,7 +16,7 @@ export async function GET() {
   // Fetch aggregated usage
   const { data: usageRows, error: usageError } = await supabase
     .from("daily_usage")
-    .select("cost_usd,total_tokens,session_count,models")
+    .select("id,date,cost_usd,total_tokens,session_count,models")
     .eq("user_id", user.id)
     .order("date", { ascending: false });
 
@@ -35,6 +37,21 @@ export async function GET() {
     Array.isArray(usageRows[0].models) && usageRows[0].models.length > 0
       ? usageRows[0].models[0]
       : null;
+  const latestUsage = usageRows[0];
+
+  after(() => captureServerActivationEvent({
+    event: "first_sync_confirmed",
+    distinctId: user.id,
+    properties: {
+      surface: "usage_status",
+      activation_state: "activated",
+      is_authenticated: true,
+      session_count,
+      total_tokens,
+      total_cost_usd: Math.round(cost_usd * 100) / 100,
+      "$insert_id": `first_sync_confirmed:${user.id}:${latestUsage.id ?? latestUsage.date}`,
+    },
+  }));
 
   return NextResponse.json({
     has_data: true,

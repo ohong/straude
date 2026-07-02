@@ -1,6 +1,19 @@
 import { NextResponse } from "next/server";
+import { after } from "@/lib/utils/after";
+import { ACTIVATION_ANONYMOUS_COOKIE, deriveActivationState } from "@/lib/analytics/activation";
+import { captureServerActivationEvent, identifyServerActivationUser } from "@/lib/analytics/server";
 import { createClient } from "@/lib/supabase/server";
 import { getServiceClient } from "@/lib/supabase/service";
+
+function getCookieValue(cookieHeader: string | null, name: string): string | null {
+  if (!cookieHeader) return null;
+  const target = `${name}=`;
+  const entry = cookieHeader
+    .split(";")
+    .map((part) => part.trim())
+    .find((part) => part.startsWith(target));
+  return entry ? decodeURIComponent(entry.slice(target.length)) : null;
+}
 
 export async function GET(request: Request) {
   const { searchParams, origin: requestOrigin } = new URL(request.url);
@@ -26,6 +39,35 @@ export async function GET(request: Request) {
           .select("username, github_username, onboarding_completed")
           .eq("id", user.id)
           .single();
+        const anonymousId = getCookieValue(
+          request.headers.get("cookie"),
+          ACTIVATION_ANONYMOUS_COOKIE,
+        );
+
+        after(async () => {
+          if (anonymousId) {
+            await identifyServerActivationUser({
+              distinctId: user.id,
+              anonymousDistinctId: anonymousId,
+              properties: {
+                is_authenticated: true,
+                activation_state: "signed_up",
+              },
+            });
+          }
+
+          if (!profile?.onboarding_completed) {
+            await captureServerActivationEvent({
+              event: "signup_completed",
+              distinctId: user.id,
+              properties: {
+                surface: "auth_callback",
+                activation_state: deriveActivationState({ isAuthenticated: true }),
+                is_authenticated: true,
+              },
+            });
+          }
+        });
 
         if (profile && !profile.username && profile.github_username) {
           const sanitized = profile.github_username

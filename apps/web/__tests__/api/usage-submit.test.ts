@@ -13,11 +13,16 @@ vi.mock("@/lib/supabase/service", () => ({
   getServiceClient: vi.fn(),
 }));
 
+vi.mock("@/lib/analytics/server", () => ({
+  captureServerActivationEvent: vi.fn().mockResolvedValue(true),
+}));
+
 vi.mock("@supabase/supabase-js", () => ({
   createClient: vi.fn(),
 }));
 
 import { POST, aggregateDeviceRows } from "@/app/api/usage/submit/route";
+import { captureServerActivationEvent } from "@/lib/analytics/server";
 import { createClient } from "@/lib/supabase/server";
 import { verifyCliToken, verifyCliTokenWithRefresh } from "@/lib/api/cli-auth";
 import { getServiceClient } from "@/lib/supabase/service";
@@ -209,6 +214,18 @@ describe("POST /api/usage/submit", () => {
     expect(json.results[0].post_id).toBe("post-1");
     expect(json.results[0].post_url).toBe("https://straude.com/post/post-1");
     expect(svc.rpc).toHaveBeenCalledWith("recalculate_user_level", { p_user_id: "user-1" });
+    expect(captureServerActivationEvent).toHaveBeenCalledWith(expect.objectContaining({
+      event: "usage_submit_succeeded",
+      distinctId: "user-1",
+      properties: expect.objectContaining({
+        surface: "usage_submit",
+        activation_state: "first_usage_submitted",
+        is_authenticated: true,
+        days_pushed: 1,
+        result_count: 1,
+        total_tokens: 1500,
+      }),
+    }));
   });
 
   it("submits multiple days (batch)", async () => {
