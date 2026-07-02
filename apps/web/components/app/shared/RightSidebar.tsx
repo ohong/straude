@@ -1,116 +1,81 @@
-import { createClient } from "@/lib/supabase/server";
-import { getServiceClient } from "@/lib/supabase/service";
-import { formatTokens } from "@/lib/utils/format";
-import Link from "next/link";
-import { Avatar } from "@/components/ui/Avatar";
-import { FollowButton } from "@/components/app/profile/FollowButton";
+"use client";
 
-interface RightSidebarProps {
-  userId: string;
-  totalOutputTokens: number;
+import Link from "next/link";
+import { useQuery } from "@tanstack/react-query";
+import { Avatar } from "@/components/ui/Avatar";
+import { Skeleton } from "@/components/ui/Skeleton";
+import { FollowButton } from "@/components/app/profile/FollowButton";
+import { fetchRightSidebar, type RightSidebarResponse } from "@/lib/query/right-sidebar";
+import { queryKeys } from "@/lib/query/keys";
+import { formatTokens } from "@/lib/utils/format";
+
+export function RightSidebarFallback() {
+  return (
+    <div className="flex flex-col" aria-label="Loading discovery panel">
+      {[0, 1, 2].map((section) => (
+        <div key={section} className="border-b border-border p-6">
+          <Skeleton className="mb-4 h-3 w-28" />
+          <div className="space-y-3">
+            <Skeleton className="h-4 w-full" />
+            <Skeleton className="h-4 w-5/6" />
+            <Skeleton className="h-4 w-3/4" />
+          </div>
+        </div>
+      ))}
+    </div>
+  );
 }
 
-export async function RightSidebar({
-  userId,
-  totalOutputTokens,
-}: RightSidebarProps) {
-  const supabase = await createClient();
-  // Service client so suggestions can include all users.
-  const service = getServiceClient();
+export function LazyRightSidebar() {
+  const rightSidebarQuery = useQuery({
+    queryKey: queryKeys.rightSidebar(),
+    queryFn: fetchRightSidebar,
+    staleTime: 60_000,
+  });
 
-  // Start independent queries in parallel (avoid waterfall)
-  const [{ data: topUsers }, { data: following }] = await Promise.all([
-    supabase
-      .from("leaderboard_weekly")
-      .select("user_id, username, avatar_url, total_cost")
-      .order("total_cost", { ascending: false })
-      .limit(5),
-    supabase
-      .from("follows")
-      .select("following_id")
-      .eq("follower_id", userId),
-  ]);
-
-  const followingIds = following?.map((f) => f.following_id) ?? [];
-  const excludeIds = [userId, ...followingIds];
-
-  // Service client bypasses RLS so we can query all users for suggestions.
-  const [{ data: pinnedUsers }, { data: recentlyActive }, { data: newSignups }] =
-    await Promise.all([
-      service
-        .from("users")
-        .select("id, username, avatar_url, bio")
-        .eq("is_pinned_suggestion", true)
-        .not("id", "in", `(${excludeIds.join(",")})`),
-      // Users with recent activity (have pushed usage data)
-      service
-        .from("daily_usage")
-        .select("user_id, users!inner(id, username, avatar_url, bio, is_public)")
-        .not("users.username", "is", null)
-        .not("user_id", "in", `(${excludeIds.join(",")})`)
-        .order("date", { ascending: false })
-        .limit(20),
-      // New signups who completed onboarding (have a username)
-      service
-        .from("users")
-        .select("id, username, avatar_url, bio")
-        .eq("is_public", true)
-        .not("username", "is", null)
-        .not("id", "in", `(${excludeIds.join(",")})`)
-        .order("created_at", { ascending: false })
-        .limit(10),
-    ]);
-
-  const pinnedIds = new Set((pinnedUsers ?? []).map((u) => u.id));
-
-  // Deduplicate active users (may appear on multiple days), skip private and pinned
-  const seenIds = new Set<string>();
-  const activeUsers: Array<{ id: string; username: string; avatar_url: string | null; bio: string | null }> = [];
-  for (const row of recentlyActive ?? []) {
-    const u = row.users as unknown as { id: string; username: string; avatar_url: string | null; bio: string | null; is_public: boolean };
-    if (!seenIds.has(u.id) && !pinnedIds.has(u.id) && u.is_public) {
-      seenIds.add(u.id);
-      activeUsers.push({ id: u.id, username: u.username, avatar_url: u.avatar_url, bio: u.bio });
-    }
+  if (rightSidebarQuery.isLoading) {
+    return <RightSidebarFallback />;
   }
 
-  // Merge: active users first, then new signups, then pinned last (all deduped)
-  const merged: typeof activeUsers = [];
-  for (const u of activeUsers) {
-    if (!merged.some((m) => m.id === u.id)) merged.push(u);
+  if (rightSidebarQuery.isError) {
+    return (
+      <div className="border-b border-border p-6">
+        <p className="text-sm text-muted">Discovery is unavailable right now.</p>
+      </div>
+    );
   }
-  for (const u of newSignups ?? []) {
-    if (!merged.some((m) => m.id === u.id) && !pinnedIds.has(u.id)) merged.push(u);
-  }
-  // Cap organic suggestions to leave room for pinned users at the end
-  const pinnedList = (pinnedUsers ?? []).filter((u) => u.username);
-  const organicLimit = Math.max(0, 5 - pinnedList.length);
-  const suggested = [...merged.slice(0, organicLimit), ...pinnedList].slice(0, 5);
 
+  if (!rightSidebarQuery.data) {
+    return <RightSidebarFallback />;
+  }
+
+  return <RightSidebar data={rightSidebarQuery.data} />;
+}
+
+export function RightSidebar({ data }: { data: RightSidebarResponse }) {
   const TARGET = 1_000_000_000;
-  const pct = Math.min((totalOutputTokens / TARGET) * 100, 100);
+  const pct = Math.min((data.totalOutputTokens / TARGET) * 100, 100);
 
   return (
     <div className="flex flex-col">
-      {/* Suggested Friends */}
       <div className="border-b border-border p-6">
         <p className="mb-3 text-xs font-semibold uppercase tracking-widest text-muted">
           Suggested Friends
         </p>
-        {suggested && suggested.length > 0 ? (
+        {data.suggested.length > 0 ? (
           <ul className="flex flex-col gap-3">
-            {suggested.map((u) => (
-              <li key={u.id} className="flex items-center gap-3">
-                <Link href={`/u/${u.username}`} className="flex items-center gap-3 flex-1 min-w-0 hover:text-accent">
-                  <Avatar src={u.avatar_url} alt={u.username ?? ""} size="sm" fallback={u.username ?? "?"} />
+            {data.suggested.map((user) => (
+              <li key={user.id} className="flex items-center gap-3">
+                <Link href={`/u/${user.username}`} className="flex min-w-0 flex-1 items-center gap-3 hover:text-accent">
+                  <Avatar src={user.avatar_url} alt={user.username} size="sm" fallback={user.username} />
                   <div className="flex-1 overflow-hidden">
-                    <p className="truncate text-sm font-medium">{u.username}</p>
-                    {u.bio && (
-                      <p className="truncate text-xs text-muted">{u.bio}</p>
+                    <p className="truncate text-sm font-medium">{user.username}</p>
+                    {user.bio && (
+                      <p className="truncate text-xs text-muted">{user.bio}</p>
                     )}
                   </div>
                 </Link>
-                <FollowButton username={u.username} initialFollowing={false} />
+                <FollowButton username={user.username} initialFollowing={false} />
               </li>
             ))}
           </ul>
@@ -119,7 +84,6 @@ export async function RightSidebar({
         )}
       </div>
 
-      {/* Featured Challenge */}
       <div className="border-b border-border p-6">
         <p className="mb-3 text-xs font-semibold uppercase tracking-widest text-muted">
           Featured Challenge
@@ -127,7 +91,7 @@ export async function RightSidebar({
         <p className="text-sm font-semibold">The Three Comma Club</p>
         <p className="mb-3 text-xs text-muted">First to one billion output tokens</p>
         <div className="mb-1 flex items-center justify-between text-xs text-muted">
-          <span>{formatTokens(totalOutputTokens)} ({pct < 0.01 ? '<0.01' : pct.toFixed(2)}%)</span>
+          <span>{formatTokens(data.totalOutputTokens)} ({pct < 0.01 ? "<0.01" : pct.toFixed(2)}%)</span>
           <span>1B</span>
         </div>
         <div className="h-1.5 w-full overflow-hidden rounded-full bg-subtle">
@@ -138,32 +102,31 @@ export async function RightSidebar({
         </div>
       </div>
 
-      {/* Leaderboard Preview */}
       <div className="border-b border-border p-6">
         <p className="mb-3 text-xs font-semibold uppercase tracking-widest text-muted">
           Top This Week
         </p>
         <ul className="flex flex-col gap-3">
-          {topUsers?.map((u, i) => (
-            <li key={u.user_id}>
+          {data.topUsers.map((user, index) => (
+            <li key={user.user_id}>
               <Link
-                href={`/u/${u.username}`}
+                href={`/u/${user.username ?? ""}`}
                 className="flex items-center gap-3 hover:text-accent"
               >
                 <span className="flex h-6 w-6 shrink-0 items-center justify-center text-xs font-semibold">
-                  {i + 1}
+                  {index + 1}
                 </span>
-                <Avatar src={u.avatar_url} alt={u.username ?? ""} size="sm" fallback={u.username ?? "?"} />
+                <Avatar src={user.avatar_url} alt={user.username ?? ""} size="sm" fallback={user.username ?? "?"} />
                 <span className="flex-1 truncate text-sm font-medium">
-                  {u.username}
+                  {user.username}
                 </span>
                 <span className="font-[family-name:var(--font-mono)] text-sm text-accent">
-                  ${Math.round(Number(u.total_cost)).toLocaleString("en-US")}
+                  ${Math.round(Number(user.total_cost ?? 0)).toLocaleString("en-US")}
                 </span>
               </Link>
             </li>
           ))}
-          {(!topUsers || topUsers.length === 0) && (
+          {data.topUsers.length === 0 && (
             <li className="text-sm text-muted">No activity yet</li>
           )}
         </ul>
@@ -175,7 +138,6 @@ export async function RightSidebar({
           <span className="text-base font-light">&rarr;</span>
         </Link>
       </div>
-
     </div>
   );
 }

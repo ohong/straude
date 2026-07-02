@@ -1,6 +1,7 @@
 import { createClient } from "@/lib/supabase/server";
 import { getServiceClient } from "@/lib/supabase/service";
 import { redirect } from "next/navigation";
+import { AppProviders } from "@/components/providers/AppProviders";
 import type { Metadata } from "next";
 
 export const metadata: Metadata = {
@@ -35,8 +36,10 @@ export default async function OnboardingLayout({
   }
 
   return (
-    <div className="flex min-h-screen items-center justify-center bg-background px-4">
-      <div className="w-full max-w-md">{children}</div>
-    </div>
+    <AppProviders>
+      <div className="flex min-h-screen items-center justify-center bg-background px-4">
+        <div className="w-full max-w-md">{children}</div>
+      </div>
+    </AppProviders>
   );
 }

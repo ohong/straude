@@ -60,6 +60,7 @@ export type ActivationEventProperties = Partial<{
   pricing_mode: string;
   ccusage_version: string;
   ccusage_agents: string[];
+  has_analytics_consent: boolean;
   has_existing_usage: boolean;
   has_errors: boolean;
   "$insert_id": string;
@@ -86,6 +87,7 @@ const ALLOWED_PROPERTY_KEYS = new Set([
   "pricing_mode",
   "ccusage_version",
   "ccusage_agents",
+  "has_analytics_consent",
   "has_existing_usage",
   "has_errors",
   "$insert_id",
