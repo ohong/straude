@@ -1,61 +1,13 @@
-"use client";
-
-import Link from "next/link";
-import { useCallback, useState } from "react";
-import { ProductHuntBadge } from "./ProductHuntBadge";
-import { trackActivationEvent } from "@/lib/analytics/client";
-
-const SYNC_COMMAND = "npx straude@latest";
-
-function CopySnippet({ command }: { command: string }) {
-  const [copied, setCopied] = useState(false);
-
-  const copy = useCallback(() => {
-    navigator.clipboard.writeText(command).then(() => {
-      trackActivationEvent("sync_command_copied", {
-        surface: "landing",
-        command,
-        activation_state: "sync_command_copied",
-        is_authenticated: false,
-      });
-      setCopied(true);
-      setTimeout(() => setCopied(false), 2000);
-    });
-  }, [command]);
-
-  return (
-    <button
-      onClick={copy}
-      className="inline-flex cursor-pointer items-center gap-4 border border-landing-border bg-landing-panel px-4 py-3 font-[family-name:var(--font-mono)] text-sm text-landing-muted transition-[border-color,transform] hover:border-landing-dim active:scale-[0.97]"
-    >
-      ${" "}
-      <span className="text-landing-text">{command}</span>
-      {copied && (
-        <svg
-          className="h-4 w-4 text-accent"
-          fill="none"
-          viewBox="0 0 24 24"
-          stroke="currentColor"
-          strokeWidth={2}
-        >
-          <path
-            strokeLinecap="round"
-            strokeLinejoin="round"
-            d="M5 13l4 4L19 7"
-          />
-        </svg>
-      )}
-    </button>
-  );
-}
+import {
+  CopyCommandButton,
+  SignupCtaLink,
+} from "@/components/landing/LandingActivationActions";
+import { LANDING_SYNC_COMMAND } from "@/components/landing/constants";
 
 export function Hero() {
   return (
     <header className="min-h-screen flex flex-col justify-center px-8 lg:px-16 pt-32 relative">
       <div className="max-w-[900px]">
-        <div className="mb-6">
-          <ProductHuntBadge />
-        </div>
         <p className="font-[family-name:var(--font-mono)] text-sm uppercase tracking-wider text-landing-muted mb-4">
           {"// STRAVA FOR CLAUDE CODE"}
         </p>
@@ -72,26 +24,19 @@ export function Hero() {
         </p>
 
         <div className="flex flex-wrap gap-4 mt-10">
-          <Link
-            href="/signup"
-            onClick={() => trackActivationEvent("landing_primary_cta_clicked", {
-              surface: "landing",
-              cta_location: "hero_primary",
-              destination: "/signup",
-              activation_state: "anonymous",
-              is_authenticated: false,
-            })}
+          <SignupCtaLink
+            ctaLocation="hero_primary"
             className="inline-flex items-center justify-center bg-accent text-landing-bg font-[family-name:var(--font-mono)] text-sm font-bold uppercase px-8 py-4 border border-accent hover:bg-transparent hover:text-accent active:scale-[0.97] transition-all duration-200"
           >
             Start Your Streak
-          </Link>
-          <CopySnippet command={SYNC_COMMAND} />
+          </SignupCtaLink>
+          <CopyCommandButton command={LANDING_SYNC_COMMAND} />
         </div>
 
         {/* Terminal output */}
         <div className="mt-10 font-[family-name:var(--font-mono)] text-[0.8rem] text-landing-muted leading-relaxed max-w-[600px]">
           <span className="block text-landing-text">
-            &gt; {SYNC_COMMAND}
+            &gt; {LANDING_SYNC_COMMAND}
           </span>
           <span className="block">Analyzing ~/.config/claude/projects/...</span>
           <span className="block">
@@ -106,7 +51,7 @@ export function Hero() {
             Est. Cost: <span className="text-accent">$19.93</span>
           </span>
           <span className="block text-accent">
-            [OK] Session logged. Current streak: 18 days {"🔥"}
+            [OK] Session logged. Current streak: 18 days
           </span>
         </div>
       </div>
