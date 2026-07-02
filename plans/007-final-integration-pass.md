@@ -11,6 +11,73 @@ Combine the workstreams into one coherent product experience.
 
 The final result should feel like one fast activation loop across landing, signup, onboarding, app, and CLI.
 
+## Integration Result
+
+Merged onto `codex/activation-integration-pass` in this order:
+
+1. `codex/onboarding-first-sync`
+2. `codex/public-landing-performance`
+3. `codex/authenticated-shell-performance`
+4. `codex/core-app-activation-ux`
+5. `codex/cli-first-run-snappiness`
+
+Review the stack sequentially:
+
+- PR #133: activation analytics contract.
+- PR #134: onboarding completion gated on first sync confirmed in web.
+- PR #135: public landing and `/open` performance.
+- PR #136: authenticated shell provider, modal, notification, and sidebar deferral.
+- PR #137: CLI first-run snappiness and 30-day backfill path.
+- PR #138: empty-state activation guidance and guest conversion CTAs.
+
+The activation definition is `activation_completed` after the web app confirms synced usage. Optional profile setup is no longer activation.
+
+## PostHog Admin Follow-Up
+
+Server-side and client-side capture are implemented, but PostHog project admin updates were not applied from this checkout. Tool discovery did not expose a PostHog MCP/tool, `posthog` is not installed on PATH, and the local env only exposes `NEXT_PUBLIC_POSTHOG_KEY` plus `NEXT_PUBLIC_POSTHOG_HOST`, not a project API key.
+
+Create or update these PostHog actions after deploying the taxonomy:
+
+- Visitor CTA: `landing_primary_cta_clicked`
+- Signup started: `signup_started`
+- Signup completed: `signup_completed`
+- Profile started: `onboarding_profile_started`
+- Command copied: `sync_command_copied`
+- CLI login completed: `login_completed`
+- Usage push succeeded: `usage_pushed`
+- Usage push failed: `usage_push_failed`
+- First sync confirmed in web: `first_sync_confirmed`
+- Activated: `activation_completed`
+
+Create an activation funnel dashboard with these ordered steps:
+
+1. `$pageview` on `/`
+2. `landing_primary_cta_clicked`
+3. `signup_completed`
+4. `sync_command_copied`
+5. `login_completed`
+6. `usage_pushed`
+7. `first_sync_confirmed`
+8. `activation_completed`
+
+Create a CLI health dashboard for `usage_pushed`, `usage_push_failed`, p50 and p95 push timing, p50 and p95 ccusage timing, pricing mode, requested day count, submitted day count, and backfill completion.
+
+## Integration Verification
+
+Passed on `codex/activation-integration-pass`:
+
+```bash
+bun --cwd apps/web typecheck
+bun --cwd packages/cli typecheck
+bun --cwd apps/web test -- __tests__/flows/activation-contract.test.ts __tests__/api/activation-analytics.test.ts __tests__/api/usage-status.test.ts __tests__/api/profile.test.ts __tests__/api/usage-submit.test.ts __tests__/components/FeedList.test.tsx __tests__/components/ActivityCard.test.tsx __tests__/components/CommandPalette.test.tsx __tests__/components/SubmitPromptWidget.test.tsx __tests__/lib/open-stats.test.ts
+bun --cwd packages/cli test -- __tests__/ccusage.test.ts __tests__/commands/push.test.ts __tests__/flows/cli-sync-flow.test.ts __tests__/resolve-push-date-range.test.ts __tests__/commands/login.test.ts
+bun --cwd apps/web build
+bun --cwd packages/cli build
+bun --cwd apps/web test:e2e -- e2e/golden-path/landing-to-signup.spec.ts
+```
+
+Results: 91 focused web tests passed, 51 focused CLI tests passed, production web build passed, CLI build passed, and 10 golden-path landing-to-signup Playwright tests passed.
+
 ## In Scope
 
 - Cross-workstream copy consistency.
