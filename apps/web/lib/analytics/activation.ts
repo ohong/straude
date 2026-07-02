@@ -3,10 +3,12 @@ export const ACTIVATION_ANONYMOUS_COOKIE_MAX_AGE = 60 * 60 * 24 * 30;
 
 export const ACTIVATION_EVENTS = [
   "landing_primary_cta_clicked",
+  "guest_signup_cta_clicked",
   "signup_started",
   "signup_completed",
   "onboarding_profile_started",
   "sync_command_copied",
+  "first_sync_nudge_clicked",
   "usage_submit_succeeded",
   "first_sync_confirmed",
   "activation_completed",
@@ -31,6 +33,7 @@ export type ActivationSurface =
   | "usage_status"
   | "feed"
   | "profile"
+  | "empty_state"
   | "cli";
 
 export interface ActivationStateInput {
