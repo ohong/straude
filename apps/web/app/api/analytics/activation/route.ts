@@ -12,9 +12,11 @@ import { createClient } from "@/lib/supabase/server";
 
 const CLIENT_EVENT_ALLOWLIST = new Set([
   "landing_primary_cta_clicked",
+  "guest_signup_cta_clicked",
   "signup_started",
   "onboarding_profile_started",
   "sync_command_copied",
+  "first_sync_nudge_clicked",
   "activation_completed",
 ]);
 

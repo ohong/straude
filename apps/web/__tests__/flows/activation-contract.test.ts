@@ -9,10 +9,12 @@ describe("activation funnel contract", () => {
   it("keeps the canonical event names stable", () => {
     expect(ACTIVATION_EVENTS).toEqual([
       "landing_primary_cta_clicked",
+      "guest_signup_cta_clicked",
       "signup_started",
       "signup_completed",
       "onboarding_profile_started",
       "sync_command_copied",
+      "first_sync_nudge_clicked",
       "usage_submit_succeeded",
       "first_sync_confirmed",
       "activation_completed",

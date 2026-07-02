@@ -16,6 +16,8 @@ import { FeedList } from "@/components/app/feed/FeedList";
 import { FollowButton } from "@/components/app/profile/FollowButton";
 import { InviteButton } from "@/components/app/profile/InviteButton";
 import { CrewPopover, type CrewMember } from "@/components/app/profile/CrewPopover";
+import { FirstSyncCommandCard } from "@/components/app/activation/FirstSyncCommandCard";
+import { GuestSignupCta } from "@/components/app/activation/GuestSignupCta";
 import { formatCurrency, formatTokens } from "@/lib/utils/format";
 import { enrichFeedPosts, getFeedCursor } from "@/lib/feed-enrichment";
 import { firstRelation } from "@/lib/utils/first-relation";
@@ -185,6 +187,7 @@ export default async function ProfilePage({
 
   const totalSpend = totalSpendRows?.reduce((s, r) => s + Number(r.cost_usd), 0) ?? 0;
   const lifetimeOutputTokens = totalSpendRows?.reduce((s, r) => s + Number(r.output_tokens), 0) ?? 0;
+  const hasUsage = (totalSpendRows?.length ?? 0) > 0;
 
   const postDateSet = new Set(
     ((postDates ?? []) as PostDateRow[])
@@ -326,48 +329,61 @@ export default async function ProfilePage({
           </div>
         </div>
 
-        {/* Stats row */}
-        <div className="mt-6 grid grid-cols-2 gap-4 sm:grid-cols-4">
-          <div>
-            <p className="text-[0.7rem] uppercase tracking-widest text-muted">Streak</p>
-            <p className="inline-flex items-center gap-1 font-[family-name:var(--font-mono)] text-lg font-medium tabular-nums">
-              <Flame size={16} className="text-accent" />
-              {streak ?? 0} days
-            </p>
-          </div>
-          <div>
-            <p className="text-[0.7rem] uppercase tracking-widest text-muted">Output Tokens</p>
-            <p className="inline-flex items-center gap-1 font-[family-name:var(--font-mono)] text-lg font-medium tabular-nums">
-              <Zap size={16} className="text-accent" />
-              {formatTokens(lifetimeOutputTokens)}
-            </p>
-          </div>
-          <div>
-            <p className="text-[0.7rem] uppercase tracking-widest text-muted">Total Spend</p>
-            <p className="font-[family-name:var(--font-mono)] text-lg font-medium tabular-nums text-accent">
-              ${formatCurrency(totalSpend)}
-            </p>
-          </div>
-          {(crewMembers ?? []).length > 0 && (
-            <div className="min-w-0">
-              <CrewPopover
-                count={(crewMembers ?? []).length}
-                members={(crewMembers ?? []) as CrewMember[]}
-              />
-            </div>
-          )}
-        </div>
-
-        {/* Achievement badges */}
-        {(achievements && achievements.length > 0 || isOwn) && (
+        {isOwn && !hasUsage ? (
           <div className="mt-6">
-            <p className="mb-2 text-[0.7rem] uppercase tracking-widest text-muted">Achievements</p>
-            <AchievementBadges earned={achievements ?? []} showLocked={isOwn} />
+            <FirstSyncCommandCard surface="profile" />
           </div>
+        ) : (
+          <>
+            {/* Stats row */}
+            <div className="mt-6 grid grid-cols-2 gap-4 sm:grid-cols-4">
+              <div>
+                <p className="text-[0.7rem] uppercase tracking-widest text-muted">Streak</p>
+                <p className="inline-flex items-center gap-1 font-[family-name:var(--font-mono)] text-lg font-medium tabular-nums">
+                  <Flame size={16} className="text-accent" />
+                  {streak ?? 0} days
+                </p>
+              </div>
+              <div>
+                <p className="text-[0.7rem] uppercase tracking-widest text-muted">Output Tokens</p>
+                <p className="inline-flex items-center gap-1 font-[family-name:var(--font-mono)] text-lg font-medium tabular-nums">
+                  <Zap size={16} className="text-accent" />
+                  {formatTokens(lifetimeOutputTokens)}
+                </p>
+              </div>
+              <div>
+                <p className="text-[0.7rem] uppercase tracking-widest text-muted">Total Spend</p>
+                <p className="font-[family-name:var(--font-mono)] text-lg font-medium tabular-nums text-accent">
+                  ${formatCurrency(totalSpend)}
+                </p>
+              </div>
+              {(crewMembers ?? []).length > 0 && (
+                <div className="min-w-0">
+                  <CrewPopover
+                    count={(crewMembers ?? []).length}
+                    members={(crewMembers ?? []) as CrewMember[]}
+                  />
+                </div>
+              )}
+            </div>
+
+            {/* Achievement badges */}
+            {(achievements && achievements.length > 0 || isOwn) && (
+              <div className="mt-6">
+                <p className="mb-2 text-[0.7rem] uppercase tracking-widest text-muted">Achievements</p>
+                <AchievementBadges earned={achievements ?? []} showLocked={isOwn} />
+              </div>
+            )}
+          </>
         )}
       </div>
 
+      {!authUserId && hasUsage && (
+        <GuestSignupCta surface="profile" ctaLocation="profile_after_stats" />
+      )}
+
       {/* Contribution graph */}
+      {hasUsage && (
       <div className="border-b border-border px-4 py-5 sm:p-6">
         <p className="mb-3 text-xs font-semibold uppercase tracking-widest text-muted">
           Contributions
@@ -389,6 +405,7 @@ export default async function ProfilePage({
           )}
         </div>
       </div>
+      )}
 
       {/* Posts */}
       <div>
@@ -408,7 +425,9 @@ export default async function ProfilePage({
           />
         ) : (
           <div className="px-4 py-12 text-center text-sm text-muted sm:px-6">
-            No activities yet.
+            {isOwn && !hasUsage
+              ? "Your first synced session will appear here."
+              : "No activities yet."}
           </div>
         )}
       </div>
