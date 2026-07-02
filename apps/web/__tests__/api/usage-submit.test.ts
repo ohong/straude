@@ -357,7 +357,7 @@ describe("POST /api/usage/submit", () => {
     expect(json.error).toContain("Unsupported ccusage agents");
   });
 
-  it("rejects non-online ccusage pricing metadata", async () => {
+  it("rejects unsupported ccusage pricing metadata", async () => {
     (verifyCliToken as any).mockReturnValue("user-1");
     mockServiceClient();
 
@@ -1491,7 +1491,7 @@ describe("POST /api/usage/submit", () => {
           claude: "ccusage-claude-v20",
           ccusage_version: "20.0.6",
           ccusage_agents: ["claude"],
-          pricing_mode: "online",
+          pricing_mode: "offline",
         },
       })
     );
@@ -1500,7 +1500,7 @@ describe("POST /api/usage/submit", () => {
       claude: "ccusage-claude-v20",
       ccusage_version: "20.0.6",
       ccusage_agents: ["claude"],
-      pricing_mode: "online",
+      pricing_mode: "offline",
     };
     expect(res.status).toBe(200);
     expect(svc.upsert.mock.calls[0][0].collector_meta).toEqual(expectedMeta);

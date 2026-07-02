@@ -80,6 +80,7 @@ export async function loginCommand(apiUrlOverride?: string): Promise<void> {
 
   openBrowser(verify_url);
   console.log(`\nIf the browser didn't open, visit:\n  ${verify_url}\n`);
+  console.log("Confirm in the browser, then keep this terminal open — Straude will continue syncing here.");
   process.stdout.write("Waiting for confirmation...");
 
   const startTime = Date.now();

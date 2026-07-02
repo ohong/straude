@@ -75,7 +75,7 @@ describe("parseCcusageOutput", () => {
       codex: CCUSAGE_CODEX_COLLECTOR,
       ccusage_version: "20.0.6",
       ccusage_agents: ["codex"],
-      pricing_mode: "online",
+      pricing_mode: "offline",
     });
   });
 
@@ -104,7 +104,7 @@ describe("parseCcusageOutput", () => {
       codex: CCUSAGE_CODEX_COLLECTOR,
       ccusage_version: "20.0.6",
       ccusage_agents: ["claude", "codex"],
-      pricing_mode: "online",
+      pricing_mode: "offline",
     });
     expect(parsed.data[0]!.reasoningOutputTokens).toBe(100);
   });
@@ -140,7 +140,7 @@ describe("parseCcusageOutput", () => {
     expect(parsed.collector).toEqual({
       ccusage_version: "20.0.6",
       ccusage_agents: [],
-      pricing_mode: "online",
+      pricing_mode: "offline",
     });
   });
 
@@ -152,7 +152,7 @@ describe("parseCcusageOutput", () => {
 });
 
 describe("version and execution", () => {
-  it("invokes the installed ccusage binary with online unified daily args", async () => {
+  it("invokes the installed ccusage binary with offline unified daily args", async () => {
     execFileMock.mockImplementationOnce((...args: unknown[]) => {
       const cb = args.at(-1) as (err: Error | null, stdout: string, stderr: string) => void;
       cb(null, rawOutput(), "");
@@ -164,10 +164,30 @@ describe("version and execution", () => {
     expect(execFileMock).toHaveBeenCalledTimes(1);
     expect(execFileMock).toHaveBeenCalledWith(
       "/bundled/ccusage",
+      ["daily", "--json", "--since", "20260513", "--until", "20260513", "--offline"],
+      expect.objectContaining({ shell: false }),
+      expect.any(Function),
+    );
+    expect(collected.collector.pricing_mode).toBe("offline");
+  });
+
+  it("can explicitly collect with online pricing", async () => {
+    execFileMock.mockImplementationOnce((...args: unknown[]) => {
+      const cb = args.at(-1) as (err: Error | null, stdout: string, stderr: string) => void;
+      cb(null, rawOutput(), "");
+    });
+
+    const collected = await collectCcusageUsageAsync("20260513", "20260513", 10_000, {
+      pricingMode: "online",
+    });
+
+    expect(execFileMock).toHaveBeenCalledWith(
+      "/bundled/ccusage",
       ["daily", "--json", "--since", "20260513", "--until", "20260513", "--no-offline"],
       expect.objectContaining({ shell: false }),
       expect.any(Function),
     );
+    expect(collected.collector.pricing_mode).toBe("online");
   });
 
   it("rejects ccusage versions below the v20 accuracy floor", async () => {
@@ -178,15 +198,35 @@ describe("version and execution", () => {
     );
   });
 
-  it("fails safely when ccusage reports missing online pricing", async () => {
+  it("falls back to online pricing when offline pricing is incomplete", async () => {
     execFileMock
       .mockImplementationOnce((...args: unknown[]) => {
         const cb = args.at(-1) as (err: Error | null, stdout: string, stderr: string) => void;
         cb(null, rawOutput(), "Missing pricing for model gpt-5.2-codex");
+      })
+      .mockImplementationOnce((...args: unknown[]) => {
+        const cb = args.at(-1) as (err: Error | null, stdout: string, stderr: string) => void;
+        cb(null, rawOutput(), "");
       });
 
-    await expect(collectCcusageUsageAsync("20260513", "20260513")).rejects.toThrow(
-      /fully priced online cost data/,
+    const collected = await collectCcusageUsageAsync("20260513", "20260513");
+
+    expect(execFileMock).toHaveBeenCalledTimes(2);
+    expect(execFileMock.mock.calls[0]![1]).toContain("--offline");
+    expect(execFileMock.mock.calls[1]![1]).toContain("--no-offline");
+    expect(collected.collector.pricing_mode).toBe("online");
+  });
+
+  it("fails safely when the selected pricing mode remains incomplete", async () => {
+    execFileMock.mockImplementationOnce((...args: unknown[]) => {
+      const cb = args.at(-1) as (err: Error | null, stdout: string, stderr: string) => void;
+      cb(null, rawOutput(), "Missing pricing for model gpt-5.2-codex");
+    });
+
+    await expect(collectCcusageUsageAsync("20260513", "20260513", undefined, {
+      allowOnlineFallback: false,
+    })).rejects.toThrow(
+      /fully priced offline cost data/,
     );
   });
 });

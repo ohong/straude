@@ -16,6 +16,7 @@ import {
   isPushInvocation,
   reportCliException,
   reportUsagePushFailed,
+  shutdownTelemetryWithTimeout,
 } from "./lib/telemetry.js";
 
 // On 401, transparently re-run the browser login flow and let api.ts retry
@@ -227,21 +228,6 @@ async function main(): Promise<void> {
 }
 
 let exitCode = 0;
-
-async function shutdownTelemetryWithTimeout(): Promise<void> {
-  let timer: NodeJS.Timeout | undefined;
-  try {
-    await Promise.race([
-      posthog._shutdown(),
-      new Promise<void>((resolve) => {
-        timer = setTimeout(resolve, 500);
-        timer.unref?.();
-      }),
-    ]);
-  } finally {
-    if (timer) clearTimeout(timer);
-  }
-}
 
 main()
   .catch((err: unknown) => {

@@ -146,7 +146,7 @@ describe("unified ccusage CLI flow", () => {
 
     expect(execFileMock).toHaveBeenCalledWith(
       "/bundled/ccusage",
-      expect.arrayContaining(["daily", "--json", "--no-offline"]),
+      expect.arrayContaining(["daily", "--json", "--offline"]),
       expect.any(Object),
       expect.any(Function),
     );
@@ -159,12 +159,12 @@ describe("unified ccusage CLI flow", () => {
       codex: "ccusage-codex-v20",
       ccusage_version: TEST_CCUSAGE_VERSION,
       ccusage_agents: ["claude", "codex"],
-      pricing_mode: "online",
+      pricing_mode: "offline",
     });
     expect(readPersistedConfig().last_push_date).toBe(todayStr());
   });
 
-  it("first migrated push backfills 30 days and stores ccusage_v20_migration_completed_at", async () => {
+  it("respects explicit --days before the migration backfill has completed", async () => {
     seedConfig({
       ccusage_v20_migration_completed_at: undefined,
       last_push_date: "2026-03-01",
@@ -172,6 +172,24 @@ describe("unified ccusage CLI flow", () => {
     mockSuccessfulSubmit();
 
     await pushCommand({ days: 3 });
+
+    const dailyCall = execFileMock.mock.calls.find(([, args]) =>
+      Array.isArray(args) && args.includes("daily"),
+    )!;
+    const args = dailyCall[1] as string[];
+    const since = args[args.indexOf("--since") + 1];
+    expect(since).toBe("20260311");
+    expect(readPersistedConfig().ccusage_v20_migration_completed_at).toBeUndefined();
+  });
+
+  it("marks the migration complete after explicit 30-day backfill", async () => {
+    seedConfig({
+      ccusage_v20_migration_completed_at: undefined,
+      last_push_date: "2026-03-01",
+    });
+    mockSuccessfulSubmit();
+
+    await pushCommand({ days: 30 });
 
     const dailyCall = execFileMock.mock.calls.find(([, args]) =>
       Array.isArray(args) && args.includes("daily"),
