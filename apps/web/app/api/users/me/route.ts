@@ -1,4 +1,6 @@
 import { NextResponse, type NextRequest } from "next/server";
+import { after } from "@/lib/utils/after";
+import { captureServerActivationEvent } from "@/lib/analytics/server";
 import { createClient } from "@/lib/supabase/server";
 import { getServiceClient } from "@/lib/supabase/service";
 import { COUNTRY_TO_REGION } from "@/lib/constants/regions";
@@ -25,6 +27,12 @@ const ALLOWED_FIELDS = [
 
 const BIO_MAX_LENGTH = 160;
 const HEARD_ABOUT_MAX_LENGTH = 500;
+
+type ActivationUsageRow = {
+  id: string;
+  session_count: number | string | null;
+  total_tokens: number | string | null;
+};
 
 function normalizeProfileLink(value: unknown): string | null {
   if (value === null) return null;
@@ -199,9 +207,36 @@ export async function PATCH(request: NextRequest) {
     return NextResponse.json({ error: "No fields to update" }, { status: 400 });
   }
 
-  const isOnboardingUpdate = updates.onboarding_completed === true;
-
   const db = getServiceClient();
+  const isOnboardingUpdate = updates.onboarding_completed === true;
+  let activationUsage: ActivationUsageRow | null = null;
+
+  if (isOnboardingUpdate) {
+    const { data: usageRow, error: usageError } = await db
+      .from("daily_usage")
+      .select("id,session_count,total_tokens")
+      .eq("user_id", user.id)
+      .order("date", { ascending: false })
+      .limit(1)
+      .maybeSingle();
+
+    if (usageError) {
+      return NextResponse.json(
+        { error: "Unable to verify first sync" },
+        { status: 500 },
+      );
+    }
+
+    if (!usageRow) {
+      return NextResponse.json(
+        { error: "Sync your first session before completing onboarding" },
+        { status: 409 },
+      );
+    }
+
+    activationUsage = usageRow as ActivationUsageRow;
+  }
+
   const { data: profile, error } = await db
     .from("users")
     .update(updates)
@@ -233,6 +268,21 @@ export async function PATCH(request: NextRequest) {
 
   // Auto-follow top active users so new users see content in their feed
   if (isOnboardingUpdate) {
+    after(() => captureServerActivationEvent({
+      event: "activation_completed",
+      distinctId: user.id,
+      properties: {
+        surface: "onboarding",
+        activation_state: "activated",
+        is_authenticated: true,
+        session_count: Number(activationUsage?.session_count ?? 0),
+        total_tokens: Number(activationUsage?.total_tokens ?? 0),
+        "$insert_id": activationUsage?.id
+          ? `activation_completed:${activationUsage.id}`
+          : `activation_completed:${user.id}`,
+      },
+    }));
+
     autoFollowTopUsers(user.id).catch(() => {});
 
     // Attribute referral from cookie

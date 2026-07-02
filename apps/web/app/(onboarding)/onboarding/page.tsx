@@ -7,8 +7,6 @@ import { BoltIcon } from "@/components/landing/icons";
 import { Check, X, Loader2, ArrowRight, Copy } from "lucide-react";
 import { Button } from "@/components/ui/Button";
 import { Input } from "@/components/ui/Input";
-import { Textarea } from "@/components/ui/Textarea";
-import { CountryPicker } from "@/components/ui/CountryPicker";
 import { trackActivationEvent } from "@/lib/analytics/client";
 import { formatCurrency } from "@/lib/utils/format";
 
@@ -16,10 +14,14 @@ const SYNC_COMMAND = "npx straude@latest";
 
 interface UsageStatus {
   has_data: boolean;
+  has_usage?: boolean;
   cost_usd?: number;
   total_tokens?: number;
   session_count?: number;
   top_model?: string | null;
+  latest_usage_id?: string;
+  latest_usage_at?: string | null;
+  latest_post_url?: string | null;
 }
 
 function formatTokens(n: number): string {
@@ -33,10 +35,15 @@ function Step3LogSession({ username }: { username: string }) {
   const [copied, setCopied] = useState(false);
   const [phase, setPhase] = useState<"waiting" | "success">("waiting");
   const [data, setData] = useState<UsageStatus | null>(null);
+  const [hasExistingUsage, setHasExistingUsage] = useState(false);
+  const [completionError, setCompletionError] = useState<string | null>(null);
   const activationTrackedRef = useRef(false);
+  const activationPersistedRef = useRef(false);
+  const commandCopiedRef = useRef(false);
 
   const handleCopy = useCallback(() => {
     navigator.clipboard.writeText(SYNC_COMMAND).then(() => {
+      commandCopiedRef.current = true;
       trackActivationEvent("sync_command_copied", {
         surface: "onboarding",
         command: SYNC_COMMAND,
@@ -48,9 +55,7 @@ function Step3LogSession({ username }: { username: string }) {
     });
   }, []);
 
-  // Poll for NEW session data (ignore pre-existing usage)
   const intervalRef = useRef<ReturnType<typeof setInterval>>(undefined);
-  const baselineRef = useRef<number | null>(null);
 
   useEffect(() => {
     let active = true;
@@ -60,29 +65,12 @@ function Step3LogSession({ username }: { username: string }) {
         const res = await fetch("/api/usage/status");
         if (!res.ok) return;
         const json: UsageStatus = await res.json();
-        const count = json.session_count ?? 0;
+        const hasUsage = json.has_usage ?? json.has_data;
 
-        // First poll: record the baseline
-        if (baselineRef.current === null) {
-          baselineRef.current = count;
-          return;
-        }
-
-        // Only transition when sessions increase beyond baseline
-        if (count > baselineRef.current && active) {
+        if (hasUsage && active) {
           setData(json);
+          setHasExistingUsage(!commandCopiedRef.current);
           setPhase("success");
-          if (!activationTrackedRef.current) {
-            activationTrackedRef.current = true;
-            trackActivationEvent("activation_completed", {
-              surface: "onboarding",
-              activation_state: "activated",
-              is_authenticated: true,
-              session_count: count,
-              total_tokens: json.total_tokens,
-              total_cost_usd: json.cost_usd,
-            });
-          }
           if (intervalRef.current) clearInterval(intervalRef.current);
         }
       } catch {
@@ -97,6 +85,49 @@ function Step3LogSession({ username }: { username: string }) {
       if (intervalRef.current) clearInterval(intervalRef.current);
     };
   }, []);
+
+  useEffect(() => {
+    if (phase !== "success" || !data || activationPersistedRef.current) return;
+
+    activationPersistedRef.current = true;
+    const observedUsage = data;
+
+    async function persistActivation() {
+      const res = await fetch("/api/users/me", {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ onboarding_completed: true }),
+      });
+
+      if (!res.ok) {
+        const payload = await res.json().catch(() => ({}));
+        setCompletionError(
+          typeof payload.error === "string"
+            ? payload.error
+            : "We saw your usage, but setup could not be completed. Refresh and try again.",
+        );
+        return;
+      }
+
+      if (!activationTrackedRef.current) {
+        activationTrackedRef.current = true;
+        trackActivationEvent("activation_completed", {
+          surface: "onboarding",
+          activation_state: "activated",
+          is_authenticated: true,
+          session_count: observedUsage.session_count,
+          total_tokens: observedUsage.total_tokens,
+          total_cost_usd: observedUsage.cost_usd,
+          has_existing_usage: hasExistingUsage,
+          "$insert_id": observedUsage.latest_usage_id
+            ? `activation_completed:${observedUsage.latest_usage_id}`
+            : "activation_completed:onboarding",
+        });
+      }
+    }
+
+    void persistActivation();
+  }, [data, hasExistingUsage, phase]);
 
   if (phase === "success" && data) {
     return (
@@ -115,7 +146,8 @@ function Step3LogSession({ username }: { username: string }) {
           </h1>
         </div>
         <p className="mb-6 text-sm text-muted">
-          Your usage is live. Here&apos;s what we captured.
+          Your usage is live. Straude can now build your streak, spend totals,
+          and shareable session history.
         </p>
 
         {/* Stats grid */}
@@ -146,7 +178,23 @@ function Step3LogSession({ username }: { username: string }) {
           </div>
         </div>
 
+        {completionError && (
+          <p className="mt-4 rounded border border-red-500/30 bg-red-500/5 px-3 py-2 text-sm text-red-500">
+            {completionError}
+          </p>
+        )}
+
         <div className="mt-6 flex items-center gap-3">
+          {data.latest_post_url && (
+            <Button
+              type="button"
+              variant="secondary"
+              onClick={() => router.push(data.latest_post_url ?? "/feed")}
+              className="py-3"
+            >
+              View session
+            </Button>
+          )}
           <Button
             onClick={() => router.push(username ? `/u/${username}` : "/feed")}
             className="flex-1 py-3"
@@ -176,11 +224,11 @@ function Step3LogSession({ username }: { username: string }) {
         className="text-2xl font-medium tracking-tight"
         style={{ letterSpacing: "-0.03em" }}
       >
-        Log your first session
+        Sync your first session
       </h1>
       <p className="mt-1 mb-6 text-sm text-muted">
-        Run this in your terminal to post today&apos;s Claude Code usage to your
-        profile. Takes about 10 seconds.
+        Run this in your terminal after a Claude Code or Codex session. Straude
+        will post your usage stats as soon as the web app sees them.
       </p>
 
       {/* Copy-to-clipboard command */}
@@ -203,7 +251,7 @@ function Step3LogSession({ username }: { username: string }) {
 
       {/* Privacy assurance */}
       <p className="mt-4 text-xs leading-relaxed text-muted">
-        Only aggregate stats leave your machine — token counts, cost, model
+        Only aggregate stats leave your machine - token counts, cost, model
         names. Your prompts, code, and conversations never do.{" "}
         <Link href="/privacy" className="underline underline-offset-2 hover:text-foreground">
           Privacy policy
@@ -222,7 +270,7 @@ function Step3LogSession({ username }: { username: string }) {
           variant="secondary"
           className="flex-1 py-3"
         >
-          I&apos;ll do this later
+          Explore without syncing
         </Button>
       </div>
 
@@ -248,12 +296,6 @@ export default function OnboardingPage() {
   const [usernameStatus, setUsernameStatus] = useState<UsernameStatus>("idle");
   const debounceRef = useRef<ReturnType<typeof setTimeout>>(undefined);
 
-  // Step 2
-  const [bio, setBio] = useState("");
-  const [heardAbout, setHeardAbout] = useState("");
-  const [country, setCountry] = useState("");
-  const [githubUsername, setGithubUsername] = useState("");
-
   // Auto-detect timezone
   const timezone = Intl.DateTimeFormat().resolvedOptions().timeZone;
 
@@ -263,9 +305,6 @@ export default function OnboardingPage() {
       const res = await fetch("/api/users/me");
       if (res.ok) {
         const profile = await res.json();
-        if (profile.github_username) {
-          setGithubUsername(profile.github_username);
-        }
         // Pre-fill username: use existing username (e.g. auto-claimed from GitHub),
         // otherwise suggest from GitHub handle
         if (profile.username) {
@@ -281,9 +320,6 @@ export default function OnboardingPage() {
           }
         }
         if (profile.display_name) setDisplayName(profile.display_name);
-        if (profile.country) setCountry(profile.country);
-        if (profile.bio) setBio(profile.bio);
-        if (profile.heard_about) setHeardAbout(profile.heard_about);
       }
     }
     loadProfile();
@@ -319,20 +355,15 @@ export default function OnboardingPage() {
     };
   }, [username]);
 
-  async function handleFinish() {
+  async function handleProfileSave() {
     setSaving(true);
     setError(null);
 
     const body: Record<string, unknown> = {
       timezone,
-      onboarding_completed: true,
     };
     if (username) body.username = username;
     if (displayName) body.display_name = displayName;
-    if (bio) body.bio = bio;
-    body.heard_about = heardAbout.trim() || null;
-    if (country) body.country = country;
-    if (githubUsername) body.github_username = githubUsername;
 
     const res = await fetch("/api/users/me", {
       method: "PATCH",
@@ -347,6 +378,7 @@ export default function OnboardingPage() {
       return;
     }
 
+    setSaving(false);
     setStep(3);
   }
 
@@ -449,12 +481,6 @@ export default function OnboardingPage() {
           </Button>
         </div>
 
-        <div className="mt-3 text-center">
-          <Link href="/feed" className="text-sm text-muted hover:text-foreground">
-            Skip for now
-          </Link>
-        </div>
-
         <div className="mt-4 flex justify-center gap-1.5">
           <span className="h-1.5 w-6 rounded-full bg-accent" />
           <span className="h-1.5 w-6 rounded-full bg-border" />
@@ -475,74 +501,25 @@ export default function OnboardingPage() {
           className="text-2xl font-medium tracking-tight"
           style={{ letterSpacing: "-0.03em" }}
         >
-          Almost there
+          Ready to sync
         </h1>
         <p className="mt-1 mb-6 text-sm text-muted">
-          Optional details to round out your profile. You can always change these
-          later in Settings.
+          Your first sync unlocks the useful parts of Straude: spend, tokens,
+          streaks, and a shareable session you can edit after it lands.
         </p>
 
-        <div className="space-y-4">
-          <div>
-            <label htmlFor="onboard-bio" className="mb-1 block text-xs font-semibold uppercase tracking-widest text-muted">
-              Bio
-            </label>
-            <Textarea
-              id="onboard-bio"
-              name="bio"
-              value={bio}
-              onChange={(e) => setBio(e.target.value)}
-              placeholder="What are you building with Claude\u2026"
-              maxLength={160}
-              rows={2}
-              className="min-h-0"
-            />
-            <p className="mt-1 text-xs text-muted">{bio.length}/160</p>
+        <div className="space-y-3 rounded border border-border bg-subtle px-4 py-4 text-sm text-muted">
+          <div className="flex gap-3">
+            <Check size={16} className="mt-0.5 shrink-0 text-accent" aria-hidden="true" />
+            <p>One command posts aggregate usage for your latest local sessions.</p>
           </div>
-
-          <div>
-            <label htmlFor="onboard-heard-about" className="mb-1 block text-xs font-semibold uppercase tracking-widest text-muted">
-              How did you hear about us?
-            </label>
-            <Textarea
-              id="onboard-heard-about"
-              name="heard_about"
-              value={heardAbout}
-              onChange={(e) => setHeardAbout(e.target.value)}
-              placeholder="Friend, GitHub, X, newsletter, podcast..."
-              maxLength={500}
-              rows={3}
-              className="min-h-0"
-              aria-describedby="onboard-heard-about-hint"
-            />
-            <div className="mt-1 flex items-end justify-end text-xs text-muted">
-              <span>{heardAbout.length}/500</span>
-            </div>
+          <div className="flex gap-3">
+            <Check size={16} className="mt-0.5 shrink-0 text-accent" aria-hidden="true" />
+            <p>Prompts, code, file paths, and conversation text stay private.</p>
           </div>
-
-          <div>
-            <label htmlFor="onboard-country" className="mb-1 block text-xs font-semibold uppercase tracking-widest text-muted">
-              Country
-            </label>
-            <CountryPicker
-              id="onboard-country"
-              name="country"
-              value={country}
-              onChange={setCountry}
-            />
-          </div>
-
-          <div>
-            <label htmlFor="onboard-github" className="mb-1 block text-xs font-semibold uppercase tracking-widest text-muted">
-              GitHub username
-            </label>
-            <Input
-              id="onboard-github"
-              name="github_username"
-              value={githubUsername}
-              onChange={(e) => setGithubUsername(e.target.value)}
-              placeholder="your-github"
-            />
+          <div className="flex gap-3">
+            <Check size={16} className="mt-0.5 shrink-0 text-accent" aria-hidden="true" />
+            <p>You can add bio, location, and links later from Settings.</p>
           </div>
         </div>
 
@@ -557,18 +534,12 @@ export default function OnboardingPage() {
             Back
           </button>
           <Button
-            onClick={handleFinish}
+            onClick={handleProfileSave}
             disabled={saving}
             className="flex-1 py-3"
           >
-            {saving ? "Setting up\u2026" : "Start logging"}
+            {saving ? "Saving..." : "Show sync command"}
           </Button>
-        </div>
-
-        <div className="mt-3 text-center">
-          <Link href="/feed" className="text-sm text-muted hover:text-foreground">
-            Skip for now
-          </Link>
         </div>
 
         <div className="mt-4 flex justify-center gap-1.5">
