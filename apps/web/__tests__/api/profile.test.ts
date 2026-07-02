@@ -8,6 +8,18 @@ vi.mock("@/lib/supabase/service", () => ({
   getServiceClient: vi.fn(),
 }));
 
+vi.mock("@/lib/email/send-welcome-email", () => ({
+  sendWelcomeEmail: vi.fn().mockResolvedValue(undefined),
+}));
+
+vi.mock("@/lib/referral", () => ({
+  attributeReferral: vi.fn().mockResolvedValue(undefined),
+}));
+
+vi.mock("@/lib/analytics/server", () => ({
+  captureServerActivationEvent: vi.fn().mockResolvedValue(true),
+}));
+
 vi.mock("@/lib/constants/regions", () => ({
   COUNTRY_TO_REGION: {
     US: "north_america",
@@ -18,6 +30,8 @@ vi.mock("@/lib/constants/regions", () => ({
 
 import { GET as getPublicProfile } from "@/app/api/users/[username]/route";
 import { GET as getOwnProfile, PATCH } from "@/app/api/users/me/route";
+import { captureServerActivationEvent } from "@/lib/analytics/server";
+import { sendWelcomeEmail } from "@/lib/email/send-welcome-email";
 import { createClient } from "@/lib/supabase/server";
 import { getServiceClient } from "@/lib/supabase/service";
 import { NextRequest } from "next/server";
@@ -349,6 +363,131 @@ describe("PATCH /api/users/me", () => {
 
     expect(res.status).toBe(200);
     expect(json.username).toBe("new_name");
+  });
+
+  it("does not complete onboarding before first sync is present", async () => {
+    const authClient: Record<string, any> = {
+      auth: {
+        getUser: vi.fn().mockResolvedValue({
+          data: { user: { id: "u-1", email: "u1@example.com" } },
+          error: null,
+        }),
+      },
+    };
+    const updateMock = vi.fn();
+    const dailyUsageChain = {
+      select: vi.fn().mockReturnThis(),
+      eq: vi.fn().mockReturnThis(),
+      order: vi.fn().mockReturnThis(),
+      limit: vi.fn().mockReturnThis(),
+      maybeSingle: vi.fn().mockResolvedValue({
+        data: null,
+        error: null,
+      }),
+    };
+    const db = {
+      from: vi.fn((table: string) => {
+        if (table === "daily_usage") return dailyUsageChain;
+        if (table === "users") return { update: updateMock };
+        throw new Error(`Unexpected table ${table}`);
+      }),
+    };
+    (createClient as any).mockResolvedValue(authClient);
+    (getServiceClient as any).mockReturnValue(db);
+
+    const res = await PATCH(
+      makeRequest("PATCH", "/api/users/me", { onboarding_completed: true })
+    );
+    const json = await res.json();
+
+    expect(res.status).toBe(409);
+    expect(json.error).toBe("Sync your first session before completing onboarding");
+    expect(updateMock).not.toHaveBeenCalled();
+    expect(sendWelcomeEmail).not.toHaveBeenCalled();
+    expect(captureServerActivationEvent).not.toHaveBeenCalled();
+  });
+
+  it("completes onboarding after first sync and captures activation", async () => {
+    const authClient: Record<string, any> = {
+      auth: {
+        getUser: vi.fn().mockResolvedValue({
+          data: { user: { id: "u-1", email: "u1@example.com" } },
+          error: null,
+        }),
+      },
+    };
+    const usageRow = {
+      id: "usage-1",
+      session_count: 2,
+      total_tokens: 2500,
+    };
+    const updatedProfile = {
+      id: "u-1",
+      username: "alice",
+      onboarding_completed: true,
+    };
+    const dailyUsageChain = {
+      select: vi.fn().mockReturnThis(),
+      eq: vi.fn().mockReturnThis(),
+      order: vi.fn().mockReturnThis(),
+      limit: vi.fn().mockReturnThis(),
+      maybeSingle: vi.fn().mockResolvedValue({
+        data: usageRow,
+        error: null,
+      }),
+    };
+    const updateMock = vi.fn().mockReturnValue({
+      eq: vi.fn().mockReturnValue({
+        select: vi.fn().mockReturnValue({
+          single: vi.fn().mockResolvedValue({
+            data: updatedProfile,
+            error: null,
+          }),
+        }),
+      }),
+    });
+    const leaderboardChain = {
+      select: vi.fn().mockReturnThis(),
+      neq: vi.fn().mockReturnThis(),
+      order: vi.fn().mockReturnThis(),
+      limit: vi.fn().mockResolvedValue({ data: [], error: null }),
+    };
+    const db = {
+      from: vi.fn((table: string) => {
+        if (table === "daily_usage") return dailyUsageChain;
+        if (table === "users") return { update: updateMock };
+        if (table === "leaderboard_weekly") return leaderboardChain;
+        throw new Error(`Unexpected table ${table}`);
+      }),
+    };
+    (createClient as any).mockResolvedValue(authClient);
+    (getServiceClient as any).mockReturnValue(db);
+
+    const res = await PATCH(
+      makeRequest("PATCH", "/api/users/me", { onboarding_completed: true })
+    );
+    const json = await res.json();
+
+    expect(res.status).toBe(200);
+    expect(json.onboarding_completed).toBe(true);
+    expect(updateMock).toHaveBeenCalledWith({ onboarding_completed: true });
+    expect(sendWelcomeEmail).toHaveBeenCalledWith({
+      userId: "u-1",
+      email: "u1@example.com",
+      username: "alice",
+    });
+    expect(captureServerActivationEvent).toHaveBeenCalledWith({
+      event: "activation_completed",
+      distinctId: "u-1",
+      properties: expect.objectContaining({
+        surface: "onboarding",
+        activation_state: "activated",
+        is_authenticated: true,
+        session_count: 2,
+        total_tokens: 2500,
+        "$insert_id": "activation_completed:usage-1",
+      }),
+    });
   });
 
   it("validates username format", async () => {

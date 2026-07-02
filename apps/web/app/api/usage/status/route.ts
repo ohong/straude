@@ -3,6 +3,26 @@ import { after } from "@/lib/utils/after";
 import { captureServerActivationEvent } from "@/lib/analytics/server";
 import { createClient } from "@/lib/supabase/server";
 
+type LatestUsageRow = {
+  id: string;
+  date: string;
+  cost_usd: number | string | null;
+  total_tokens: number | string | null;
+  session_count: number | string | null;
+  models: unknown;
+  created_at: string | null;
+};
+
+type UsageTotalsRow = {
+  total_cost: number | string | null;
+  total_tokens: number | string | null;
+};
+
+function firstModel(models: unknown): string | null {
+  if (!Array.isArray(models) || models.length === 0) return null;
+  return typeof models[0] === "string" ? models[0] : null;
+}
+
 export async function GET() {
   const supabase = await createClient();
   const {
@@ -13,31 +33,43 @@ export async function GET() {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
 
-  // Fetch aggregated usage
-  const { data: usageRows, error: usageError } = await supabase
-    .from("daily_usage")
-    .select("id,date,cost_usd,total_tokens,session_count,models")
-    .eq("user_id", user.id)
-    .order("date", { ascending: false });
+  const [latestUsageResult, usageTotalsResult] = await Promise.all([
+    supabase
+      .from("daily_usage")
+      .select("id,date,cost_usd,total_tokens,session_count,models,created_at")
+      .eq("user_id", user.id)
+      .order("date", { ascending: false })
+      .limit(1)
+      .maybeSingle(),
+    supabase
+      .rpc("get_user_usage_totals", { p_user_id: user.id })
+      .single(),
+  ]);
 
-  if (usageError) {
+  if (latestUsageResult.error) {
     return NextResponse.json({ error: "Failed to fetch usage" }, { status: 500 });
   }
 
-  if (!usageRows || usageRows.length === 0) {
-    return NextResponse.json({ has_data: false });
+  const latestUsage = latestUsageResult.data as LatestUsageRow | null;
+
+  if (!latestUsage) {
+    return NextResponse.json({ has_data: false, has_usage: false });
   }
 
-  const cost_usd = usageRows.reduce((sum, r) => sum + Number(r.cost_usd), 0);
-  const total_tokens = usageRows.reduce((sum, r) => sum + Number(r.total_tokens), 0);
-  const session_count = usageRows.reduce((sum, r) => sum + Number(r.session_count), 0);
+  const totals = usageTotalsResult.data as UsageTotalsRow | null;
+  const cost_usd = usageTotalsResult.error
+    ? Number(latestUsage.cost_usd ?? 0)
+    : Number(totals?.total_cost ?? latestUsage.cost_usd ?? 0);
+  const total_tokens = usageTotalsResult.error
+    ? Number(latestUsage.total_tokens ?? 0)
+    : Number(totals?.total_tokens ?? latestUsage.total_tokens ?? 0);
+  const session_count = Number(latestUsage.session_count ?? 0);
 
-  // Top model from most recent row
-  const top_model =
-    Array.isArray(usageRows[0].models) && usageRows[0].models.length > 0
-      ? usageRows[0].models[0]
-      : null;
-  const latestUsage = usageRows[0];
+  const { data: latestPost } = await supabase
+    .from("posts")
+    .select("id")
+    .eq("daily_usage_id", latestUsage.id)
+    .maybeSingle();
 
   after(() => captureServerActivationEvent({
     event: "first_sync_confirmed",
@@ -49,15 +81,20 @@ export async function GET() {
       session_count,
       total_tokens,
       total_cost_usd: Math.round(cost_usd * 100) / 100,
-      "$insert_id": `first_sync_confirmed:${user.id}:${latestUsage.id ?? latestUsage.date}`,
+      "$insert_id": `first_sync_confirmed:${user.id}:${latestUsage.id}`,
     },
   }));
 
   return NextResponse.json({
     has_data: true,
+    has_usage: true,
     cost_usd: Math.round(cost_usd * 100) / 100,
     total_tokens,
     session_count,
-    top_model,
+    top_model: firstModel(latestUsage.models),
+    latest_usage_id: latestUsage.id,
+    latest_usage_at: latestUsage.created_at ?? latestUsage.date,
+    latest_usage_date: latestUsage.date,
+    latest_post_url: latestPost?.id ? `/post/${latestPost.id}` : null,
   });
 }
