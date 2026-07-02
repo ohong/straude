@@ -17,11 +17,14 @@ vi.mock("../../src/lib/api.js", () => ({
 vi.mock("../../src/lib/ccusage.js", () => ({
   CCUSAGE_CLAUDE_COLLECTOR: "ccusage-claude-v20",
   CCUSAGE_CODEX_COLLECTOR: "ccusage-codex-v20",
+  CCUSAGE_DEFAULT_PRICING_MODE: "offline",
   collectCcusageUsageAsync: vi.fn(),
 }));
 
 vi.mock("../../src/lib/telemetry.js", () => ({
   reportUsagePushFailed: vi.fn(),
+  shutdownTelemetryWithTimeout: vi.fn(() => Promise.resolve(0)),
+  TELEMETRY_SHUTDOWN_TIMEOUT_MS: 150,
   errorMessage: (error: unknown) => error instanceof Error ? error.message : String(error),
 }));
 
@@ -38,8 +41,7 @@ import { loadConfig, saveConfig, updateLastPushDate } from "../../src/lib/auth.j
 import { loginCommand } from "../../src/commands/login.js";
 import { apiRequest } from "../../src/lib/api.js";
 import { collectCcusageUsageAsync } from "../../src/lib/ccusage.js";
-import { posthog } from "../../src/lib/posthog.js";
-import { reportUsagePushFailed } from "../../src/lib/telemetry.js";
+import { reportUsagePushFailed, shutdownTelemetryWithTimeout } from "../../src/lib/telemetry.js";
 
 const mockLoadConfig = vi.mocked(loadConfig);
 const mockSaveConfig = vi.mocked(saveConfig);
@@ -47,8 +49,8 @@ const mockUpdateLastPushDate = vi.mocked(updateLastPushDate);
 const mockLoginCommand = vi.mocked(loginCommand);
 const mockApiRequest = vi.mocked(apiRequest);
 const mockCollectCcusageUsageAsync = vi.mocked(collectCcusageUsageAsync);
-const mockPosthog = vi.mocked(posthog);
 const mockReportUsagePushFailed = vi.mocked(reportUsagePushFailed);
+const mockShutdownTelemetry = vi.mocked(shutdownTelemetryWithTimeout);
 
 const fakeConfig = {
   token: "tok",
@@ -119,7 +121,7 @@ function ccusageOutput(entries = [usageEntry()], overrides: Record<string, unkno
       codex: "ccusage-codex-v20",
       ccusage_version: "20.0.6",
       ccusage_agents: ["claude", "codex"],
-      pricing_mode: "online",
+      pricing_mode: "offline",
     },
     version: "20.0.6",
     raw: JSON.stringify({ daily: entries }),
@@ -169,6 +171,7 @@ describe("pushCommand", () => {
       expect.any(String),
       expect.any(String),
       undefined,
+      { pricingMode: "offline" },
     );
     expect(mockApiRequest).toHaveBeenCalledWith(
       expect.objectContaining(fakeConfig),
@@ -185,7 +188,7 @@ describe("pushCommand", () => {
       codex: "ccusage-codex-v20",
       ccusage_version: "20.0.6",
       ccusage_agents: ["claude", "codex"],
-      pricing_mode: "online",
+      pricing_mode: "offline",
     });
     expect(body.device_id).toBe("device-1");
     expect(body.device_name).toBe("work-laptop");
@@ -213,10 +216,10 @@ describe("pushCommand", () => {
     expect(body.hash).toBe(concreteHash);
   });
 
-  it("runs one-time 30-day ccusage migration backfill and writes the new marker", async () => {
+  it("respects explicit --days even when the migration backfill marker is missing", async () => {
     const today = new Date();
-    const twentyNineDaysAgo = new Date(today);
-    twentyNineDaysAgo.setDate(today.getDate() - 29);
+    const twoDaysAgo = new Date(today);
+    twoDaysAgo.setDate(today.getDate() - 2);
     mockLoadConfig.mockReturnValue({
       ...fakeConfig,
       ccusage_v20_migration_completed_at: undefined,
@@ -226,9 +229,34 @@ describe("pushCommand", () => {
     await pushCommand({ days: 3 });
 
     expect(mockCollectCcusageUsageAsync).toHaveBeenCalledWith(
+      compact(twoDaysAgo),
+      compact(today),
+      undefined,
+      { pricingMode: "offline" },
+    );
+    expect(mockUpdateLastPushDate).toHaveBeenCalledWith(todayStr());
+    expect(mockSaveConfig).not.toHaveBeenCalledWith(expect.objectContaining({
+      ccusage_v20_migration_completed_at: expect.any(String),
+    }));
+  });
+
+  it("marks the ccusage v20 migration complete after an explicit 30-day backfill", async () => {
+    const today = new Date();
+    const twentyNineDaysAgo = new Date(today);
+    twentyNineDaysAgo.setDate(today.getDate() - 29);
+    mockLoadConfig.mockReturnValue({
+      ...fakeConfig,
+      ccusage_v20_migration_completed_at: undefined,
+      last_push_date: daysAgoStr(2),
+    });
+
+    await pushCommand({ days: 30 });
+
+    expect(mockCollectCcusageUsageAsync).toHaveBeenCalledWith(
       compact(twentyNineDaysAgo),
       compact(today),
       undefined,
+      { pricingMode: "offline" },
     );
     expect(mockSaveConfig).toHaveBeenLastCalledWith(expect.objectContaining({
       ccusage_v20_migration_completed_at: expect.any(String),
@@ -247,7 +275,9 @@ describe("pushCommand", () => {
 
     await pushCommand({ date: "2026-03-12" });
 
-    expect(mockCollectCcusageUsageAsync).toHaveBeenCalledWith("20260312", "20260312", undefined);
+    expect(mockCollectCcusageUsageAsync).toHaveBeenCalledWith("20260312", "20260312", undefined, {
+      pricingMode: "offline",
+    });
     expect(mockUpdateLastPushDate).toHaveBeenCalledWith(todayStr());
     expect(mockSaveConfig).not.toHaveBeenCalledWith(expect.objectContaining({
       ccusage_v20_migration_completed_at: expect.any(String),
@@ -260,6 +290,7 @@ describe("pushCommand", () => {
       expect.any(String),
       expect.any(String),
       300_000,
+      { pricingMode: "offline" },
     );
   });
 
@@ -301,9 +332,15 @@ describe("pushCommand", () => {
     expect(mockReportUsagePushFailed).toHaveBeenCalledWith(
       expect.objectContaining(fakeConfig),
       error,
-      { command: "push", stage: "scan" },
+      expect.objectContaining({
+        command: "push",
+        stage: "scan",
+        pricing_mode: "offline",
+        collection_ms: expect.any(Number),
+        total_ms: expect.any(Number),
+      }),
     );
-    expect(mockPosthog._shutdown).toHaveBeenCalled();
+    expect(mockShutdownTelemetry).toHaveBeenCalled();
     expect(mockApiRequest).not.toHaveBeenCalled();
   });
 
@@ -316,7 +353,14 @@ describe("pushCommand", () => {
     expect(mockReportUsagePushFailed).toHaveBeenCalledWith(
       expect.objectContaining(fakeConfig),
       error,
-      { command: "push", stage: "submit" },
+      expect.objectContaining({
+        command: "push",
+        stage: "submit",
+        pricing_mode: "offline",
+        collection_ms: expect.any(Number),
+        submit_ms: expect.any(Number),
+        total_ms: expect.any(Number),
+      }),
     );
     expect(process.exit).toHaveBeenCalledWith(1);
   });
@@ -355,7 +399,7 @@ describe("pushCommand", () => {
       collector: {
         ccusage_version: "20.0.6",
         ccusage_agents: [],
-        pricing_mode: "online",
+        pricing_mode: "offline",
       },
       raw: '{"daily":[]}',
     }) as never);
