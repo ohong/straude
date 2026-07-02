@@ -1,4 +1,5 @@
 import type { Metadata } from "next";
+import { PublicAnalytics } from "@/components/providers/PublicAnalytics";
 
 export const metadata: Metadata = {
   title: "Sign in to Straude",
@@ -13,8 +14,11 @@ export default function AuthLayout({
   children: React.ReactNode;
 }) {
   return (
-    <main id="main-content" className="flex min-h-screen items-center justify-center bg-background px-4 text-foreground">
-      <div className="w-full max-w-md">{children}</div>
-    </main>
+    <>
+      <main id="main-content" className="flex min-h-screen items-center justify-center bg-background px-4 text-foreground">
+        <div className="w-full max-w-md">{children}</div>
+      </main>
+      <PublicAnalytics />
+    </>
   );
 }

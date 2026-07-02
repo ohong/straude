@@ -10,6 +10,12 @@ import { useAnalyticsConsent } from "@/components/providers/useAnalyticsConsent"
 
 const POSTHOG_KEY = process.env.NEXT_PUBLIC_POSTHOG_KEY;
 
+declare global {
+  interface Window {
+    __straudePostHogInitialized?: boolean;
+  }
+}
+
 /**
  * Wraps posthog-js/react PostHogProvider with deferred initialization.
  *
@@ -42,6 +48,7 @@ export function PostHogClientProvider({
       person_profiles: "identified_only",
     });
     initialized.current = true;
+    window.__straudePostHogInitialized = true;
     readyTimer = window.setTimeout(() => setReady(true), 0);
 
     const supabase = createClient();

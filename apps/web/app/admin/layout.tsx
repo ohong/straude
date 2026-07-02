@@ -2,6 +2,7 @@ import { redirect } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
 import { isAdmin } from "@/lib/admin";
 import { AdminShell } from "./components/AdminShell";
+import { AppProviders } from "@/components/providers/AppProviders";
 import type { Metadata } from "next";
 import "./admin.css";
 
@@ -21,5 +22,9 @@ export default async function AdminLayout({
     redirect("/feed");
   }
 
-  return <AdminShell>{children}</AdminShell>;
+  return (
+    <AppProviders>
+      <AdminShell>{children}</AdminShell>
+    </AppProviders>
+  );
 }

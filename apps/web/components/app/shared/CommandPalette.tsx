@@ -1,177 +1,77 @@
 "use client";
 
-import {
-  KBarProvider,
-  KBarPortal,
-  KBarPositioner,
-  KBarAnimator,
-  KBarSearch,
-  KBarResults,
-  useMatches,
-  type Action,
-} from "kbar";
-import { useEffect } from "react";
-import { useRouter } from "next/navigation";
-import { useTheme } from "@/components/providers/ThemeProvider";
-import { createClient } from "@/lib/supabase/client";
+import dynamic from "next/dynamic";
+import { useCallback, useEffect, useState, type ReactNode } from "react";
 
-const STATIC_PREFETCH_HREFS = [
-  "/feed",
-  "/leaderboard",
-  "/search",
-  "/settings",
-  "/post/new",
-  "/recap",
-  "/prompts",
-] as const;
+const CommandPaletteInner = dynamic(
+  () => import("@/components/app/shared/CommandPaletteInner").then((mod) => mod.CommandPaletteInner),
+  { ssr: false },
+);
 
-function RenderResults() {
-  const { results } = useMatches();
-
-  return (
-    <KBarResults
-      items={results}
-      onRender={({ item, active }) =>
-        typeof item === "string" ? (
-          <div className="px-4 py-2 text-xs uppercase text-muted">{item}</div>
-        ) : (
-          <div
-            className={`flex cursor-pointer items-center justify-between px-4 py-3 text-sm ${
-              active ? "bg-hover text-accent" : "text-foreground"
-            }`}
-          >
-            <span>{item.name}</span>
-            {item.shortcut && item.shortcut.length > 0 && (
-              <span className="flex gap-1">
-                {item.shortcut.map((key) => (
-                  <kbd
-                    key={key}
-                    className="rounded border border-border bg-subtle px-1.5 py-0.5 font-mono text-xs text-muted"
-                  >
-                    {key}
-                  </kbd>
-                ))}
-              </span>
-            )}
-          </div>
-        )
-      }
-    />
-  );
+interface CommandPaletteProps {
+  username?: string | null;
+  children: ReactNode;
 }
 
-export function CommandPalette({
-  username,
-  children,
-}: {
-  username?: string | null;
-  children: React.ReactNode;
-}) {
-  const router = useRouter();
-  const { setTheme } = useTheme();
-  const profileHref = username ? `/u/${username}` : "/feed";
+type WindowWithIdleCallback = Window & {
+  requestIdleCallback?: (callback: IdleRequestCallback, options?: IdleRequestOptions) => number;
+  cancelIdleCallback?: (handle: number) => void;
+};
+
+function isCommandPaletteShortcut(event: KeyboardEvent) {
+  return (event.metaKey || event.ctrlKey) && event.key.toLowerCase() === "k";
+}
+
+export function CommandPalette({ username, children }: CommandPaletteProps) {
+  const [shouldLoad, setShouldLoad] = useState(false);
+  const [openOnLoad, setOpenOnLoad] = useState(false);
 
   useEffect(() => {
-    for (const href of STATIC_PREFETCH_HREFS) {
-      router.prefetch(href);
-    }
-    router.prefetch(profileHref);
-  }, [profileHref, router]);
+    if (shouldLoad) return;
 
-  const actions: Action[] = [
-    {
-      id: "feed",
-      name: "Feed",
-      shortcut: ["g", "f"],
-      perform: () => router.push("/feed"),
-    },
-    {
-      id: "leaderboard",
-      name: "Leaderboard",
-      shortcut: ["g", "l"],
-      perform: () => router.push("/leaderboard"),
-    },
-    {
-      id: "search",
-      name: "Search",
-      shortcut: ["/"],
-      perform: () => router.push("/search"),
-    },
-    {
-      id: "settings",
-      name: "Settings",
-      shortcut: ["g", "s"],
-      perform: () => router.push("/settings"),
-    },
-    {
-      id: "new-post",
-      name: "New Post",
-      shortcut: ["c"],
-      perform: () => router.push("/post/new"),
-    },
-    {
-      id: "recap",
-      name: "Recap",
-      shortcut: ["g", "r"],
-      perform: () => router.push("/recap"),
-    },
-    {
-      id: "prompts",
-      name: "Prompts",
-      shortcut: ["g", "p"],
-      perform: () => router.push("/prompts"),
-    },
-    {
-      id: "profile",
-      name: "Profile",
-      shortcut: ["g", "m"],
-      perform: () => router.push(profileHref),
-    },
-    {
-      id: "logout",
-      name: "Log out",
-      section: "Account",
-      shortcut: [],
-      perform: async () => {
-        const supabase = createClient();
-        await supabase.auth.signOut();
-        router.push("/");
-      },
-    },
-    {
-      id: "theme-light",
-      name: "Light theme",
-      section: "Theme",
-      shortcut: [],
-      perform: () => setTheme("light"),
-    },
-    {
-      id: "theme-dark",
-      name: "Dark theme",
-      section: "Theme",
-      shortcut: [],
-      perform: () => setTheme("dark"),
-    },
-    {
-      id: "theme-system",
-      name: "System theme",
-      section: "Theme",
-      shortcut: [],
-      perform: () => setTheme("system"),
-    },
-  ];
+    function handleKeyDown(event: KeyboardEvent) {
+      if (!isCommandPaletteShortcut(event)) return;
+
+      event.preventDefault();
+      setOpenOnLoad(true);
+      setShouldLoad(true);
+    }
+
+    window.addEventListener("keydown", handleKeyDown);
+    return () => window.removeEventListener("keydown", handleKeyDown);
+  }, [shouldLoad]);
+
+  useEffect(() => {
+    if (shouldLoad) return;
+
+    const idleWindow = window as WindowWithIdleCallback;
+    if (idleWindow.requestIdleCallback) {
+      const idleId = idleWindow.requestIdleCallback(
+        () => setShouldLoad(true),
+        { timeout: 4_000 },
+      );
+      return () => idleWindow.cancelIdleCallback?.(idleId);
+    }
+
+    const timeoutId = window.setTimeout(() => setShouldLoad(true), 2_500);
+    return () => window.clearTimeout(timeoutId);
+  }, [shouldLoad]);
+
+  const handleOpenOnLoadConsumed = useCallback(() => {
+    setOpenOnLoad(false);
+  }, []);
+
+  if (!shouldLoad) {
+    return <>{children}</>;
+  }
 
   return (
-    <KBarProvider actions={actions}>
-      <KBarPortal>
-        <KBarPositioner className="z-50 bg-overlay">
-          <KBarAnimator className="mx-auto mt-[20vh] w-full max-w-[600px] rounded-[4px] border border-border bg-background">
-            <KBarSearch className="w-full border-b border-border bg-background px-4 py-3 font-mono text-base text-foreground outline-none placeholder:text-muted" />
-            <RenderResults />
-          </KBarAnimator>
-        </KBarPositioner>
-      </KBarPortal>
+    <CommandPaletteInner
+      username={username}
+      openOnLoad={openOnLoad}
+      onOpenOnLoadConsumed={handleOpenOnLoadConsumed}
+    >
       {children}
-    </KBarProvider>
+    </CommandPaletteInner>
   );
 }

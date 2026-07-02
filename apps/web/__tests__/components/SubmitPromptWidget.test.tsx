@@ -7,6 +7,11 @@ describe("SubmitPromptWidget", () => {
     vi.restoreAllMocks();
   });
 
+  async function openPromptModal() {
+    fireEvent.click(screen.getByRole("button", { name: /submit a prompt/i }));
+    return screen.findByRole("dialog");
+  }
+
   it("opens the modal and submits a prompt", async () => {
     const fetchMock = vi.spyOn(global, "fetch" as any).mockResolvedValue({
       ok: true,
@@ -15,8 +20,7 @@ describe("SubmitPromptWidget", () => {
 
     render(<SubmitPromptWidget username="jane" />);
 
-    fireEvent.click(screen.getByRole("button", { name: /submit a prompt/i }));
-    expect(screen.getByRole("dialog")).toBeInTheDocument();
+    expect(await openPromptModal()).toBeInTheDocument();
 
     fireEvent.change(screen.getByLabelText("Prompt"), {
       target: { value: "Please add a compact mode for activity cards in the feed." },
@@ -52,7 +56,7 @@ describe("SubmitPromptWidget", () => {
 
     render(<SubmitPromptWidget username="jane" />);
 
-    fireEvent.click(screen.getByRole("button", { name: /submit a prompt/i }));
+    await openPromptModal();
 
     fireEvent.change(screen.getByLabelText("Prompt"), {
       target: { value: "Please add markdown shortcuts in comments." },
@@ -74,7 +78,7 @@ describe("SubmitPromptWidget", () => {
 
     render(<SubmitPromptWidget username="jane" />);
 
-    fireEvent.click(screen.getByRole("button", { name: /submit a prompt/i }));
+    await openPromptModal();
     fireEvent.click(screen.getByRole("button", { name: /submit as anonymous/i }));
 
     fireEvent.change(screen.getByLabelText("Prompt"), {
@@ -96,10 +100,10 @@ describe("SubmitPromptWidget", () => {
     });
   });
 
-  it("shows the submit keyboard shortcut hint", () => {
+  it("shows the submit keyboard shortcut hint", async () => {
     render(<SubmitPromptWidget username="jane" />);
 
-    fireEvent.click(screen.getByRole("button", { name: /submit a prompt/i }));
+    await openPromptModal();
 
     expect(
       screen.getByRole("button", { name: /submit prompt ⌘↵/i }),
@@ -131,7 +135,7 @@ describe("SubmitPromptWidget", () => {
 
     render(<SubmitPromptWidget username="jane" />);
 
-    fireEvent.click(screen.getByRole("button", { name: /submit a prompt/i }));
+    await openPromptModal();
     fireEvent.click(screen.getByRole("button", { name: /view community prompts/i }));
 
     await waitFor(() => {
