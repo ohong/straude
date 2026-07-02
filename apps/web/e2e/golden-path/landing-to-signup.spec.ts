@@ -45,9 +45,28 @@ test.describe("Landing → Signup funnel", () => {
     await page.goto("/");
 
     // The hero's "Start Your Streak" link specifically
-    const startCTA = page.locator('a:has-text("Start Your Streak")');
+    const startCTA = page
+      .locator("header")
+      .getByRole("link", { name: "Start Your Streak" });
     await expect(startCTA).toBeVisible();
     await expect(startCTA).toHaveAttribute("href", "/signup");
+  });
+
+  test("uses one canonical sync command across the landing page", async ({ page }) => {
+    await page.goto("/");
+
+    await expect(page.getByText("npx straude@latest").first()).toBeVisible();
+    await expect(page.getByText("npx straude push --days 7")).toHaveCount(0);
+  });
+
+  test("final CTA offers signup and command copy actions", async ({ page }) => {
+    await page.goto("/");
+
+    const finalSection = page.locator("section").filter({
+      has: page.getByRole("heading", { name: "Ready to run?" }),
+    });
+    await expect(finalSection.getByRole("link", { name: "Start Your Streak" })).toHaveAttribute("href", "/signup");
+    await expect(finalSection.getByRole("button", { name: /npx straude@latest/ })).toBeVisible();
   });
 
   test("navbar Get Started links to signup or login", async ({ page }) => {

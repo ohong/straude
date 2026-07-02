@@ -1,3 +1,10 @@
+import {
+  CopyCommandButton,
+  SignupCtaLink,
+} from "@/components/landing/LandingActivationActions";
+import { ProductHuntBadge } from "@/components/landing/ProductHuntBadge";
+import { LANDING_SYNC_COMMAND } from "@/components/landing/constants";
+
 export function CTASection() {
   return (
     <section className="border-t border-landing-border py-24 md:py-32">
@@ -10,16 +17,25 @@ export function CTASection() {
         <div className="font-[family-name:var(--font-mono)] text-sm text-landing-muted">
           1. Claim your profile at straude.com
           <br />
-          2. Run one command after your session
+          2. Run one command after your first session
           <br />
-          3. See who else is putting in the work
+          3. Watch Straude confirm the sync
         </div>
-        <div className="inline-flex items-center gap-4 border border-landing-border bg-landing-panel px-6 py-3 font-[family-name:var(--font-mono)] text-lg text-landing-muted">
-          ${" "}
-          <span className="text-landing-text">
-            npx straude push --days 7
-          </span>
+
+        <div className="flex flex-col items-center gap-3 sm:flex-row">
+          <SignupCtaLink
+            ctaLocation="final_primary"
+            className="inline-flex items-center justify-center border border-accent bg-accent px-8 py-4 font-[family-name:var(--font-mono)] text-sm font-bold uppercase text-landing-bg transition-all duration-200 hover:bg-transparent hover:text-accent active:scale-[0.97]"
+          >
+            Start Your Streak
+          </SignupCtaLink>
+          <CopyCommandButton
+            command={LANDING_SYNC_COMMAND}
+            className="inline-flex cursor-pointer items-center gap-4 border border-landing-border bg-landing-panel px-6 py-4 font-[family-name:var(--font-mono)] text-sm text-landing-muted transition-[border-color,transform] hover:border-landing-dim active:scale-[0.97]"
+          />
         </div>
+
+        <ProductHuntBadge />
       </div>
     </section>
   );

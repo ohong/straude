@@ -3,6 +3,7 @@ import {
   type OpenStats,
   type OpenStatsDb,
   getOpenStatsForPage,
+  refreshOpenStatsSnapshot,
 } from "@/lib/open-stats";
 
 type FixtureOptions = {
@@ -116,6 +117,61 @@ afterEach(() => {
 });
 
 describe("getOpenStatsForPage", () => {
+  it("returns the latest snapshot without running live aggregation", async () => {
+    const snapshotStats = makeSnapshotStats({
+      totalSpend: 101_001,
+      snapshotDate: "2026-03-31",
+      fetchedAt: "2026-03-31T23:59:59.000Z",
+    });
+    const { db, snapshotUpsert } = makeDb({
+      snapshotRows: [
+        {
+          snapshot_date: "2026-03-31",
+          captured_at: "2026-03-31T23:59:59.000Z",
+          stats: snapshotStats,
+        },
+      ],
+    });
+
+    const stats = await getOpenStatsForPage(db);
+
+    expect(stats.source).toBe("snapshot");
+    expect(stats.totalSpend).toBe(101_001);
+    expect(stats.snapshotDate).toBe("2026-03-31");
+    expect(db.from).not.toHaveBeenCalledWith("daily_usage");
+    expect(db.rpc).not.toHaveBeenCalled();
+    expect(snapshotUpsert).not.toHaveBeenCalled();
+  });
+
+  it("returns placeholder stats when the snapshot read fails", async () => {
+    const { db } = makeDb({
+      snapshotError: { message: "connection refused" },
+    });
+
+    const stats = await getOpenStatsForPage(db);
+
+    expect(stats.source).toBe("snapshot");
+    expect(stats.totalSpend).toBe(0);
+    expect(stats.trackedUsers).toBe(0);
+    expect(stats.models).toEqual([]);
+    expect(db.from).not.toHaveBeenCalledWith("daily_usage");
+    expect(db.rpc).not.toHaveBeenCalled();
+  });
+
+  it("returns placeholder stats when no snapshot exists", async () => {
+    const { db } = makeDb({ snapshotRows: [] });
+
+    const stats = await getOpenStatsForPage(db);
+
+    expect(stats.source).toBe("snapshot");
+    expect(stats.totalSpend).toBe(0);
+    expect(stats.trackedUsers).toBe(0);
+    expect(db.from).not.toHaveBeenCalledWith("daily_usage");
+    expect(db.rpc).not.toHaveBeenCalled();
+  });
+});
+
+describe("refreshOpenStatsSnapshot", () => {
   it("returns live stats and writes the latest snapshot", async () => {
     vi.useFakeTimers();
     vi.setSystemTime(new Date("2026-04-01T12:00:00.000Z"));
@@ -143,7 +199,7 @@ describe("getOpenStatsForPage", () => {
       spendRows: [{ date: "2026-04-01", daily_total: 12.5, cumulative_total: 12.5 }],
     });
 
-    const stats = await getOpenStatsForPage(db);
+    const stats = await refreshOpenStatsSnapshot(db);
 
     expect(stats.source).toBe("live");
     expect(stats.totalSpend).toBe(12.5);
@@ -159,64 +215,25 @@ describe("getOpenStatsForPage", () => {
     );
   });
 
-  it("falls back to the latest snapshot when the live query fails", async () => {
-    const snapshotStats = makeSnapshotStats();
-    const { db, snapshotUpsert } = makeDb({
-      usageError: { message: "database offline" },
-      snapshotRows: [
-        {
-          snapshot_date: "2026-04-01",
-          captured_at: "2026-04-01T12:00:00.000Z",
-          stats: snapshotStats,
-        },
-      ],
-    });
-
-    const stats = await getOpenStatsForPage(db);
-
-    expect(stats.source).toBe("snapshot");
-    expect(stats.totalSpend).toBe(snapshotStats.totalSpend);
-    expect(stats.fetchedAt).toBe(snapshotStats.fetchedAt);
-    expect(snapshotUpsert).not.toHaveBeenCalled();
-  });
-
-  it("returns placeholder stats when both live and snapshot fail", async () => {
+  it("throws when the live query fails", async () => {
     const { db } = makeDb({
-      usageError: { message: "connection refused" },
-      snapshotError: { message: "connection refused" },
+      usageError: { message: "database offline" },
     });
 
-    const stats = await getOpenStatsForPage(db);
-
-    expect(stats.source).toBe("snapshot");
-    expect(stats.totalSpend).toBe(0);
-    expect(stats.trackedUsers).toBe(0);
-    expect(stats.models).toEqual([]);
+    await expect(refreshOpenStatsSnapshot(db)).rejects.toThrow(
+      "open stats daily_usage query failed",
+    );
   });
 
-  it("falls back to the latest snapshot when live stats come back empty", async () => {
-    const snapshotStats = makeSnapshotStats({
-      totalSpend: 101_001,
-      snapshotDate: "2026-03-31",
-      fetchedAt: "2026-03-31T23:59:59.000Z",
-    });
+  it("throws when live stats come back empty", async () => {
     const { db } = makeDb({
       usageRows: [],
       concentrationRows: [],
       growthRows: [],
-      snapshotRows: [
-        {
-          snapshot_date: "2026-03-31",
-          captured_at: "2026-03-31T23:59:59.000Z",
-          stats: snapshotStats,
-        },
-      ],
     });
 
-    const stats = await getOpenStatsForPage(db);
-
-    expect(stats.source).toBe("snapshot");
-    expect(stats.totalSpend).toBe(101_001);
-    expect(stats.snapshotDate).toBe("2026-03-31");
+    await expect(refreshOpenStatsSnapshot(db)).rejects.toThrow(
+      "open stats daily_usage query returned no rows",
+    );
   });
 });
