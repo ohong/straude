@@ -5,6 +5,14 @@ vi.mock("@/lib/supabase/server", () => ({
   createClient: vi.fn(),
 }));
 
+const mockServiceClient = {
+  rpc: vi.fn(),
+};
+
+vi.mock("@/lib/supabase/service", () => ({
+  getServiceClient: vi.fn(() => mockServiceClient),
+}));
+
 // Mock heic-convert so tests don't need real HEIC decoding
 vi.mock("heic-convert", () => ({
   default: vi.fn().mockResolvedValue(new ArrayBuffer(8)),
@@ -88,6 +96,10 @@ function makeUploadRequest(
 beforeEach(() => {
   vi.clearAllMocks();
   resetRateLimiters();
+  mockServiceClient.rpc.mockResolvedValue({
+    data: [{ allowed: true, retry_after_seconds: 0 }],
+    error: null,
+  });
 });
 
 describe("POST /api/upload", () => {

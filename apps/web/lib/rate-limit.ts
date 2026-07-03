@@ -1,11 +1,11 @@
 import { NextResponse } from "next/server";
+import { getServiceClient } from "@/lib/supabase/service";
 
 /**
- * In-memory sliding window rate limiter keyed by user ID.
+ * Durable fixed-window rate limiter backed by Supabase.
  *
- * Each limiter instance maintains its own request map, so different
- * endpoints can have independent limits. Timestamps older than the
- * window are pruned on every check to bound memory growth.
+ * The database function owns the atomic counter update so limits are shared
+ * across serverless instances instead of resetting with each process.
  */
 
 interface RateLimitConfig {
@@ -15,65 +15,15 @@ interface RateLimitConfig {
   windowSeconds?: number;
 }
 
-interface CheckResult {
+interface RateLimitRpcResult {
   allowed: boolean;
-  /** Seconds until the earliest request in the window expires. */
-  retryAfterSeconds: number;
-}
-
-class RateLimiter {
-  private requests = new Map<string, number[]>();
-  private readonly limit: number;
-  private readonly windowMs: number;
-
-  constructor(config: RateLimitConfig) {
-    this.limit = config.limit;
-    this.windowMs = (config.windowSeconds ?? 60) * 1000;
-  }
-
-  check(userId: string): CheckResult {
-    const now = Date.now();
-    const windowStart = now - this.windowMs;
-
-    let timestamps = this.requests.get(userId);
-    if (timestamps) {
-      // Prune expired entries
-      timestamps = timestamps.filter((t) => t > windowStart);
-      this.requests.set(userId, timestamps);
-    } else {
-      timestamps = [];
-    }
-
-    if (timestamps.length >= this.limit) {
-      const oldestInWindow = timestamps[0]!;
-      const retryAfterMs = oldestInWindow + this.windowMs - now;
-      return {
-        allowed: false,
-        retryAfterSeconds: Math.ceil(retryAfterMs / 1000),
-      };
-    }
-
-    timestamps.push(now);
-    this.requests.set(userId, timestamps);
-    return { allowed: true, retryAfterSeconds: 0 };
-  }
-}
-
-// Shared limiter instances (one per endpoint group)
-const limiters = new Map<string, RateLimiter>();
-
-function getLimiter(name: string, config: RateLimitConfig): RateLimiter {
-  let limiter = limiters.get(name);
-  if (!limiter) {
-    limiter = new RateLimiter(config);
-    limiters.set(name, limiter);
-  }
-  return limiter;
+  retry_after_seconds: number;
 }
 
 /** Reset all limiter state. Useful in tests. */
 export function resetRateLimiters(): void {
-  limiters.clear();
+  // Durable limiter state lives in Supabase. Tests mock the service client
+  // instead of clearing production state.
 }
 
 /**
@@ -82,24 +32,42 @@ export function resetRateLimiters(): void {
  *
  * Usage:
  * ```ts
- * const limited = rateLimit("upload", userId, { limit: 10 });
+ * const limited = await rateLimit("upload", userId, { limit: 10 });
  * if (limited) return limited;
  * ```
  */
-export function rateLimit(
+export async function rateLimit(
   name: string,
-  userId: string,
+  subject: string,
   config: RateLimitConfig,
-): NextResponse | null {
-  const limiter = getLimiter(name, config);
-  const result = limiter.check(userId);
+): Promise<NextResponse | null> {
+  const db = getServiceClient();
+  const { data, error } = await db.rpc("check_rate_limit", {
+    p_name: name,
+    p_subject: subject,
+    p_limit: config.limit,
+    p_window_seconds: config.windowSeconds ?? 60,
+  });
 
-  if (!result.allowed) {
+  if (error) {
+    return NextResponse.json(
+      { error: "Rate limit check failed" },
+      { status: 503 },
+    );
+  }
+
+  const row = Array.isArray(data)
+    ? (data[0] as RateLimitRpcResult | undefined)
+    : (data as RateLimitRpcResult | null);
+  const allowed = row?.allowed ?? false;
+  const retryAfterSeconds = Math.max(1, row?.retry_after_seconds ?? config.windowSeconds ?? 60);
+
+  if (!allowed) {
     return NextResponse.json(
       { error: "Too many requests. Please try again later." },
       {
         status: 429,
-        headers: { "Retry-After": String(result.retryAfterSeconds) },
+        headers: { "Retry-After": String(retryAfterSeconds) },
       },
     );
   }

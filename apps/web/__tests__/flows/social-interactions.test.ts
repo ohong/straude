@@ -9,8 +9,16 @@ const mockSupabase = {
   rpc: vi.fn(),
 };
 
+const mockServiceClient = {
+  rpc: vi.fn(),
+};
+
 vi.mock("@/lib/supabase/server", () => ({
   createClient: vi.fn(() => mockSupabase),
+}));
+
+vi.mock("@/lib/supabase/service", () => ({
+  getServiceClient: vi.fn(() => mockServiceClient),
 }));
 
 // ---------------------------------------------------------------------------
@@ -53,6 +61,10 @@ describe("Flow: Social Interactions", () => {
   beforeEach(() => {
     vi.clearAllMocks();
     vi.resetModules();
+    mockServiceClient.rpc.mockResolvedValue({
+      data: [{ allowed: true, retry_after_seconds: 0 }],
+      error: null,
+    });
   });
 
   it("User A follows User B", async () => {

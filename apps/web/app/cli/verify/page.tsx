@@ -14,21 +14,26 @@ function VerifyContent() {
   const searchParams = useSearchParams();
   const router = useRouter();
   const code = searchParams.get("code");
+  const verifySecret = searchParams.get("verify_secret");
+  const verifyPath = `/cli/verify?${new URLSearchParams({
+    ...(code ? { code } : {}),
+    ...(verifySecret ? { verify_secret: verifySecret } : {}),
+  }).toString()}`;
   const [state, setState] = useState<"idle" | "loading" | "success" | "error" | "unauthenticated">("idle");
   const [errorMsg, setErrorMsg] = useState("");
 
   // Check auth on mount — redirect early if not logged in
   useEffect(() => {
-    if (!code) return;
+    if (!code || !verifySecret) return;
     const supabase = createClient();
     supabase.auth.getUser().then(({ data: { user } }) => {
       if (!user) {
         setState("unauthenticated");
       }
     });
-  }, [code]);
+  }, [code, verifySecret]);
 
-  if (!code) {
+  if (!code || !verifySecret) {
     return (
       <div className="flex min-h-screen items-center justify-center">
         <p className="text-muted">No authorization code provided.</p>
@@ -45,18 +50,18 @@ function VerifyContent() {
       const { data: { user }, error: authError } = await supabase.auth.getUser();
 
       if (authError || !user) {
-        router.push(`/login?next=${encodeURIComponent(`/cli/verify?code=${code}`)}`);
+        router.push(`/login?next=${encodeURIComponent(verifyPath)}`);
         return;
       }
 
       const verifyRes = await fetch("/api/auth/cli/verify", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ code }),
+        body: JSON.stringify({ code, verify_secret: verifySecret }),
       });
 
       if (verifyRes.status === 401) {
-        router.push(`/login?next=${encodeURIComponent(`/cli/verify?code=${code}`)}`);
+        router.push(`/login?next=${encodeURIComponent(verifyPath)}`);
         return;
       }
 
@@ -75,7 +80,7 @@ function VerifyContent() {
   }
 
   function handleSignIn() {
-    router.push(`/login?next=${encodeURIComponent(`/cli/verify?code=${code}`)}`);
+    router.push(`/login?next=${encodeURIComponent(verifyPath)}`);
   }
 
   return (

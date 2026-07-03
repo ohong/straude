@@ -61,6 +61,7 @@ describe("loginCommand", () => {
       .mockResolvedValueOnce({
         code: "ABCD-EFGH",
         verify_url: "https://straude.com/cli/verify?code=ABCD-EFGH",
+        poll_secret: "poll-secret-123",
       })
       .mockResolvedValueOnce({ status: "completed", token: "tok-123", username: "alice" });
 
@@ -84,6 +85,7 @@ describe("loginCommand", () => {
       .mockResolvedValueOnce({
         code: "ABCD-EFGH",
         verify_url: "https://straude.com/cli/verify?code=ABCD-EFGH",
+        poll_secret: "poll-secret-123",
       })
       .mockResolvedValueOnce({ status: "pending" })
       .mockResolvedValueOnce({ status: "pending" })
@@ -94,6 +96,13 @@ describe("loginCommand", () => {
     expect(mockSaveConfig).toHaveBeenCalledWith(
       expect.objectContaining({ token: "tok-456", username: "bob" }),
     );
+    expect(mockApiRequestNoAuth).toHaveBeenCalledWith(
+      "https://straude.com",
+      "/api/auth/cli/poll",
+      expect.objectContaining({
+        body: JSON.stringify({ code: "ABCD-EFGH", poll_secret: "poll-secret-123" }),
+      }),
+    );
   });
 
   it("handles expired code", async () => {
@@ -101,6 +110,7 @@ describe("loginCommand", () => {
       .mockResolvedValueOnce({
         code: "ABCD-EFGH",
         verify_url: "https://straude.com/cli/verify?code=ABCD-EFGH",
+        poll_secret: "poll-secret-123",
       })
       .mockResolvedValueOnce({ status: "expired" });
 
@@ -118,6 +128,18 @@ describe("loginCommand", () => {
     expect(process.exit).toHaveBeenCalledWith(1);
   });
 
+  it("rejects init responses without poll_secret", async () => {
+    mockApiRequestNoAuth.mockResolvedValueOnce({
+      code: "ABCD-EFGH",
+      verify_url: "https://straude.com/cli/verify?code=ABCD-EFGH",
+    });
+
+    await expect(loginCommand("https://straude.com")).rejects.toThrow(ExitError);
+
+    expect(process.exit).toHaveBeenCalledWith(1);
+    expect(mockSaveConfig).not.toHaveBeenCalled();
+  });
+
   it("preserves config fields when re-logging into the same account", async () => {
     mockLoadConfig.mockReturnValueOnce({
       token: "old-tok",
@@ -131,6 +153,7 @@ describe("loginCommand", () => {
       .mockResolvedValueOnce({
         code: "ABCD-EFGH",
         verify_url: "https://straude.com/cli/verify?code=ABCD-EFGH",
+        poll_secret: "poll-secret-123",
       })
       .mockResolvedValueOnce({ status: "completed", token: "new-tok", username: "alice" });
 
@@ -159,6 +182,7 @@ describe("loginCommand", () => {
       .mockResolvedValueOnce({
         code: "ABCD-EFGH",
         verify_url: "https://straude.com/cli/verify?code=ABCD-EFGH",
+        poll_secret: "poll-secret-123",
       })
       .mockResolvedValueOnce({ status: "completed", token: "new-tok", username: "bob" });
 
@@ -187,6 +211,7 @@ describe("loginCommand", () => {
       .mockResolvedValueOnce({
         code: "ABCD-EFGH",
         verify_url: "https://other.com/cli/verify?code=ABCD-EFGH",
+        poll_secret: "poll-secret-123",
       })
       .mockResolvedValueOnce({ status: "completed", token: "new-tok", username: "alice" });
 
