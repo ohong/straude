@@ -64,8 +64,12 @@ function validateEntry(entry: CcusageDailyEntry): string | null {
 
 function validateCollectorMeta(collector: UsageCollectorMeta | undefined): string | null {
   if (!collector) return null;
-  if (collector.pricing_mode != null && collector.pricing_mode !== "online") {
-    return "Unsupported pricing mode; ccusage submissions must use online pricing";
+  if (
+    collector.pricing_mode != null &&
+    collector.pricing_mode !== "online" &&
+    collector.pricing_mode !== "offline"
+  ) {
+    return "Unsupported pricing mode; ccusage submissions must use online or offline pricing";
   }
   if (collector.ccusage_agents != null) {
     if (!Array.isArray(collector.ccusage_agents)) {

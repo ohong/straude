@@ -4,14 +4,16 @@ import { createClient } from "@/lib/supabase/server";
 import { getServiceClient } from "@/lib/supabase/service";
 import { getAuthUser } from "@/lib/supabase/auth";
 import { Sidebar } from "@/components/app/shared/Sidebar";
-import { RightSidebar } from "@/components/app/shared/RightSidebar";
+import { LazyRightSidebar } from "@/components/app/shared/RightSidebar";
 import { InviteButton } from "@/components/app/profile/InviteButton";
 import { ResponsiveShellFrame } from "@/components/app/shared/ResponsiveShellFrame";
 import { GuestHeader, GuestMobileNav } from "@/components/app/shared/GuestHeader";
 import { CommandPalette } from "@/components/app/shared/CommandPalette";
 import { Avatar } from "@/components/ui/Avatar";
 import { Skeleton } from "@/components/ui/Skeleton";
+import { AppProviders } from "@/components/providers/AppProviders";
 import { firstRelation } from "@/lib/utils/first-relation";
+import { loadUsageTotals } from "@/lib/data/usage-totals";
 import type { DailyUsage } from "@/types";
 
 type ShellProfile = {
@@ -31,65 +33,7 @@ type LatestPostRow = {
   daily_usage: Array<Pick<DailyUsage, "date">> | null;
 };
 
-type UsageFallbackRow = Pick<DailyUsage, "cost_usd" | "output_tokens">;
-type UsageTotalsRpcRow = {
-  total_cost: number | string | null;
-  total_tokens: number | string | null;
-};
 type SupabaseServerClient = Awaited<ReturnType<typeof createClient>>;
-
-async function loadUsageTotals(
-  supabase: SupabaseServerClient,
-  userId: string,
-): Promise<{ totalTokens: number; totalCost: number }> {
-  const usageTotalsRes = await supabase
-    .rpc("get_user_usage_totals", { p_user_id: userId })
-    .single();
-
-  const loadFallbackUsageTotals = async (): Promise<{ totalTokens: number; totalCost: number }> => {
-    const { data: fallbackRows, error: fallbackError } = await supabase
-      .from("daily_usage")
-      .select("cost_usd, output_tokens")
-      .eq("user_id", userId);
-
-    if (fallbackError) {
-      throw new Error(`Unable to load usage totals from daily_usage fallback (${fallbackError.message})`);
-    }
-
-    const rows = (fallbackRows ?? []) as UsageFallbackRow[];
-    return {
-      totalTokens: rows.reduce((sum, row) => sum + Number(row.output_tokens), 0),
-      totalCost: rows.reduce((sum, row) => sum + Number(row.cost_usd), 0),
-    };
-  };
-
-  if (usageTotalsRes.error) {
-    console.error("get_user_usage_totals RPC failed; using direct daily_usage fallback", {
-      userId,
-      code: usageTotalsRes.error.code,
-      message: usageTotalsRes.error.message,
-    });
-
-    return loadFallbackUsageTotals();
-  }
-
-  const usageTotals = usageTotalsRes.data as UsageTotalsRpcRow | null;
-  const rpcTokens = usageTotals?.total_tokens;
-
-  if (rpcTokens === null || rpcTokens === undefined) {
-    console.error("get_user_usage_totals returned no total_tokens; using direct daily_usage fallback", {
-      userId,
-      rpcKeys: usageTotals ? Object.keys(usageTotals) : [],
-    });
-
-    return loadFallbackUsageTotals();
-  }
-
-  return {
-    totalTokens: Number(rpcTokens),
-    totalCost: Number(usageTotals?.total_cost ?? 0),
-  };
-}
 
 function formatLatestPosts(rows: LatestPostRow[]) {
   return rows
@@ -179,23 +123,6 @@ function SidebarFallback({ profile }: { profile: ShellProfile | null }) {
   );
 }
 
-function RightSidebarFallback() {
-  return (
-    <div className="flex flex-col">
-      {[0, 1, 2].map((section) => (
-        <div key={section} className="border-b border-border p-6">
-          <Skeleton className="mb-4 h-3 w-28" />
-          <div className="space-y-3">
-            <Skeleton className="h-4 w-full" />
-            <Skeleton className="h-4 w-5/6" />
-            <Skeleton className="h-4 w-3/4" />
-          </div>
-        </div>
-      ))}
-    </div>
-  );
-}
-
 async function DeferredSidebar({
   userId,
   profile,
@@ -252,22 +179,6 @@ async function DeferredSidebar({
   );
 }
 
-async function DeferredRightSidebar({
-  userId,
-}: {
-  userId: string;
-}) {
-  const supabase = await createClient();
-  const usageTotals = await loadUsageTotals(supabase, userId);
-
-  return (
-    <RightSidebar
-      userId={userId}
-      totalOutputTokens={usageTotals.totalTokens}
-    />
-  );
-}
-
 async function PhotoNudge({
   userId,
   onboardingIncomplete,
@@ -311,8 +222,9 @@ export default async function AppLayout({
     // This check runs server-side as a safety net alongside proxy.ts
     // Public pages render with a guest layout below
     return (
-      <div className="fixed inset-0 flex flex-col overflow-hidden">
-        <GuestHeader />
+      <AppProviders>
+        <div className="fixed inset-0 flex flex-col overflow-hidden">
+          <GuestHeader />
           <div className="mx-auto flex min-h-0 w-full max-w-[1600px] flex-1 overflow-hidden border-x border-border">
             <main id="main-content" className="scrollbar-none min-w-0 flex-1 overflow-y-auto overflow-x-hidden overscroll-contain">
               <div className="pb-[var(--mobile-nav-height)] sm:pb-0">
@@ -321,7 +233,8 @@ export default async function AppLayout({
             </main>
           </div>
           <GuestMobileNav />
-      </div>
+        </div>
+      </AppProviders>
     );
   }
 
@@ -341,39 +254,38 @@ export default async function AppLayout({
     </Suspense>
   );
 
-  const rightPanel = (
-    <Suspense fallback={<RightSidebarFallback />}>
-      <DeferredRightSidebar userId={user.id} />
-    </Suspense>
-  );
+  const rightPanel = <LazyRightSidebar />;
 
   return (
-    <CommandPalette username={profile?.username ?? null}>
-      <div className="fixed inset-0 flex flex-col overflow-hidden">
-        {onboardingIncomplete && (
-          <div className="flex items-center justify-center gap-2 border-b border-border bg-accent/5 px-4 py-2 text-sm">
-            <span className="text-muted">Finish setting up your profile</span>
-            <Link href="/onboarding" className="font-medium text-accent hover:underline">
-              Complete onboarding
-            </Link>
-          </div>
-        )}
-        <Suspense fallback={null}>
-          <PhotoNudge
-            userId={user.id}
-            onboardingIncomplete={onboardingIncomplete}
-          />
-        </Suspense>
+    <AppProviders>
+      <CommandPalette username={profile?.username ?? null}>
+        <div className="fixed inset-0 flex flex-col overflow-hidden">
+          {onboardingIncomplete && (
+            <div className="flex items-center justify-center gap-2 border-b border-border bg-accent/5 px-4 py-2 text-sm">
+              <span className="text-muted">Finish setting up your profile</span>
+              <Link href="/onboarding" className="font-medium text-accent hover:underline">
+                Complete onboarding
+              </Link>
+            </div>
+          )}
+          <Suspense fallback={null}>
+            <PhotoNudge
+              userId={user.id}
+              onboardingIncomplete={onboardingIncomplete}
+            />
+          </Suspense>
 
-        <ResponsiveShellFrame
-          username={profile?.username ?? null}
-          avatarUrl={profile?.avatar_url ?? null}
-          leftPanel={leftPanel}
-          rightPanel={rightPanel}
-        >
-          {children}
-        </ResponsiveShellFrame>
-      </div>
-    </CommandPalette>
+          <ResponsiveShellFrame
+            username={profile?.username ?? null}
+            avatarUrl={profile?.avatar_url ?? null}
+            leftPanel={leftPanel}
+            rightPanel={rightPanel}
+            showPromptWidget={!onboardingIncomplete}
+          >
+            {children}
+          </ResponsiveShellFrame>
+        </div>
+      </CommandPalette>
+    </AppProviders>
   );
 }

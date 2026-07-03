@@ -1,8 +1,5 @@
-"use client";
-
 import Image from "next/image";
 import type { WallOfLovePost } from "@/types";
-import { motion, type Variants } from "motion/react";
 
 function XIcon({ className }: { className?: string }) {
   return (
@@ -17,26 +14,10 @@ function XIcon({ className }: { className?: string }) {
   );
 }
 
-const wallCardVariants: Variants = {
-  hidden: { opacity: 0, y: 28, scale: 0.97 },
-  visible: (i: number) => ({
-    opacity: 1,
-    y: 0,
-    scale: 1,
-    transition: {
-      delay: i * 0.04,
-      duration: 0.55,
-      ease: [0.25, 0.46, 0.45, 0.94],
-    },
-  }),
-};
-
 function WallOfLoveCard({
   post,
-  index,
 }: {
   post: WallOfLovePost;
-  index: number;
 }) {
   const initials = post.author_name
     .split(" ")
@@ -44,16 +25,11 @@ function WallOfLoveCard({
     .join("");
 
   return (
-    <motion.a
+    <a
       href={post.url}
       target="_blank"
       rel="noopener noreferrer"
       className="mb-5 block break-inside-avoid border border-landing-border bg-landing-panel p-6 transition-[border-color] duration-200 hover:border-accent/40"
-      custom={index}
-      variants={wallCardVariants}
-      initial="hidden"
-      whileInView="visible"
-      viewport={{ once: true, amount: 0.15 }}
     >
       {/* Header: avatar + name + X icon */}
       <div className="flex items-start gap-3">
@@ -92,7 +68,7 @@ function WallOfLoveCard({
       <p className="mt-4 text-xs text-landing-dim font-[family-name:var(--font-mono)]">
         {post.date}
       </p>
-    </motion.a>
+    </a>
   );
 }
 
@@ -102,22 +78,16 @@ export function WallOfLove({ posts }: { posts: WallOfLovePost[] }) {
   return (
     <section className="border-t border-landing-border py-24 md:py-32">
       <div className="mx-auto max-w-[1280px] px-8">
-        <motion.div
-          className="flex flex-col items-center text-center mb-14"
-          initial={{ opacity: 0, y: 20 }}
-          whileInView={{ opacity: 1, y: 0 }}
-          viewport={{ once: true, amount: 0.5 }}
-          transition={{ duration: 0.5, ease: "easeOut" }}
-        >
+        <div className="mb-14 flex flex-col items-center text-center">
           <h2 className="text-[clamp(2rem,4vw,3.5rem)] font-medium tracking-[-0.03em] text-balance text-landing-text">
             Everybody is <span className="text-accent">Claudemaxxing</span>.
             Are you?
           </h2>
-        </motion.div>
+        </div>
 
         <div className="columns-1 sm:columns-2 lg:columns-3 gap-5">
-          {posts.map((post, i) => (
-            <WallOfLoveCard key={post.url} post={post} index={i} />
+          {posts.map((post) => (
+            <WallOfLoveCard key={post.url} post={post} />
           ))}
         </div>
       </div>

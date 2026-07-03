@@ -1,4 +1,4 @@
-import { act, render, waitFor } from "@testing-library/react";
+import { act, fireEvent, render, waitFor } from "@testing-library/react";
 import type { ReactNode } from "react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { ThemeProvider } from "@/components/providers/ThemeProvider";
@@ -40,6 +40,7 @@ vi.mock("kbar", () => ({
   }) => <div className={className}>{children}</div>,
   KBarSearch: ({ className }: { className?: string }) => <input className={className} />,
   KBarResults: () => null,
+  useKBar: () => ({ query: { toggle: vi.fn() } }),
   useMatches: () => ({ results: [] }),
 }));
 
@@ -92,9 +93,13 @@ describe("CommandPalette", () => {
       </ThemeProvider>,
     );
 
-    expect(capturedActions.map((action) => action.id)).toEqual(
-      expect.arrayContaining(["theme-light", "theme-dark", "theme-system"]),
-    );
+    fireEvent.keyDown(window, { key: "k", metaKey: true });
+
+    await waitFor(() => {
+      expect(capturedActions.map((action) => action.id)).toEqual(
+        expect.arrayContaining(["theme-light", "theme-dark", "theme-system"]),
+      );
+    });
 
     const darkAction = capturedActions.find((action) => action.id === "theme-dark");
     act(() => {

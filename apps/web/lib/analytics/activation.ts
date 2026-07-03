@@ -3,10 +3,12 @@ export const ACTIVATION_ANONYMOUS_COOKIE_MAX_AGE = 60 * 60 * 24 * 30;
 
 export const ACTIVATION_EVENTS = [
   "landing_primary_cta_clicked",
+  "guest_signup_cta_clicked",
   "signup_started",
   "signup_completed",
   "onboarding_profile_started",
   "sync_command_copied",
+  "first_sync_nudge_clicked",
   "usage_submit_succeeded",
   "first_sync_confirmed",
   "activation_completed",
@@ -31,6 +33,7 @@ export type ActivationSurface =
   | "usage_status"
   | "feed"
   | "profile"
+  | "empty_state"
   | "cli";
 
 export interface ActivationStateInput {
@@ -60,6 +63,7 @@ export type ActivationEventProperties = Partial<{
   pricing_mode: string;
   ccusage_version: string;
   ccusage_agents: string[];
+  has_analytics_consent: boolean;
   has_existing_usage: boolean;
   has_errors: boolean;
   "$insert_id": string;
@@ -86,6 +90,7 @@ const ALLOWED_PROPERTY_KEYS = new Set([
   "pricing_mode",
   "ccusage_version",
   "ccusage_agents",
+  "has_analytics_consent",
   "has_existing_usage",
   "has_errors",
   "$insert_id",

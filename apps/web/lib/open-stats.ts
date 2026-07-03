@@ -411,53 +411,57 @@ async function persistOpenStatsSnapshot(db: OpenStatsDb, stats: OpenStats) {
   throwIfSupabaseError("open stats snapshot write failed", result.error);
 }
 
+function createPlaceholderOpenStats(): OpenStats {
+  const now = new Date().toISOString();
+  return {
+    trackedUsers: 0,
+    totalUsers: 0,
+    totalSpend: 0,
+    avgWeeklySpend: 0,
+    totalTokens: 0,
+    totalSessions: 0,
+    avgStreak: 0,
+    totalStreaks: 0,
+    concentration: [],
+    cumulativePct: {},
+    models: [],
+    fetchedAt: now,
+    snapshotDate: snapshotDateFromIso(now),
+    source: "snapshot",
+  };
+}
+
+export async function refreshOpenStatsSnapshot(
+  db: OpenStatsDb = getServiceClient() as unknown as OpenStatsDb,
+): Promise<OpenStats> {
+  const liveStats = await fetchLiveOpenStats(db);
+
+  try {
+    await persistOpenStatsSnapshot(db, liveStats);
+  } catch (error) {
+    // TODO(observability): forward to PostHog server-side capture once a
+    // helper exists (context: "open-stats:snapshot-write"). For now, log
+    // so prod failures are visible in server logs.
+    logOpenStatsError("open stats snapshot write failed:", error);
+  }
+
+  return liveStats;
+}
+
 export async function getOpenStatsForPage(
   db: OpenStatsDb = getServiceClient() as unknown as OpenStatsDb,
 ): Promise<OpenStats> {
   try {
-    const liveStats = await fetchLiveOpenStats(db);
-
-    try {
-      await persistOpenStatsSnapshot(db, liveStats);
-    } catch (error) {
-      // TODO(observability): forward to PostHog server-side capture once a
-      // helper exists (context: "open-stats:snapshot-write"). For now, log
-      // so prod failures are visible in server logs.
-      logOpenStatsError("open stats snapshot write failed:", error);
-    }
-
-    return liveStats;
-  } catch (liveError) {
-    try {
-      const snapshot = await readLatestOpenStatsSnapshot(db);
-      if (snapshot) return snapshot;
-    } catch (snapshotError) {
-      // TODO(observability): forward to PostHog server-side capture once a
-      // helper exists (context: "open-stats:snapshot-fallback").
-      logOpenStatsError("open stats snapshot fallback failed:", snapshotError);
-    }
-
-    // Both live and snapshot failed (e.g. Supabase unreachable in CI).
-    // Return an empty placeholder so the build doesn't crash.
+    const snapshot = await readLatestOpenStatsSnapshot(db);
+    if (snapshot) return snapshot;
+  } catch (snapshotError) {
     // TODO(observability): forward to PostHog server-side capture once a
-    // helper exists (context: "open-stats:all-sources-failed").
-    logOpenStatsError("open stats: all sources failed, returning placeholder", liveError);
-    const now = new Date().toISOString();
-    return {
-      trackedUsers: 0,
-      totalUsers: 0,
-      totalSpend: 0,
-      avgWeeklySpend: 0,
-      totalTokens: 0,
-      totalSessions: 0,
-      avgStreak: 0,
-      totalStreaks: 0,
-      concentration: [],
-      cumulativePct: {},
-      models: [],
-      fetchedAt: now,
-      snapshotDate: snapshotDateFromIso(now),
-      source: "snapshot",
-    };
+    // helper exists (context: "open-stats:snapshot-read").
+    logOpenStatsError("open stats snapshot read failed:", snapshotError);
   }
+
+  // Public pages must not run the 50k-row live aggregation path during render.
+  // Return a coherent placeholder until the scheduled/admin refresh writes a
+  // new durable snapshot.
+  return createPlaceholderOpenStats();
 }

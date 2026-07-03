@@ -1,6 +1,7 @@
 export const queryKeys = {
   appBootstrap: () => ["app", "bootstrap"] as const,
   appCounts: () => ["app", "counts"] as const,
+  rightSidebar: () => ["app", "right-sidebar"] as const,
   notifications: (params?: {
     limit?: number;
     offset?: number;

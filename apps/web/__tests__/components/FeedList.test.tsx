@@ -1,4 +1,4 @@
-import { act, fireEvent, render, screen, waitFor } from "@testing-library/react";
+import { act, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { FeedList } from "@/components/app/feed/FeedList";
 import type { Post } from "@/types";
@@ -14,6 +14,12 @@ vi.mock("@/components/app/feed/PendingPostsNudge", () => ({
     <aside data-testid="pending-posts">{posts.length} pending</aside>
   ),
 }));
+
+vi.mock("@/lib/analytics/client", () => ({
+  trackActivationEvent: vi.fn(),
+}));
+
+import { trackActivationEvent } from "@/lib/analytics/client";
 
 let intersectionCallback:
   | ((entries: Array<{ isIntersecting: boolean }>) => void)
@@ -68,6 +74,12 @@ function makePost(id: string, overrides: Partial<Post> = {}): Post {
 describe("FeedList", () => {
   beforeEach(() => {
     intersectionCallback = null;
+    Object.defineProperty(navigator, "clipboard", {
+      configurable: true,
+      value: {
+        writeText: vi.fn().mockResolvedValue(undefined),
+      },
+    });
     vi.stubGlobal("IntersectionObserver", MockIntersectionObserver);
     vi.stubGlobal(
       "fetch",
@@ -156,5 +168,54 @@ describe("FeedList", () => {
       "2026-01-01|2026-01-01T12:00:00.000Z",
     );
     expect(request.searchParams.get("limit")).toBe("20");
+  });
+
+  it("shows a copyable first-sync command for the signed-in empty sessions feed", async () => {
+    render(
+      <FeedList
+        initialPosts={[]}
+        userId="user-1"
+        feedType="mine"
+      />,
+    );
+
+    const emptyState = screen.getByRole("region", { name: /sync your first session/i });
+    expect(within(emptyState).getByText("Sync your first session")).toBeInTheDocument();
+    expect(within(emptyState).getByText("npx straude@latest")).toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole("button", { name: /copy first sync command/i }));
+
+    await waitFor(() => {
+      expect(navigator.clipboard.writeText).toHaveBeenCalledWith("npx straude@latest");
+    });
+    expect(trackActivationEvent).toHaveBeenCalledWith("sync_command_copied", expect.objectContaining({
+      surface: "empty_state",
+      cta_location: "feed_empty_state",
+      command: "npx straude@latest",
+    }));
+  });
+
+  it("shows a contextual signup CTA after guest feed content", () => {
+    render(
+      <FeedList
+        initialPosts={[
+          makePost("guest-1", { title: "First public session" }),
+          makePost("guest-2", { title: "Second public session" }),
+        ]}
+        userId={null}
+      />,
+    );
+
+    const cta = screen.getByRole("link", { name: /start your streak/i });
+    expect(cta).toHaveAttribute("href", "/signup");
+
+    cta.addEventListener("click", (event) => event.preventDefault());
+    fireEvent.click(cta);
+
+    expect(trackActivationEvent).toHaveBeenCalledWith("guest_signup_cta_clicked", expect.objectContaining({
+      surface: "feed",
+      cta_location: "feed_after_posts",
+      destination: "/signup",
+    }));
   });
 });

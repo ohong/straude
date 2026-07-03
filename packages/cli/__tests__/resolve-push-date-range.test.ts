@@ -86,19 +86,20 @@ describe("resolvePushDateRange", () => {
   });
 
   describe("ccusage migration branch", () => {
-    it("backfills the full 30-day window when ccusage migration runs", () => {
+    it("does not expand a normal sync to 30 days when the migration marker is missing", () => {
       const r = resolvePushDateRange({
         today: dateAt("2026-05-04"),
         options: {},
+        lastPushDate: "2026-05-01",
         shouldRunMigrationBackfill: true,
       });
       expect(r.ok).toBe(true);
       if (!r.ok) return;
-      expect(isoDay(r.since)).toBe("2026-04-05"); // today - 29 days
+      expect(isoDay(r.since)).toBe("2026-05-01");
       expect(isoDay(r.until)).toBe("2026-05-04");
     });
 
-    it("ignores --days when ccusage migration runs", () => {
+    it("respects --days when the migration marker is missing", () => {
       const r = resolvePushDateRange({
         today: dateAt("2026-05-04"),
         options: { days: 5 },
@@ -106,7 +107,7 @@ describe("resolvePushDateRange", () => {
       });
       expect(r.ok).toBe(true);
       if (!r.ok) return;
-      expect(isoDay(r.since)).toBe("2026-04-05"); // 30-day backfill, not 5
+      expect(isoDay(r.since)).toBe("2026-04-30");
     });
   });
 

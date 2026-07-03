@@ -54,10 +54,13 @@ export function TopHeader({
   const notificationsQuery = useQuery({
     queryKey: queryKeys.notifications(),
     queryFn: fetchNotifications,
+    enabled: notifOpen,
+    staleTime: 30_000,
   });
   const appCountsQuery = useQuery({
     queryKey: queryKeys.appCounts(),
     queryFn: fetchAppCounts,
+    staleTime: 15_000,
   });
 
   const notifications = notificationsQuery.data?.notifications ?? [];
@@ -94,13 +97,16 @@ export function TopHeader({
     };
   }, [profileOpen, notifOpen]);
 
-  // Initial unread count fetch + mark as returning user + listen for external changes
+  // Initial unread count fetch + mark as returning user + listen for external changes.
+  // The full notifications list stays lazy until the menu is opened.
   useEffect(() => {
     function refreshCounts() {
       void queryClient.invalidateQueries({ queryKey: queryKeys.appCounts() });
-      void queryClient.invalidateQueries({
-        queryKey: queryKeys.notifications(),
-      });
+      if (notifOpen) {
+        void queryClient.invalidateQueries({
+          queryKey: queryKeys.notifications(),
+        });
+      }
     }
 
     try { localStorage.setItem("straude_returning", "1"); } catch {}
@@ -113,7 +119,7 @@ export function TopHeader({
       window.removeEventListener("notifications-updated", handleSync);
       window.removeEventListener("messages-updated", handleSync);
     };
-  }, [queryClient]);
+  }, [notifOpen, queryClient]);
 
   async function handleLogout() {
     const supabase = createClient();
@@ -207,16 +213,7 @@ export function TopHeader({
           <div ref={notifRef} className="relative">
             <button
               type="button"
-              onClick={() => {
-                setNotifOpen((v) => {
-                  if (!v) {
-                    void queryClient.invalidateQueries({
-                      queryKey: queryKeys.notifications(),
-                    });
-                  }
-                  return !v;
-                });
-              }}
+              onClick={() => setNotifOpen((v) => !v)}
               className="relative rounded p-1.5 text-muted hover:bg-subtle hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent focus-visible:ring-offset-2 focus-visible:ring-offset-background"
               aria-label="Notifications"
               aria-haspopup="true"
@@ -243,7 +240,15 @@ export function TopHeader({
                   )}
                 </div>
                 <div className="max-h-[60vh] overflow-y-auto sm:max-h-80" style={{ WebkitOverflowScrolling: "touch" }}>
-                  {notifications.length === 0 ? (
+                  {notificationsQuery.isLoading ? (
+                    <p className="px-4 py-6 text-center text-sm text-muted">
+                      Loading notifications...
+                    </p>
+                  ) : notificationsQuery.isError ? (
+                    <p role="alert" className="px-4 py-6 text-center text-sm text-error">
+                      Could not load notifications.
+                    </p>
+                  ) : notifications.length === 0 ? (
                     <p className="px-4 py-6 text-center text-sm text-muted">
                       No notifications yet
                     </p>

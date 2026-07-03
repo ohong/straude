@@ -1,5 +1,6 @@
 import { createHash, randomUUID } from "node:crypto";
 import { hostname } from "node:os";
+import { performance } from "node:perf_hooks";
 import { loadConfig, updateLastPushDate, saveConfig } from "../lib/auth.js";
 import type { StraudeConfig } from "../lib/auth.js";
 import { loginCommand } from "./login.js";
@@ -7,6 +8,7 @@ import { apiRequest } from "../lib/api.js";
 import {
   CCUSAGE_CLAUDE_COLLECTOR,
   CCUSAGE_CODEX_COLLECTOR,
+  CCUSAGE_DEFAULT_PRICING_MODE,
   collectCcusageUsageAsync,
 } from "../lib/ccusage.js";
 import type { CcusageDailyEntry, CcusageCollectorMeta } from "../lib/ccusage.js";
@@ -15,7 +17,12 @@ import { Spinner } from "../lib/spinner.js";
 import type { DashboardData as DashboardResponse } from "../components/PushSummary.js";
 import { posthog } from "../lib/posthog.js";
 import { getDistinctId } from "../lib/machine-id.js";
-import { errorMessage, reportUsagePushFailed } from "../lib/telemetry.js";
+import {
+  TELEMETRY_SHUTDOWN_TIMEOUT_MS,
+  errorMessage,
+  reportUsagePushFailed,
+  shutdownTelemetryWithTimeout,
+} from "../lib/telemetry.js";
 
 interface UsageSubmitRequest {
   entries: Array<{
@@ -53,6 +60,28 @@ interface PushOptions {
   days?: number;
   dryRun?: boolean;
   timeoutMs?: number;
+  dashboardTimeoutMs?: number;
+}
+
+const DASHBOARD_TIMEOUT_MS = 1_500;
+
+type PushRangeMode =
+  | "explicit_date"
+  | "explicit_days"
+  | "incremental"
+  | "first_sync";
+
+interface PushTimings {
+  auth_ms?: number;
+  collection_ms?: number;
+  submit_ms?: number;
+  dashboard_ms?: number;
+}
+
+interface DashboardRenderResult {
+  rendered: boolean;
+  timedOut: boolean;
+  durationMs: number;
 }
 
 function formatDate(d: Date): string {
@@ -102,7 +131,7 @@ export function isWithinBackfillWindow(dateStr: string): boolean {
 }
 
 export type DateRangeResolution =
-  | { ok: true; since: Date; until: Date }
+  | { ok: true; since: Date; until: Date; mode: PushRangeMode }
   | { ok: false; error: string };
 
 /**
@@ -117,7 +146,7 @@ export function resolvePushDateRange(args: {
   lastPushDate?: string;
   shouldRunMigrationBackfill: boolean;
 }): DateRangeResolution {
-  const { today, options, lastPushDate, shouldRunMigrationBackfill } = args;
+  const { today, options, lastPushDate } = args;
   const todayStr = formatDate(today);
 
   if (options.date) {
@@ -128,40 +157,34 @@ export function resolvePushDateRange(args: {
     if (target > today) {
       return { ok: false, error: "Cannot push usage for a future date." };
     }
-    return { ok: true, since: target, until: target };
-  }
-
-  if (shouldRunMigrationBackfill) {
-    const since = new Date(today);
-    since.setDate(since.getDate() - MAX_BACKFILL_DAYS + 1);
-    return { ok: true, since, until: today };
+    return { ok: true, since: target, until: target, mode: "explicit_date" };
   }
 
   if (options.days) {
     const days = Math.min(options.days, MAX_BACKFILL_DAYS);
     const since = new Date(today);
     since.setDate(since.getDate() - days + 1);
-    return { ok: true, since, until: today };
+    return { ok: true, since, until: today, mode: "explicit_days" };
   }
 
   if (lastPushDate) {
     if (lastPushDate >= todayStr) {
-      return { ok: true, since: new Date(today), until: new Date(today) };
+      return { ok: true, since: new Date(today), until: new Date(today), mode: "incremental" };
     }
     const gap = daysBetweenStrings(lastPushDate, todayStr);
     if (gap > DEFAULT_SYNC_DAYS) {
       const since = new Date(today);
       since.setDate(since.getDate() - DEFAULT_SYNC_DAYS + 1);
-      return { ok: true, since, until: today };
+      return { ok: true, since, until: today, mode: "incremental" };
     }
-    return { ok: true, since: parseDate(lastPushDate), until: today };
+    return { ok: true, since: parseDate(lastPushDate), until: today, mode: "incremental" };
   }
 
   // Never pushed before — backfill last 3 days by default
   const FIRST_RUN_BACKFILL_DAYS = 3;
   const since = new Date(today);
   since.setDate(since.getDate() - FIRST_RUN_BACKFILL_DAYS + 1);
-  return { ok: true, since, until: today };
+  return { ok: true, since, until: today, mode: "first_sync" };
 }
 
 function formatTokens(n: number): string {
@@ -174,12 +197,147 @@ function formatCost(n: number): string {
   return `$${n.toFixed(2)}`;
 }
 
+function elapsedMs(start: number): number {
+  return Math.round(performance.now() - start);
+}
+
+function inclusiveDayCount(since: Date, until: Date): number {
+  return daysBetween(since, until) + 1;
+}
+
+function pluralize(count: number, singular: string, plural = `${singular}s`): string {
+  return count === 1 ? singular : plural;
+}
+
+function pushTelemetryProperties(args: {
+  timings: PushTimings;
+  totalStartedAt: number;
+  rangeMode: PushRangeMode;
+  firstRun: boolean;
+  authFlowStarted: boolean;
+  migrationPending: boolean;
+  fullBackfillCompleted: boolean;
+  pricingMode?: CcusageCollectorMeta["pricing_mode"];
+  ccusageVersion?: string;
+  ccusageAgents?: CcusageCollectorMeta["ccusage_agents"];
+  dashboardRendered?: boolean;
+  dashboardTimedOut?: boolean;
+}): Record<string, string | number | boolean | string[] | undefined> {
+  return {
+    first_run: args.firstRun,
+    auth_flow_started: args.authFlowStarted,
+    backfill_mode: args.rangeMode,
+    migration_backfill_pending: args.migrationPending,
+    full_backfill_completed: args.fullBackfillCompleted,
+    pricing_mode: args.pricingMode,
+    ccusage_version: args.ccusageVersion,
+    ccusage_agents: args.ccusageAgents,
+    dashboard_rendered: args.dashboardRendered,
+    dashboard_timed_out: args.dashboardTimedOut,
+    telemetry_shutdown_timeout_ms: TELEMETRY_SHUTDOWN_TIMEOUT_MS,
+    total_ms: elapsedMs(args.totalStartedAt),
+    ...args.timings,
+  };
+}
+
+async function renderDashboardWithTimeout(
+  config: StraudeConfig,
+  results: UsageSubmitResponse["results"] | undefined,
+  timeoutMs = DASHBOARD_TIMEOUT_MS,
+): Promise<DashboardRenderResult> {
+  const startedAt = performance.now();
+  const abortController = new AbortController();
+  let timer: NodeJS.Timeout | undefined;
+  let unmountDashboard: (() => void) | undefined;
+
+  const dashboardTask = (async () => {
+    const dashboard = await apiRequest<DashboardResponse>(config, "/api/cli/dashboard", {
+      signal: abortController.signal,
+    });
+    const { render } = await import("ink");
+    const { createElement } = await import("react");
+    const { PushSummary } = await import("../components/PushSummary.js");
+
+    const { waitUntilExit, unmount } = render(
+      createElement(PushSummary, {
+        dashboard,
+        results,
+      }),
+    );
+    unmountDashboard = unmount;
+    await waitUntilExit();
+  })();
+
+  const timeoutTask = new Promise<"timeout">((resolve) => {
+    timer = setTimeout(() => resolve("timeout"), timeoutMs);
+    timer.unref?.();
+  });
+
+  try {
+    const winner = await Promise.race([
+      dashboardTask.then(() => "rendered" as const).catch(() => "failed" as const),
+      timeoutTask,
+    ]);
+
+    if (winner === "timeout") {
+      abortController.abort();
+      unmountDashboard?.();
+    }
+
+    return {
+      rendered: winner === "rendered",
+      timedOut: winner === "timeout",
+      durationMs: elapsedMs(startedAt),
+    };
+  } finally {
+    if (timer) clearTimeout(timer);
+    dashboardTask.catch(() => {
+      // The command has already moved on after timeout/failure.
+    });
+  }
+}
+
+function printSubmitSuccess(args: {
+  entries: CcusageDailyEntry[];
+  results: UsageSubmitResponse["results"];
+  totalCost: number;
+  totalTokens: number;
+  migrationPending: boolean;
+  fullBackfillCompleted: boolean;
+}): void {
+  const { entries, results, totalCost, totalTokens, migrationPending, fullBackfillCompleted } = args;
+  const created = results.filter((r) => r.action === "created").length;
+  const updated = results.filter((r) => r.action === "updated").length;
+  const primaryResult = results[0];
+
+  console.log("");
+  console.log(
+    `Synced ${entries.length} ${pluralize(entries.length, "day")} (${formatCost(totalCost)}, ${formatTokens(totalTokens)} tokens).`,
+  );
+  if (created > 0 || updated > 0) {
+    console.log(`Posted ${created}, updated ${updated}.`);
+  }
+  if (primaryResult) {
+    console.log(`View it: ${primaryResult.post_url}${primaryResult.post_url.includes("?") ? "&" : "?"}edit=1`);
+  }
+  if (migrationPending && !fullBackfillCompleted) {
+    console.log(`Optional: backfill your last ${MAX_BACKFILL_DAYS} days with \`straude push --days ${MAX_BACKFILL_DAYS}\`.`);
+  }
+}
+
 export async function pushCommand(options: PushOptions, apiUrlOverride?: string): Promise<void> {
+  const totalStartedAt = performance.now();
+  const timings: PushTimings = {};
+  let authFlowStarted = false;
   let config = loadConfig();
 
   // Login if needed
   if (!config) {
+    authFlowStarted = true;
+    const authStartedAt = performance.now();
+    console.log("After authentication, Straude will continue into your first sync here.");
     await loginCommand(apiUrlOverride);
+    timings.auth_ms = elapsedMs(authStartedAt);
     config = loadConfig();
     if (!config) {
       console.error("Login failed.");
@@ -200,15 +358,14 @@ export async function pushCommand(options: PushOptions, apiUrlOverride?: string)
   }
 
   const today = new Date();
-  // Trigger a one-time 30-day backfill after migrating both Claude and Codex
-  // ingestion to ccusage v20. Explicit --date pushes stay exact.
-  const shouldRunMigrationBackfill = !options.date && !config.ccusage_v20_migration_completed_at;
+  const migrationPending = !config.ccusage_v20_migration_completed_at;
+  const firstRun = !config.last_push_date;
 
   const resolution = resolvePushDateRange({
     today,
     options: { date: options.date, days: options.days },
     lastPushDate: config.last_push_date,
-    shouldRunMigrationBackfill,
+    shouldRunMigrationBackfill: migrationPending,
   });
   if (!resolution.ok) {
     console.error(resolution.error);
@@ -216,6 +373,8 @@ export async function pushCommand(options: PushOptions, apiUrlOverride?: string)
   }
   const sinceDate = resolution.since;
   const untilDate = resolution.until;
+  const rangeMode = resolution.mode;
+  const fullBackfillRequested = inclusiveDayCount(sinceDate, untilDate) >= MAX_BACKFILL_DAYS;
 
   const sinceStr = formatDateCompact(sinceDate);
   const untilStr = formatDateCompact(untilDate);
@@ -229,16 +388,31 @@ export async function pushCommand(options: PushOptions, apiUrlOverride?: string)
   const scanSpinner = new Spinner("scan");
   scanSpinner.start();
   let ccusage: Awaited<ReturnType<typeof collectCcusageUsageAsync>>;
+  const collectionStartedAt = performance.now();
   try {
-    ccusage = await collectCcusageUsageAsync(sinceStr, untilStr, options.timeoutMs);
+    ccusage = await collectCcusageUsageAsync(sinceStr, untilStr, options.timeoutMs, {
+      pricingMode: CCUSAGE_DEFAULT_PRICING_MODE,
+    });
+    timings.collection_ms = elapsedMs(collectionStartedAt);
     scanSpinner.stop();
   } catch (err) {
+    timings.collection_ms = elapsedMs(collectionStartedAt);
     scanSpinner.stop();
     reportUsagePushFailed(config, err, {
       command: "push",
       stage: "scan",
+      ...pushTelemetryProperties({
+        timings,
+        totalStartedAt,
+        rangeMode,
+        firstRun,
+        authFlowStarted,
+        migrationPending,
+        fullBackfillCompleted: false,
+        pricingMode: CCUSAGE_DEFAULT_PRICING_MODE,
+      }),
     });
-    await posthog._shutdown();
+    await shutdownTelemetryWithTimeout();
     console.error(`\nFailed to collect usage: ${errorMessage(err)}`);
     process.exit(1);
   }
@@ -314,22 +488,50 @@ export async function pushCommand(options: PushOptions, apiUrlOverride?: string)
   const syncSpinner = new Spinner("sync");
   syncSpinner.start();
   let response: UsageSubmitResponse;
+  const submitStartedAt = performance.now();
   try {
     response = await apiRequest<UsageSubmitResponse>(config, "/api/usage/submit", {
       method: "POST",
       body: JSON.stringify(body),
     });
+    timings.submit_ms = elapsedMs(submitStartedAt);
     syncSpinner.stop();
   } catch (err) {
+    timings.submit_ms = elapsedMs(submitStartedAt);
     syncSpinner.stop();
     reportUsagePushFailed(config, err, {
       command: "push",
       stage: "submit",
+      ...pushTelemetryProperties({
+        timings,
+        totalStartedAt,
+        rangeMode,
+        firstRun,
+        authFlowStarted,
+        migrationPending,
+        fullBackfillCompleted: false,
+        pricingMode: ccusage.collector.pricing_mode,
+        ccusageVersion: ccusage.version,
+        ccusageAgents: ccusage.agents,
+      }),
     });
-    await posthog._shutdown();
+    await shutdownTelemetryWithTimeout();
     console.error(`\nFailed to submit: ${errorMessage(err)}`);
     process.exit(1);
   }
+
+  const totalCost = entries.reduce((sum, e) => sum + e.costUSD, 0);
+  const totalTokens = entries.reduce((sum, e) => sum + e.totalTokens, 0);
+  const fullBackfillCompleted = migrationPending && fullBackfillRequested;
+
+  printSubmitSuccess({
+    entries,
+    results: response.results,
+    totalCost,
+    totalTokens,
+    migrationPending,
+    fullBackfillCompleted,
+  });
 
   // Show per-entry delta feedback before dashboard
   for (const result of response.results) {
@@ -352,7 +554,7 @@ export async function pushCommand(options: PushOptions, apiUrlOverride?: string)
     (latest, e) => (e.date > latest ? e.date : latest),
     entries[0]!.date,
   );
-  if (shouldRunMigrationBackfill) {
+  if (fullBackfillCompleted) {
     const stamp = new Date().toISOString();
     config.ccusage_v20_migration_completed_at = stamp;
     config.last_push_date = latestDate;
@@ -361,10 +563,19 @@ export async function pushCommand(options: PushOptions, apiUrlOverride?: string)
     updateLastPushDate(latestDate);
   }
 
-  const totalCost = entries.reduce((sum, e) => sum + e.costUSD, 0);
-  const totalTokens = entries.reduce((sum, e) => sum + e.totalTokens, 0);
   const datesCreated = response.results.filter((r) => r.action === "created").length;
   const datesUpdated = response.results.filter((r) => r.action === "updated").length;
+
+  const dashboard = await renderDashboardWithTimeout(
+    config,
+    response.results,
+    options.dashboardTimeoutMs,
+  );
+  timings.dashboard_ms = dashboard.durationMs;
+  if (dashboard.timedOut) {
+    console.log(`Dashboard took too long to load. Run \`straude status\` anytime for the full view.`);
+  }
+
   posthog.capture({
     distinctId: getDistinctId(config),
     event: "usage_pushed",
@@ -375,31 +586,20 @@ export async function pushCommand(options: PushOptions, apiUrlOverride?: string)
       total_cost_usd: Math.round(totalCost * 100) / 100,
       total_tokens: totalTokens,
       dry_run: false,
-      ccusage_version: ccusage.version,
-      ccusage_agents: ccusage.agents,
+      ...pushTelemetryProperties({
+        timings,
+        totalStartedAt,
+        rangeMode,
+        firstRun,
+        authFlowStarted,
+        migrationPending,
+        fullBackfillCompleted,
+        pricingMode: ccusage.collector.pricing_mode,
+        ccusageVersion: ccusage.version,
+        ccusageAgents: ccusage.agents,
+        dashboardRendered: dashboard.rendered,
+        dashboardTimedOut: dashboard.timedOut,
+      }),
     },
   });
-
-  // Render visual dashboard
-  try {
-    const dashboard = await apiRequest<DashboardResponse>(config, "/api/cli/dashboard");
-    const { render } = await import("ink");
-    const { createElement } = await import("react");
-    const { PushSummary } = await import("../components/PushSummary.js");
-
-    const { waitUntilExit } = render(
-      createElement(PushSummary, {
-        dashboard,
-        results: response.results,
-      }),
-    );
-    await waitUntilExit();
-  } catch {
-    // Fallback: if dashboard fetch or Ink render fails, show plain text
-    console.log("");
-    for (const result of response.results) {
-      const verb = result.action === "updated" ? "Updated" : "Posted";
-      console.log(`${verb} ${result.date}: ${result.post_url}?edit=1`);
-    }
-  }
 }

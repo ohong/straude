@@ -1,6 +1,5 @@
 "use client";
 
-import Image from "next/image";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useEffect, useMemo, useRef, useState } from "react";
@@ -9,7 +8,7 @@ import {
   useQuery,
   useQueryClient,
 } from "@tanstack/react-query";
-import { ArrowLeft, FileText, Loader2, MessageSquare, Paperclip, X } from "lucide-react";
+import { ArrowLeft, Loader2, MessageSquare, Paperclip } from "lucide-react";
 import { Avatar } from "@/components/ui/Avatar";
 import { Button } from "@/components/ui/Button";
 import { Textarea } from "@/components/ui/Textarea";
@@ -24,18 +23,24 @@ import type {
   DirectMessageThread,
   MessageAttachmentInput,
 } from "@/types";
+import {
+  MessageBubble,
+  MessageImageLightbox,
+  PendingAttachmentList,
+} from "./MessagePresentation";
+import {
+  createPendingAttachment,
+  isImageMime,
+  threadPreview,
+  type LocalDirectMessage,
+  type PendingAttachment,
+} from "./message-utils";
 
 interface ConversationUser {
   id: string;
   username: string | null;
   avatar_url: string | null;
   display_name: string | null;
-}
-
-interface PendingAttachment {
-  file: File;
-  preview?: string;
-  uploading: boolean;
 }
 
 interface ThreadsResponse {
@@ -49,12 +54,6 @@ interface ConversationResponse {
   messages: LocalDirectMessage[];
   has_more?: boolean;
 }
-
-type DeliveryStatus = "sending" | "sent" | "failed";
-
-type LocalDirectMessage = DirectMessage & {
-  delivery_status?: DeliveryStatus;
-};
 
 interface SendMessageVariables {
   username: string;
@@ -119,32 +118,6 @@ function updateThreadAfterSend(
     last_message_has_attachment: hasAttachment,
     unread_count: 0,
   };
-}
-
-function formatFileSize(bytes: number): string {
-  if (bytes < 1024) return `${bytes} B`;
-  if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KB`;
-  return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
-}
-
-const IMAGE_EXTENSIONS = ["jpg", "jpeg", "png", "webp", "gif", "heic", "heif"];
-
-function isImageMime(type: string, fileName?: string): boolean {
-  if (type.startsWith("image/")) return true;
-  if (!fileName) return false;
-  const ext = fileName.split(".").pop()?.toLowerCase();
-  return !!ext && IMAGE_EXTENSIONS.includes(ext);
-}
-
-function threadPreview(thread: DirectMessageThread): string {
-  const prefix = thread.last_message_is_from_me ? "You: " : "";
-  if (thread.last_message_content) {
-    return `${prefix}${thread.last_message_content}`;
-  }
-  if (thread.last_message_has_attachment) {
-    return `${prefix}Sent an attachment`;
-  }
-  return "";
 }
 
 export function MessagesInbox({
@@ -421,12 +394,7 @@ export function MessagesInbox({
     if (remaining <= 0) return;
     const toAdd = files.slice(0, remaining);
 
-    const newAttachments: PendingAttachment[] = toAdd.map((file) => {
-      const preview = isImageMime(file.type, file.name)
-        ? URL.createObjectURL(file)
-        : undefined;
-      return { file, preview, uploading: false };
-    });
+    const newAttachments = toAdd.map(createPendingAttachment);
 
     setPendingAttachments((prev) => [...prev, ...newAttachments]);
   }
@@ -880,112 +848,14 @@ export function MessagesInbox({
                         </button>
                       </div>
                     )}
-                    {messages.map((message) => {
-                    const mine = message.sender_id === currentUserId;
-                    const attachments = message.attachments ?? [];
-                    const imageAttachments = attachments.filter((a) => isImageMime(a.type, a.name));
-                    const fileAttachments = attachments.filter((a) => !isImageMime(a.type, a.name));
-
-                    return (
-                      <div
+                    {messages.map((message) => (
+                      <MessageBubble
                         key={message.id}
-                        className={cn("flex", mine ? "justify-end" : "justify-start")}
-                      >
-                        <div
-                          className={cn(
-                            "rounded-2xl px-4 py-3",
-                            mine
-                              ? "bg-accent text-accent-foreground"
-                              : "border border-border bg-background"
-                          )}
-                          style={{ maxWidth: "var(--app-messages-bubble-max-width)" }}
-                        >
-                          {/* Image attachments */}
-                          {imageAttachments.length > 0 && (
-                            <div className={cn(
-                              "flex flex-wrap gap-1.5",
-                              message.content && "mb-2"
-                            )}>
-                              {imageAttachments.map((attachment) => (
-                                <button
-                                  key={attachment.url}
-                                  type="button"
-                                  onClick={() => setLightboxImage(attachment.url)}
-                                  className="relative block overflow-hidden rounded-lg"
-                                  aria-label={`View ${attachment.name}`}
-                                >
-                                  <Image
-                                    src={attachment.url}
-                                    alt={attachment.name}
-                                    width={96}
-                                    height={96}
-                                    className="h-[var(--app-messages-attachment-size)] w-[var(--app-messages-attachment-size)] rounded-lg object-cover"
-                                    sizes="(max-width: 879px) 80px, 96px"
-                                  />
-                                </button>
-                              ))}
-                            </div>
-                          )}
-
-                          {/* File attachments */}
-                          {fileAttachments.length > 0 && (
-                            <div className={cn(
-                              "space-y-1.5",
-                              message.content && "mb-2"
-                            )}>
-                              {fileAttachments.map((attachment) => (
-                                <a
-                                  key={attachment.url}
-                                  href={attachment.url}
-                                  target="_blank"
-                                  rel="noopener noreferrer"
-                                  download={attachment.name}
-                                  className={cn(
-                                    "flex items-center gap-2 rounded-lg px-3 py-2 text-sm",
-                                    mine
-                                      ? "bg-white/15 hover:bg-white/25"
-                                      : "bg-subtle hover:bg-subtle/80"
-                                  )}
-                                >
-                                  <FileText size={16} className="shrink-0" aria-hidden="true" />
-                                  <span className="min-w-0 truncate">{attachment.name}</span>
-                                  <span className={cn(
-                                    "shrink-0 text-xs",
-                                    mine ? "text-white/70" : "text-muted"
-                                  )}>
-                                    {formatFileSize(attachment.size)}
-                                  </span>
-                                </a>
-                              ))}
-                            </div>
-                          )}
-
-                          {/* Text content */}
-                          {message.content && (
-                            <p className="whitespace-pre-wrap text-sm leading-relaxed">
-                              {message.content}
-                            </p>
-                          )}
-
-                          <div
-                            className={cn(
-                              "mt-2 flex items-center gap-2 text-xs",
-                              mine ? "text-white/70" : "text-muted"
-                            )}
-                          >
-                            <span suppressHydrationWarning>
-                              {timeAgo(message.created_at)}
-                            </span>
-                            {mine && message.delivery_status && (
-                              <span className="capitalize">
-                                {message.delivery_status}
-                              </span>
-                            )}
-                          </div>
-                        </div>
-                      </div>
-                    );
-                  })}
+                        message={message}
+                        currentUserId={currentUserId}
+                        onOpenImage={setLightboxImage}
+                      />
+                    ))}
                   </>
                 )}
                   <div ref={messagesEndRef} />
@@ -1010,65 +880,10 @@ export function MessagesInbox({
                     Message @{counterpart.username}
                   </label>
 
-                  {pendingAttachments.length > 0 && (
-                    <div className="mb-3 flex flex-wrap gap-2">
-                      {pendingAttachments.map((attachment, index) => (
-                        <div
-                          key={index}
-                          className="group relative"
-                        >
-                          {attachment.preview ? (
-                            <div className="relative">
-                              {/* eslint-disable-next-line @next/next/no-img-element */}
-                              <img
-                                src={attachment.preview}
-                                alt={attachment.file.name}
-                                className={cn(
-                                  "h-[var(--app-messages-attachment-size)] w-[var(--app-messages-attachment-size)] rounded-lg border border-border object-cover",
-                                  attachment.uploading && "opacity-50"
-                                )}
-                              />
-                              {attachment.uploading && (
-                                <div className="absolute inset-0 flex items-center justify-center">
-                                  <Loader2 size={16} className="animate-spin text-accent" />
-                                </div>
-                              )}
-                            </div>
-                          ) : (
-                            <div
-                              className={cn(
-                                "flex h-[var(--app-messages-attachment-size)] items-center gap-2 rounded-lg border border-border bg-subtle px-3",
-                                attachment.uploading && "opacity-50"
-                              )}
-                            >
-                              <FileText size={16} className="shrink-0 text-muted" aria-hidden="true" />
-                              <div className="min-w-0">
-                                <p className="max-w-[120px] truncate text-xs font-medium">
-                                  {attachment.file.name}
-                                </p>
-                                <p className="text-xs text-muted">
-                                  {formatFileSize(attachment.file.size)}
-                                </p>
-                              </div>
-                              {attachment.uploading && (
-                                <Loader2 size={14} className="animate-spin text-accent" />
-                              )}
-                            </div>
-                          )}
-                          {!attachment.uploading && (
-                            <button
-                              type="button"
-                              onClick={() => removeAttachment(index)}
-                              className="absolute -top-1.5 -right-1.5 flex h-5 w-5 items-center justify-center rounded-full bg-foreground text-background text-xs"
-                              aria-label={`Remove ${attachment.file.name}`}
-                            >
-                              <X size={12} />
-                            </button>
-                          )}
-                        </div>
-                      ))}
-                    </div>
-                  )}
+                  <PendingAttachmentList
+                    attachments={pendingAttachments}
+                    onRemove={removeAttachment}
+                  />
 
                   <Textarea
                     id="dm-composer"
@@ -1133,42 +948,11 @@ export function MessagesInbox({
         </div>
       </section>
 
-      {/* Image lightbox */}
       {lightboxImage && (
-        <div
-          role="dialog"
-          aria-modal="true"
-          aria-label="Image preview"
-          className="fixed inset-0 z-50 flex items-center justify-center bg-black/85"
-          onClick={() => setLightboxImage(null)}
-          onKeyDown={(e) => {
-            if (e.key === "Escape") setLightboxImage(null);
-          }}
-        >
-          <button
-            type="button"
-            onClick={() => setLightboxImage(null)}
-            className="absolute top-4 right-4 z-10 rounded-full bg-white/10 p-2 text-white hover:bg-white/20"
-            aria-label="Close preview"
-            autoFocus
-          >
-            <X size={24} />
-          </button>
-          <div
-            className="relative max-h-[85vh] max-w-[90vw]"
-            style={{ width: "90vw", height: "85vh" }}
-            onClick={(e) => e.stopPropagation()}
-          >
-            <Image
-              src={lightboxImage}
-              alt=""
-              fill
-              className="object-contain"
-              sizes="90vw"
-              priority
-            />
-          </div>
-        </div>
+        <MessageImageLightbox
+          imageUrl={lightboxImage}
+          onClose={() => setLightboxImage(null)}
+        />
       )}
     </div>
   );
