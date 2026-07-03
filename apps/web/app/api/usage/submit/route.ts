@@ -1,4 +1,6 @@
 import { NextResponse } from "next/server";
+import { after } from "@/lib/utils/after";
+import { captureServerActivationEvent } from "@/lib/analytics/server";
 import { createClient } from "@/lib/supabase/server";
 import { verifyCliTokenWithRefresh } from "@/lib/api/cli-auth";
 import { getServiceClient } from "@/lib/supabase/service";
@@ -62,8 +64,12 @@ function validateEntry(entry: CcusageDailyEntry): string | null {
 
 function validateCollectorMeta(collector: UsageCollectorMeta | undefined): string | null {
   if (!collector) return null;
-  if (collector.pricing_mode != null && collector.pricing_mode !== "online") {
-    return "Unsupported pricing mode; ccusage submissions must use online pricing";
+  if (
+    collector.pricing_mode != null &&
+    collector.pricing_mode !== "online" &&
+    collector.pricing_mode !== "offline"
+  ) {
+    return "Unsupported pricing mode; ccusage submissions must use online or offline pricing";
   }
   if (collector.ccusage_agents != null) {
     if (!Array.isArray(collector.ccusage_agents)) {
@@ -334,6 +340,7 @@ function mergeCollectorWithRepairMeta(
 
 interface AuthContext {
   userId: string;
+  username?: string | null;
   source: "cli" | "web";
   /** When set, the response should include X-Straude-Refreshed-Token. */
   refreshedToken?: string | null;
@@ -346,6 +353,7 @@ async function resolveAuthContext(request: Request): Promise<AuthContext | null>
   if (cliAuth) {
     return {
       userId: cliAuth.userId,
+      username: cliAuth.username,
       source: "cli",
       refreshedToken: cliAuth.refreshedToken,
     };
@@ -828,6 +836,31 @@ export async function POST(request: Request) {
   if (auth.source === "cli" && auth.refreshedToken) {
     responseHeaders["X-Straude-Refreshed-Token"] = auth.refreshedToken;
   }
+  const datesCreated = results.filter((r) => r.action === "created").length;
+  const datesUpdated = results.filter((r) => r.action === "updated").length;
+  const totalCost = body.entries.reduce((sum, entry) => sum + entry.data.costUSD, 0);
+  const totalTokens = body.entries.reduce((sum, entry) => sum + entry.data.totalTokens, 0);
+
+  after(() => captureServerActivationEvent({
+    event: "usage_submit_succeeded",
+    distinctId: userId,
+    properties: {
+      surface: "usage_submit",
+      activation_state: "first_usage_submitted",
+      is_authenticated: true,
+      days_pushed: results.length,
+      dates_created: datesCreated,
+      dates_updated: datesUpdated,
+      result_count: results.length,
+      total_cost_usd: Math.round(totalCost * 100) / 100,
+      total_tokens: totalTokens,
+      pricing_mode: body.collector?.pricing_mode,
+      ccusage_version: body.collector?.ccusage_version,
+      ccusage_agents: body.collector?.ccusage_agents,
+      has_errors: errors.length > 0,
+      "$insert_id": `usage_submit_succeeded:${userId}:${body.hash ?? body.device_id ?? "unknown"}:${results.map((r) => r.date).join(",")}`,
+    },
+  }));
 
   const response: UsageSubmitResponse = { results };
   if (errors.length > 0) {

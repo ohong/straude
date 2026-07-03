@@ -164,9 +164,7 @@ export default async function OpenStatsPage() {
             Daily, anonymized data from the Straude community.
           </p>
           <p className="mt-2 text-sm text-muted">
-            {stats.source === "snapshot"
-              ? "Showing the last successful snapshot while the live refresh recovers."
-              : "Updated daily from the latest successful Straude snapshot."}
+            Updated daily from the latest successful Straude snapshot.
           </p>
 
           {/* ---- Big Number Grid ----------------------------------------- */}

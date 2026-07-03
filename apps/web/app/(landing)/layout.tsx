@@ -1,5 +1,6 @@
 import type { Metadata } from "next";
 import { CookieConsentModal } from "@/components/landing/CookieConsentModal";
+import { PublicAnalytics } from "@/components/providers/PublicAnalytics";
 
 export const metadata: Metadata = {
   title: { absolute: "Straude — Strava for Claude Code" },
@@ -15,6 +16,7 @@ export default function LandingLayout({
   return (
     <>
       {children}
+      <PublicAnalytics />
       <CookieConsentModal />
     </>
   );

@@ -10,7 +10,7 @@ import { BoltIcon } from "@/components/landing/icons";
 const navLinks = [
   { href: "/feed", label: "Feed" },
   { href: "/leaderboard", label: "Leaderboard" },
-  { href: "/token-rich", label: "Prometheus List" },
+  { href: "/token-rich", label: "Company Rankings" },
 ] as const;
 
 function subscribeToAuthHrefChange() {
@@ -73,7 +73,7 @@ export function GuestHeader() {
 const mobileNavItems = [
   { href: "/feed", label: "Home", icon: Home },
   { href: "/leaderboard", label: "Leaderboard", icon: Trophy },
-  { href: "/token-rich", label: "Prometheus", icon: Flame },
+  { href: "/token-rich", label: "Companies", icon: Flame },
 ] as const;
 
 export function GuestMobileNav() {

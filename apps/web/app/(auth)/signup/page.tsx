@@ -6,6 +6,7 @@ import Link from "next/link";
 import { BoltIcon } from "@/components/landing/icons";
 import { Button } from "@/components/ui/Button";
 import { Input } from "@/components/ui/Input";
+import { trackActivationEvent } from "@/lib/analytics/client";
 
 export default function SignupPage() {
   const [email, setEmail] = useState("");
@@ -17,6 +18,12 @@ export default function SignupPage() {
     e.preventDefault();
     setLoading(true);
     setError(null);
+    trackActivationEvent("signup_started", {
+      surface: "signup",
+      signup_method: "magic_link",
+      activation_state: "anonymous",
+      is_authenticated: false,
+    });
 
     const supabase = createClient();
     const { error } = await supabase.auth.signInWithOtp({
@@ -33,6 +40,12 @@ export default function SignupPage() {
   }
 
   async function handleGitHub() {
+    trackActivationEvent("signup_started", {
+      surface: "signup",
+      signup_method: "github",
+      activation_state: "anonymous",
+      is_authenticated: false,
+    });
     const supabase = createClient();
     await supabase.auth.signInWithOAuth({
       provider: "github",

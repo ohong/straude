@@ -15,6 +15,7 @@ interface ResponsiveShellFrameProps {
   leftPanel: ReactNode;
   rightPanel: ReactNode;
   children: ReactNode;
+  showPromptWidget?: boolean;
 }
 
 export function ResponsiveShellFrame({
@@ -23,6 +24,7 @@ export function ResponsiveShellFrame({
   leftPanel,
   rightPanel,
   children,
+  showPromptWidget = true,
 }: ResponsiveShellFrameProps) {
   const mode = useResponsiveShell();
   const [panelOpenMode, setPanelOpenMode] = useState<ResponsiveShellMode | null>(null);
@@ -122,7 +124,7 @@ export function ResponsiveShellFrame({
       </div>
 
       <MobileNav username={username} />
-      <SubmitPromptWidget username={username} />
+      {showPromptWidget && <SubmitPromptWidget username={username} />}
 
       <PanelSheet
         key={`${mode}-${panelTriggerLabel ?? "none"}`}

@@ -1,24 +1,20 @@
 "use client";
 
-import { useEffect, useRef, useState, useCallback } from "react";
+import { Fragment, useEffect, useRef, useState, useCallback } from "react";
 import { useRouter } from "next/navigation";
 import { ChevronDown, Copy, Check } from "lucide-react";
 import { ActivityCard } from "./ActivityCard";
 import { PendingPostsNudge } from "./PendingPostsNudge";
+import { FirstSyncCommandCard } from "@/components/app/activation/FirstSyncCommandCard";
+import { GuestSignupCta } from "@/components/app/activation/GuestSignupCta";
 import { cn } from "@/lib/utils/cn";
+import { useClipboardFeedback } from "@/lib/utils/useClipboardFeedback";
 import type { Post } from "@/types";
 
 const SYNC_COMMAND = "npx straude@latest";
 
 function SyncCommandHint() {
-  const [copied, setCopied] = useState(false);
-
-  function handleCopy() {
-    navigator.clipboard.writeText(SYNC_COMMAND).then(() => {
-      setCopied(true);
-      setTimeout(() => setCopied(false), 2000);
-    });
-  }
+  const { copied, copyText } = useClipboardFeedback();
 
   return (
     <div className="hidden items-center gap-2.5 sm:flex">
@@ -27,7 +23,7 @@ function SyncCommandHint() {
       </span>
       <button
         type="button"
-        onClick={handleCopy}
+        onClick={() => void copyText(SYNC_COMMAND)}
         className="flex items-center gap-2 rounded border border-border bg-background px-3 py-1 font-mono text-xs text-foreground hover:border-accent hover:text-accent transition-colors"
         aria-label="Copy sync command"
       >
@@ -287,25 +283,32 @@ export function FeedList({
         </div>
       ) : posts.length === 0 ? (
         <div className="flex flex-col items-center justify-center px-6 py-20 text-center">
-          <p className="text-lg font-medium">
-            {feedType === "following"
-              ? "No posts from people you follow yet"
-              : feedType === "mine"
-                ? "You haven\u2019t posted any sessions yet"
-                : "No posts yet"}
-          </p>
-          <p className="mt-2 text-sm text-muted">
-            {feedType === "following"
-              ? "Follow some builders to see their posts here."
-              : feedType === "mine"
-                ? "Sync your Claude usage to share your first session."
-                : "Check back soon."}
-          </p>
+          {userId && feedType === "mine" ? (
+            <FirstSyncCommandCard surface="feed" />
+          ) : (
+            <>
+              <p className="text-lg font-medium">
+                {feedType === "following"
+                  ? "No posts from people you follow yet"
+                  : "No posts yet"}
+              </p>
+              <p className="mt-2 text-sm text-muted">
+                {feedType === "following"
+                  ? "Follow some builders to see their posts here."
+                  : "Check back soon."}
+              </p>
+            </>
+          )}
         </div>
       ) : (
         <>
-          {posts.map((post) => (
-            <ActivityCard key={post.id} post={post} userId={userId} />
+          {posts.map((post, index) => (
+            <Fragment key={post.id}>
+              <ActivityCard post={post} userId={userId} />
+              {!userId && feedType === "global" && index === Math.min(4, posts.length - 1) && (
+                <GuestSignupCta surface="feed" ctaLocation="feed_after_posts" />
+              )}
+            </Fragment>
           ))}
           {error && (
             <div role="alert" className="flex flex-col items-center gap-2 py-8">

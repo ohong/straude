@@ -309,9 +309,12 @@ export function ActivityCard({ post, userId, hideShareMenu }: { post: Post; user
               </>
             )}
             {usage?.is_verified && (
-              <span className="inline-flex items-center gap-1 font-semibold text-accent">
-                <CheckCircle size={12} aria-hidden="true" />
-                Verified
+              <span
+                className="inline-flex items-center gap-1 text-muted"
+                title="Verified CLI sync"
+              >
+                <CheckCircle size={12} className="text-accent" aria-hidden="true" />
+                <span className="sr-only">Verified CLI sync</span>
               </span>
             )}
             {isOwn && <CompletenessRing post={post} />}

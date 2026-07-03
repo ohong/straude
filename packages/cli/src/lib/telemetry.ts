@@ -1,8 +1,11 @@
+import { performance } from "node:perf_hooks";
 import type { StraudeConfig } from "./auth.js";
 import { getDistinctId } from "./machine-id.js";
 import { posthog } from "./posthog.js";
 
-type TelemetryProperties = Record<string, string | number | boolean | null | undefined>;
+type TelemetryProperties = Record<string, string | number | boolean | string[] | null | undefined>;
+
+export const TELEMETRY_SHUTDOWN_TIMEOUT_MS = 150;
 
 export function isPushInvocation(command: string | null): boolean {
   return command === null || command === "push";
@@ -45,4 +48,23 @@ export function reportCliException(
   properties: TelemetryProperties = {},
 ): void {
   posthog.captureException(error, getDistinctId(config), properties);
+}
+
+export async function shutdownTelemetryWithTimeout(
+  timeoutMs = TELEMETRY_SHUTDOWN_TIMEOUT_MS,
+): Promise<number> {
+  const startedAt = performance.now();
+  let timer: NodeJS.Timeout | undefined;
+  try {
+    await Promise.race([
+      posthog._shutdown(timeoutMs),
+      new Promise<void>((resolve) => {
+        timer = setTimeout(resolve, timeoutMs);
+        timer.unref?.();
+      }),
+    ]);
+  } finally {
+    if (timer) clearTimeout(timer);
+  }
+  return Math.round(performance.now() - startedAt);
 }

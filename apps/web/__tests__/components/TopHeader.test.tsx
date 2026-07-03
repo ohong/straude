@@ -1,6 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import type { ComponentProps } from "react";
-import { render, screen, waitFor } from "@testing-library/react";
+import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { TopHeader } from "@/components/app/shared/TopHeader";
 
@@ -82,7 +82,7 @@ describe("TopHeader", () => {
     });
   });
 
-  it("loads shared app counts without fetching message threads", async () => {
+  it("loads shared app counts without fetching notification lists or message threads", async () => {
     renderTopHeader({ username: "alice", avatarUrl: null });
 
     await waitFor(() => {
@@ -93,7 +93,21 @@ describe("TopHeader", () => {
       String(input),
     );
 
-    expect(requestedUrls).toContain("/api/notifications");
+    expect(requestedUrls).not.toContain("/api/notifications");
     expect(requestedUrls).not.toContain("/api/messages/threads?limit=1");
+  });
+
+  it("fetches notifications when the notifications menu opens", async () => {
+    renderTopHeader({ username: "alice", avatarUrl: null });
+
+    await waitFor(() => {
+      expect(fetch).toHaveBeenCalledWith("/api/app/counts");
+    });
+
+    fireEvent.click(screen.getByRole("button", { name: /notifications/i }));
+
+    await waitFor(() => {
+      expect(fetch).toHaveBeenCalledWith("/api/notifications");
+    });
   });
 });
