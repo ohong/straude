@@ -1,8 +1,12 @@
 import { test, expect } from "@playwright/test";
 
+function verifyUrl(code: string) {
+  return `/cli/verify?code=${encodeURIComponent(code)}&verify_secret=test-verify-secret`;
+}
+
 test.describe("CLI verify page", () => {
   test("page loads with authorization heading", async ({ page }) => {
-    await page.goto("/cli/verify?code=TEST1234");
+    await page.goto(verifyUrl("TEST1234"));
     await page.waitForLoadState("networkidle");
 
     await expect(page.locator("h1")).toContainText("Authorize CLI");
@@ -10,7 +14,7 @@ test.describe("CLI verify page", () => {
 
   test("displays the authorization code from URL", async ({ page }) => {
     const testCode = "ABCD1234";
-    await page.goto(`/cli/verify?code=${testCode}`);
+    await page.goto(verifyUrl(testCode));
     await page.waitForLoadState("networkidle");
 
     await expect(page.getByText(testCode)).toBeVisible();
@@ -22,7 +26,7 @@ test.describe("CLI verify page", () => {
   test("unauthenticated user sees sign-in or authorize action", async ({
     page,
   }) => {
-    await page.goto("/cli/verify?code=TEST1234");
+    await page.goto(verifyUrl("TEST1234"));
     await page.waitForLoadState("networkidle");
 
     // Either sign-in button (for guests) or authorize button (for logged-in)
@@ -35,7 +39,7 @@ test.describe("CLI verify page", () => {
   });
 
   test("sign-in link includes return URL", async ({ page }) => {
-    await page.goto("/cli/verify?code=TEST1234");
+    await page.goto(verifyUrl("TEST1234"));
     await page.waitForLoadState("networkidle");
 
     const signInLink = page.locator('a:has-text("Sign in to authorize")');

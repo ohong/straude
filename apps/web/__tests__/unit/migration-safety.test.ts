@@ -183,6 +183,24 @@ describe("Migration safety", () => {
     expect(/jsonb_build_object\s*\(/i.test(latest.content)).toBe(true);
   });
 
+  it("latest cli_auth_codes hardening removes public grants and pending-code select policies", () => {
+    const latest = getLatestMigrationMatching(
+      migrations,
+      /public\.cli_auth_codes[\s\S]*(REVOKE\s+ALL|DROP\s+POLICY)/i
+    );
+
+    expect(latest, "Expected cli_auth_codes hardening migration").toBeTruthy();
+    const content = latest!.content;
+
+    expect(/REVOKE\s+ALL\s+ON\s+TABLE\s+public\.cli_auth_codes\s+FROM\s+anon/i.test(content)).toBe(true);
+    expect(/REVOKE\s+ALL\s+ON\s+TABLE\s+public\.cli_auth_codes\s+FROM\s+authenticated/i.test(content)).toBe(true);
+    expect(/GRANT\s+SELECT\s+ON\s+(TABLE\s+)?public\.cli_auth_codes\s+TO\s+anon/i.test(content)).toBe(false);
+    expect(/GRANT\s+SELECT[^;]+public\.cli_auth_codes[^;]+authenticated/i.test(content)).toBe(false);
+    expect(/CREATE\s+POLICY[\s\S]*ON\s+(TABLE\s+)?public\.cli_auth_codes[\s\S]*status\s*=\s*'pending'/i.test(content)).toBe(false);
+    expect(/DROP\s+POLICY\s+IF\s+EXISTS\s+"Users can view own cli auth codes"/i.test(content)).toBe(true);
+    expect(/DROP\s+POLICY\s+IF\s+EXISTS\s+"Authenticated users can verify pending codes"/i.test(content)).toBe(true);
+  });
+
   it("latest interaction RLS policies inherit parent post visibility", () => {
     // Match only migrations that actually CREATE POLICY on the interaction
     // tables — not every migration that happens to reference them in passing

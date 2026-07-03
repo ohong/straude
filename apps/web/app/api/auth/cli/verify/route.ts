@@ -1,4 +1,5 @@
 import { NextResponse } from "next/server";
+import { hashCliDeviceSecret } from "@/lib/api/cli-auth";
 import { getServiceClient } from "@/lib/supabase/service";
 import { createClient } from "@/lib/supabase/server";
 
@@ -12,7 +13,7 @@ export async function POST(request: Request) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
 
-  let body: { code?: unknown };
+  let body: { code?: unknown; verify_secret?: unknown };
   try {
     body = await request.json();
   } catch {
@@ -23,12 +24,17 @@ export async function POST(request: Request) {
   if (!code) {
     return NextResponse.json({ error: "Missing code" }, { status: 400 });
   }
+  const verifySecret = typeof body.verify_secret === "string" ? body.verify_secret.trim() : "";
+  if (!verifySecret) {
+    return NextResponse.json({ error: "Missing verify_secret" }, { status: 400 });
+  }
 
   const db = getServiceClient();
   const { data, error } = await db
     .from("cli_auth_codes")
     .update({ user_id: user.id, status: "completed" })
     .eq("code", code)
+    .eq("verify_secret_hash", hashCliDeviceSecret(verifySecret))
     .eq("status", "pending")
     .gt("expires_at", new Date().toISOString())
     .select("id")
