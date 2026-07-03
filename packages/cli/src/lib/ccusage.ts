@@ -297,7 +297,12 @@ function asStringArray(value: unknown, field: string, date: string): string[] {
   return value.filter((item): item is string => typeof item === "string" && item.length > 0);
 }
 
-function parseAgents(row: CcusageRawEntry, date: string): CcusageAgent[] {
+interface ParsedAgents {
+  supported: CcusageAgent[];
+  unsupported: string[];
+}
+
+function parseAgents(row: CcusageRawEntry, date: string): ParsedAgents {
   if (!isRecord(row.metadata) || !Array.isArray(row.metadata.agents)) {
     throw new Error(`Invalid ccusage row for ${date}: metadata.agents is required.`);
   }
@@ -310,15 +315,16 @@ function parseAgents(row: CcusageRawEntry, date: string): CcusageAgent[] {
   const unsupported = rawAgents.filter((agent): agent is string =>
     typeof agent === "string" && !SUPPORTED_AGENTS.includes(agent as CcusageAgent),
   );
-  if (unsupported.length > 0) {
-    throw new Error(
-      `Unsupported ccusage agents detected for ${date}: ${[...new Set(unsupported)].join(", ")}. Straude currently supports Claude Code and Codex only.`,
-    );
-  }
-
-  return [...new Set(rawAgents as CcusageAgent[])].sort((a, b) =>
-    SUPPORTED_AGENTS.indexOf(a) - SUPPORTED_AGENTS.indexOf(b),
+  const supported = rawAgents.filter((agent): agent is CcusageAgent =>
+    typeof agent === "string" && SUPPORTED_AGENTS.includes(agent as CcusageAgent),
   );
+
+  return {
+    supported: [...new Set(supported)].sort((a, b) =>
+      SUPPORTED_AGENTS.indexOf(a) - SUPPORTED_AGENTS.indexOf(b),
+    ),
+    unsupported: [...new Set(unsupported)].sort(),
+  };
 }
 
 function parseModelBreakdown(value: unknown, date: string): ModelBreakdownEntry[] | undefined {
@@ -395,7 +401,7 @@ export function parseCcusageOutput(raw: string, options: ParseOptions = {}): Ccu
 
   const rawRows = normalizeRawDaily(parsed);
   const seenAgents = new Set<CcusageAgent>();
-  const data = rawRows.map((row, index) => {
+  const data = rawRows.flatMap((row, index) => {
     if (!isRecord(row)) {
       throw new Error(`Invalid ccusage row at index ${index}: expected an object.`);
     }
@@ -406,7 +412,12 @@ export function parseCcusageOutput(raw: string, options: ParseOptions = {}): Ccu
     }
 
     const rowAgents = parseAgents(row, date);
-    rowAgents.forEach((agent) => seenAgents.add(agent));
+    if (rowAgents.unsupported.length > 0) return [];
+
+    const rowSupportedAgents = rowAgents.supported;
+    if (rowSupportedAgents.length === 0) return [];
+
+    rowSupportedAgents.forEach((agent) => seenAgents.add(agent));
 
     const inputTokens = asFiniteNumber(row.inputTokens, "inputTokens", date);
     const outputTokens = asFiniteNumber(row.outputTokens, "outputTokens", date);
@@ -428,7 +439,7 @@ export function parseCcusageOutput(raw: string, options: ParseOptions = {}): Ccu
       0,
     );
 
-    return {
+    return [{
       date,
       models: [...modelNames],
       inputTokens,
@@ -439,7 +450,7 @@ export function parseCcusageOutput(raw: string, options: ParseOptions = {}): Ccu
       costUSD,
       reasoningOutputTokens,
       modelBreakdown,
-    };
+    }];
   });
 
   data.sort((a, b) => a.date.localeCompare(b.date));

@@ -200,7 +200,7 @@ describe("unified ccusage CLI flow", () => {
     expect(readPersistedConfig().ccusage_v20_migration_completed_at).toEqual(expect.any(String));
   });
 
-  it("rejects unsupported agents before submitting", async () => {
+  it("ignores unsupported-only ccusage rows without throwing", async () => {
     seedConfig();
     mockCcusage(JSON.stringify({
       daily: [
@@ -219,10 +219,13 @@ describe("unified ccusage CLI flow", () => {
       ],
     }));
 
-    await expect(pushCommand({})).rejects.toThrow(ExitError);
+    await pushCommand({});
+
     expect(mockFetch).not.toHaveBeenCalled();
-    expect(console.error).toHaveBeenCalledWith(
-      expect.stringContaining("Unsupported ccusage agents"),
+    expect(process.exit).not.toHaveBeenCalled();
+    expect(console.error).not.toHaveBeenCalled();
+    expect(console.log).toHaveBeenCalledWith(
+      expect.stringContaining("No usage data found"),
     );
   });
 });

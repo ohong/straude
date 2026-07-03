@@ -109,10 +109,35 @@ describe("parseCcusageOutput", () => {
     expect(parsed.data[0]!.reasoningOutputTokens).toBe(100);
   });
 
-  it("rejects unsupported ccusage agents instead of filtering them silently", () => {
-    expect(() => parseCcusageOutput(rawOutput([
-      row({ metadata: { agents: ["claude", "gemini"] } }),
-    ]))).toThrow(/Unsupported ccusage agents detected.*gemini/);
+  it("skips unsupported ccusage agent rows without blocking supported usage", () => {
+    const parsed = parseCcusageOutput(rawOutput([
+      row({
+        period: "2026-05-11",
+        modelsUsed: ["gemini-pro"],
+        modelBreakdowns: [{ modelName: "gemini-pro", cost: 0.01 }],
+        metadata: { agents: ["gemini"] },
+      }),
+      row({
+        period: "2026-05-12",
+        modelsUsed: ["claude-sonnet-4-5-20250929", "gemini-pro"],
+        modelBreakdowns: [
+          { modelName: "claude-sonnet-4-5-20250929", cost: 0.2 },
+          { modelName: "gemini-pro", cost: 0.01 },
+        ],
+        metadata: { agents: ["claude", "gemini"] },
+      }),
+      row({ period: "2026-05-13", metadata: { agents: ["codex"] } }),
+    ]), { version: "20.0.6" });
+
+    expect(parsed.data).toHaveLength(1);
+    expect(parsed.data[0]!.date).toBe("2026-05-13");
+    expect(parsed.agents).toEqual(["codex"]);
+    expect(parsed.collector).toEqual({
+      codex: CCUSAGE_CODEX_COLLECTOR,
+      ccusage_version: "20.0.6",
+      ccusage_agents: ["codex"],
+      pricing_mode: "offline",
+    });
   });
 
   it("rejects rows without metadata agents", () => {
