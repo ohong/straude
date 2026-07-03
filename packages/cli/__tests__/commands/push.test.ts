@@ -17,13 +17,12 @@ vi.mock("../../src/lib/api.js", () => ({
 vi.mock("../../src/lib/ccusage.js", () => ({
   CCUSAGE_CLAUDE_COLLECTOR: "ccusage-claude-v20",
   CCUSAGE_CODEX_COLLECTOR: "ccusage-codex-v20",
-  runCcusageAgentRawAsync: vi.fn(),
-  parseCcusageOutput: vi.fn(),
-  ensureCcusageInstalled: vi.fn(() => Promise.resolve()),
+  collectCcusageUsageAsync: vi.fn(),
 }));
 
-vi.mock("../../src/lib/codex-native.js", () => ({
-  containsSessionFile: vi.fn(),
+vi.mock("../../src/lib/telemetry.js", () => ({
+  reportUsagePushFailed: vi.fn(),
+  errorMessage: (error: unknown) => error instanceof Error ? error.message : String(error),
 }));
 
 vi.mock("../../src/lib/posthog.js", () => ({
@@ -33,23 +32,13 @@ vi.mock("../../src/lib/posthog.js", () => ({
   },
 }));
 
-vi.mock("../../src/lib/telemetry.js", () => ({
-  reportUsagePushFailed: vi.fn(),
-  errorMessage: (error: unknown) => error instanceof Error ? error.message : String(error),
-}));
-
-vi.mock("../../src/commands/push-output.js", () => ({
-  printDryRunEntries: vi.fn(),
-  printSubmittedResults: vi.fn(),
-  renderPushSummary: vi.fn(() => Promise.resolve()),
-}));
-
-import { pushCommand, mergeEntries } from "../../src/commands/push.js";
+import { createHash } from "node:crypto";
+import { pushCommand } from "../../src/commands/push.js";
 import { loadConfig, saveConfig, updateLastPushDate } from "../../src/lib/auth.js";
 import { loginCommand } from "../../src/commands/login.js";
 import { apiRequest } from "../../src/lib/api.js";
-import { runCcusageAgentRawAsync, parseCcusageOutput } from "../../src/lib/ccusage.js";
-import { containsSessionFile } from "../../src/lib/codex-native.js";
+import { collectCcusageUsageAsync } from "../../src/lib/ccusage.js";
+import { posthog } from "../../src/lib/posthog.js";
 import { reportUsagePushFailed } from "../../src/lib/telemetry.js";
 
 const mockLoadConfig = vi.mocked(loadConfig);
@@ -57,12 +46,18 @@ const mockSaveConfig = vi.mocked(saveConfig);
 const mockUpdateLastPushDate = vi.mocked(updateLastPushDate);
 const mockLoginCommand = vi.mocked(loginCommand);
 const mockApiRequest = vi.mocked(apiRequest);
-const mockRunCcusageAgentRawAsync = vi.mocked(runCcusageAgentRawAsync);
-const mockParseCcusageOutput = vi.mocked(parseCcusageOutput);
-const mockHasCodexLogs = vi.mocked(containsSessionFile);
+const mockCollectCcusageUsageAsync = vi.mocked(collectCcusageUsageAsync);
+const mockPosthog = vi.mocked(posthog);
 const mockReportUsagePushFailed = vi.mocked(reportUsagePushFailed);
 
-const fakeConfig = { token: "tok", username: "alice", api_url: "https://straude.com" };
+const fakeConfig = {
+  token: "tok",
+  username: "alice",
+  api_url: "https://straude.com",
+  device_id: "device-1",
+  device_name: "work-laptop",
+  ccusage_v20_migration_completed_at: "2026-05-01T00:00:00.000Z",
+};
 
 class ExitError extends Error {
   code: number;
@@ -72,67 +67,87 @@ class ExitError extends Error {
   }
 }
 
-function todayStr(): string {
-  const d = new Date();
-  const y = d.getFullYear();
-  const m = String(d.getMonth() + 1).padStart(2, "0");
-  const day = String(d.getDate()).padStart(2, "0");
-  return `${y}-${m}-${day}`;
+function compact(date: Date): string {
+  return `${date.getFullYear()}${String(date.getMonth() + 1).padStart(2, "0")}${String(date.getDate()).padStart(2, "0")}`;
 }
 
-function usageEntry(date: string, overrides: Record<string, unknown> = {}) {
+function todayStr(): string {
+  const d = new Date();
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
+}
+
+function daysAgoStr(days: number): string {
+  const d = new Date();
+  d.setDate(d.getDate() - days);
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
+}
+
+function usageEntry(date = todayStr(), overrides: Record<string, unknown> = {}) {
   return {
     date,
-    models: ["claude-sonnet-4-5-20250929"],
-    inputTokens: 1000,
-    outputTokens: 500,
-    cacheCreationTokens: 0,
-    cacheReadTokens: 0,
-    totalTokens: 1500,
-    costUSD: 0.05,
+    models: ["claude-sonnet-4-5-20250929", "gpt-5.2-codex"],
+    inputTokens: 1200,
+    outputTokens: 400,
+    reasoningOutputTokens: 100,
+    cacheCreationTokens: 100,
+    cacheReadTokens: 300,
+    totalTokens: 2100,
+    costUSD: 0.25,
+    modelBreakdown: [
+      { model: "claude-sonnet-4-5-20250929", cost_usd: 0.2 },
+      { model: "gpt-5.2-codex", cost_usd: 0.05 },
+    ],
     ...overrides,
   };
 }
 
-function mockSourceData(args: {
-  claude?: ReturnType<typeof usageEntry>[];
-  codex?: ReturnType<typeof usageEntry>[];
-} = {}) {
-  const claude = args.claude ?? [];
-  const codex = args.codex ?? [];
-
-  mockRunCcusageAgentRawAsync.mockImplementation(async (agent) => `${agent}-raw`);
-  mockParseCcusageOutput.mockImplementation((_raw, agent) => ({
-    data: agent === "codex" ? codex : claude,
-    rowMetadata: (agent === "codex" ? codex : claude).map((entry) => ({
-      date: entry.date,
-      agents: [agent],
-    })),
-    anomalies: [],
-  }));
-}
-
-function submitCallBody() {
-  const submitCall = mockApiRequest.mock.calls.find(([, path]) => path === "/api/usage/submit");
-  expect(submitCall).toBeDefined();
-  return JSON.parse((submitCall![2] as { body: string }).body);
+function ccusageOutput(entries = [usageEntry()], overrides: Record<string, unknown> = {}) {
+  return {
+    data: entries,
+    summary: {
+      totalInputTokens: entries.reduce((sum, entry) => sum + entry.inputTokens, 0),
+      totalOutputTokens: entries.reduce((sum, entry) => sum + entry.outputTokens, 0),
+      totalReasoningOutputTokens: entries.reduce((sum, entry) => sum + (entry.reasoningOutputTokens ?? 0), 0),
+      totalCacheCreationTokens: entries.reduce((sum, entry) => sum + entry.cacheCreationTokens, 0),
+      totalCacheReadTokens: entries.reduce((sum, entry) => sum + entry.cacheReadTokens, 0),
+      totalTokens: entries.reduce((sum, entry) => sum + entry.totalTokens, 0),
+      totalCostUSD: entries.reduce((sum, entry) => sum + entry.costUSD, 0),
+    },
+    agents: ["claude", "codex"],
+    collector: {
+      claude: "ccusage-claude-v20",
+      codex: "ccusage-codex-v20",
+      ccusage_version: "20.0.6",
+      ccusage_agents: ["claude", "codex"],
+      pricing_mode: "online",
+    },
+    version: "20.0.6",
+    raw: JSON.stringify({ daily: entries }),
+    stderr: "",
+    ...overrides,
+  };
 }
 
 beforeEach(() => {
   vi.useFakeTimers({ now: new Date("2026-03-13T12:00:00Z"), toFake: ["Date"] });
   vi.clearAllMocks();
-  mockLoadConfig.mockReturnValue(fakeConfig);
-  mockHasCodexLogs.mockResolvedValue(false);
-  mockSourceData();
+  mockLoadConfig.mockReturnValue({ ...fakeConfig });
+  mockCollectCcusageUsageAsync.mockResolvedValue(ccusageOutput() as never);
   mockApiRequest.mockImplementation(async (_config, path) => {
-    if (path === "/api/usage/submit") {
-      return {
-        results: [
-          { date: todayStr(), usage_id: "u-1", post_id: "p-1", post_url: "https://straude.com/post/p-1", action: "created" },
-        ],
-      };
+    if (path === "/api/cli/dashboard") {
+      throw new Error("dashboard not mocked");
     }
-    return { days: [] };
+    return {
+      results: [
+        {
+          date: todayStr(),
+          usage_id: "u-1",
+          post_id: "p-1",
+          post_url: "https://straude.com/post/p-1",
+          action: "created",
+        },
+      ],
+    };
   });
   vi.spyOn(console, "log").mockImplementation(() => {});
   vi.spyOn(console, "error").mockImplementation(() => {});
@@ -147,238 +162,209 @@ afterEach(() => {
 });
 
 describe("pushCommand", () => {
-  it("submits source-focused Claude usage with v20 collector metadata", async () => {
-    const today = todayStr();
-    mockSourceData({ claude: [usageEntry(today)] });
-
+  it("submits unified ccusage rows with v20 collector metadata", async () => {
     await pushCommand({});
 
-    expect(mockRunCcusageAgentRawAsync).toHaveBeenCalledWith(
-      "claude",
+    expect(mockCollectCcusageUsageAsync).toHaveBeenCalledWith(
       expect.any(String),
       expect.any(String),
       undefined,
     );
-    expect(mockRunCcusageAgentRawAsync).toHaveBeenCalledWith(
-      "codex",
-      expect.any(String),
-      expect.any(String),
-      undefined,
+    expect(mockApiRequest).toHaveBeenCalledWith(
+      expect.objectContaining(fakeConfig),
+      "/api/usage/submit",
+      expect.objectContaining({ method: "POST" }),
     );
 
-    const body = submitCallBody();
+    const submitCall = mockApiRequest.mock.calls.find(([, path]) => path === "/api/usage/submit")!;
+    const body = JSON.parse((submitCall[2] as { body: string }).body);
     expect(body.entries).toHaveLength(1);
-    expect(body.entries[0].data.costUSD).toBe(0.05);
-    expect(body.collector).toEqual({ claude: "ccusage-claude-v20" });
-    expect(body.source).toBe("cli");
-  });
-
-  it("merges Claude and Codex data for the same day", async () => {
-    const today = todayStr();
-    mockSourceData({
-      claude: [
-        usageEntry(today, {
-          models: ["claude-opus-4-20250505"],
-          inputTokens: 1000,
-          outputTokens: 500,
-          cacheCreationTokens: 100,
-          cacheReadTokens: 50,
-          totalTokens: 1650,
-          costUSD: 10,
-          modelBreakdown: [{ model: "claude-opus-4-20250505", cost_usd: 10 }],
-        }),
-      ],
-      codex: [
-        usageEntry(today, {
-          models: ["gpt-5-codex"],
-          inputTokens: 2000,
-          outputTokens: 800,
-          totalTokens: 2800,
-          costUSD: 3,
-          modelBreakdown: [{ model: "gpt-5-codex", cost_usd: 3 }],
-        }),
-      ],
-    });
-
-    await pushCommand({});
-
-    const body = submitCallBody();
-    const entry = body.entries[0].data;
-    expect(entry.costUSD).toBe(13);
-    expect(entry.totalTokens).toBe(4450);
-    expect(entry.models).toEqual(["claude-opus-4-20250505", "gpt-5-codex"]);
-    expect(entry.modelBreakdown).toEqual([
-      { model: "claude-opus-4-20250505", cost_usd: 10 },
-      { model: "gpt-5-codex", cost_usd: 3 },
-    ]);
+    expect(body.entries[0].data.reasoningOutputTokens).toBe(100);
     expect(body.collector).toEqual({
       claude: "ccusage-claude-v20",
       codex: "ccusage-codex-v20",
+      ccusage_version: "20.0.6",
+      ccusage_agents: ["claude", "codex"],
+      pricing_mode: "online",
     });
+    expect(body.device_id).toBe("device-1");
+    expect(body.device_name).toBe("work-laptop");
   });
 
-  it("continues with Codex usage when Claude source data is missing", async () => {
-    const today = todayStr();
-    mockRunCcusageAgentRawAsync.mockImplementation(async (agent) => {
-      if (agent === "claude") {
-        throw new Error("ccusage failed: No valid Claude data directories found");
-      }
-      return "codex-raw";
+  it("hashes the ccusage v20 raw payload and collector run metadata", async () => {
+    const output = ccusageOutput([usageEntry()], {
+      raw: '{"daily":[{"period":"2026-03-13"}]}',
     });
-    mockParseCcusageOutput.mockImplementation((_raw, agent) => ({
-      data: agent === "codex" ? [
-        usageEntry(today, { models: ["gpt-5-codex"], costUSD: 3 }),
-      ] : [],
-      rowMetadata: [],
-      anomalies: [],
-    }));
+    mockCollectCcusageUsageAsync.mockResolvedValue(output as never);
 
     await pushCommand({});
 
-    const body = submitCallBody();
-    expect(body.entries).toHaveLength(1);
-    expect(body.entries[0].data.models).toEqual(["gpt-5-codex"]);
-    expect(body.collector).toEqual({ codex: "ccusage-codex-v20" });
+    const submitCall = mockApiRequest.mock.calls.find(([, path]) => path === "/api/usage/submit")!;
+    const body = JSON.parse((submitCall[2] as { body: string }).body);
+    const [since, until] = mockCollectCcusageUsageAsync.mock.calls[0]!;
+    const concreteHash = createHash("sha256").update(JSON.stringify({
+      collector: "ccusage-v20",
+      version: output.version,
+      agents: output.agents,
+      since,
+      until,
+      raw: output.raw,
+    })).digest("hex");
+    expect(body.hash).toBe(concreteHash);
   });
 
-  it("fails on generic source errors even if the other source has data", async () => {
-    mockRunCcusageAgentRawAsync.mockImplementation(async (agent) => {
-      if (agent === "claude") throw new Error("ccusage failed: unexpected runtime error");
-      return "codex-raw";
-    });
-    mockParseCcusageOutput.mockReturnValue({
-      data: [usageEntry(todayStr(), { models: ["gpt-5-codex"], costUSD: 3 })],
-      rowMetadata: [],
-      anomalies: [],
-    });
-
-    await expect(pushCommand({})).rejects.toThrow(ExitError);
-    expect(process.exit).toHaveBeenCalledWith(1);
-    expect(mockApiRequest).not.toHaveBeenCalled();
-  });
-
-  it("forwards date ranges and timeout to both source scans", async () => {
-    await pushCommand({ date: "2026-03-12", timeoutMs: 300_000 });
-
-    expect(mockRunCcusageAgentRawAsync).toHaveBeenCalledWith(
-      "claude",
-      "20260312",
-      "20260312",
-      300_000,
-    );
-    expect(mockRunCcusageAgentRawAsync).toHaveBeenCalledWith(
-      "codex",
-      "20260312",
-      "20260312",
-      300_000,
-    );
-  });
-
-  it("runs one-time 30-day Codex repair range and persists repair markers", async () => {
-    const today = todayStr();
-    mockHasCodexLogs.mockResolvedValue(true);
+  it("runs one-time 30-day ccusage migration backfill and writes the new marker", async () => {
+    const today = new Date();
+    const twentyNineDaysAgo = new Date(today);
+    twentyNineDaysAgo.setDate(today.getDate() - 29);
     mockLoadConfig.mockReturnValue({
       ...fakeConfig,
-      device_id: "device-1",
-      device_name: "work-laptop",
+      ccusage_v20_migration_completed_at: undefined,
+      last_push_date: daysAgoStr(2),
     });
-    mockSourceData({ codex: [usageEntry(today, { models: ["gpt-5-codex"], costUSD: 3 })] });
 
     await pushCommand({ days: 3 });
 
-    expect(mockRunCcusageAgentRawAsync).toHaveBeenCalledWith(
-      "claude",
-      "20260212",
-      "20260313",
+    expect(mockCollectCcusageUsageAsync).toHaveBeenCalledWith(
+      compact(twentyNineDaysAgo),
+      compact(today),
       undefined,
     );
-    expect(mockRunCcusageAgentRawAsync).toHaveBeenCalledWith(
-      "codex",
-      "20260212",
-      "20260313",
-      undefined,
-    );
-    expect(mockSaveConfig).toHaveBeenCalledWith(expect.objectContaining({
+    expect(mockSaveConfig).toHaveBeenLastCalledWith(expect.objectContaining({
+      ccusage_v20_migration_completed_at: expect.any(String),
+      last_push_date: todayStr(),
+    }));
+    expect(mockSaveConfig).not.toHaveBeenCalledWith(expect.objectContaining({
       codex_native_repair_completed_at: expect.any(String),
-      codex_native_last_token_usage_repair_completed_at: expect.any(String),
-      last_push_date: today,
     }));
   });
 
-  it("generates device_id on first push and includes it in submit body", async () => {
-    const today = todayStr();
-    mockLoadConfig.mockReturnValue({ token: "tok", username: "alice", api_url: "https://straude.com" });
-    mockSourceData({ claude: [usageEntry(today)] });
-
-    await pushCommand({});
-
-    expect(mockSaveConfig).toHaveBeenCalled();
-    const savedConfig = mockSaveConfig.mock.calls[0]![0];
-    const body = submitCallBody();
-    expect(savedConfig.device_id).toMatch(/^[0-9a-f-]{36}$/i);
-    expect(body.device_id).toBe(savedConfig.device_id);
-    expect(body.device_name).toBe(savedConfig.device_name);
-  });
-
-  it("updates last push date after a successful normal push", async () => {
-    const today = todayStr();
+  it("uses exact --date without running migration backfill", async () => {
     mockLoadConfig.mockReturnValue({
       ...fakeConfig,
-      device_id: "device-1",
-      device_name: "work-laptop",
-      codex_native_repair_completed_at: "2026-03-01T00:00:00.000Z",
-      codex_native_last_token_usage_repair_completed_at: "2026-03-01T00:00:00.000Z",
+      ccusage_v20_migration_completed_at: undefined,
     });
-    mockSourceData({ claude: [usageEntry(today)] });
 
-    await pushCommand({});
+    await pushCommand({ date: "2026-03-12" });
 
-    expect(mockUpdateLastPushDate).toHaveBeenCalledWith(today);
+    expect(mockCollectCcusageUsageAsync).toHaveBeenCalledWith("20260312", "20260312", undefined);
+    expect(mockUpdateLastPushDate).toHaveBeenCalledWith(todayStr());
+    expect(mockSaveConfig).not.toHaveBeenCalledWith(expect.objectContaining({
+      ccusage_v20_migration_completed_at: expect.any(String),
+    }));
   });
 
-  it("reports API submission failures", async () => {
-    mockSourceData({ claude: [usageEntry(todayStr())] });
-    mockApiRequest.mockRejectedValue(new Error("Server error"));
-
-    await expect(pushCommand({})).rejects.toThrow(ExitError);
-    expect(mockReportUsagePushFailed).toHaveBeenCalledWith(
-      fakeConfig,
-      expect.any(Error),
-      { command: "push", stage: "submit" },
+  it("forwards --timeout to ccusage", async () => {
+    await pushCommand({ timeoutMs: 300_000 });
+    expect(mockCollectCcusageUsageAsync).toHaveBeenCalledWith(
+      expect.any(String),
+      expect.any(String),
+      300_000,
     );
   });
 
-  it("runs login when not authenticated", async () => {
+  it("filters out-of-window ccusage rows before submit", async () => {
+    const oldDate = "2026-01-12";
+    mockCollectCcusageUsageAsync.mockResolvedValue(ccusageOutput([
+      usageEntry(oldDate),
+      usageEntry(todayStr()),
+    ]) as never);
+
+    await pushCommand({ days: 30 });
+
+    const submitCall = mockApiRequest.mock.calls.find(([, path]) => path === "/api/usage/submit")!;
+    const body = JSON.parse((submitCall[2] as { body: string }).body);
+    expect(body.entries).toHaveLength(1);
+    expect(body.entries[0].date).toBe(todayStr());
+    expect(console.log).toHaveBeenCalledWith(
+      expect.stringContaining(`skipping 1 date(s) outside the 30-day backfill window: ${oldDate}`),
+    );
+  });
+
+  it("dry-run fetches dashboard but skips submit", async () => {
+    await pushCommand({ dryRun: true });
+
+    expect(mockApiRequest).toHaveBeenCalledTimes(1);
+    expect(mockApiRequest).toHaveBeenCalledWith(
+      expect.objectContaining(fakeConfig),
+      "/api/cli/dashboard",
+    );
+    expect(console.log).toHaveBeenCalledWith(expect.stringContaining("dry run"));
+  });
+
+  it("reports scan failures and exits before submit", async () => {
+    const error = new Error("ccusage 20.0.4 is unsupported");
+    mockCollectCcusageUsageAsync.mockRejectedValue(error);
+
+    await expect(pushCommand({})).rejects.toThrow(ExitError);
+
+    expect(mockReportUsagePushFailed).toHaveBeenCalledWith(
+      expect.objectContaining(fakeConfig),
+      error,
+      { command: "push", stage: "scan" },
+    );
+    expect(mockPosthog._shutdown).toHaveBeenCalled();
+    expect(mockApiRequest).not.toHaveBeenCalled();
+  });
+
+  it("reports submit failures and exits", async () => {
+    const error = new Error("Server error");
+    mockApiRequest.mockRejectedValue(error);
+
+    await expect(pushCommand({})).rejects.toThrow(ExitError);
+
+    expect(mockReportUsagePushFailed).toHaveBeenCalledWith(
+      expect.objectContaining(fakeConfig),
+      error,
+      { command: "push", stage: "submit" },
+    );
+    expect(process.exit).toHaveBeenCalledWith(1);
+  });
+
+  it("logs in when config is missing", async () => {
     mockLoadConfig
       .mockReturnValueOnce(null)
-      .mockReturnValueOnce(fakeConfig);
-    mockLoginCommand.mockResolvedValue(undefined);
+      .mockReturnValueOnce({ ...fakeConfig });
 
     await pushCommand({});
 
     expect(mockLoginCommand).toHaveBeenCalledTimes(1);
   });
-});
 
-describe("mergeEntries", () => {
-  it("keeps separate days sorted by date", () => {
-    const merged = mergeEntries(
-      [usageEntry("2026-03-13")],
-      [usageEntry("2026-03-12", { models: ["gpt-5-codex"], costUSD: 1 })],
-    );
+  it("generates and persists a device id on first push", async () => {
+    mockLoadConfig.mockReturnValue({
+      token: "tok",
+      username: "alice",
+      api_url: "https://straude.com",
+      ccusage_v20_migration_completed_at: "2026-05-01T00:00:00.000Z",
+    });
 
-    expect(merged.map((entry) => entry.date)).toEqual(["2026-03-12", "2026-03-13"]);
+    await pushCommand({});
+
+    const savedConfig = mockSaveConfig.mock.calls[0]![0];
+    expect(savedConfig.device_id).toMatch(/^[0-9a-f-]{36}$/i);
+    expect(savedConfig.device_name).toBeDefined();
+    const submitCall = mockApiRequest.mock.calls.find(([, path]) => path === "/api/usage/submit")!;
+    const body = JSON.parse((submitCall[2] as { body: string }).body);
+    expect(body.device_id).toBe(savedConfig.device_id);
   });
 
-  it("distributes cost across models when no source breakdown is available", () => {
-    const merged = mergeEntries(
-      [usageEntry("2026-03-13", { models: ["a", "b"], costUSD: 4 })],
-      [],
-    );
+  it("returns without submit when ccusage has no rows", async () => {
+    mockCollectCcusageUsageAsync.mockResolvedValue(ccusageOutput([], {
+      agents: [],
+      collector: {
+        ccusage_version: "20.0.6",
+        ccusage_agents: [],
+        pricing_mode: "online",
+      },
+      raw: '{"daily":[]}',
+    }) as never);
 
-    expect(merged[0]!.modelBreakdown).toEqual([
-      { model: "a", cost_usd: 2 },
-      { model: "b", cost_usd: 2 },
-    ]);
+    await pushCommand({});
+
+    expect(mockApiRequest).not.toHaveBeenCalled();
+    expect(console.log).toHaveBeenCalledWith(
+      expect.stringContaining("No usage data found"),
+    );
   });
 });

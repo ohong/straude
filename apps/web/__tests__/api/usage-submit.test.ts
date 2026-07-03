@@ -21,6 +21,15 @@ import { POST, aggregateDeviceRows } from "@/app/api/usage/submit/route";
 import { createClient } from "@/lib/supabase/server";
 import { verifyCliToken, verifyCliTokenWithRefresh } from "@/lib/api/cli-auth";
 import { getServiceClient } from "@/lib/supabase/service";
+import { resetRateLimiters } from "@/lib/rate-limit";
+
+function mockAllowedRpc() {
+  return vi.fn((fn: string) => Promise.resolve(
+    fn === "check_rate_limit"
+      ? { data: [{ allowed: true, retry_after_seconds: 0 }], error: null }
+      : { data: null, error: null },
+  ));
+}
 
 function makeEntry(dateStr: string, overrides: Record<string, any> = {}) {
   return {
@@ -52,10 +61,7 @@ function daysAgo(n: number) {
 function mockServiceClient(overrides: Record<string, any> = {}) {
   const chain: Record<string, any> = {
     from: vi.fn().mockReturnThis(),
-    rpc: vi.fn().mockResolvedValue({
-      data: null,
-      error: null,
-    }),
+    rpc: mockAllowedRpc(),
     upsert: vi.fn().mockReturnThis(),
     insert: vi.fn().mockReturnThis(),
     delete: vi.fn().mockReturnThis(),
@@ -121,6 +127,7 @@ function mockRequestRaw(body: any, headers: Record<string, string> = {}) {
 
 beforeEach(() => {
   vi.clearAllMocks();
+  resetRateLimiters();
   process.env.NEXT_PUBLIC_SUPABASE_URL = "https://test.supabase.co";
   process.env.SUPABASE_SECRET_KEY = "secret";
   process.env.NEXT_PUBLIC_APP_URL = "https://straude.com";
@@ -231,6 +238,44 @@ describe("POST /api/usage/submit", () => {
 
     expect(res.status).toBe(200);
     expect(json.results).toHaveLength(2);
+    expect(json.results.map((result: { date: string }) => result.date)).toEqual([
+      todayStr(),
+      daysAgo(1),
+    ]);
+  });
+
+  it("rejects duplicate dates", async () => {
+    (verifyCliToken as any).mockReturnValue("user-1");
+    mockServiceClient();
+    const date = todayStr();
+
+    const res = await POST(
+      mockRequest({
+        entries: [makeEntry(date), makeEntry(date)],
+        source: "cli",
+      })
+    );
+    const json = await res.json();
+
+    expect(res.status).toBe(400);
+    expect(json.error).toBe(`Duplicate date: ${date}`);
+  });
+
+  it("rejects more than 32 entries", async () => {
+    (verifyCliToken as any).mockReturnValue("user-1");
+    mockServiceClient();
+    const entries = Array.from({ length: 33 }, (_, index) => makeEntry(daysAgo(index % 31)));
+
+    const res = await POST(
+      mockRequest({
+        entries,
+        source: "cli",
+      })
+    );
+    const json = await res.json();
+
+    expect(res.status).toBe(400);
+    expect(json.error).toBe("Too many entries provided. Maximum is 32.");
   });
 
   it("rejects dates older than 30 days", async () => {
@@ -301,6 +346,65 @@ describe("POST /api/usage/submit", () => {
     expect(json.error).toContain("Negative input tokens");
   });
 
+  it("rejects negative reasoning output tokens", async () => {
+    (verifyCliToken as any).mockReturnValue("user-1");
+    mockServiceClient();
+
+    const res = await POST(
+      mockRequest({
+        entries: [makeEntry(todayStr(), { reasoningOutputTokens: -1 })],
+        source: "cli",
+      })
+    );
+    const json = await res.json();
+
+    expect(res.status).toBe(400);
+    expect(json.error).toContain("Negative reasoning output tokens");
+  });
+
+  it("rejects unsupported ccusage collector agents", async () => {
+    (verifyCliToken as any).mockReturnValue("user-1");
+    mockServiceClient();
+
+    const res = await POST(
+      mockRequest({
+        entries: [makeEntry(todayStr())],
+        source: "cli",
+        collector: {
+          ccusage_version: "20.0.6",
+          ccusage_agents: ["claude", "gemini"],
+          pricing_mode: "online",
+        },
+      })
+    );
+    const json = await res.json();
+
+    expect(res.status).toBe(400);
+    expect(json.error).toContain("Unsupported ccusage agents");
+  });
+
+  it("rejects non-online ccusage pricing metadata", async () => {
+    (verifyCliToken as any).mockReturnValue("user-1");
+    mockServiceClient();
+
+    const res = await POST(
+      mockRequest({
+        entries: [makeEntry(todayStr())],
+        source: "cli",
+        collector: {
+          ccusage_version: "20.0.6",
+          ccusage_agents: ["claude"],
+          pricing_mode: "auto",
+        },
+      })
+    );
+    const json = await res.json();
+
+    expect(res.status).toBe(400);
+    expect(json.error).toContain("Unsupported pricing mode");
+  });
+
+
   it("uses upsert on conflict for device_usage and daily_usage", async () => {
     (verifyCliToken as any).mockReturnValue("user-1");
     const svc = mockServiceClient();
@@ -353,6 +457,25 @@ describe("POST /api/usage/submit", () => {
 
     expect(res.status).toBe(400);
     expect(json.error).toBe("Invalid JSON");
+  });
+
+  it("rejects request bodies over 256KB", async () => {
+    (verifyCliToken as any).mockReturnValue("user-1");
+    const req = new Request("http://localhost/api/usage/submit", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        entries: [makeEntry(todayStr(), { models: ["claude-sonnet-4-5-20250929"], large: "x".repeat(260 * 1024) })],
+        source: "cli",
+        device_id: DEFAULT_DEVICE_ID,
+      }),
+    });
+
+    const res = await POST(req);
+    const json = await res.json();
+
+    expect(res.status).toBe(413);
+    expect(json.error).toBe("Request body too large");
   });
 
   it("rejects empty entries array", async () => {
@@ -433,6 +556,47 @@ describe("POST /api/usage/submit", () => {
     expect(upsertCall[0].model_breakdown).toBeNull();
   });
 
+  it("stores and aggregates reasoning output tokens", async () => {
+    (verifyCliToken as any).mockReturnValue("user-1");
+    const deviceRow = {
+      cost_usd: 3.0,
+      input_tokens: 2000,
+      output_tokens: 800,
+      reasoning_output_tokens: 250,
+      cache_creation_tokens: 0,
+      cache_read_tokens: 0,
+      total_tokens: 2800,
+      models: ["gpt-5-codex"],
+      model_breakdown: [{ model: "gpt-5-codex", cost_usd: 3.0 }],
+    };
+    const svc = mockServiceClient({ data: [deviceRow] });
+    svc.single
+      .mockResolvedValueOnce({ data: { id: "dev-1" }, error: null })
+      .mockResolvedValueOnce({ data: { id: "usage-1" }, error: null })
+      .mockResolvedValueOnce({ data: { id: "post-1" }, error: null });
+
+    const res = await POST(
+      mockRequest({
+        entries: [
+          makeEntry(todayStr(), {
+            models: ["gpt-5-codex"],
+            costUSD: 3.0,
+            inputTokens: 2000,
+            outputTokens: 800,
+            reasoningOutputTokens: 250,
+            totalTokens: 2800,
+            modelBreakdown: [{ model: "gpt-5-codex", cost_usd: 3.0 }],
+          }),
+        ],
+        source: "cli",
+      })
+    );
+
+    expect(res.status).toBe(200);
+    expect(svc.upsert.mock.calls[0][0].reasoning_output_tokens).toBe(250);
+    expect(svc.upsert.mock.calls[1][0].reasoning_output_tokens).toBe(250);
+  });
+
   it("accepts Codex-only usage (no Claude models)", async () => {
     (verifyCliToken as any).mockReturnValue("user-1");
     const svc = mockServiceClient();
@@ -507,6 +671,52 @@ describe("POST /api/usage/submit", () => {
     expect(postInsertCall[0].title).toContain("GPT-5.3-Codex");
   });
 
+  it("auto-title treats Claude Fable as the highest Claude tier", async () => {
+    (verifyCliToken as any).mockReturnValue("user-1");
+    const deviceRow = {
+      cost_usd: 15,
+      input_tokens: 2100,
+      output_tokens: 900,
+      cache_creation_tokens: 0,
+      cache_read_tokens: 0,
+      total_tokens: 3000,
+      models: ["claude-opus-4-20250505", "claude-fable-5"],
+      model_breakdown: [
+        { model: "claude-opus-4-20250505", cost_usd: 12 },
+        { model: "claude-fable-5", cost_usd: 3 },
+      ],
+    };
+    const svc = mockServiceClient({ data: [deviceRow] });
+    svc.single
+      .mockResolvedValueOnce({ data: { id: "dev-1" }, error: null })
+      .mockResolvedValueOnce({ data: { id: "usage-1" }, error: null })
+      .mockResolvedValueOnce({ data: { id: "post-1" }, error: null });
+
+    const res = await POST(
+      mockRequest({
+        entries: [
+          makeEntry(todayStr(), {
+            models: ["claude-opus-4-20250505", "claude-fable-5"],
+            costUSD: 15,
+            inputTokens: 2100,
+            outputTokens: 900,
+            totalTokens: 3000,
+            modelBreakdown: [
+              { model: "claude-opus-4-20250505", cost_usd: 12 },
+              { model: "claude-fable-5", cost_usd: 3 },
+            ],
+          }),
+        ],
+        source: "cli",
+      })
+    );
+
+    expect(res.status).toBe(200);
+    const postInsertCall = svc.insert.mock.calls[0];
+    expect(postInsertCall[0].title).toContain("Claude Fable");
+    expect(postInsertCall[0].title).not.toContain("Claude Opus");
+  });
+
   // -------------------------------------------------------------------------
   // Multi-device tests
   // -------------------------------------------------------------------------
@@ -572,7 +782,7 @@ describe("POST /api/usage/submit", () => {
       return dailyChain;
     });
 
-    (getServiceClient as any).mockReturnValue({ from: fromFn, rpc: vi.fn().mockResolvedValue({ data: null, error: null }) });
+    (getServiceClient as any).mockReturnValue({ from: fromFn, rpc: mockAllowedRpc() });
 
     const res = await POST(
       mockRequest({
@@ -691,7 +901,7 @@ describe("POST /api/usage/submit", () => {
       return dailyChain;
     });
 
-    (getServiceClient as any).mockReturnValue({ from: fromFn, rpc: vi.fn().mockResolvedValue({ data: null, error: null }) });
+    (getServiceClient as any).mockReturnValue({ from: fromFn, rpc: mockAllowedRpc() });
 
     const DEVICE_B = "11111111-2222-3333-4444-555555555555";
     const res = await POST(
@@ -782,7 +992,7 @@ describe("POST /api/usage/submit", () => {
       if (table === "posts") return postChain;
       return dailyChain;
     });
-    (getServiceClient as any).mockReturnValue({ from: fromFn, rpc: vi.fn().mockResolvedValue({ data: null, error: null }) });
+    (getServiceClient as any).mockReturnValue({ from: fromFn, rpc: mockAllowedRpc() });
 
     const res = await POST(
       mockRequest({
@@ -875,7 +1085,7 @@ describe("POST /api/usage/submit", () => {
       if (table === "posts") return postChain;
       return dailyChain;
     });
-    (getServiceClient as any).mockReturnValue({ from: fromFn, rpc: vi.fn().mockResolvedValue({ data: null, error: null }) });
+    (getServiceClient as any).mockReturnValue({ from: fromFn, rpc: mockAllowedRpc() });
 
     const res = await POST(
       mockRequest({
@@ -1001,7 +1211,7 @@ describe("POST /api/usage/submit", () => {
       if (table === "posts") return postChain;
       return dailyChain;
     });
-    (getServiceClient as any).mockReturnValue({ from: fromFn, rpc: vi.fn().mockResolvedValue({ data: null, error: null }) });
+    (getServiceClient as any).mockReturnValue({ from: fromFn, rpc: mockAllowedRpc() });
 
     const res = await POST(
       mockRequest({
@@ -1111,7 +1321,7 @@ describe("POST /api/usage/submit", () => {
       if (table === "posts") return postChain;
       return dailyChain;
     });
-    (getServiceClient as any).mockReturnValue({ from: fromFn, rpc: vi.fn().mockResolvedValue({ data: null, error: null }) });
+    (getServiceClient as any).mockReturnValue({ from: fromFn, rpc: mockAllowedRpc() });
 
     const res = await POST(
       mockRequest({
@@ -1209,7 +1419,7 @@ describe("POST /api/usage/submit", () => {
       if (table === "posts") return postChain;
       return dailyChain;
     });
-    (getServiceClient as any).mockReturnValue({ from: fromFn, rpc: vi.fn().mockResolvedValue({ data: null, error: null }) });
+    (getServiceClient as any).mockReturnValue({ from: fromFn, rpc: mockAllowedRpc() });
 
     const res = await POST(
       mockRequest({
@@ -1234,7 +1444,10 @@ describe("POST /api/usage/submit", () => {
     expect(json.results[0].daily_total).toBe(20);
   });
 
-  it("allows a mixed trusted Codex correction when non-Codex cost is preserved", async () => {
+  it.each([
+    ["native last-token collector", "straude-codex-native-last-token-usage"],
+    ["ccusage Codex v20 collector", "ccusage-codex-v20"],
+  ])("allows a mixed trusted Codex correction from the %s when non-Codex cost is preserved", async (_label, codexCollector) => {
     (verifyCliToken as any).mockReturnValue("user-mixed-preserved");
 
     const existingMixedRow = {
@@ -1260,7 +1473,7 @@ describe("POST /api/usage/submit", () => {
         { model: "claude-opus-4-20250505", cost_usd: 90 },
         { model: "gpt-5-codex", cost_usd: 10 },
       ],
-      collector_meta: { claude: "ccusage-v18", codex: "straude-codex-native-last-token-usage" },
+      collector_meta: { claude: "ccusage-v18", codex: codexCollector },
     };
     const deviceGuardChain: Record<string, any> = {
       select: vi.fn().mockReturnThis(),
@@ -1325,7 +1538,7 @@ describe("POST /api/usage/submit", () => {
       if (table === "posts") return postChain;
       return dailyChain;
     });
-    (getServiceClient as any).mockReturnValue({ from: fromFn, rpc: vi.fn().mockResolvedValue({ data: null, error: null }) });
+    (getServiceClient as any).mockReturnValue({ from: fromFn, rpc: mockAllowedRpc() });
 
     const res = await POST(
       mockRequest({
@@ -1339,7 +1552,7 @@ describe("POST /api/usage/submit", () => {
           modelBreakdown: correctedMixedRow.model_breakdown,
         })],
         source: "cli",
-        collector: { codex: "straude-codex-native-last-token-usage", claude: "ccusage-v18" },
+        collector: { codex: codexCollector, claude: "ccusage-claude-v20" },
       })
     );
 
@@ -1348,9 +1561,41 @@ describe("POST /api/usage/submit", () => {
     expect(deviceDeleteChain.delete).toHaveBeenCalled();
     expect(dailyChain.upsert.mock.calls[0][0].cost_usd).toBe(100);
     expect(dailyChain.upsert.mock.calls[0][0].collector_meta).toEqual({
-      claude: "ccusage-v18",
-      codex: "straude-codex-native-last-token-usage",
+      claude: "ccusage-claude-v20",
+      codex: codexCollector,
     });
+  });
+
+  it("stores ccusage collector metadata fields with the source collector", async () => {
+    (verifyCliToken as any).mockReturnValue("user-collector-meta");
+    const svc = mockServiceClient();
+    svc.single
+      .mockResolvedValueOnce({ data: { id: "dev-1" }, error: null })
+      .mockResolvedValueOnce({ data: { id: "usage-1" }, error: null })
+      .mockResolvedValueOnce({ data: { id: "post-1" }, error: null });
+
+    const res = await POST(
+      mockRequest({
+        entries: [makeEntry(todayStr())],
+        source: "cli",
+        collector: {
+          claude: "ccusage-claude-v20",
+          ccusage_version: "20.0.6",
+          ccusage_agents: ["claude"],
+          pricing_mode: "online",
+        },
+      })
+    );
+
+    const expectedMeta = {
+      claude: "ccusage-claude-v20",
+      ccusage_version: "20.0.6",
+      ccusage_agents: ["claude"],
+      pricing_mode: "online",
+    };
+    expect(res.status).toBe(200);
+    expect(svc.upsert.mock.calls[0][0].collector_meta).toEqual(expectedMeta);
+    expect(svc.upsert.mock.calls[1][0].collector_meta).toEqual(expectedMeta);
   });
 
   it("blocks a mixed trusted Codex correction when non-Codex cost would fall", async () => {
@@ -1432,7 +1677,7 @@ describe("POST /api/usage/submit", () => {
       if (table === "posts") return postChain;
       return dailyChain;
     });
-    (getServiceClient as any).mockReturnValue({ from: fromFn, rpc: vi.fn().mockResolvedValue({ data: null, error: null }) });
+    (getServiceClient as any).mockReturnValue({ from: fromFn, rpc: mockAllowedRpc() });
 
     const res = await POST(
       mockRequest({
@@ -1538,7 +1783,7 @@ describe("POST /api/usage/submit", () => {
       if (table === "posts") return postChain;
       return dailyChain;
     });
-    (getServiceClient as any).mockReturnValue({ from: fromFn, rpc: vi.fn().mockResolvedValue({ data: null, error: null }) });
+    (getServiceClient as any).mockReturnValue({ from: fromFn, rpc: mockAllowedRpc() });
 
     const res = await POST(
       mockRequest({
@@ -1628,6 +1873,7 @@ describe("aggregateDeviceRows", () => {
         cost_usd: 5.0,
         input_tokens: 1000,
         output_tokens: 500,
+        reasoning_output_tokens: 125,
         cache_creation_tokens: 100,
         cache_read_tokens: 50,
         total_tokens: 1650,
@@ -1638,6 +1884,7 @@ describe("aggregateDeviceRows", () => {
         cost_usd: 3.0,
         input_tokens: 2000,
         output_tokens: 800,
+        reasoning_output_tokens: 75,
         cache_creation_tokens: 0,
         cache_read_tokens: 0,
         total_tokens: 2800,
@@ -1651,6 +1898,7 @@ describe("aggregateDeviceRows", () => {
     expect(agg.cost_usd).toBe(8.0);
     expect(agg.input_tokens).toBe(3000);
     expect(agg.output_tokens).toBe(1300);
+    expect(agg.reasoning_output_tokens).toBe(200);
     expect(agg.cache_creation_tokens).toBe(100);
     expect(agg.cache_read_tokens).toBe(50);
     expect(agg.total_tokens).toBe(4450);

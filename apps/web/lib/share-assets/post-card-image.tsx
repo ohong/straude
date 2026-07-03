@@ -23,7 +23,8 @@ function truncate(text: string, max: number): string {
 
 function prettifyModel(model: string): string {
   const normalized = model.trim();
-  if (/claude-opus-4/i.test(normalized)) return "Claude Opus";
+  if (/claude-fable/i.test(normalized)) return "Claude Fable";
+  if (/claude-opus/i.test(normalized)) return "Claude Opus";
   if (/claude-sonnet-4/i.test(normalized)) return "Claude Sonnet";
   if (/claude-haiku-4/i.test(normalized)) return "Claude Haiku";
   if (/^gpt-/i.test(normalized)) {

@@ -1,89 +1,39 @@
-/**
- * CLI flow integration tests.
- *
- * These test the full sync/push paths end-to-end, mocking only at boundaries:
- *   - `fetch` (global) — API responses
- *   - `node:child_process` — ccusage binary
- *   - `node:fs` — config persistence
- *
- * This catches issues like wrong API paths (404), expired tokens (401),
- * missing config fields, and broken flow sequencing that unit tests miss.
- */
 import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
-
-// ---------------------------------------------------------------------------
-// Boundary mocks
-// ---------------------------------------------------------------------------
 
 const mockFetch = vi.fn();
 vi.stubGlobal("fetch", mockFetch);
 
-const { _execFileSync } = vi.hoisted(() => ({
-  _execFileSync: vi.fn(),
-}));
-
-const { _collectCodexUsageAsync, _hasCodexLogs } = vi.hoisted(() => ({
-  _collectCodexUsageAsync: vi.fn(),
-  _hasCodexLogs: vi.fn(),
+const { execFileMock } = vi.hoisted(() => ({
+  execFileMock: vi.fn(),
 }));
 
 vi.mock("node:child_process", () => ({
   exec: vi.fn(),
-  execFileSync: _execFileSync,
-  // Async execFile delegates to execFileSync's mock implementation via callback
-  execFile: vi.fn((...args: unknown[]) => {
-    const callback = args[args.length - 1] as (err: Error | null, stdout: string, stderr: string) => void;
-    try {
-      const result = _execFileSync(...(args.slice(0, -1) as [string, string[]]));
-      callback(null, result as string, "");
-    } catch (err) {
-      callback(err as Error, "", "");
-    }
-  }),
+  execFileSync: vi.fn(),
+  execFile: execFileMock,
 }));
 
-vi.mock("../../src/lib/codex-native.js", () => ({
-  CODEX_NATIVE_COLLECTOR: "straude-codex-native-last-token-usage",
-  collectCodexUsageAsync: _collectCodexUsageAsync,
-  containsSessionFile: _hasCodexLogs,
-}));
-
-// Speed up login polling in tests
 vi.mock("../../src/config.js", async (importOriginal) => {
   const actual = await importOriginal<typeof import("../../src/config.js")>();
   return { ...actual, POLL_INTERVAL_MS: 1 };
 });
 
-// In-memory config store
 let configStore: Record<string, string> = {};
 
 vi.mock("node:fs", () => ({
-  existsSync: vi.fn((path: string) =>
-    path in configStore
-    || /(^|[\\/])ccusage(\.cmd|\.exe)?$/.test(path),
-  ),
+  existsSync: vi.fn((path: string) => path in configStore),
   readFileSync: vi.fn((path: string) => configStore[path] ?? ""),
   writeFileSync: vi.fn((path: string, data: string) => {
     configStore[path] = data;
   }),
   mkdirSync: vi.fn(),
+  statSync: vi.fn(() => ({ mode: 0o755 })),
+  chmodSync: vi.fn(),
 }));
-
-// ---------------------------------------------------------------------------
-// Imports (after mocks)
-// ---------------------------------------------------------------------------
 
 import { pushCommand } from "../../src/commands/push.js";
 import { CONFIG_FILE } from "../../src/config.js";
-import { _resetCcusageResolver } from "../../src/lib/ccusage.js";
-
-const mockExecFileSync = _execFileSync;
-const mockCollectCodexUsageAsync = _collectCodexUsageAsync;
-const mockHasCodexLogs = _hasCodexLogs;
-
-// ---------------------------------------------------------------------------
-// Helpers
-// ---------------------------------------------------------------------------
+import { _resetCcusageResolver, _setCcusageCommandForTests } from "../../src/lib/ccusage.js";
 
 class ExitError extends Error {
   code: number;
@@ -98,17 +48,14 @@ function todayStr(): string {
   return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
 }
 
-function daysAgoStr(n: number): string {
-  const d = new Date();
-  d.setDate(d.getDate() - n);
-  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
-}
-
 function makeConfig(overrides: Record<string, unknown> = {}) {
   return {
     token: "tok-123",
     username: "alice",
     api_url: "https://straude.com",
+    device_id: "device-1",
+    device_name: "work-laptop",
+    ccusage_v20_migration_completed_at: "2026-05-01T00:00:00.000Z",
     ...overrides,
   };
 }
@@ -121,126 +68,62 @@ function readPersistedConfig(): Record<string, unknown> {
   return JSON.parse(configStore[CONFIG_FILE] ?? "{}");
 }
 
-/** Builds the JSON that ccusage would emit for a single day. */
-function ccusageJson(dates: string[]) {
+function ccusageJson(date = todayStr()) {
   return JSON.stringify({
-    daily: dates.map((date) => ({
-      date,
-      modelsUsed: ["claude-sonnet-4-6"],
-      inputTokens: 1000,
-      outputTokens: 500,
-      cacheCreationTokens: 0,
-      cacheReadTokens: 0,
-      totalTokens: 1500,
-      totalCost: 0.05,
-    })),
-    totals: {
-      inputTokens: 1000,
-      outputTokens: 500,
-      cacheCreationTokens: 0,
-      cacheReadTokens: 0,
-      totalTokens: 1500,
-      totalCost: 0.05,
-    },
-  });
-}
-
-function ccusageCodexJson(dates: string[]) {
-  return JSON.stringify({
-    daily: dates.map((date) => ({
-      date,
-      inputTokens: 2000,
-      outputTokens: 800,
-      cachedInputTokens: 0,
-      reasoningOutputTokens: 0,
-      totalTokens: 2800,
-      costUSD: 3.0,
-      models: {
-        "gpt-5-codex": {
-          inputTokens: 2000,
-          cachedInputTokens: 0,
-          outputTokens: 800,
-          reasoningOutputTokens: 0,
-          totalTokens: 2800,
-          isFallback: false,
-        },
+    daily: [
+      {
+        period: date,
+        modelsUsed: ["claude-sonnet-4-5-20250929", "gpt-5.2-codex"],
+        inputTokens: 1200,
+        outputTokens: 400,
+        cacheCreationTokens: 100,
+        cacheReadTokens: 300,
+        totalTokens: 2100,
+        totalCost: 0.25,
+        modelBreakdowns: [
+          { modelName: "claude-sonnet-4-5-20250929", cost: 0.2 },
+          { modelName: "gpt-5.2-codex", cost: 0.05 },
+        ],
+        metadata: { agents: ["claude", "codex"] },
       },
-    })),
-    totals: {},
+    ],
   });
 }
 
-function mockCcusageOnly(json: string) {
-  mockExecFileSync.mockImplementation(((cmd: string, args: string[]) => {
-    if (args.includes("--version")) return "ccusage 20.0.6";
-    if (args.includes("codex")) return "[]";
-    return json;
-  }) as never);
+const TEST_CCUSAGE_VERSION = "20.0.11";
+
+function mockCcusage(json = ccusageJson()) {
+  execFileMock.mockImplementation((_cmd: string, _args: string[], _options: unknown, callback: (err: Error | null, stdout: string, stderr: string) => void) => {
+    callback(null, json, "");
+  });
 }
 
-function mockCcusageSources(claudeJson: string, codexJson = "[]") {
-  mockExecFileSync.mockImplementation(((cmd: string, args: string[]) => {
-    if (args.includes("--version")) return "ccusage 20.0.6";
-    if (args.includes("codex")) return codexJson;
-    return claudeJson;
-  }) as never);
-}
-
-function codexOutput(dates: string[] = [], extra: Record<string, unknown> = {}) {
-  return {
-    data: dates.map((date) => ({
-      date,
-      models: ["gpt-5-codex"],
-      inputTokens: 2000,
-      outputTokens: 800,
-      cacheCreationTokens: 0,
-      cacheReadTokens: 0,
-      totalTokens: 2800,
-      costUSD: 3.0,
-      modelBreakdown: [{ model: "gpt-5-codex", cost_usd: 3.0 }],
-    })),
-    anomalies: [],
-    entryMeta: [],
-    fingerprint: dates.length > 0 ? "codex-native-fingerprint" : "",
-    scannedFiles: dates.length > 0 ? 1 : 0,
-    parsedEvents: dates.length,
-    ...extra,
-  };
-}
-
-function mockSuccessfulSubmit(dates: string[]) {
-  // 1st fetch: POST /api/usage/submit
+function mockSuccessfulSubmit(date = todayStr()) {
   mockFetch.mockResolvedValueOnce({
     ok: true,
     json: () =>
       Promise.resolve({
-        results: dates.map((date, i) => ({
-          date,
-          usage_id: `u-${i}`,
-          post_id: `p-${i}`,
-          post_url: `https://straude.com/post/p-${i}`,
-        })),
+        results: [
+          {
+            date,
+            usage_id: "u-1",
+            post_id: "p-1",
+            post_url: "https://straude.com/post/p-1",
+            action: "created",
+          },
+        ],
       }),
   });
-  // 2nd fetch: GET /api/cli/dashboard (visual summary — fail triggers fallback)
   mockFetch.mockRejectedValueOnce(new Error("dashboard not mocked"));
 }
 
-// ---------------------------------------------------------------------------
-// Setup / Teardown
-// ---------------------------------------------------------------------------
-
 beforeEach(() => {
-  vi.useFakeTimers({ now: new Date('2026-03-13T12:00:00Z'), toFake: ['Date'] });
+  vi.useFakeTimers({ now: new Date("2026-03-13T12:00:00Z"), toFake: ["Date"] });
   vi.clearAllMocks();
-  mockFetch.mockReset();
-  mockExecFileSync.mockReset();
-  mockCollectCodexUsageAsync.mockReset();
-  mockHasCodexLogs.mockReset();
   _resetCcusageResolver();
-  mockHasCodexLogs.mockResolvedValue(false);
-  mockCollectCodexUsageAsync.mockResolvedValue(codexOutput());
+  _setCcusageCommandForTests({ cmd: "/bundled/ccusage", args: [], version: TEST_CCUSAGE_VERSION });
   configStore = {};
+  mockCcusage();
   vi.spyOn(console, "log").mockImplementation(() => {});
   vi.spyOn(console, "error").mockImplementation(() => {});
   vi.spyOn(process.stdout, "write").mockImplementation(() => true);
@@ -254,576 +137,74 @@ afterEach(() => {
   vi.restoreAllMocks();
 });
 
-// ===========================================================================
-// 1. SYNC FLOW — Happy paths
-// ===========================================================================
-
-describe("sync flow", () => {
-  it("first-time user: login → push today", async () => {
-    // No config → triggers login
-    // Mock login init + poll (two fetch calls)
-    mockFetch
-      .mockResolvedValueOnce({
-        ok: true,
-        json: () =>
-          Promise.resolve({
-            code: "ABCD-EFGH",
-            verify_url: "https://straude.com/cli/verify?code=ABCD-EFGH",
-          }),
-      })
-      .mockResolvedValueOnce({
-        ok: true,
-        json: () =>
-          Promise.resolve({
-            status: "completed",
-            token: "tok-new",
-            username: "alice",
-          }),
-      });
-
-    // After login, loadConfig is called again — config now exists
-    // The login flow writes config via saveConfig, which uses our fs mock
-    // Then push runs ccusage + submit
-    const today = todayStr();
-    mockCcusageOnly(ccusageJson([today]));
-    mockSuccessfulSubmit([today]);
-
-    await pushCommand({}, "https://straude.com");
-
-    // Login was called (init + poll = 2 fetches), then push (submit + dashboard = 2 fetches)
-    expect(mockFetch).toHaveBeenCalledTimes(4);
-    // Config was saved with token
-    const saved = readPersistedConfig();
-    expect(saved.token).toBe("tok-new");
-    expect(saved.last_push_date).toBe(today);
-  });
-
-  it("returning user with no last_push_date: backfills 3 days", async () => {
-    seedConfig(); // has token, no last_push_date
-    const today = todayStr();
-    mockCcusageOnly(ccusageJson([today]));
-    mockSuccessfulSubmit([today]);
-
-    await pushCommand({});
-
-    expect(mockFetch).toHaveBeenCalledTimes(2);
-    const saved = readPersistedConfig();
-    expect(saved.last_push_date).toBe(today);
-  });
-
-  it("returning user already synced today: re-syncs with days=1", async () => {
-    seedConfig({ last_push_date: todayStr() });
-    const today = todayStr();
-    mockCcusageOnly(ccusageJson([today]));
-    mockSuccessfulSubmit([today]);
-
-    await pushCommand({});
-
-    // Re-syncs today's data (1 API call)
-    expect(mockFetch).toHaveBeenCalledTimes(2);
-    expect(mockExecFileSync).toHaveBeenCalledTimes(3);
-    const saved = readPersistedConfig();
-    expect(saved.last_push_date).toBe(today);
-  });
-
-  it("returning user with stale last_push_date: pushes diff days", async () => {
-    const threeDaysAgo = daysAgoStr(3);
-    seedConfig({ last_push_date: threeDaysAgo });
-
-    const dates = [daysAgoStr(2), daysAgoStr(1), todayStr()];
-    mockCcusageOnly(ccusageJson(dates));
-    mockSuccessfulSubmit(dates);
-
-    await pushCommand({});
-
-    expect(mockExecFileSync).toHaveBeenCalledTimes(3);
-    expect(mockFetch).toHaveBeenCalledTimes(2);
-
-    const saved = readPersistedConfig();
-    expect(saved.last_push_date).toBe(todayStr());
-  });
-
-  it("returning user with very stale last_push_date: caps at 7 days", async () => {
-    seedConfig({ last_push_date: daysAgoStr(30) });
-
-    const today = todayStr();
-    mockCcusageOnly(ccusageJson([today]));
-    mockSuccessfulSubmit([today]);
-
-    await pushCommand({});
-
-    expect(mockExecFileSync).toHaveBeenCalledTimes(3);
-    const args = mockExecFileSync.mock.calls.find(([, argv]) =>
-      Array.isArray(argv) && argv.includes("claude")
-    )!;
-    const sinceIdx = (args[1] as string[]).indexOf("--since");
-    const sinceDate = (args[1] as string[])[sinceIdx + 1]!;
-    // Since date should be 6 days ago (7 days including today)
-    const sixDaysAgo = new Date();
-    sixDaysAgo.setDate(sixDaysAgo.getDate() - 6);
-    const expectedSince = `${sixDaysAgo.getFullYear()}${String(sixDaysAgo.getMonth() + 1).padStart(2, "0")}${String(sixDaysAgo.getDate()).padStart(2, "0")}`;
-    expect(sinceDate).toBe(expectedSince);
-  });
-});
-
-// ===========================================================================
-// 1b. CODEX INTEGRATION — merged Claude + Codex data
-// ===========================================================================
-
-describe("Codex integration", () => {
-  it("merges Claude + Codex data when both are available", async () => {
+describe("unified ccusage CLI flow", () => {
+  it("submits v20 unified Claude+Codex usage through the API", async () => {
     seedConfig();
-    const today = todayStr();
-    mockCcusageSources(ccusageJson([today]), ccusageCodexJson([today]));
-    mockSuccessfulSubmit([today]);
+    mockSuccessfulSubmit();
 
     await pushCommand({});
 
-    // Verify the API call was made
-    expect(mockFetch).toHaveBeenCalledTimes(2);
+    expect(execFileMock).toHaveBeenCalledWith(
+      "/bundled/ccusage",
+      expect.arrayContaining(["daily", "--json", "--no-offline"]),
+      expect.any(Object),
+      expect.any(Function),
+    );
+
     const [, options] = mockFetch.mock.calls[0]!;
     const body = JSON.parse(options.body);
-
-    // Should have merged data
-    expect(body.entries).toHaveLength(1);
-    const data = body.entries[0].data;
-    expect(data.costUSD).toBe(3.05); // 0.05 (Claude) + 3.0 (Codex)
-    expect(data.inputTokens).toBe(3000); // 1000 + 2000
-    expect(data.outputTokens).toBe(1300); // 500 + 800
-    expect(data.totalTokens).toBe(4300); // 1500 + 2800
-    expect(data.models).toContain("claude-sonnet-4-6");
-    expect(data.models).toContain("gpt-5-codex");
-
-    // model_breakdown should have per-source cost entries
-    expect(data.modelBreakdown).toHaveLength(2);
-    expect(data.modelBreakdown).toContainEqual({ model: "claude-sonnet-4-6", cost_usd: 0.05 });
-    expect(data.modelBreakdown).toContainEqual({ model: "gpt-5-codex", cost_usd: 3.0 });
+    expect(body.entries[0].data.reasoningOutputTokens).toBe(100);
     expect(body.collector).toEqual({
       claude: "ccusage-claude-v20",
       codex: "ccusage-codex-v20",
+      ccusage_version: TEST_CCUSAGE_VERSION,
+      ccusage_agents: ["claude", "codex"],
+      pricing_mode: "online",
     });
+    expect(readPersistedConfig().last_push_date).toBe(todayStr());
   });
 
-  it("hash includes source-tagged Claude and Codex raw JSON", async () => {
-    seedConfig();
-    const today = todayStr();
-    const ccRaw = ccusageJson([today]);
-    const codexRaw = ccusageCodexJson([today]);
-    mockCcusageSources(ccRaw, codexRaw);
-    mockSuccessfulSubmit([today]);
-
-    await pushCommand({});
-
-    const [, options] = mockFetch.mock.calls[0]!;
-    const body = JSON.parse(options.body);
-
-    const { createHash } = await import("node:crypto");
-    const expectedHash = createHash("sha256")
-      .update(`claude\0${ccRaw}\0codex\0${codexRaw}`)
-      .digest("hex");
-    expect(body.hash).toBe(expectedHash);
-  });
-
-  it("Codex-only day (no Claude data) still submits", async () => {
-    seedConfig();
-    const today = todayStr();
-
-    mockCcusageSources("[]", ccusageCodexJson([today]));
-
-    mockSuccessfulSubmit([today]);
-
-    await pushCommand({});
-
-    expect(mockFetch).toHaveBeenCalledTimes(2);
-    const [, options] = mockFetch.mock.calls[0]!;
-    const body = JSON.parse(options.body);
-    const data = body.entries[0].data;
-
-    expect(data.models).toEqual(["gpt-5-codex"]);
-    expect(data.costUSD).toBe(3.0);
-    expect(data.modelBreakdown).toEqual([{ model: "gpt-5-codex", cost_usd: 3.0 }]);
-    expect(body.collector).toEqual({ codex: "ccusage-codex-v20" });
-  });
-
-  it("dry-run fetches dashboard but skips submit", async () => {
-    seedConfig();
-    const today = todayStr();
-    mockCcusageOnly(ccusageJson([today]));
-
-    await pushCommand({ dryRun: true });
-
-    // Dry run calls dashboard API for full history, but no submit
-    expect(mockFetch).toHaveBeenCalledTimes(1);
-    const [url] = mockFetch.mock.calls[0]!;
-    expect(url).toContain("/api/cli/dashboard");
-    expect(console.log).toHaveBeenCalledWith(
-      expect.stringContaining("dry run"),
-    );
-  });
-
-  it("Codex failure is silent — Claude data still pushes", async () => {
-    seedConfig();
-    const today = todayStr();
-    // ccusage works, codex throws
-    mockCcusageOnly(ccusageJson([today]));
-    mockSuccessfulSubmit([today]);
-
-    await pushCommand({});
-
-    expect(mockFetch).toHaveBeenCalledTimes(2);
-    const [, options] = mockFetch.mock.calls[0]!;
-    const body = JSON.parse(options.body);
-    const data = body.entries[0].data;
-
-    // Only Claude data
-    expect(data.models).toEqual(["claude-sonnet-4-6"]);
-    expect(data.costUSD).toBe(0.05);
-    // No console.error about Codex
-    const errorCalls = (console.error as any).mock.calls.map((c: any[]) => c[0]);
-    expect(errorCalls.every((msg: string) => !msg.includes("codex"))).toBe(true);
-  });
-
-  it("missing local Claude data falls back to Codex-only sync", async () => {
-    seedConfig();
-    const today = todayStr();
-
-    mockExecFileSync.mockImplementation(((cmd: string, args: string[]) => {
-      if (args.includes("--version")) return "ccusage 20.0.6";
-      if (args.includes("codex")) return ccusageCodexJson([today]);
-      throw new Error(`No valid Claude data directories found. Please ensure at least one of the following exists:
-- /Users/test/.config/claude/projects
-- /Users/test/.claude/projects`);
-    }) as never);
-
-    mockSuccessfulSubmit([today]);
-
-    await pushCommand({});
-
-    expect(mockFetch).toHaveBeenCalledTimes(2);
-    const [, options] = mockFetch.mock.calls[0]!;
-    const body = JSON.parse(options.body);
-    const data = body.entries[0].data;
-
-    expect(data.models).toEqual(["gpt-5-codex"]);
-    expect(data.costUSD).toBe(3.0);
-    expect(data.modelBreakdown).toEqual([{ model: "gpt-5-codex", cost_usd: 3.0 }]);
-  });
-});
-
-// ===========================================================================
-// 2. API ERROR HANDLING — the kind of bug that prompted this test suite
-// ===========================================================================
-
-describe("API error handling during push", () => {
-  it("404 Not Found — surfaces error clearly", async () => {
-    seedConfig();
-    const today = todayStr();
-    mockCcusageOnly(ccusageJson([today]));
-
-    mockFetch.mockResolvedValueOnce({
-      ok: false,
-      status: 404,
-      json: () => Promise.resolve({}),
+  it("first migrated push backfills 30 days and stores ccusage_v20_migration_completed_at", async () => {
+    seedConfig({
+      ccusage_v20_migration_completed_at: undefined,
+      last_push_date: "2026-03-01",
     });
-
-    await expect(pushCommand({})).rejects.toThrow(ExitError);
-    expect(console.error).toHaveBeenCalledWith(
-      expect.stringContaining("Endpoint not found"),
-    );
-  });
-
-  it("401 Unauthorized — surfaces auth error", async () => {
-    seedConfig();
-    const today = todayStr();
-    mockCcusageOnly(ccusageJson([today]));
-
-    mockFetch.mockResolvedValueOnce({
-      ok: false,
-      status: 401,
-      json: () => Promise.resolve({ error: "Unauthorized" }),
-    });
-
-    await expect(pushCommand({})).rejects.toThrow(ExitError);
-    expect(console.error).toHaveBeenCalledWith(
-      expect.stringContaining("Session expired"),
-    );
-  });
-
-  it("500 Internal Server Error — surfaces server error", async () => {
-    seedConfig();
-    const today = todayStr();
-    mockCcusageOnly(ccusageJson([today]));
-
-    mockFetch.mockResolvedValueOnce({
-      ok: false,
-      status: 500,
-      json: () => Promise.resolve({ error: "Internal server error" }),
-    });
-
-    await expect(pushCommand({})).rejects.toThrow(ExitError);
-    expect(console.error).toHaveBeenCalledWith(
-      expect.stringContaining("Internal server error"),
-    );
-  });
-
-  it("network failure — surfaces connection error", async () => {
-    seedConfig();
-    const today = todayStr();
-    mockCcusageOnly(ccusageJson([today]));
-
-    mockFetch.mockRejectedValueOnce(new TypeError("fetch failed"));
-
-    await expect(pushCommand({})).rejects.toThrow(ExitError);
-    expect(console.error).toHaveBeenCalledWith(
-      expect.stringContaining("fetch failed"),
-    );
-  });
-
-  it("404 during sync flow — surfaces error, does not save last_push_date", async () => {
-    seedConfig();
-    const today = todayStr();
-    mockCcusageOnly(ccusageJson([today]));
-
-    mockFetch.mockResolvedValueOnce({
-      ok: false,
-      status: 404,
-      json: () => Promise.resolve({}),
-    });
-
-    await expect(pushCommand({})).rejects.toThrow(ExitError);
-
-    const saved = readPersistedConfig();
-    expect(saved.last_push_date).toBeUndefined();
-  });
-});
-
-// ===========================================================================
-// 3. API ENDPOINT VERIFICATION — exact paths matter
-// ===========================================================================
-
-describe("API endpoint paths", () => {
-  it("push submits to /api/usage/submit", async () => {
-    seedConfig();
-    const today = todayStr();
-    mockCcusageOnly(ccusageJson([today]));
-    mockSuccessfulSubmit([today]);
-
-    await pushCommand({});
-
-    const [url] = mockFetch.mock.calls[0]!;
-    expect(url).toBe("https://straude.com/api/usage/submit");
-  });
-
-  it("push sends POST method", async () => {
-    seedConfig();
-    const today = todayStr();
-    mockCcusageOnly(ccusageJson([today]));
-    mockSuccessfulSubmit([today]);
-
-    await pushCommand({});
-
-    const [, options] = mockFetch.mock.calls[0]!;
-    expect(options.method).toBe("POST");
-  });
-
-  it("push sends Authorization header", async () => {
-    seedConfig({ token: "my-jwt-token" });
-    const today = todayStr();
-    mockCcusageOnly(ccusageJson([today]));
-    mockSuccessfulSubmit([today]);
-
-    await pushCommand({});
-
-    const [, options] = mockFetch.mock.calls[0]!;
-    expect(options.headers.Authorization).toBe("Bearer my-jwt-token");
-  });
-
-  it("push sends correct body shape", async () => {
-    seedConfig();
-    const today = todayStr();
-    mockCcusageOnly(ccusageJson([today]));
-    mockSuccessfulSubmit([today]);
-
-    await pushCommand({});
-
-    const [, options] = mockFetch.mock.calls[0]!;
-    const body = JSON.parse(options.body);
-    expect(body).toHaveProperty("entries");
-    expect(body).toHaveProperty("hash");
-    expect(body).toHaveProperty("source", "cli");
-    expect(body.entries).toHaveLength(1);
-    expect(body.entries[0]).toHaveProperty("date", today);
-    expect(body.entries[0]).toHaveProperty("data");
-    expect(body.entries[0].data).toHaveProperty("costUSD", 0.05);
-    expect(body.entries[0].data).toHaveProperty("models", ["claude-sonnet-4-6"]);
-  });
-
-  it("login init calls /api/auth/cli/init", async () => {
-    // No config → triggers login
-    mockFetch
-      .mockResolvedValueOnce({
-        ok: true,
-        json: () =>
-          Promise.resolve({
-            code: "ABCD-EFGH",
-            verify_url: "https://straude.com/cli/verify?code=ABCD-EFGH",
-          }),
-      })
-      .mockResolvedValueOnce({
-        ok: true,
-        json: () =>
-          Promise.resolve({ status: "completed", token: "tok-1", username: "alice" }),
-      });
-
-    const today = todayStr();
-    mockCcusageOnly(ccusageJson([today]));
-    mockSuccessfulSubmit([today]);
-
-    await pushCommand({}, "https://straude.com");
-
-    const [initUrl] = mockFetch.mock.calls[0]!;
-    expect(initUrl).toBe("https://straude.com/api/auth/cli/init");
-
-    const [pollUrl] = mockFetch.mock.calls[1]!;
-    expect(pollUrl).toBe("https://straude.com/api/auth/cli/poll");
-  });
-});
-
-// ===========================================================================
-// 4. CONFIG PERSISTENCE — last_push_date tracking
-// ===========================================================================
-
-describe("config persistence", () => {
-  it("saves last_push_date after successful push", async () => {
-    seedConfig();
-    const today = todayStr();
-    mockCcusageOnly(ccusageJson([today]));
-    mockSuccessfulSubmit([today]);
-
-    await pushCommand({});
-
-    const saved = readPersistedConfig();
-    expect(saved.last_push_date).toBe(today);
-  });
-
-  it("saves latest date when pushing multiple days", async () => {
-    seedConfig();
-    const dates = [daysAgoStr(2), daysAgoStr(1), todayStr()];
-    mockCcusageOnly(ccusageJson(dates));
-    mockSuccessfulSubmit(dates);
+    mockSuccessfulSubmit();
 
     await pushCommand({ days: 3 });
 
-    const saved = readPersistedConfig();
-    expect(saved.last_push_date).toBe(todayStr());
+    const dailyCall = execFileMock.mock.calls.find(([, args]) =>
+      Array.isArray(args) && args.includes("daily"),
+    )!;
+    const args = dailyCall[1] as string[];
+    const since = args[args.indexOf("--since") + 1];
+    expect(since).toBe("20260212");
+    expect(readPersistedConfig().ccusage_v20_migration_completed_at).toEqual(expect.any(String));
   });
 
-  it("does not save last_push_date on dry run", async () => {
+  it("rejects unsupported agents before submitting", async () => {
     seedConfig();
-    const today = todayStr();
-    mockCcusageOnly(ccusageJson([today]));
-
-    await pushCommand({ dryRun: true });
-
-    const saved = readPersistedConfig();
-    expect(saved.last_push_date).toBeUndefined();
-  });
-
-  it("does not save last_push_date when no data found", async () => {
-    seedConfig();
-    mockCcusageOnly("[]");
-
-    await pushCommand({});
-
-    const saved = readPersistedConfig();
-    expect(saved.last_push_date).toBeUndefined();
-  });
-
-  it("does not overwrite other config fields", async () => {
-    seedConfig({ token: "original-token", username: "bob" });
-    const today = todayStr();
-    mockCcusageOnly(ccusageJson([today]));
-    mockSuccessfulSubmit([today]);
-
-    await pushCommand({});
-
-    const saved = readPersistedConfig();
-    expect(saved.token).toBe("original-token");
-    expect(saved.username).toBe("bob");
-    expect(saved.last_push_date).toBe(today);
-  });
-});
-
-// ===========================================================================
-// 5. --api-url OVERRIDE — the bug that prompted this test suite
-// ===========================================================================
-
-describe("--api-url override", () => {
-  it("sync uses override URL instead of stored config URL", async () => {
-    // Config saved with port 3000, but dev server is on 3001
-    seedConfig({ api_url: "http://localhost:3000" });
-    const today = todayStr();
-    mockCcusageOnly(ccusageJson([today]));
-    mockSuccessfulSubmit([today]);
-
-    await pushCommand({}, "http://localhost:3001");
-
-    const [url] = mockFetch.mock.calls[0]!;
-    expect(url).toBe("http://localhost:3001/api/usage/submit");
-  });
-
-  it("push with apiUrlOverride uses override URL", async () => {
-    seedConfig({ api_url: "http://localhost:3000" });
-    const today = todayStr();
-    mockCcusageOnly(ccusageJson([today]));
-    mockSuccessfulSubmit([today]);
-
-    await pushCommand({}, "http://localhost:3001");
-
-    const [url] = mockFetch.mock.calls[0]!;
-    expect(url).toBe("http://localhost:3001/api/usage/submit");
-  });
-
-  it("sync without override uses stored config URL", async () => {
-    seedConfig({ api_url: "http://localhost:3000" });
-    const today = todayStr();
-    mockCcusageOnly(ccusageJson([today]));
-    mockSuccessfulSubmit([today]);
-
-    await pushCommand({}); // no override
-
-    const [url] = mockFetch.mock.calls[0]!;
-    expect(url).toBe("http://localhost:3000/api/usage/submit");
-  });
-});
-
-// ===========================================================================
-// 6. CCUSAGE FAILURE HANDLING
-// ===========================================================================
-
-describe("ccusage failures during flow", () => {
-  it("ccusage not installed — clear error message", async () => {
-    seedConfig();
-    mockExecFileSync.mockImplementation(() => {
-      const err = new Error("ccusage not found") as Error & { status: number; stderr: string };
-      err.status = 127;
-      err.stderr = "ccusage: not found";
-      throw err;
-    });
+    mockCcusage(JSON.stringify({
+      daily: [
+        {
+          period: todayStr(),
+          modelsUsed: ["gemini-pro"],
+          inputTokens: 1,
+          outputTokens: 1,
+          cacheCreationTokens: 0,
+          cacheReadTokens: 0,
+          totalTokens: 2,
+          totalCost: 0.01,
+          modelBreakdowns: [{ modelName: "gemini-pro", cost: 0.01 }],
+          metadata: { agents: ["gemini"] },
+        },
+      ],
+    }));
 
     await expect(pushCommand({})).rejects.toThrow(ExitError);
+    expect(mockFetch).not.toHaveBeenCalled();
     expect(console.error).toHaveBeenCalledWith(
-      expect.stringContaining("Failed to validate bundled ccusage version"),
-    );
-  });
-
-  it("ccusage returns invalid JSON — clear error message", async () => {
-    seedConfig();
-    mockCcusageOnly("not json at all");
-
-    await expect(pushCommand({})).rejects.toThrow(ExitError);
-    expect(console.error).toHaveBeenCalledWith(
-      expect.stringContaining("parse"),
+      expect.stringContaining("Unsupported ccusage agents"),
     );
   });
 });

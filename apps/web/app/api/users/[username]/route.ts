@@ -17,7 +17,7 @@ type PublicProfileRow = {
   streak_freezes: number | null;
 };
 type TotalCostAggregateRow = {
-  cost_usd: number | string | null;
+  total_cost: number | string | null;
 };
 
 export async function GET(_request: NextRequest, context: RouteContext) {
@@ -65,7 +65,7 @@ export async function GET(_request: NextRequest, context: RouteContext) {
     }),
     db
       .from("daily_usage")
-      .select("cost_usd.sum()")
+      .select("total_cost:cost_usd.sum()")
       .eq("user_id", profile.id),
     db
       .from("user_levels")
@@ -83,7 +83,7 @@ export async function GET(_request: NextRequest, context: RouteContext) {
 
   const streak = typeof streakRes.data === "number" ? streakRes.data : 0;
   const totalCostRows = totalCostRes.data as TotalCostAggregateRow[] | null;
-  const total_cost = Number(totalCostRows?.[0]?.cost_usd ?? 0);
+  const total_cost = Number(totalCostRows?.[0]?.total_cost ?? 0);
   const is_following = !isOwn && !!authUserId && isFollowing;
 
   // Rank queries (depend on weekly leaderboard entry)

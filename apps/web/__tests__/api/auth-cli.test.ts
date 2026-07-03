@@ -2,6 +2,7 @@ import { describe, it, expect, vi, beforeEach } from "vitest";
 
 const mockServiceClient: Record<string, any> = {
   from: vi.fn(),
+  rpc: vi.fn(),
 };
 
 vi.mock("@/lib/supabase/service", () => ({
@@ -12,9 +13,13 @@ vi.mock("@/lib/supabase/server", () => ({
   createClient: vi.fn(),
 }));
 
-vi.mock("@/lib/api/cli-auth", () => ({
-  createCliToken: vi.fn(),
-}));
+vi.mock("@/lib/api/cli-auth", async (importOriginal) => {
+  const actual = await importOriginal<typeof import("@/lib/api/cli-auth")>();
+  return {
+    ...actual,
+    createCliToken: vi.fn(),
+  };
+});
 
 import { POST as initPOST } from "@/app/api/auth/cli/init/route";
 import { POST as pollPOST } from "@/app/api/auth/cli/poll/route";
@@ -30,6 +35,7 @@ function mockChain(overrides = {}) {
     update: vi.fn().mockReturnThis(),
     eq: vi.fn().mockReturnThis(),
     gt: vi.fn().mockReturnThis(),
+    is: vi.fn().mockReturnThis(),
     neq: vi.fn().mockReturnThis(),
     single: vi.fn().mockResolvedValue({ data: null, error: null }),
     ...overrides,
@@ -50,6 +56,10 @@ beforeEach(() => {
   vi.stubEnv("NEXT_PUBLIC_APP_URL", "https://straude.com");
   vi.stubEnv("NEXT_PUBLIC_SUPABASE_URL", "https://test.supabase.co");
   vi.stubEnv("SUPABASE_SECRET_KEY", "test-secret");
+  mockServiceClient.rpc.mockResolvedValue({
+    data: [{ allowed: true, retry_after_seconds: 0 }],
+    error: null,
+  });
 });
 
 function mockAuthenticatedUser(user: { id: string } | null = { id: "user-abc" }) {
@@ -76,9 +86,20 @@ describe("POST /api/auth/cli/init", () => {
 
     expect(res.status).toBe(200);
     expect(json.code).toMatch(/^[A-Z0-9]{4}-[A-Z0-9]{4}$/);
-    expect(json.verify_url).toBe(
-      `https://straude.com/cli/verify?code=${json.code}`
-    );
+    expect(json.poll_secret).toMatch(/^[A-Za-z0-9_-]+$/);
+
+    const url = new URL(json.verify_url);
+    expect(`${url.origin}${url.pathname}`).toBe("https://straude.com/cli/verify");
+    expect(url.searchParams.get("code")).toBe(json.code);
+    expect(url.searchParams.get("verify_secret")).toMatch(/^[A-Za-z0-9_-]+$/);
+
+    const insertArg = chain.insert.mock.calls[0][0];
+    expect(insertArg.code).toBe(json.code);
+    expect(insertArg.status).toBe("pending");
+    expect(insertArg.poll_secret_hash).toMatch(/^[a-f0-9]{64}$/);
+    expect(insertArg.verify_secret_hash).toMatch(/^[a-f0-9]{64}$/);
+    expect(insertArg.poll_secret_hash).not.toBe(json.poll_secret);
+    expect(insertArg.verify_secret_hash).not.toBe(url.searchParams.get("verify_secret"));
   });
 
   it("returns 500 when insert fails", async () => {
@@ -120,13 +141,21 @@ describe("POST /api/auth/cli/poll", () => {
     expect(json.error).toBe("Missing code");
   });
 
+  it("returns error when poll_secret is missing", async () => {
+    const res = await pollPOST(mockRequest({ code: "AAAA-BBBB" }));
+    const json = await res.json();
+
+    expect(res.status).toBe(400);
+    expect(json.error).toBe("Missing poll_secret");
+  });
+
   it("returns expired when code not found", async () => {
     const chain = mockChain({
       single: vi.fn().mockResolvedValue({ data: null, error: { code: "PGRST116" } }),
     });
     mockServiceClient.from.mockReturnValue(chain);
 
-    const res = await pollPOST(mockRequest({ code: "XXXX-YYYY" }));
+    const res = await pollPOST(mockRequest({ code: "XXXX-YYYY", poll_secret: "secret" }));
     const json = await res.json();
 
     expect(json.status).toBe("expired");
@@ -142,7 +171,7 @@ describe("POST /api/auth/cli/poll", () => {
     });
     mockServiceClient.from.mockReturnValue(chain);
 
-    const res = await pollPOST(mockRequest({ code: "AAAA-BBBB" }));
+    const res = await pollPOST(mockRequest({ code: "AAAA-BBBB", poll_secret: "secret" }));
     const json = await res.json();
 
     expect(json.status).toBe("pending");
@@ -158,7 +187,7 @@ describe("POST /api/auth/cli/poll", () => {
     });
     mockServiceClient.from.mockReturnValue(chain);
 
-    const res = await pollPOST(mockRequest({ code: "AAAA-BBBB" }));
+    const res = await pollPOST(mockRequest({ code: "AAAA-BBBB", poll_secret: "secret" }));
     const json = await res.json();
 
     expect(json.status).toBe("expired");
@@ -174,7 +203,7 @@ describe("POST /api/auth/cli/poll", () => {
     });
     mockServiceClient.from.mockReturnValue(chain);
 
-    const res = await pollPOST(mockRequest({ code: "AAAA-BBBB" }));
+    const res = await pollPOST(mockRequest({ code: "AAAA-BBBB", poll_secret: "secret" }));
     const json = await res.json();
 
     expect(json.status).toBe("expired");
@@ -195,6 +224,10 @@ describe("POST /api/auth/cli/poll", () => {
         error: null,
       })
       .mockResolvedValueOnce({
+        data: { user_id: "user-abc" },
+        error: null,
+      })
+      .mockResolvedValueOnce({
         data: { username: "testuser" },
         error: null,
       });
@@ -202,13 +235,45 @@ describe("POST /api/auth/cli/poll", () => {
 
     (createCliToken as any).mockReturnValue("jwt-token-123");
 
-    const res = await pollPOST(mockRequest({ code: "AAAA-BBBB" }));
+    const res = await pollPOST(mockRequest({ code: "AAAA-BBBB", poll_secret: "secret" }));
     const json = await res.json();
 
     expect(json.status).toBe("completed");
     expect(json.token).toBe("jwt-token-123");
     expect(json.username).toBe("testuser");
     expect(createCliToken).toHaveBeenCalledWith("user-abc", "testuser");
+    expect(chain.update).toHaveBeenCalledWith({
+      status: "used",
+      redeemed_at: expect.any(String),
+    });
+    expect(chain.is).toHaveBeenCalledWith("redeemed_at", null);
+  });
+
+  it("does not mint a token when a completed code was already redeemed", async () => {
+    const futureDate = new Date(Date.now() + 600_000).toISOString();
+    const chain = mockChain();
+    chain.single = vi.fn()
+      .mockResolvedValueOnce({
+        data: {
+          id: "1",
+          code: "AAAA-BBBB",
+          status: "completed",
+          expires_at: futureDate,
+          user_id: "user-abc",
+        },
+        error: null,
+      })
+      .mockResolvedValueOnce({
+        data: null,
+        error: { code: "PGRST116", message: "No rows" },
+      });
+    mockServiceClient.from.mockReturnValue(chain);
+
+    const res = await pollPOST(mockRequest({ code: "AAAA-BBBB", poll_secret: "secret" }));
+    const json = await res.json();
+
+    expect(json.status).toBe("expired");
+    expect(createCliToken).not.toHaveBeenCalled();
   });
 });
 
@@ -216,7 +281,7 @@ describe("POST /api/auth/cli/verify", () => {
   it("rejects unauthenticated requests", async () => {
     mockAuthenticatedUser(null);
 
-    const res = await verifyPOST(mockRequest({ code: "AAAA-BBBB" }));
+    const res = await verifyPOST(mockRequest({ code: "AAAA-BBBB", verify_secret: "secret" }));
     const json = await res.json();
 
     expect(res.status).toBe(401);
@@ -231,6 +296,16 @@ describe("POST /api/auth/cli/verify", () => {
 
     expect(res.status).toBe(400);
     expect(json.error).toBe("Missing code");
+  });
+
+  it("returns error when verify_secret is missing", async () => {
+    mockAuthenticatedUser();
+
+    const res = await verifyPOST(mockRequest({ code: "AAAA-BBBB" }));
+    const json = await res.json();
+
+    expect(res.status).toBe(400);
+    expect(json.error).toBe("Missing verify_secret");
   });
 
   it("returns error for invalid JSON", async () => {
@@ -257,7 +332,7 @@ describe("POST /api/auth/cli/verify", () => {
     });
     mockServiceClient.from.mockReturnValue(chain);
 
-    const res = await verifyPOST(mockRequest({ code: "AAAA-BBBB" }));
+    const res = await verifyPOST(mockRequest({ code: "AAAA-BBBB", verify_secret: "secret" }));
     const json = await res.json();
 
     expect(res.status).toBe(400);
@@ -274,7 +349,7 @@ describe("POST /api/auth/cli/verify", () => {
     });
     mockServiceClient.from.mockReturnValue(chain);
 
-    const res = await verifyPOST(mockRequest({ code: " AAAA-BBBB " }));
+    const res = await verifyPOST(mockRequest({ code: " AAAA-BBBB ", verify_secret: "secret" }));
     const json = await res.json();
 
     expect(res.status).toBe(200);
@@ -284,6 +359,7 @@ describe("POST /api/auth/cli/verify", () => {
       status: "completed",
     });
     expect(chain.eq).toHaveBeenCalledWith("code", "AAAA-BBBB");
+    expect(chain.eq).toHaveBeenCalledWith("verify_secret_hash", expect.stringMatching(/^[a-f0-9]{64}$/));
     expect(chain.eq).toHaveBeenCalledWith("status", "pending");
     expect(chain.gt).toHaveBeenCalledWith("expires_at", expect.any(String));
     expect(chain.select).toHaveBeenCalledWith("id");

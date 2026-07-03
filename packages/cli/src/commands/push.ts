@@ -7,25 +7,15 @@ import { apiRequest } from "../lib/api.js";
 import {
   CCUSAGE_CLAUDE_COLLECTOR,
   CCUSAGE_CODEX_COLLECTOR,
-  runCcusageAgentRawAsync,
-  parseCcusageOutput,
-  ensureCcusageInstalled,
+  collectCcusageUsageAsync,
 } from "../lib/ccusage.js";
-import type { CcusageAgent, CcusageDailyEntry, CcusageOutput, ModelBreakdownEntry } from "../lib/ccusage.js";
-import { containsSessionFile } from "../lib/codex-native.js";
+import type { CcusageDailyEntry, CcusageCollectorMeta } from "../lib/ccusage.js";
 import { MAX_BACKFILL_DAYS, DEFAULT_SYNC_DAYS } from "../config.js";
 import { Spinner } from "../lib/spinner.js";
 import type { DashboardData as DashboardResponse } from "../components/PushSummary.js";
-import {
-  printDryRunEntries,
-  printSubmittedResults,
-  renderPushSummary,
-} from "./push-output.js";
 import { posthog } from "../lib/posthog.js";
 import { getDistinctId } from "../lib/machine-id.js";
-import { isDebug, debugLog } from "../lib/debug.js";
 import { errorMessage, reportUsagePushFailed } from "../lib/telemetry.js";
-import type { NormalizationAnomaly } from "../lib/ccusage.js";
 
 interface UsageSubmitRequest {
   entries: Array<{
@@ -36,6 +26,9 @@ interface UsageSubmitRequest {
   collector?: {
     claude?: typeof CCUSAGE_CLAUDE_COLLECTOR;
     codex?: typeof CCUSAGE_CODEX_COLLECTOR;
+    ccusage_version?: CcusageCollectorMeta["ccusage_version"];
+    ccusage_agents?: CcusageCollectorMeta["ccusage_agents"];
+    pricing_mode?: CcusageCollectorMeta["pricing_mode"];
   };
   source: "cli" | "web";
   device_id?: string;
@@ -61,20 +54,6 @@ interface PushOptions {
   dryRun?: boolean;
   timeoutMs?: number;
 }
-
-type SourceScan =
-  | {
-    ok: true;
-    agent: CcusageAgent;
-    raw: string;
-    parsed: CcusageOutput;
-  }
-  | {
-    ok: false;
-    agent: CcusageAgent;
-    error: Error;
-    missingData: boolean;
-  };
 
 function formatDate(d: Date): string {
   const y = d.getFullYear();
@@ -128,7 +107,7 @@ export type DateRangeResolution =
 
 /**
  * Pure resolver for the date range a push should cover. Extracted from
- * `pushCommand` so each branch (explicit --date, codex repair, --days,
+ * `pushCommand` so each branch (explicit --date, ccusage v20 migration, --days,
  * smart-sync from last_push_date, fresh install) can be unit-tested without
  * mocking ccusage / the API / the filesystem.
  */
@@ -136,9 +115,9 @@ export function resolvePushDateRange(args: {
   today: Date;
   options: { date?: string; days?: number };
   lastPushDate?: string;
-  shouldRunCodexRepair: boolean;
+  shouldRunMigrationBackfill: boolean;
 }): DateRangeResolution {
-  const { today, options, lastPushDate, shouldRunCodexRepair } = args;
+  const { today, options, lastPushDate, shouldRunMigrationBackfill } = args;
   const todayStr = formatDate(today);
 
   if (options.date) {
@@ -152,7 +131,7 @@ export function resolvePushDateRange(args: {
     return { ok: true, since: target, until: target };
   }
 
-  if (shouldRunCodexRepair) {
+  if (shouldRunMigrationBackfill) {
     const since = new Date(today);
     since.setDate(since.getDate() - MAX_BACKFILL_DAYS + 1);
     return { ok: true, since, until: today };
@@ -185,91 +164,14 @@ export function resolvePushDateRange(args: {
   return { ok: true, since, until: today };
 }
 
-/**
- * Build per-model cost breakdown from a source's entry.
- * Distributes total cost evenly across models when per-model data isn't available.
- */
-function buildBreakdown(entry: CcusageDailyEntry): ModelBreakdownEntry[] {
-  if (entry.modelBreakdown && entry.modelBreakdown.length > 0) return entry.modelBreakdown;
-  // Fallback: distribute evenly (no per-model data available)
-  if (entry.models.length === 0 || entry.costUSD === 0) return [];
-  const perModel = entry.costUSD / entry.models.length;
-  return entry.models.map((model) => ({ model, cost_usd: perModel }));
+function formatTokens(n: number): string {
+  if (n >= 1_000_000) return `${(n / 1_000_000).toFixed(1)}M`;
+  if (n >= 1_000) return `${Math.round(n / 1_000)}k`;
+  return String(n);
 }
 
-/**
- * Merge Claude and Codex daily entries by date.
- * Sums tokens/costs, unions models, builds model_breakdown.
- */
-export function mergeEntries(
-  claudeEntries: CcusageDailyEntry[],
-  codexEntries: CcusageDailyEntry[],
-): CcusageDailyEntry[] {
-  const byDate = new Map<string, { claude?: CcusageDailyEntry; codex?: CcusageDailyEntry }>();
-
-  for (const e of claudeEntries) {
-    byDate.set(e.date, { ...byDate.get(e.date), claude: e });
-  }
-  for (const e of codexEntries) {
-    byDate.set(e.date, { ...byDate.get(e.date), codex: e });
-  }
-
-  const merged: CcusageDailyEntry[] = [];
-
-  for (const [date, { claude, codex }] of byDate) {
-    const claudeBreakdown = claude ? buildBreakdown(claude) : [];
-    const codexBreakdown = codex ? buildBreakdown(codex) : [];
-    const modelBreakdown = [...claudeBreakdown, ...codexBreakdown];
-
-    merged.push({
-      date,
-      models: [
-        ...(claude?.models ?? []),
-        ...(codex?.models ?? []),
-      ],
-      inputTokens: (claude?.inputTokens ?? 0) + (codex?.inputTokens ?? 0),
-      outputTokens: (claude?.outputTokens ?? 0) + (codex?.outputTokens ?? 0),
-      cacheCreationTokens: (claude?.cacheCreationTokens ?? 0) + (codex?.cacheCreationTokens ?? 0),
-      cacheReadTokens: (claude?.cacheReadTokens ?? 0) + (codex?.cacheReadTokens ?? 0),
-      totalTokens: (claude?.totalTokens ?? 0) + (codex?.totalTokens ?? 0),
-      costUSD: (claude?.costUSD ?? 0) + (codex?.costUSD ?? 0),
-      modelBreakdown: modelBreakdown.length > 0 ? modelBreakdown : undefined,
-    });
-  }
-
-  // Sort by date ascending
-  merged.sort((a, b) => a.date.localeCompare(b.date));
-  return merged;
-}
-
-function isMissingSourceDataError(err: Error): boolean {
-  return /(?:no valid|no|missing).{0,80}(?:data|jsonl|session|director(?:y|ies))|(?:data|jsonl|session|director(?:y|ies)).{0,80}(?:not found|missing)/i
-    .test(err.message);
-}
-
-async function scanCcusageSource(
-  agent: CcusageAgent,
-  sinceStr: string,
-  untilStr: string,
-  timeoutMs?: number,
-): Promise<SourceScan> {
-  try {
-    const raw = await runCcusageAgentRawAsync(agent, sinceStr, untilStr, timeoutMs);
-    return {
-      ok: true,
-      agent,
-      raw,
-      parsed: parseCcusageOutput(raw, agent),
-    };
-  } catch (err) {
-    const error = err instanceof Error ? err : new Error(String(err));
-    return {
-      ok: false,
-      agent,
-      error,
-      missingData: isMissingSourceDataError(error),
-    };
-  }
+function formatCost(n: number): string {
+  return `$${n.toFixed(2)}`;
 }
 
 export async function pushCommand(options: PushOptions, apiUrlOverride?: string): Promise<void> {
@@ -298,19 +200,15 @@ export async function pushCommand(options: PushOptions, apiUrlOverride?: string)
   }
 
   const today = new Date();
-  // Trigger a one-time 30-day backfill when the user has not yet re-collected
-  // Codex sessions with the last_token_usage accounting fix. The older repair
-  // marker is kept only so users who already ran the first repair still get
-  // this more accurate re-collection.
-  const shouldRunCodexRepair = !options.date
-    && (!config.codex_native_repair_completed_at || !config.codex_native_last_token_usage_repair_completed_at)
-    && await containsSessionFile();
+  // Trigger a one-time 30-day backfill after migrating both Claude and Codex
+  // ingestion to ccusage v20. Explicit --date pushes stay exact.
+  const shouldRunMigrationBackfill = !options.date && !config.ccusage_v20_migration_completed_at;
 
   const resolution = resolvePushDateRange({
     today,
     options: { date: options.date, days: options.days },
     lastPushDate: config.last_push_date,
-    shouldRunCodexRepair,
+    shouldRunMigrationBackfill,
   });
   if (!resolution.ok) {
     console.error(resolution.error);
@@ -328,72 +226,31 @@ export async function pushCommand(options: PushOptions, apiUrlOverride?: string)
       : `Pushing usage for ${formatDate(sinceDate)} to ${formatDate(untilDate)}...`,
   );
 
-  try {
-    await ensureCcusageInstalled(config);
-  } catch (err) {
-    console.error((err as Error).message);
-    process.exit(1);
-  }
-
   const scanSpinner = new Spinner("scan");
   scanSpinner.start();
-  const scans = await Promise.all([
-    scanCcusageSource("claude", sinceStr, untilStr, options.timeoutMs),
-    scanCcusageSource("codex", sinceStr, untilStr, options.timeoutMs),
-  ]);
-  scanSpinner.stop();
-
-  const fatalScan = scans.find((scan) => !scan.ok && !scan.missingData);
-  if (fatalScan && !fatalScan.ok) {
-    console.error(fatalScan.error.message);
+  let ccusage: Awaited<ReturnType<typeof collectCcusageUsageAsync>>;
+  try {
+    ccusage = await collectCcusageUsageAsync(sinceStr, untilStr, options.timeoutMs);
+    scanSpinner.stop();
+  } catch (err) {
+    scanSpinner.stop();
+    reportUsagePushFailed(config, err, {
+      command: "push",
+      stage: "scan",
+    });
+    await posthog._shutdown();
+    console.error(`\nFailed to collect usage: ${errorMessage(err)}`);
     process.exit(1);
-  }
-
-  const successfulScans = scans.filter((scan): scan is Extract<SourceScan, { ok: true }> => scan.ok);
-
-  // Token-normalization anomalies are diagnostic, not user-actionable: rows
-  // tagged medium/low confidence still get pushed (we just had to infer
-  // cache semantics). Only `mode === "unresolved"` rows are dropped, and
-  // those have their own warning below. So keep these counts quiet by
-  // default and surface them only under --debug; ship the counts to PostHog
-  // either way so we can monitor normalization quality across users.
-  const allAnomalies: NormalizationAnomaly[] = successfulScans.flatMap(
-    (scan) => scan.parsed.anomalies ?? [],
-  );
-  const anomalyCounts = countAnomalies(allAnomalies);
-
-  if (isDebug() && anomalyCounts.mediumLow > 0) {
-    debugLog(
-      `normalization anomalies: ${anomalyCounts.mediumLow} medium/low,`,
-      `low=${anomalyCounts.low}, unresolved=${anomalyCounts.unresolved}`,
-    );
-    for (const a of allAnomalies) {
-      if (a.confidence === "high") continue;
-      const warningStr = a.warnings.length > 0 ? ` warnings=${a.warnings.join("; ")}` : "";
-      debugLog(
-        `  ${a.date} ${a.source} mode=${a.mode} confidence=${a.confidence}`,
-        `consistency_error=${a.consistencyError}${warningStr}`,
-      );
-    }
   }
 
   // Drop entries the server would reject as out-of-window. Pre-filtering keeps
   // a single edge-case row from failing the whole batch with HTTP 400.
   const droppedDates: string[] = [];
-  const filterEntry = (entry: CcusageDailyEntry) => {
+  const entries = ccusage.data.filter((entry) => {
     if (isWithinBackfillWindow(entry.date)) return true;
     droppedDates.push(entry.date);
     return false;
-  };
-  const claudeEntries = successfulScans
-    .filter((scan) => scan.agent === "claude")
-    .flatMap((scan) => scan.parsed.data)
-    .filter(filterEntry);
-  const codexEntries = successfulScans
-    .filter((scan) => scan.agent === "codex")
-    .flatMap((scan) => scan.parsed.data)
-    .filter(filterEntry);
-  const entries = mergeEntries(claudeEntries, codexEntries);
+  });
   if (droppedDates.length > 0) {
     console.log(
       `Note: skipping ${droppedDates.length} date(s) outside the ${MAX_BACKFILL_DAYS}-day backfill window: ${droppedDates.join(", ")}`,
@@ -409,21 +266,38 @@ export async function pushCommand(options: PushOptions, apiUrlOverride?: string)
     // Dry run: fetch full dashboard from API (skip submit only)
     try {
       const dashboard = await apiRequest<DashboardResponse>(config, "/api/cli/dashboard");
-      await renderPushSummary(dashboard);
+      const { render } = await import("ink");
+      const { createElement } = await import("react");
+      const { PushSummary } = await import("../components/PushSummary.js");
+
+      const { waitUntilExit } = render(
+        createElement(PushSummary, { dashboard }),
+      );
+      await waitUntilExit();
     } catch {
       // Fallback: plain text if API or Ink fails
-      printDryRunEntries(entries);
+      for (const entry of entries) {
+        console.log(`  ${entry.date}:`);
+        console.log(`    Cost: ${formatCost(entry.costUSD)}`);
+        console.log(
+          `    Tokens: ${formatTokens(entry.totalTokens)} (input: ${formatTokens(entry.inputTokens)}, output: ${formatTokens(entry.outputTokens)})`,
+        );
+        console.log(`    Models: ${entry.models.join(", ")}`);
+      }
     }
     console.log("\n(dry run — nothing submitted)");
     return;
   }
 
-  const hash = createHash("sha256")
-    .update(successfulScans.map((scan) => `${scan.agent}\0${scan.raw}`).join("\0"))
-    .digest("hex");
-  const collector: UsageSubmitRequest["collector"] = {};
-  if (claudeEntries.length > 0) collector.claude = CCUSAGE_CLAUDE_COLLECTOR;
-  if (codexEntries.length > 0) collector.codex = CCUSAGE_CODEX_COLLECTOR;
+  const hashInput = JSON.stringify({
+    collector: "ccusage-v20",
+    version: ccusage.version,
+    agents: ccusage.agents,
+    since: sinceStr,
+    until: untilStr,
+    raw: ccusage.raw,
+  });
+  const hash = createHash("sha256").update(hashInput).digest("hex");
 
   const body: UsageSubmitRequest = {
     entries: entries.map((entry) => ({
@@ -431,7 +305,7 @@ export async function pushCommand(options: PushOptions, apiUrlOverride?: string)
       data: entry,
     })),
     hash,
-    collector: Object.keys(collector).length > 0 ? collector : undefined,
+    collector: ccusage.agents.length > 0 ? ccusage.collector : undefined,
     source: "cli",
     device_id: config.device_id,
     device_name: config.device_name,
@@ -478,10 +352,9 @@ export async function pushCommand(options: PushOptions, apiUrlOverride?: string)
     (latest, e) => (e.date > latest ? e.date : latest),
     entries[0]!.date,
   );
-  if (shouldRunCodexRepair) {
+  if (shouldRunMigrationBackfill) {
     const stamp = new Date().toISOString();
-    config.codex_native_repair_completed_at = stamp;
-    config.codex_native_last_token_usage_repair_completed_at = stamp;
+    config.ccusage_v20_migration_completed_at = stamp;
     config.last_push_date = latestDate;
     saveConfig(config);
   } else {
@@ -502,28 +375,31 @@ export async function pushCommand(options: PushOptions, apiUrlOverride?: string)
       total_cost_usd: Math.round(totalCost * 100) / 100,
       total_tokens: totalTokens,
       dry_run: false,
-      anomalies_medium_low: anomalyCounts.mediumLow,
-      anomalies_low_confidence: anomalyCounts.low,
-      anomalies_unresolved: anomalyCounts.unresolved,
+      ccusage_version: ccusage.version,
+      ccusage_agents: ccusage.agents,
     },
   });
 
   // Render visual dashboard
   try {
     const dashboard = await apiRequest<DashboardResponse>(config, "/api/cli/dashboard");
-    await renderPushSummary(dashboard, response.results);
+    const { render } = await import("ink");
+    const { createElement } = await import("react");
+    const { PushSummary } = await import("../components/PushSummary.js");
+
+    const { waitUntilExit } = render(
+      createElement(PushSummary, {
+        dashboard,
+        results: response.results,
+      }),
+    );
+    await waitUntilExit();
   } catch {
     // Fallback: if dashboard fetch or Ink render fails, show plain text
-    printSubmittedResults(response.results);
+    console.log("");
+    for (const result of response.results) {
+      const verb = result.action === "updated" ? "Updated" : "Posted";
+      console.log(`${verb} ${result.date}: ${result.post_url}?edit=1`);
+    }
   }
-}
-
-function countAnomalies(
-  anomalies: NormalizationAnomaly[],
-): { mediumLow: number; low: number; unresolved: number } {
-  return {
-    mediumLow: anomalies.filter((a) => a.confidence !== "high").length,
-    low: anomalies.filter((a) => a.confidence === "low").length,
-    unresolved: anomalies.filter((a) => a.mode === "unresolved").length,
-  };
 }

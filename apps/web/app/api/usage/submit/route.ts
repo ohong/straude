@@ -8,12 +8,13 @@ import { formatCurrency } from "@/lib/utils/format";
 import type { UsageSubmitRequest, UsageSubmitResponse, CcusageDailyEntry, ModelBreakdownEntry, UsageCollectorMeta } from "@/types";
 
 const MAX_BACKFILL_DAYS = 30;
-// Bump in lockstep with trusted Codex collectors in packages/cli/src/lib.
-// Trusted collectors are the only ones allowed to *lower* totals on UPSERT,
-// which is how the server accepts retroactive corrections from fixed CLIs.
-const TRUSTED_CODEX_COLLECTOR = "straude-codex-native-last-token-usage";
+const MAX_USAGE_ENTRIES = MAX_BACKFILL_DAYS + 2;
+const MAX_USAGE_BODY_BYTES = 256 * 1024;
+const USAGE_PROCESS_CONCURRENCY = 4;
+// Trusted collectors are the only ones allowed to *lower* Codex totals on
+// UPSERT, which is how the server accepts retroactive collector corrections.
 const TRUSTED_CODEX_COLLECTORS = new Set([
-  TRUSTED_CODEX_COLLECTOR,
+  "straude-codex-native-last-token-usage",
   "ccusage-codex-v20",
 ]);
 const LEGACY_DEVICE_ID = "00000000-0000-0000-0000-000000000000";
@@ -54,8 +55,118 @@ function validateEntry(entry: CcusageDailyEntry): string | null {
   if (entry.costUSD < 0) return `Negative cost for ${entry.date}`;
   if (entry.inputTokens < 0) return `Negative input tokens for ${entry.date}`;
   if (entry.outputTokens < 0) return `Negative output tokens for ${entry.date}`;
+  if ((entry.reasoningOutputTokens ?? 0) < 0) return `Negative reasoning output tokens for ${entry.date}`;
   if (entry.totalTokens < 0) return `Negative total tokens for ${entry.date}`;
   return null;
+}
+
+function validateCollectorMeta(collector: UsageCollectorMeta | undefined): string | null {
+  if (!collector) return null;
+  if (collector.pricing_mode != null && collector.pricing_mode !== "online") {
+    return "Unsupported pricing mode; ccusage submissions must use online pricing";
+  }
+  if (collector.ccusage_agents != null) {
+    if (!Array.isArray(collector.ccusage_agents)) {
+      return "Invalid ccusage_agents collector metadata";
+    }
+    const unsupported = collector.ccusage_agents.filter((agent) => agent !== "claude" && agent !== "codex");
+    if (unsupported.length > 0) {
+      return `Unsupported ccusage agents: ${[...new Set(unsupported)].join(", ")}`;
+    }
+  }
+  return null;
+}
+
+type JsonReadResult<T> =
+  | { ok: true; body: T }
+  | { ok: false; response: NextResponse };
+
+async function readJsonBodyWithLimit<T>(
+  request: Request,
+  maxBytes: number,
+): Promise<JsonReadResult<T>> {
+  const contentLength = request.headers.get("content-length");
+  if (contentLength) {
+    const parsedLength = Number(contentLength);
+    if (Number.isFinite(parsedLength) && parsedLength > maxBytes) {
+      return {
+        ok: false,
+        response: NextResponse.json({ error: "Request body too large" }, { status: 413 }),
+      };
+    }
+  }
+
+  if (!request.body) {
+    return {
+      ok: false,
+      response: NextResponse.json({ error: "Invalid JSON" }, { status: 400 }),
+    };
+  }
+
+  const reader = request.body.getReader();
+  const chunks: Uint8Array[] = [];
+  let totalBytes = 0;
+
+  while (true) {
+    const { done, value } = await reader.read();
+    if (done) break;
+    if (!value) continue;
+
+    totalBytes += value.byteLength;
+    if (totalBytes > maxBytes) {
+      return {
+        ok: false,
+        response: NextResponse.json({ error: "Request body too large" }, { status: 413 }),
+      };
+    }
+    chunks.push(value);
+  }
+
+  const bytes = new Uint8Array(totalBytes);
+  let offset = 0;
+  for (const chunk of chunks) {
+    bytes.set(chunk, offset);
+    offset += chunk.byteLength;
+  }
+
+  try {
+    return {
+      ok: true,
+      body: JSON.parse(new TextDecoder().decode(bytes)) as T,
+    };
+  } catch {
+    return {
+      ok: false,
+      response: NextResponse.json({ error: "Invalid JSON" }, { status: 400 }),
+    };
+  }
+}
+
+async function mapSettledWithConcurrency<T, R>(
+  items: T[],
+  concurrency: number,
+  mapper: (item: T, index: number) => Promise<R>,
+): Promise<PromiseSettledResult<R>[]> {
+  const results = new Array<PromiseSettledResult<R>>(items.length);
+  let nextIndex = 0;
+
+  async function worker() {
+    while (nextIndex < items.length) {
+      const index = nextIndex;
+      nextIndex += 1;
+
+      try {
+        results[index] = { status: "fulfilled", value: await mapper(items[index]!, index) };
+      } catch (reason) {
+        results[index] = { status: "rejected", reason };
+      }
+    }
+  }
+
+  await Promise.all(
+    Array.from({ length: Math.min(concurrency, items.length) }, () => worker()),
+  );
+  return results;
 }
 
 function isCodexModel(model: unknown): boolean {
@@ -122,15 +233,18 @@ function collectorForEntry(
 ): UsageCollectorMeta | undefined {
   if (!collector) return undefined;
 
-  const entryCollector: UsageCollectorMeta = {};
+  const entryCollector: Record<string, unknown> = {};
   if (collector.claude && entryContainsNonCodexUsage(entry)) {
     entryCollector.claude = collector.claude;
   }
   if (collector.codex && entryContainsCodexUsage(entry)) {
     entryCollector.codex = collector.codex;
   }
+  if (Object.keys(entryCollector).length > 0) {
+    mergeCollectorRunMeta(entryCollector, collector);
+  }
 
-  return Object.keys(entryCollector).length > 0 ? entryCollector : undefined;
+  return Object.keys(entryCollector).length > 0 ? entryCollector as UsageCollectorMeta : undefined;
 }
 
 function nonCodexCostIsPreserved(
@@ -175,10 +289,20 @@ function mergeRepairMeta(target: Record<string, unknown>, meta: unknown): void {
   }
 }
 
+function mergeCollectorRunMeta(target: Record<string, unknown>, meta: unknown): void {
+  if (!isRecord(meta)) return;
+  if (typeof meta.ccusage_version === "string") target.ccusage_version = meta.ccusage_version;
+  if (Array.isArray(meta.ccusage_agents) && meta.ccusage_agents.every((agent) => typeof agent === "string")) {
+    target.ccusage_agents = meta.ccusage_agents;
+  }
+  if (typeof meta.pricing_mode === "string") target.pricing_mode = meta.pricing_mode;
+}
+
 function mergeCollectorSourceMeta(target: Record<string, unknown>, meta: unknown): void {
   if (!isRecord(meta)) return;
   if (typeof meta.claude === "string") target.claude = meta.claude;
   if (typeof meta.codex === "string") target.codex = meta.codex;
+  mergeCollectorRunMeta(target, meta);
 }
 
 function mergeDailyCollectorMeta(
@@ -242,6 +366,7 @@ interface DeviceUsageRow {
   cost_usd: number;
   input_tokens: number;
   output_tokens: number;
+  reasoning_output_tokens?: number;
   cache_creation_tokens: number;
   cache_read_tokens: number;
   total_tokens: number;
@@ -259,6 +384,7 @@ export function aggregateDeviceRows(rows: DeviceUsageRow[]) {
   let cost_usd = 0;
   let input_tokens = 0;
   let output_tokens = 0;
+  let reasoning_output_tokens = 0;
   let cache_creation_tokens = 0;
   let cache_read_tokens = 0;
   let total_tokens = 0;
@@ -269,6 +395,7 @@ export function aggregateDeviceRows(rows: DeviceUsageRow[]) {
     cost_usd += Number(row.cost_usd);
     input_tokens += Number(row.input_tokens);
     output_tokens += Number(row.output_tokens);
+    reasoning_output_tokens += Number(row.reasoning_output_tokens ?? 0);
     cache_creation_tokens += Number(row.cache_creation_tokens ?? 0);
     cache_read_tokens += Number(row.cache_read_tokens ?? 0);
     total_tokens += Number(row.total_tokens);
@@ -292,6 +419,7 @@ export function aggregateDeviceRows(rows: DeviceUsageRow[]) {
     cost_usd,
     input_tokens,
     output_tokens,
+    reasoning_output_tokens,
     cache_creation_tokens,
     cache_read_tokens,
     total_tokens,
@@ -301,20 +429,38 @@ export function aggregateDeviceRows(rows: DeviceUsageRow[]) {
   };
 }
 
+function resolveClaudeTitleLabel(models: string[] | null | undefined): string | null {
+  if (!models || models.length === 0) return null;
+  const slugs = models.map((model) => model.trim().toLowerCase());
+  return slugs.some((slug) => slug.includes("fable")) ? "Claude Fable"
+    : slugs.some((slug) => slug.includes("opus")) ? "Claude Opus"
+    : slugs.some((slug) => slug.includes("sonnet")) ? "Claude Sonnet"
+    : slugs.some((slug) => slug.includes("haiku")) ? "Claude Haiku"
+    : null;
+}
+
 export async function POST(request: Request) {
-  let body: UsageSubmitRequest;
-  try {
-    body = await request.json();
-  } catch {
-    return NextResponse.json({ error: "Invalid JSON" }, { status: 400 });
-  }
+  const parsed = await readJsonBodyWithLimit<UsageSubmitRequest>(request, MAX_USAGE_BODY_BYTES);
+  if (!parsed.ok) return parsed.response;
+  const body = parsed.body;
 
   if (!body.entries || !Array.isArray(body.entries) || body.entries.length === 0) {
     return NextResponse.json({ error: "No entries provided" }, { status: 400 });
   }
+  if (body.entries.length > MAX_USAGE_ENTRIES) {
+    return NextResponse.json(
+      { error: `Too many entries provided. Maximum is ${MAX_USAGE_ENTRIES}.` },
+      { status: 400 },
+    );
+  }
 
   if (!body.source || !["cli", "web"].includes(body.source)) {
     return NextResponse.json({ error: "Invalid source" }, { status: 400 });
+  }
+
+  const collectorValidationError = validateCollectorMeta(body.collector);
+  if (collectorValidationError) {
+    return NextResponse.json({ error: collectorValidationError }, { status: 400 });
   }
 
   const auth = await resolveAuthContext(request);
@@ -324,14 +470,18 @@ export async function POST(request: Request) {
 
   const userId = auth.userId;
 
-  const limited = rateLimit("usage-submit", userId, { limit: 20 });
+  const limited = await rateLimit("usage-submit", userId, { limit: 20 });
   if (limited) return limited;
 
-  // Validate all entries
+  const seenDates = new Set<string>();
   for (const entry of body.entries) {
     if (!isValidDate(entry.date)) {
       return NextResponse.json({ error: `Invalid date: ${entry.date}` }, { status: 400 });
     }
+    if (seenDates.has(entry.date)) {
+      return NextResponse.json({ error: `Duplicate date: ${entry.date}` }, { status: 400 });
+    }
+    seenDates.add(entry.date);
     if (!isWithinBackfillWindow(entry.date, MAX_BACKFILL_DAYS)) {
       return NextResponse.json(
         { error: `Date ${entry.date} is outside the ${MAX_BACKFILL_DAYS}-day backfill window` },
@@ -360,9 +510,10 @@ export async function POST(request: Request) {
     );
   }
 
-  // Process all entries concurrently — each entry is independent per-date
-  const settled = await Promise.allSettled(
-    body.entries.map(async (entry) => {
+  const settled = await mapSettledWithConcurrency(
+    body.entries,
+    USAGE_PROCESS_CONCURRENCY,
+    async (entry) => {
       // Check if a record already exists to determine create vs update
       const { data: existing } = await db
         .from("daily_usage")
@@ -379,9 +530,9 @@ export async function POST(request: Request) {
       const entryIsTrustedCodexCorrection = requestHasTrustedCodexCollector && entryContainsCodexUsage(entry.data);
       const entryCollector = collectorForEntry(body.collector, entry.data);
 
-      // Guard against decreasing values (e.g., ccusage log rotation). The native
-      // Codex collector is allowed to lower totals because it repairs inflated
-      // rows produced by the older upstream Codex aggregation behavior.
+      // Guard against decreasing values (e.g., ccusage log rotation). Trusted
+      // Codex collectors may lower totals because they repair inflated rows
+      // produced by older Codex aggregation behavior.
       const { data: existingDevice } = await db
         .from("device_usage")
         .select("cost_usd,models,model_breakdown,collector_meta")
@@ -434,6 +585,7 @@ export async function POST(request: Request) {
               cost_usd: entry.data.costUSD,
               input_tokens: entry.data.inputTokens,
               output_tokens: entry.data.outputTokens,
+              reasoning_output_tokens: entry.data.reasoningOutputTokens ?? 0,
               cache_creation_tokens: entry.data.cacheCreationTokens,
               cache_read_tokens: entry.data.cacheReadTokens,
               total_tokens: entry.data.totalTokens,
@@ -482,7 +634,7 @@ export async function POST(request: Request) {
         if (preexistingDeviceCount === 0) {
           const { data: legacyRow } = await db
             .from("daily_usage")
-            .select("cost_usd,input_tokens,output_tokens,cache_creation_tokens,cache_read_tokens,total_tokens,models,model_breakdown,raw_hash")
+            .select("cost_usd,input_tokens,output_tokens,reasoning_output_tokens,cache_creation_tokens,cache_read_tokens,total_tokens,models,model_breakdown,raw_hash")
             .eq("id", existing.id)
             .single();
 
@@ -495,6 +647,7 @@ export async function POST(request: Request) {
               cost_usd: legacyRow.cost_usd,
               input_tokens: legacyRow.input_tokens,
               output_tokens: legacyRow.output_tokens,
+              reasoning_output_tokens: legacyRow.reasoning_output_tokens ?? 0,
               cache_creation_tokens: legacyRow.cache_creation_tokens ?? 0,
               cache_read_tokens: legacyRow.cache_read_tokens ?? 0,
               total_tokens: legacyRow.total_tokens,
@@ -512,7 +665,7 @@ export async function POST(request: Request) {
       // Fetch all device rows for this (user_id, date) and aggregate
       const { data: deviceRows, error: fetchError } = await db
         .from("device_usage")
-        .select("cost_usd,input_tokens,output_tokens,cache_creation_tokens,cache_read_tokens,total_tokens,models,model_breakdown,collector_meta")
+        .select("cost_usd,input_tokens,output_tokens,reasoning_output_tokens,cache_creation_tokens,cache_read_tokens,total_tokens,models,model_breakdown,collector_meta")
         .eq("user_id", userId)
         .eq("date", entry.date);
 
@@ -536,6 +689,7 @@ export async function POST(request: Request) {
             cost_usd: agg.cost_usd,
             input_tokens: agg.input_tokens,
             output_tokens: agg.output_tokens,
+            reasoning_output_tokens: agg.reasoning_output_tokens,
             cache_creation_tokens: agg.cache_creation_tokens,
             cache_read_tokens: agg.cache_read_tokens,
             total_tokens: agg.total_tokens,
@@ -561,10 +715,8 @@ export async function POST(request: Request) {
 
       // Build auto-title from aggregated usage data
       const models = agg.models;
-      const hasClaude = models?.some((m) => m.includes("claude") || m.includes("opus") || m.includes("sonnet") || m.includes("haiku"));
-      const claudeLabel = models?.some((m) => m.includes("opus")) ? "Claude Opus"
-        : models?.some((m) => m.includes("sonnet")) ? "Claude Sonnet"
-        : models?.some((m) => m.includes("haiku")) ? "Claude Haiku" : null;
+      const claudeLabel = resolveClaudeTitleLabel(models);
+      const hasClaude = Boolean(claudeLabel || models?.some((m) => m.toLowerCase().includes("claude")));
       const codexModel = models?.find((m) => /^gpt-/i.test(m) || /^o3/i.test(m) || /^o4/i.test(m));
       const codexLabel = codexModel
         ? /^gpt-/i.test(codexModel)
@@ -633,7 +785,7 @@ export async function POST(request: Request) {
         daily_total: agg.cost_usd,
         device_count: deviceRows.length,
       };
-    }),
+    },
   );
 
   // Collect results and errors

@@ -38,7 +38,7 @@ beforeAll(() => {
       throw new Error(`failed to build CLI before e2e suite (exit ${built.status})`);
     }
   }
-});
+}, 60_000);
 
 let home: string;
 beforeEach(() => {

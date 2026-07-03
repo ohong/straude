@@ -1,10 +1,11 @@
-import { createHmac, timingSafeEqual } from "node:crypto";
+import { createHash, createHmac, randomBytes, timingSafeEqual } from "node:crypto";
 
 interface JwtPayload {
   sub: string;
   username?: string;
   iat: number;
   exp: number;
+  oiat?: number;
 }
 
 /**
@@ -19,6 +20,14 @@ export interface CliAuthResult {
   username: string | null;
   /** Set when the verified token is older than TOKEN_REFRESH_AFTER_DAYS. */
   refreshedToken: string | null;
+}
+
+export function createCliDeviceSecret(): string {
+  return randomBytes(32).toString("base64url");
+}
+
+export function hashCliDeviceSecret(secret: string): string {
+  return createHash("sha256").update(secret, "utf8").digest("hex");
 }
 
 function base64urlEncode(data: string): string {
@@ -47,18 +56,21 @@ function sign(header: string, payload: string, secret: string): string {
 /**
  * Create a signed JWT for CLI authentication.
  */
-export function createCliToken(userId: string, username: string | null): string {
+export function createCliToken(userId: string, username: string | null, originalIat?: number): string {
   const secret = process.env.CLI_JWT_SECRET;
   if (!secret) throw new Error("CLI_JWT_SECRET not configured");
 
   const header = base64urlEncode(JSON.stringify({ alg: "HS256", typ: "JWT" }));
   const now = Math.floor(Date.now() / 1000);
+  const absoluteIat = originalIat ?? now;
+  const absoluteExpiry = absoluteIat + 30 * 24 * 60 * 60;
   const payload = base64urlEncode(
     JSON.stringify({
       sub: userId,
       username: username ?? undefined,
       iat: now,
-      exp: now + 30 * 24 * 60 * 60, // 30 days
+      oiat: originalIat,
+      exp: Math.min(now + 30 * 24 * 60 * 60, absoluteExpiry),
     }),
   );
   const signature = sign(header, payload, secret);
@@ -117,13 +129,21 @@ export function verifyCliTokenWithRefresh(authHeader: string | null): CliAuthRes
   if (!decoded) return null;
 
   const username = decoded.username ?? null;
-  const tokenAgeSeconds = Math.floor(Date.now() / 1000) - decoded.iat;
+  const now = Math.floor(Date.now() / 1000);
+  const originalIat = decoded.oiat ?? decoded.iat;
+  const tokenAgeSeconds = now - decoded.iat;
+  const absoluteAgeSeconds = now - originalIat;
   const refreshThresholdSeconds = TOKEN_REFRESH_AFTER_DAYS * 24 * 60 * 60;
+  const absoluteLifetimeSeconds = 30 * 24 * 60 * 60;
 
   let refreshedToken: string | null = null;
-  if (tokenAgeSeconds >= refreshThresholdSeconds && process.env.CLI_JWT_SECRET) {
+  if (
+    tokenAgeSeconds >= refreshThresholdSeconds &&
+    absoluteAgeSeconds < absoluteLifetimeSeconds &&
+    process.env.CLI_JWT_SECRET
+  ) {
     try {
-      refreshedToken = createCliToken(decoded.sub, username);
+      refreshedToken = createCliToken(decoded.sub, username, originalIat);
     } catch {
       // If we can't mint a refresh, the request still succeeds with the old
       // token. The user just won't get the rotation this round.

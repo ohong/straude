@@ -33,6 +33,7 @@ export interface DailyUsage {
   cost_usd: number;
   input_tokens: number;
   output_tokens: number;
+  reasoning_output_tokens: number;
   cache_creation_tokens: number;
   cache_read_tokens: number;
   total_tokens: number;
@@ -152,6 +153,7 @@ export interface CcusageDailyEntry {
   models: string[];
   inputTokens: number;
   outputTokens: number;
+  reasoningOutputTokens?: number;
   cacheCreationTokens: number;
   cacheReadTokens: number;
   totalTokens: number;
@@ -165,6 +167,7 @@ export interface CcusageOutput {
   summary: {
     totalInputTokens: number;
     totalOutputTokens: number;
+    totalReasoningOutputTokens?: number;
     totalCacheCreationTokens: number;
     totalCacheReadTokens: number;
     totalTokens: number;
@@ -181,6 +184,7 @@ export interface DeviceUsage {
   cost_usd: number;
   input_tokens: number;
   output_tokens: number;
+  reasoning_output_tokens: number;
   cache_creation_tokens: number;
   cache_read_tokens: number;
   total_tokens: number;
@@ -194,8 +198,11 @@ export interface DeviceUsage {
 }
 
 export interface UsageCollectorMeta {
-  claude?: "ccusage-v18" | "ccusage-claude-v20" | string;
-  codex?: "straude-codex-native-last-token-usage" | "straude-codex-native-v1" | "ccusage-codex-v20" | string;
+  claude?: "ccusage-claude-v20" | "ccusage-v18" | string;
+  codex?: "straude-codex-native-last-token-usage" | "ccusage-codex-v20" | "straude-codex-native-v1" | string;
+  ccusage_version?: string;
+  ccusage_agents?: string[];
+  pricing_mode?: string;
   // Set when a row was repaired retroactively (legacy or previous native Codex inflation fix).
   // Surfaced on the post card so kudos/comments stay attached but the user can
   // see why their cost changed.

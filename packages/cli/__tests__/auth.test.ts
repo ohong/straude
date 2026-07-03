@@ -68,6 +68,18 @@ describe("loadConfig", () => {
     expect(config!.codex_native_last_token_usage_repair_completed_at).toBe("2026-05-07T00:00:00.000Z");
   });
 
+  it("loads the ccusage v20 migration marker", () => {
+    mockExistsSync.mockReturnValue(true);
+    mockReadFileSync.mockReturnValue(
+      JSON.stringify({
+        token: "tok-abc",
+        ccusage_v20_migration_completed_at: "2026-06-02T00:00:00.000Z",
+      }),
+    );
+    const config = loadConfig();
+    expect(config!.ccusage_v20_migration_completed_at).toBe("2026-06-02T00:00:00.000Z");
+  });
+
   it("returns null when token is missing from config", () => {
     mockExistsSync.mockReturnValue(true);
     mockReadFileSync.mockReturnValue(JSON.stringify({ username: "alice" }));

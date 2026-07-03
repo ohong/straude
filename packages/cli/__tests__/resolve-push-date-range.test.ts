@@ -20,7 +20,7 @@ describe("resolvePushDateRange", () => {
       const r = resolvePushDateRange({
         today: dateAt("2026-05-04"),
         options: { date: "2026-05-01" },
-        shouldRunCodexRepair: false,
+        shouldRunMigrationBackfill: false,
       });
       expect(r.ok).toBe(true);
       if (!r.ok) return;
@@ -32,7 +32,7 @@ describe("resolvePushDateRange", () => {
       const r = resolvePushDateRange({
         today: dateAt("2026-05-04"),
         options: { date: "2025-12-01" },
-        shouldRunCodexRepair: false,
+        shouldRunMigrationBackfill: false,
       });
       expect(r.ok).toBe(false);
       if (r.ok) return;
@@ -46,7 +46,7 @@ describe("resolvePushDateRange", () => {
       const r = resolvePushDateRange({
         today: dateAt("2026-05-04"),
         options: { date: "2026-05-05" },
-        shouldRunCodexRepair: false,
+        shouldRunMigrationBackfill: false,
       });
       expect(r.ok).toBe(false);
       if (r.ok) return;
@@ -57,7 +57,7 @@ describe("resolvePushDateRange", () => {
       const r = resolvePushDateRange({
         today: dateAt("2026-05-04"),
         options: { date: "2099-01-01" },
-        shouldRunCodexRepair: false,
+        shouldRunMigrationBackfill: false,
       });
       expect(r.ok).toBe(false);
       if (r.ok) return;
@@ -68,16 +68,16 @@ describe("resolvePushDateRange", () => {
       const r = resolvePushDateRange({
         today: dateAt("2026-05-04"),
         options: { date: "2026-04-04" },
-        shouldRunCodexRepair: false,
+        shouldRunMigrationBackfill: false,
       });
       expect(r.ok).toBe(true);
     });
 
-    it("--date wins over codex repair when both would apply", () => {
+    it("--date wins over ccusage migration when both would apply", () => {
       const r = resolvePushDateRange({
         today: dateAt("2026-05-04"),
         options: { date: "2026-05-03" },
-        shouldRunCodexRepair: true,
+        shouldRunMigrationBackfill: true,
       });
       expect(r.ok).toBe(true);
       if (!r.ok) return;
@@ -85,12 +85,12 @@ describe("resolvePushDateRange", () => {
     });
   });
 
-  describe("codex repair branch", () => {
-    it("backfills the full 30-day window when codex repair runs", () => {
+  describe("ccusage migration branch", () => {
+    it("backfills the full 30-day window when ccusage migration runs", () => {
       const r = resolvePushDateRange({
         today: dateAt("2026-05-04"),
         options: {},
-        shouldRunCodexRepair: true,
+        shouldRunMigrationBackfill: true,
       });
       expect(r.ok).toBe(true);
       if (!r.ok) return;
@@ -98,11 +98,11 @@ describe("resolvePushDateRange", () => {
       expect(isoDay(r.until)).toBe("2026-05-04");
     });
 
-    it("ignores --days when codex repair runs", () => {
+    it("ignores --days when ccusage migration runs", () => {
       const r = resolvePushDateRange({
         today: dateAt("2026-05-04"),
         options: { days: 5 },
-        shouldRunCodexRepair: true,
+        shouldRunMigrationBackfill: true,
       });
       expect(r.ok).toBe(true);
       if (!r.ok) return;
@@ -115,7 +115,7 @@ describe("resolvePushDateRange", () => {
       const r = resolvePushDateRange({
         today: dateAt("2026-05-04"),
         options: { days: 7 },
-        shouldRunCodexRepair: false,
+        shouldRunMigrationBackfill: false,
       });
       expect(r.ok).toBe(true);
       if (!r.ok) return;
@@ -127,7 +127,7 @@ describe("resolvePushDateRange", () => {
       const r = resolvePushDateRange({
         today: dateAt("2026-05-04"),
         options: { days: 90 },
-        shouldRunCodexRepair: false,
+        shouldRunMigrationBackfill: false,
       });
       expect(r.ok).toBe(true);
       if (!r.ok) return;
@@ -141,7 +141,7 @@ describe("resolvePushDateRange", () => {
         today: dateAt("2026-05-04"),
         options: {},
         lastPushDate: "2026-05-01",
-        shouldRunCodexRepair: false,
+        shouldRunMigrationBackfill: false,
       });
       expect(r.ok).toBe(true);
       if (!r.ok) return;
@@ -154,7 +154,7 @@ describe("resolvePushDateRange", () => {
         today: dateAt("2026-05-04"),
         options: {},
         lastPushDate: "2026-04-15",
-        shouldRunCodexRepair: false,
+        shouldRunMigrationBackfill: false,
       });
       expect(r.ok).toBe(true);
       if (!r.ok) return;
@@ -166,7 +166,7 @@ describe("resolvePushDateRange", () => {
         today: dateAt("2026-05-04"),
         options: {},
         lastPushDate: "2026-05-04",
-        shouldRunCodexRepair: false,
+        shouldRunMigrationBackfill: false,
       });
       expect(r.ok).toBe(true);
       if (!r.ok) return;
@@ -180,7 +180,7 @@ describe("resolvePushDateRange", () => {
       const r = resolvePushDateRange({
         today: dateAt("2026-05-04"),
         options: {},
-        shouldRunCodexRepair: false,
+        shouldRunMigrationBackfill: false,
       });
       expect(r.ok).toBe(true);
       if (!r.ok) return;

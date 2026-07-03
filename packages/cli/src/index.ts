@@ -43,7 +43,7 @@ silenceEpipe(process.stdout);
 silenceEpipe(process.stderr);
 
 const HELP = `
-straude v${CLI_VERSION} — Push your Claude Code usage to Straude
+straude v${CLI_VERSION} — Push your Claude Code and Codex usage to Straude
 
 Usage:
   straude                Sync latest stats (login if needed)
@@ -228,6 +228,21 @@ async function main(): Promise<void> {
 
 let exitCode = 0;
 
+async function shutdownTelemetryWithTimeout(): Promise<void> {
+  let timer: NodeJS.Timeout | undefined;
+  try {
+    await Promise.race([
+      posthog._shutdown(),
+      new Promise<void>((resolve) => {
+        timer = setTimeout(resolve, 500);
+        timer.unref?.();
+      }),
+    ]);
+  } finally {
+    if (timer) clearTimeout(timer);
+  }
+}
+
 main()
   .catch((err: unknown) => {
     exitCode = 1;
@@ -245,4 +260,4 @@ main()
     }
     console.error(`Error: ${errorMessage(err)}`);
   })
-  .finally(() => posthog._shutdown().then(() => process.exit(exitCode)));
+  .finally(() => shutdownTelemetryWithTimeout().then(() => process.exit(exitCode)));

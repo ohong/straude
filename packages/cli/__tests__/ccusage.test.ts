@@ -1,234 +1,192 @@
 import { describe, it, expect, vi, beforeEach } from "vitest";
-import {
-  parseCcusageOutput,
-  runCcusage,
-  runCcusageRaw,
-  _resetCcusageResolver,
-} from "../src/lib/ccusage.js";
 
-vi.mock("node:child_process", () => ({
-  execFileSync: vi.fn(),
-  execFile: vi.fn(),
+const { execFileMock } = vi.hoisted(() => ({
+  execFileMock: vi.fn(),
 }));
 
-import { execFileSync } from "node:child_process";
+vi.mock("node:child_process", () => ({
+  execFile: execFileMock,
+}));
 
-const mockExecFileSync = vi.mocked(execFileSync);
+import {
+  CCUSAGE_CLAUDE_COLLECTOR,
+  CCUSAGE_CODEX_COLLECTOR,
+  collectCcusageUsageAsync,
+  parseCcusageOutput,
+  _resetCcusageResolver,
+  _setCcusageCommandForTests,
+} from "../src/lib/ccusage.js";
 
-function claudeOutput() {
-  return JSON.stringify({
-    daily: [
+function row(overrides: Record<string, unknown> = {}) {
+  return {
+    period: "2026-05-13",
+    modelsUsed: ["gpt-5.2-codex"],
+    inputTokens: 750,
+    outputTokens: 125,
+    cacheCreationTokens: 0,
+    cacheReadTokens: 250,
+    totalTokens: 1200,
+    totalCost: 0.00310625,
+    modelBreakdowns: [
       {
-        date: "2026-06-01",
-        modelsUsed: ["claude-opus-4-8"],
-        inputTokens: 223,
-        outputTokens: 9486,
-        cacheCreationTokens: 264403,
-        cacheReadTokens: 47523,
-        totalTokens: 321635,
-        totalCost: 1.91454525,
-        modelBreakdowns: [
-          {
-            modelName: "claude-opus-4-8",
-            inputTokens: 223,
-            outputTokens: 9486,
-            cacheCreationTokens: 264403,
-            cacheReadTokens: 47523,
-            cost: 1.91454525,
-          },
-        ],
+        modelName: "gpt-5.2-codex",
+        inputTokens: 750,
+        outputTokens: 125,
+        cacheCreationTokens: 0,
+        cacheReadTokens: 250,
+        cost: 0.00310625,
       },
     ],
-    totals: {},
-  });
+    metadata: { agents: ["codex"] },
+    ...overrides,
+  };
 }
 
-function codexOutput() {
-  return JSON.stringify({
-    daily: [
-      {
-        date: "2026-06-01",
-        inputTokens: 2217560,
-        outputTokens: 156872,
-        cachedInputTokens: 34676096,
-        reasoningOutputTokens: 58261,
-        totalTokens: 37050528,
-        costUSD: 33.132008,
-        models: {
-          "gpt-5.5": {
-            inputTokens: 2217560,
-            cachedInputTokens: 34676096,
-            outputTokens: 156872,
-            reasoningOutputTokens: 58261,
-            totalTokens: 37050528,
-            isFallback: false,
-          },
-        },
-      },
-    ],
-    totals: {},
-  });
+function rawOutput(rows: unknown[] = [row()]) {
+  return JSON.stringify({ daily: rows });
 }
 
 beforeEach(() => {
   vi.clearAllMocks();
   _resetCcusageResolver();
-  mockExecFileSync.mockImplementation((_cmd, args) => {
-    const argv = Array.isArray(args) ? args.map(String) : [];
-    if (argv.includes("--version")) return "ccusage 20.0.6" as never;
-    if (argv.includes("claude")) return claudeOutput() as never;
-    if (argv.includes("codex")) return codexOutput() as never;
-    throw new Error(`unexpected ccusage args: ${argv.join(" ")}`);
-  });
+  _setCcusageCommandForTests({ cmd: "/bundled/ccusage", args: [] });
 });
 
 describe("parseCcusageOutput", () => {
-  it("parses source-focused Claude v20 output", () => {
-    const result = parseCcusageOutput(claudeOutput(), "claude");
+  it("parses ccusage v20 daily rows and derives reasoning residuals", () => {
+    const parsed = parseCcusageOutput(rawOutput(), { version: "20.0.6" });
 
-    expect(result.data).toHaveLength(1);
-    expect(result.data[0]).toMatchObject({
-      date: "2026-06-01",
-      models: ["claude-opus-4-8"],
-      inputTokens: 223,
-      outputTokens: 9486,
-      cacheCreationTokens: 264403,
-      cacheReadTokens: 47523,
-      totalTokens: 321635,
-      costUSD: 1.91454525,
-    });
-    expect(result.data[0]!.modelBreakdown).toEqual([
-      { model: "claude-opus-4-8", cost_usd: 1.91454525 },
-    ]);
-    expect(result.rowMetadata).toEqual([
-      { date: "2026-06-01", agents: ["claude"] },
-    ]);
-  });
-
-  it("parses source-focused Codex v20 output with separate cached input semantics", () => {
-    const result = parseCcusageOutput(codexOutput(), "codex");
-
-    expect(result.data).toHaveLength(1);
-    expect(result.data[0]).toMatchObject({
-      date: "2026-06-01",
-      models: ["gpt-5.5"],
-      inputTokens: 2217560,
-      outputTokens: 156872,
+    expect(parsed.data).toHaveLength(1);
+    expect(parsed.data[0]).toEqual({
+      date: "2026-05-13",
+      models: ["gpt-5.2-codex"],
+      inputTokens: 750,
+      outputTokens: 125,
       cacheCreationTokens: 0,
-      cacheReadTokens: 34676096,
-      totalTokens: 37050528,
-      costUSD: 33.132008,
-      reasoningOutputTokens: 58261,
+      cacheReadTokens: 250,
+      totalTokens: 1200,
+      costUSD: 0.00310625,
+      reasoningOutputTokens: 75,
+      modelBreakdown: [{ model: "gpt-5.2-codex", cost_usd: 0.00310625 }],
     });
-    expect(result.data[0]!.modelBreakdown).toEqual([
-      { model: "gpt-5.5", cost_usd: 33.132008 },
-    ]);
-    expect(result.rowMetadata).toEqual([
-      { date: "2026-06-01", agents: ["codex"] },
-    ]);
+    expect(parsed.summary.totalReasoningOutputTokens).toBe(75);
+    expect(parsed.agents).toEqual(["codex"]);
+    expect(parsed.collector).toEqual({
+      codex: CCUSAGE_CODEX_COLLECTOR,
+      ccusage_version: "20.0.6",
+      ccusage_agents: ["codex"],
+      pricing_mode: "online",
+    });
   });
 
-  it("returns empty data for an empty ccusage array", () => {
-    expect(parseCcusageOutput("[]", "claude").data).toEqual([]);
+  it("keeps mixed Claude+Codex rows unified with both collector ids", () => {
+    const parsed = parseCcusageOutput(rawOutput([
+      row({
+        period: "2026-05-12",
+        modelsUsed: ["claude-sonnet-4-5-20250929", "gpt-5.2-codex"],
+        inputTokens: 1200,
+        outputTokens: 400,
+        cacheCreationTokens: 100,
+        cacheReadTokens: 300,
+        totalTokens: 2100,
+        totalCost: 0.25,
+        modelBreakdowns: [
+          { modelName: "claude-sonnet-4-5-20250929", cost: 0.2 },
+          { modelName: "gpt-5.2-codex", cost: 0.05 },
+        ],
+        metadata: { agents: ["claude", "codex"] },
+      }),
+    ]), { version: "20.0.6" });
+
+    expect(parsed.agents).toEqual(["claude", "codex"]);
+    expect(parsed.collector).toEqual({
+      claude: CCUSAGE_CLAUDE_COLLECTOR,
+      codex: CCUSAGE_CODEX_COLLECTOR,
+      ccusage_version: "20.0.6",
+      ccusage_agents: ["claude", "codex"],
+      pricing_mode: "online",
+    });
+    expect(parsed.data[0]!.reasoningOutputTokens).toBe(100);
+  });
+
+  it("rejects unsupported ccusage agents instead of filtering them silently", () => {
+    expect(() => parseCcusageOutput(rawOutput([
+      row({ metadata: { agents: ["claude", "gemini"] } }),
+    ]))).toThrow(/Unsupported ccusage agents detected.*gemini/);
+  });
+
+  it("rejects rows without metadata agents", () => {
+    expect(() => parseCcusageOutput(rawOutput([
+      row({ metadata: undefined }),
+    ]))).toThrow(/metadata\.agents is required/);
+  });
+
+  it("rejects priced rows without modelBreakdowns", () => {
+    expect(() => parseCcusageOutput(rawOutput([
+      row({ modelBreakdowns: undefined }),
+    ]))).toThrow(/priced rows must include modelBreakdowns/);
+  });
+
+  it("rejects negative token counts", () => {
+    expect(() => parseCcusageOutput(rawOutput([
+      row({ inputTokens: -1 }),
+    ]))).toThrow(/inputTokens must be non-negative/);
+  });
+
+  it("returns empty output for an empty ccusage daily array", () => {
+    const parsed = parseCcusageOutput(rawOutput([]), { version: "20.0.6" });
+    expect(parsed.data).toEqual([]);
+    expect(parsed.agents).toEqual([]);
+    expect(parsed.collector).toEqual({
+      ccusage_version: "20.0.6",
+      ccusage_agents: [],
+      pricing_mode: "online",
+    });
   });
 
   it("rejects non-JSON input", () => {
-    expect(() => parseCcusageOutput("not json", "claude")).toThrow(
+    expect(() => parseCcusageOutput("not json")).toThrow(
       "Failed to parse ccusage output as JSON",
-    );
-  });
-
-  it("rejects output without a daily array", () => {
-    expect(() => parseCcusageOutput(JSON.stringify({ totals: {} }), "claude")).toThrow(
-      "Unexpected ccusage output format",
-    );
-  });
-
-  it("rejects rows with negative numeric fields", () => {
-    const bad = JSON.stringify({
-      daily: [
-        {
-          date: "2026-06-01",
-          modelsUsed: [],
-          inputTokens: 0,
-          outputTokens: 0,
-          cacheCreationTokens: 0,
-          cacheReadTokens: 0,
-          totalTokens: 0,
-          totalCost: -1,
-        },
-      ],
-    });
-
-    expect(() => parseCcusageOutput(bad, "claude")).toThrow(
-      "totalCost must be non-negative",
     );
   });
 });
 
-describe("runCcusage", () => {
-  it("executes the bundled ccusage package through the current Node runtime", () => {
-    const result = runCcusage("claude", "20260601", "20260602");
-
-    expect(result.data).toHaveLength(1);
-    expect(mockExecFileSync).toHaveBeenCalledTimes(2);
-    expect(mockExecFileSync).toHaveBeenNthCalledWith(
-      1,
-      process.execPath,
-      [expect.stringContaining("ccusage/dist/cli.js"), "--version"],
-      expect.objectContaining({ encoding: "utf-8" }),
-    );
-    expect(mockExecFileSync).toHaveBeenNthCalledWith(
-      2,
-      process.execPath,
-      [
-        expect.stringContaining("ccusage/dist/cli.js"),
-        "claude",
-        "daily",
-        "--json",
-        "--since",
-        "20260601",
-        "--until",
-        "20260602",
-        "--no-offline",
-      ],
-      expect.objectContaining({ encoding: "utf-8" }),
-    );
-  });
-
-  it("returns raw JSON for the requested agent", () => {
-    const result = runCcusageRaw("codex", "20260601", "20260602");
-
-    expect(result).toBe(codexOutput());
-  });
-
-  it("reports timeout with the source-focused command hint", () => {
-    const err = new Error("killed") as Error & { killed: boolean; signal: string };
-    err.killed = true;
-    err.signal = "SIGTERM";
-    mockExecFileSync.mockImplementation((_cmd, args) => {
-      const argv = Array.isArray(args) ? args.map(String) : [];
-      if (argv.includes("--version")) return "ccusage 20.0.6" as never;
-      throw err;
+describe("version and execution", () => {
+  it("invokes the installed ccusage binary with online unified daily args", async () => {
+    execFileMock.mockImplementationOnce((...args: unknown[]) => {
+      const cb = args.at(-1) as (err: Error | null, stdout: string, stderr: string) => void;
+      cb(null, rawOutput(), "");
     });
 
-    expect(() => runCcusage("claude", "20260601", "20260602")).toThrow(
-      "ccusage timed out. Try running `ccusage claude daily",
+    const collected = await collectCcusageUsageAsync("20260513", "20260513", 10_000);
+
+    expect(collected.raw).toBe(rawOutput());
+    expect(execFileMock).toHaveBeenCalledTimes(1);
+    expect(execFileMock).toHaveBeenCalledWith(
+      "/bundled/ccusage",
+      ["daily", "--json", "--since", "20260513", "--until", "20260513", "--no-offline"],
+      expect.objectContaining({ shell: false }),
+      expect.any(Function),
     );
   });
 
-  it("includes stderr detail on failures", () => {
-    const err = new Error("fail") as Error & { status: number; stderr: string };
-    err.status = 1;
-    err.stderr = "Error: invalid date range";
-    mockExecFileSync.mockImplementation((_cmd, args) => {
-      const argv = Array.isArray(args) ? args.map(String) : [];
-      if (argv.includes("--version")) return "ccusage 20.0.6" as never;
-      throw err;
-    });
+  it("rejects ccusage versions below the v20 accuracy floor", async () => {
+    _setCcusageCommandForTests({ cmd: "/bundled/ccusage", args: [], version: "20.0.4" });
 
-    expect(() => runCcusageRaw("codex", "20260601", "20260601")).toThrow(
-      "ccusage failed: Error: invalid date range",
+    await expect(collectCcusageUsageAsync("20260513", "20260513")).rejects.toThrow(
+      /requires ccusage >=20\.0\.5/,
+    );
+  });
+
+  it("fails safely when ccusage reports missing online pricing", async () => {
+    execFileMock
+      .mockImplementationOnce((...args: unknown[]) => {
+        const cb = args.at(-1) as (err: Error | null, stdout: string, stderr: string) => void;
+        cb(null, rawOutput(), "Missing pricing for model gpt-5.2-codex");
+      });
+
+    await expect(collectCcusageUsageAsync("20260513", "20260513")).rejects.toThrow(
+      /fully priced online cost data/,
     );
   });
 });
