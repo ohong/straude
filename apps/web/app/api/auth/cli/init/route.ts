@@ -1,23 +1,8 @@
 import { NextResponse, type NextRequest } from "next/server";
 import { randomBytes } from "node:crypto";
+import { createCliDeviceSecret, hashCliDeviceSecret } from "@/lib/api/cli-auth";
+import { rateLimit } from "@/lib/rate-limit";
 import { getServiceClient } from "@/lib/supabase/service";
-
-// Simple in-process rate limiter: max 5 requests per IP per minute
-const rateLimitMap = new Map<string, { count: number; resetAt: number }>();
-const RATE_LIMIT = 5;
-const RATE_WINDOW_MS = 60_000;
-
-function checkRateLimit(ip: string): boolean {
-  const now = Date.now();
-  const entry = rateLimitMap.get(ip);
-  if (!entry || now > entry.resetAt) {
-    rateLimitMap.set(ip, { count: 1, resetAt: now + RATE_WINDOW_MS });
-    return true;
-  }
-  if (entry.count >= RATE_LIMIT) return false;
-  entry.count++;
-  return true;
-}
 
 function generateCode(): string {
   const chars = "ABCDEFGHJKLMNPQRSTUVWXYZ23456789"; // no I/O/0/1 for readability
@@ -37,19 +22,19 @@ export async function POST(request: NextRequest) {
     request.headers.get("x-real-ip") ??
     "unknown";
 
-  if (!checkRateLimit(ip)) {
-    return NextResponse.json(
-      { error: "Too many requests. Please wait before trying again." },
-      { status: 429 }
-    );
-  }
+  const limited = await rateLimit("cli-auth-init", ip, { limit: 5 });
+  if (limited) return limited;
 
   const supabase = getServiceClient();
   const code = generateCode();
+  const pollSecret = createCliDeviceSecret();
+  const verifySecret = createCliDeviceSecret();
   const expiresAt = new Date(Date.now() + 10 * 60 * 1000).toISOString();
 
   const { error } = await supabase.from("cli_auth_codes").insert({
     code,
+    poll_secret_hash: hashCliDeviceSecret(pollSecret),
+    verify_secret_hash: hashCliDeviceSecret(verifySecret),
     status: "pending",
     expires_at: expiresAt,
   });
@@ -58,8 +43,9 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ error: "Failed to create auth code" }, { status: 500 });
   }
 
-  const appUrl = process.env.NEXT_PUBLIC_APP_URL ?? "https://straude.com";
-  const verifyUrl = `${appUrl}/cli/verify?code=${code}`;
+  const appUrl = (process.env.NEXT_PUBLIC_APP_URL ?? "https://straude.com").replace(/\/+$/, "");
+  const params = new URLSearchParams({ code, verify_secret: verifySecret });
+  const verifyUrl = `${appUrl}/cli/verify?${params.toString()}`;
 
-  return NextResponse.json({ code, verify_url: verifyUrl });
+  return NextResponse.json({ code, verify_url: verifyUrl, poll_secret: pollSecret });
 }

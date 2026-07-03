@@ -1,6 +1,7 @@
 export function prettifyModel(model: string): string {
   const normalized = model.trim();
-  if (/claude-opus-4/i.test(normalized)) return "Claude Opus";
+  if (/claude-fable/i.test(normalized)) return "Claude Fable";
+  if (/claude-opus/i.test(normalized)) return "Claude Opus";
   if (/claude-sonnet-4/i.test(normalized)) return "Claude Sonnet";
   if (/claude-haiku-4/i.test(normalized)) return "Claude Haiku";
 
@@ -15,6 +16,7 @@ export function prettifyModel(model: string): string {
   if (/^o3/i.test(normalized)) return "o3";
   // Legacy: broader Claude matching (preserves behavior of ActivityCard,
   // open-stats, and CLI's prior local copies; tested via prettify-model.test.ts).
+  if (normalized.includes("fable")) return "Claude Fable";
   if (normalized.includes("opus")) return "Claude Opus";
   if (normalized.includes("sonnet")) return "Claude Sonnet";
   if (normalized.includes("haiku")) return "Claude Haiku";
@@ -25,7 +27,8 @@ export function getShareModelLabel(
   models: string[] | null | undefined
 ): string | null {
   if (!models || models.length === 0) return null;
-  if (models.some((model) => /claude-opus-4/i.test(model))) return "Claude Opus";
+  if (models.some((model) => /claude-fable/i.test(model))) return "Claude Fable";
+  if (models.some((model) => /claude-opus/i.test(model))) return "Claude Opus";
   if (models.some((model) => /claude-sonnet-4/i.test(model))) {
     return "Claude Sonnet";
   }

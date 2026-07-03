@@ -12,11 +12,15 @@ vi.mock("@/lib/supabase/server", () => ({
   createClient: vi.fn(() => mockSessionClient),
 }));
 
-vi.mock("@/lib/api/cli-auth", () => ({
-  createCliToken: vi.fn(() => "mock-cli-jwt-token"),
-  verifyCliToken: vi.fn(),
-  verifyCliTokenWithRefresh: vi.fn(),
-}));
+vi.mock("@/lib/api/cli-auth", async (importOriginal) => {
+  const actual = await importOriginal<typeof import("@/lib/api/cli-auth")>();
+  return {
+    ...actual,
+    createCliToken: vi.fn(() => "mock-cli-jwt-token"),
+    verifyCliToken: vi.fn(),
+    verifyCliTokenWithRefresh: vi.fn(),
+  };
+});
 
 const mockServiceClient = {
   from: vi.fn(),
@@ -81,7 +85,12 @@ describe("Flow: CLI Push", () => {
     vi.useFakeTimers({ now: new Date('2026-03-13T12:00:00Z'), toFake: ['Date'] });
     vi.clearAllMocks();
     autoDeriveCliAuthMocks();
-    mockServiceClient.rpc.mockResolvedValue({ data: null, error: null });
+    mockServiceClient.rpc.mockImplementation((fn: string) => {
+      if (fn === "check_rate_limit") {
+        return Promise.resolve({ data: [{ allowed: true, retry_after_seconds: 0 }], error: null });
+      }
+      return Promise.resolve({ data: null, error: null });
+    });
     vi.stubEnv("NEXT_PUBLIC_APP_URL", "https://straude.com");
     vi.stubEnv("NEXT_PUBLIC_SUPABASE_URL", "https://test.supabase.co");
     vi.stubEnv("SUPABASE_SECRET_KEY", "test-secret");
@@ -112,6 +121,7 @@ describe("Flow: CLI Push", () => {
     expect(data.code).toBeDefined();
     expect(data.code).toMatch(/^[A-Z0-9]{4}-[A-Z0-9]{4}$/);
     expect(data.verify_url).toContain("https://straude.com/cli/verify?code=");
+    expect(data.poll_secret).toBeDefined();
     expect(mockServiceClient.from).toHaveBeenCalledWith("cli_auth_codes");
   });
 
@@ -135,7 +145,7 @@ describe("Flow: CLI Push", () => {
     const req = makeRequest("http://localhost:3000/api/auth/cli/poll", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ code: "ABCD-EFGH" }),
+      body: JSON.stringify({ code: "ABCD-EFGH", poll_secret: "secret" }),
     });
     const res = await POST(req);
     const data = await res.json();
@@ -166,7 +176,7 @@ describe("Flow: CLI Push", () => {
     const req = makeRequest("http://localhost:3000/api/auth/cli/poll", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ code: "ABCD-EFGH" }),
+      body: JSON.stringify({ code: "ABCD-EFGH", poll_secret: "secret" }),
     });
     const res = await POST(req);
     const data = await res.json();

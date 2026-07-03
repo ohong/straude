@@ -84,7 +84,7 @@ export async function POST(request: NextRequest, context: RouteContext) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
 
-  const limited = rateLimit("social", user.id, { limit: 30 });
+  const limited = await rateLimit("social", user.id, { limit: 30 });
   if (limited) return limited;
 
   const body = await request.json();

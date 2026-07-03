@@ -1,4 +1,4 @@
-import { createHmac, timingSafeEqual } from "node:crypto";
+import { createHash, createHmac, randomBytes, timingSafeEqual } from "node:crypto";
 
 interface JwtPayload {
   sub: string;
@@ -20,6 +20,14 @@ export interface CliAuthResult {
   username: string | null;
   /** Set when the verified token is older than TOKEN_REFRESH_AFTER_DAYS. */
   refreshedToken: string | null;
+}
+
+export function createCliDeviceSecret(): string {
+  return randomBytes(32).toString("base64url");
+}
+
+export function hashCliDeviceSecret(secret: string): string {
+  return createHash("sha256").update(secret, "utf8").digest("hex");
 }
 
 function base64urlEncode(data: string): string {

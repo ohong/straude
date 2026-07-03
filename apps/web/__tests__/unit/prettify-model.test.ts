@@ -3,9 +3,16 @@ import { prettifyModel } from "@/components/app/feed/ActivityCard";
 
 describe("prettifyModel", () => {
   describe("Claude models", () => {
-    it("prettifies claude-opus-4 variants", () => {
+    it("prettifies claude-fable-5 variants", () => {
+      expect(prettifyModel("claude-fable-5-20260610")).toBe("Claude Fable");
+      expect(prettifyModel("claude-fable-5")).toBe("Claude Fable");
+      expect(prettifyModel("claude-fable")).toBe("Claude Fable");
+    });
+
+    it("prettifies claude-opus variants", () => {
       expect(prettifyModel("claude-opus-4-20260301")).toBe("Claude Opus");
       expect(prettifyModel("claude-opus-4")).toBe("Claude Opus");
+      expect(prettifyModel("claude-opus-5")).toBe("Claude Opus");
     });
 
     it("prettifies claude-sonnet-4 variants", () => {
@@ -60,6 +67,7 @@ describe("prettifyModel", () => {
     });
 
     it("trims whitespace for legacy .includes() fallbacks", () => {
+      expect(prettifyModel("  some-fable-variant  ")).toBe("Claude Fable");
       expect(prettifyModel("  some-opus-variant  ")).toBe("Claude Opus");
       expect(prettifyModel("  some-sonnet-variant  ")).toBe("Claude Sonnet");
     });

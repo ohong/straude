@@ -82,7 +82,12 @@ describe("Flow: Web JSON Import", () => {
 
   beforeEach(() => {
     vi.clearAllMocks();
-    mockServiceClient.rpc.mockResolvedValue({ data: null, error: null });
+    mockServiceClient.rpc.mockImplementation((fn: string) => {
+      if (fn === "check_rate_limit") {
+        return Promise.resolve({ data: [{ allowed: true, retry_after_seconds: 0 }], error: null });
+      }
+      return Promise.resolve({ data: null, error: null });
+    });
     vi.stubEnv("NEXT_PUBLIC_APP_URL", "https://straude.com");
     vi.stubEnv("NEXT_PUBLIC_SUPABASE_URL", "https://test.supabase.co");
     vi.stubEnv("SUPABASE_SECRET_KEY", "test-secret");

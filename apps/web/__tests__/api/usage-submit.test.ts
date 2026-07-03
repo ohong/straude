@@ -28,6 +28,14 @@ import { verifyCliToken, verifyCliTokenWithRefresh } from "@/lib/api/cli-auth";
 import { getServiceClient } from "@/lib/supabase/service";
 import { resetRateLimiters } from "@/lib/rate-limit";
 
+function mockAllowedRpc() {
+  return vi.fn((fn: string) => Promise.resolve(
+    fn === "check_rate_limit"
+      ? { data: [{ allowed: true, retry_after_seconds: 0 }], error: null }
+      : { data: null, error: null },
+  ));
+}
+
 function makeEntry(dateStr: string, overrides: Record<string, any> = {}) {
   return {
     date: dateStr,
@@ -58,10 +66,7 @@ function daysAgo(n: number) {
 function mockServiceClient(overrides: Record<string, any> = {}) {
   const chain: Record<string, any> = {
     from: vi.fn().mockReturnThis(),
-    rpc: vi.fn().mockResolvedValue({
-      data: null,
-      error: null,
-    }),
+    rpc: mockAllowedRpc(),
     upsert: vi.fn().mockReturnThis(),
     insert: vi.fn().mockReturnThis(),
     delete: vi.fn().mockReturnThis(),
@@ -250,6 +255,44 @@ describe("POST /api/usage/submit", () => {
 
     expect(res.status).toBe(200);
     expect(json.results).toHaveLength(2);
+    expect(json.results.map((result: { date: string }) => result.date)).toEqual([
+      todayStr(),
+      daysAgo(1),
+    ]);
+  });
+
+  it("rejects duplicate dates", async () => {
+    (verifyCliToken as any).mockReturnValue("user-1");
+    mockServiceClient();
+    const date = todayStr();
+
+    const res = await POST(
+      mockRequest({
+        entries: [makeEntry(date), makeEntry(date)],
+        source: "cli",
+      })
+    );
+    const json = await res.json();
+
+    expect(res.status).toBe(400);
+    expect(json.error).toBe(`Duplicate date: ${date}`);
+  });
+
+  it("rejects more than 32 entries", async () => {
+    (verifyCliToken as any).mockReturnValue("user-1");
+    mockServiceClient();
+    const entries = Array.from({ length: 33 }, (_, index) => makeEntry(daysAgo(index % 31)));
+
+    const res = await POST(
+      mockRequest({
+        entries,
+        source: "cli",
+      })
+    );
+    const json = await res.json();
+
+    expect(res.status).toBe(400);
+    expect(json.error).toBe("Too many entries provided. Maximum is 32.");
   });
 
   it("rejects dates older than 30 days", async () => {
@@ -431,6 +474,25 @@ describe("POST /api/usage/submit", () => {
 
     expect(res.status).toBe(400);
     expect(json.error).toBe("Invalid JSON");
+  });
+
+  it("rejects request bodies over 256KB", async () => {
+    (verifyCliToken as any).mockReturnValue("user-1");
+    const req = new Request("http://localhost/api/usage/submit", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        entries: [makeEntry(todayStr(), { models: ["claude-sonnet-4-5-20250929"], large: "x".repeat(260 * 1024) })],
+        source: "cli",
+        device_id: DEFAULT_DEVICE_ID,
+      }),
+    });
+
+    const res = await POST(req);
+    const json = await res.json();
+
+    expect(res.status).toBe(413);
+    expect(json.error).toBe("Request body too large");
   });
 
   it("rejects empty entries array", async () => {
@@ -626,6 +688,52 @@ describe("POST /api/usage/submit", () => {
     expect(postInsertCall[0].title).toContain("GPT-5.3-Codex");
   });
 
+  it("auto-title treats Claude Fable as the highest Claude tier", async () => {
+    (verifyCliToken as any).mockReturnValue("user-1");
+    const deviceRow = {
+      cost_usd: 15,
+      input_tokens: 2100,
+      output_tokens: 900,
+      cache_creation_tokens: 0,
+      cache_read_tokens: 0,
+      total_tokens: 3000,
+      models: ["claude-opus-4-20250505", "claude-fable-5"],
+      model_breakdown: [
+        { model: "claude-opus-4-20250505", cost_usd: 12 },
+        { model: "claude-fable-5", cost_usd: 3 },
+      ],
+    };
+    const svc = mockServiceClient({ data: [deviceRow] });
+    svc.single
+      .mockResolvedValueOnce({ data: { id: "dev-1" }, error: null })
+      .mockResolvedValueOnce({ data: { id: "usage-1" }, error: null })
+      .mockResolvedValueOnce({ data: { id: "post-1" }, error: null });
+
+    const res = await POST(
+      mockRequest({
+        entries: [
+          makeEntry(todayStr(), {
+            models: ["claude-opus-4-20250505", "claude-fable-5"],
+            costUSD: 15,
+            inputTokens: 2100,
+            outputTokens: 900,
+            totalTokens: 3000,
+            modelBreakdown: [
+              { model: "claude-opus-4-20250505", cost_usd: 12 },
+              { model: "claude-fable-5", cost_usd: 3 },
+            ],
+          }),
+        ],
+        source: "cli",
+      })
+    );
+
+    expect(res.status).toBe(200);
+    const postInsertCall = svc.insert.mock.calls[0];
+    expect(postInsertCall[0].title).toContain("Claude Fable");
+    expect(postInsertCall[0].title).not.toContain("Claude Opus");
+  });
+
   // -------------------------------------------------------------------------
   // Multi-device tests
   // -------------------------------------------------------------------------
@@ -691,7 +799,7 @@ describe("POST /api/usage/submit", () => {
       return dailyChain;
     });
 
-    (getServiceClient as any).mockReturnValue({ from: fromFn, rpc: vi.fn().mockResolvedValue({ data: null, error: null }) });
+    (getServiceClient as any).mockReturnValue({ from: fromFn, rpc: mockAllowedRpc() });
 
     const res = await POST(
       mockRequest({
@@ -810,7 +918,7 @@ describe("POST /api/usage/submit", () => {
       return dailyChain;
     });
 
-    (getServiceClient as any).mockReturnValue({ from: fromFn, rpc: vi.fn().mockResolvedValue({ data: null, error: null }) });
+    (getServiceClient as any).mockReturnValue({ from: fromFn, rpc: mockAllowedRpc() });
 
     const DEVICE_B = "11111111-2222-3333-4444-555555555555";
     const res = await POST(
@@ -901,7 +1009,7 @@ describe("POST /api/usage/submit", () => {
       if (table === "posts") return postChain;
       return dailyChain;
     });
-    (getServiceClient as any).mockReturnValue({ from: fromFn, rpc: vi.fn().mockResolvedValue({ data: null, error: null }) });
+    (getServiceClient as any).mockReturnValue({ from: fromFn, rpc: mockAllowedRpc() });
 
     const res = await POST(
       mockRequest({
@@ -994,7 +1102,7 @@ describe("POST /api/usage/submit", () => {
       if (table === "posts") return postChain;
       return dailyChain;
     });
-    (getServiceClient as any).mockReturnValue({ from: fromFn, rpc: vi.fn().mockResolvedValue({ data: null, error: null }) });
+    (getServiceClient as any).mockReturnValue({ from: fromFn, rpc: mockAllowedRpc() });
 
     const res = await POST(
       mockRequest({
@@ -1120,7 +1228,7 @@ describe("POST /api/usage/submit", () => {
       if (table === "posts") return postChain;
       return dailyChain;
     });
-    (getServiceClient as any).mockReturnValue({ from: fromFn, rpc: vi.fn().mockResolvedValue({ data: null, error: null }) });
+    (getServiceClient as any).mockReturnValue({ from: fromFn, rpc: mockAllowedRpc() });
 
     const res = await POST(
       mockRequest({
@@ -1230,7 +1338,7 @@ describe("POST /api/usage/submit", () => {
       if (table === "posts") return postChain;
       return dailyChain;
     });
-    (getServiceClient as any).mockReturnValue({ from: fromFn, rpc: vi.fn().mockResolvedValue({ data: null, error: null }) });
+    (getServiceClient as any).mockReturnValue({ from: fromFn, rpc: mockAllowedRpc() });
 
     const res = await POST(
       mockRequest({
@@ -1328,7 +1436,7 @@ describe("POST /api/usage/submit", () => {
       if (table === "posts") return postChain;
       return dailyChain;
     });
-    (getServiceClient as any).mockReturnValue({ from: fromFn, rpc: vi.fn().mockResolvedValue({ data: null, error: null }) });
+    (getServiceClient as any).mockReturnValue({ from: fromFn, rpc: mockAllowedRpc() });
 
     const res = await POST(
       mockRequest({
@@ -1447,7 +1555,7 @@ describe("POST /api/usage/submit", () => {
       if (table === "posts") return postChain;
       return dailyChain;
     });
-    (getServiceClient as any).mockReturnValue({ from: fromFn, rpc: vi.fn().mockResolvedValue({ data: null, error: null }) });
+    (getServiceClient as any).mockReturnValue({ from: fromFn, rpc: mockAllowedRpc() });
 
     const res = await POST(
       mockRequest({
@@ -1586,7 +1694,7 @@ describe("POST /api/usage/submit", () => {
       if (table === "posts") return postChain;
       return dailyChain;
     });
-    (getServiceClient as any).mockReturnValue({ from: fromFn, rpc: vi.fn().mockResolvedValue({ data: null, error: null }) });
+    (getServiceClient as any).mockReturnValue({ from: fromFn, rpc: mockAllowedRpc() });
 
     const res = await POST(
       mockRequest({
@@ -1692,7 +1800,7 @@ describe("POST /api/usage/submit", () => {
       if (table === "posts") return postChain;
       return dailyChain;
     });
-    (getServiceClient as any).mockReturnValue({ from: fromFn, rpc: vi.fn().mockResolvedValue({ data: null, error: null }) });
+    (getServiceClient as any).mockReturnValue({ from: fromFn, rpc: mockAllowedRpc() });
 
     const res = await POST(
       mockRequest({
