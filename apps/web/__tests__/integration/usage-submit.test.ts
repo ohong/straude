@@ -128,6 +128,9 @@ describe("POST /api/usage/submit (real Supabase)", () => {
       token,
     );
 
+    if (res.status !== 200) {
+      console.error("DIAG_SUBMIT_BODY:", res.status, await res.clone().text());
+    }
     expect(res.status).toBe(200);
     const json = await res.json();
     expect(json.results).toHaveLength(1);
