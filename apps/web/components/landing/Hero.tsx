@@ -3,11 +3,15 @@ import {
   SignupCtaLink,
 } from "@/components/landing/LandingActivationActions";
 import { LANDING_SYNC_COMMAND } from "@/components/landing/constants";
+import { ProductHuntBadge } from "./ProductHuntBadge";
 
 export function Hero() {
   return (
     <header className="min-h-screen flex flex-col justify-center px-8 lg:px-16 pt-32 relative">
       <div className="max-w-[900px]">
+        <div className="mb-6">
+          <ProductHuntBadge />
+        </div>
         <p className="font-[family-name:var(--font-mono)] text-sm uppercase tracking-wider text-landing-muted mb-4">
           {"// STRAVA FOR CLAUDE CODE"}
         </p>
