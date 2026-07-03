@@ -10,6 +10,9 @@ import { formatCurrency } from "@/lib/utils/format";
 import type { UsageSubmitRequest, UsageSubmitResponse, CcusageDailyEntry, ModelBreakdownEntry, UsageCollectorMeta } from "@/types";
 
 const MAX_BACKFILL_DAYS = 30;
+const MAX_USAGE_ENTRIES = MAX_BACKFILL_DAYS + 2;
+const MAX_USAGE_BODY_BYTES = 256 * 1024;
+const USAGE_PROCESS_CONCURRENCY = 4;
 // Trusted collectors are the only ones allowed to *lower* Codex totals on
 // UPSERT, which is how the server accepts retroactive collector corrections.
 const TRUSTED_CODEX_COLLECTORS = new Set([
@@ -78,6 +81,98 @@ function validateCollectorMeta(collector: UsageCollectorMeta | undefined): strin
     }
   }
   return null;
+}
+
+type JsonReadResult<T> =
+  | { ok: true; body: T }
+  | { ok: false; response: NextResponse };
+
+async function readJsonBodyWithLimit<T>(
+  request: Request,
+  maxBytes: number,
+): Promise<JsonReadResult<T>> {
+  const contentLength = request.headers.get("content-length");
+  if (contentLength) {
+    const parsedLength = Number(contentLength);
+    if (Number.isFinite(parsedLength) && parsedLength > maxBytes) {
+      return {
+        ok: false,
+        response: NextResponse.json({ error: "Request body too large" }, { status: 413 }),
+      };
+    }
+  }
+
+  if (!request.body) {
+    return {
+      ok: false,
+      response: NextResponse.json({ error: "Invalid JSON" }, { status: 400 }),
+    };
+  }
+
+  const reader = request.body.getReader();
+  const chunks: Uint8Array[] = [];
+  let totalBytes = 0;
+
+  while (true) {
+    const { done, value } = await reader.read();
+    if (done) break;
+    if (!value) continue;
+
+    totalBytes += value.byteLength;
+    if (totalBytes > maxBytes) {
+      return {
+        ok: false,
+        response: NextResponse.json({ error: "Request body too large" }, { status: 413 }),
+      };
+    }
+    chunks.push(value);
+  }
+
+  const bytes = new Uint8Array(totalBytes);
+  let offset = 0;
+  for (const chunk of chunks) {
+    bytes.set(chunk, offset);
+    offset += chunk.byteLength;
+  }
+
+  try {
+    return {
+      ok: true,
+      body: JSON.parse(new TextDecoder().decode(bytes)) as T,
+    };
+  } catch {
+    return {
+      ok: false,
+      response: NextResponse.json({ error: "Invalid JSON" }, { status: 400 }),
+    };
+  }
+}
+
+async function mapSettledWithConcurrency<T, R>(
+  items: T[],
+  concurrency: number,
+  mapper: (item: T, index: number) => Promise<R>,
+): Promise<PromiseSettledResult<R>[]> {
+  const results = new Array<PromiseSettledResult<R>>(items.length);
+  let nextIndex = 0;
+
+  async function worker() {
+    while (nextIndex < items.length) {
+      const index = nextIndex;
+      nextIndex += 1;
+
+      try {
+        results[index] = { status: "fulfilled", value: await mapper(items[index]!, index) };
+      } catch (reason) {
+        results[index] = { status: "rejected", reason };
+      }
+    }
+  }
+
+  await Promise.all(
+    Array.from({ length: Math.min(concurrency, items.length) }, () => worker()),
+  );
+  return results;
 }
 
 function isCodexModel(model: unknown): boolean {
@@ -342,16 +437,29 @@ export function aggregateDeviceRows(rows: DeviceUsageRow[]) {
   };
 }
 
+function resolveClaudeTitleLabel(models: string[] | null | undefined): string | null {
+  if (!models || models.length === 0) return null;
+  const slugs = models.map((model) => model.trim().toLowerCase());
+  return slugs.some((slug) => slug.includes("fable")) ? "Claude Fable"
+    : slugs.some((slug) => slug.includes("opus")) ? "Claude Opus"
+    : slugs.some((slug) => slug.includes("sonnet")) ? "Claude Sonnet"
+    : slugs.some((slug) => slug.includes("haiku")) ? "Claude Haiku"
+    : null;
+}
+
 export async function POST(request: Request) {
-  let body: UsageSubmitRequest;
-  try {
-    body = await request.json();
-  } catch {
-    return NextResponse.json({ error: "Invalid JSON" }, { status: 400 });
-  }
+  const parsed = await readJsonBodyWithLimit<UsageSubmitRequest>(request, MAX_USAGE_BODY_BYTES);
+  if (!parsed.ok) return parsed.response;
+  const body = parsed.body;
 
   if (!body.entries || !Array.isArray(body.entries) || body.entries.length === 0) {
     return NextResponse.json({ error: "No entries provided" }, { status: 400 });
+  }
+  if (body.entries.length > MAX_USAGE_ENTRIES) {
+    return NextResponse.json(
+      { error: `Too many entries provided. Maximum is ${MAX_USAGE_ENTRIES}.` },
+      { status: 400 },
+    );
   }
 
   if (!body.source || !["cli", "web"].includes(body.source)) {
@@ -370,14 +478,18 @@ export async function POST(request: Request) {
 
   const userId = auth.userId;
 
-  const limited = rateLimit("usage-submit", userId, { limit: 20 });
+  const limited = await rateLimit("usage-submit", userId, { limit: 20 });
   if (limited) return limited;
 
-  // Validate all entries
+  const seenDates = new Set<string>();
   for (const entry of body.entries) {
     if (!isValidDate(entry.date)) {
       return NextResponse.json({ error: `Invalid date: ${entry.date}` }, { status: 400 });
     }
+    if (seenDates.has(entry.date)) {
+      return NextResponse.json({ error: `Duplicate date: ${entry.date}` }, { status: 400 });
+    }
+    seenDates.add(entry.date);
     if (!isWithinBackfillWindow(entry.date, MAX_BACKFILL_DAYS)) {
       return NextResponse.json(
         { error: `Date ${entry.date} is outside the ${MAX_BACKFILL_DAYS}-day backfill window` },
@@ -406,9 +518,10 @@ export async function POST(request: Request) {
     );
   }
 
-  // Process all entries concurrently — each entry is independent per-date
-  const settled = await Promise.allSettled(
-    body.entries.map(async (entry) => {
+  const settled = await mapSettledWithConcurrency(
+    body.entries,
+    USAGE_PROCESS_CONCURRENCY,
+    async (entry) => {
       // Check if a record already exists to determine create vs update
       const { data: existing } = await db
         .from("daily_usage")
@@ -610,10 +723,8 @@ export async function POST(request: Request) {
 
       // Build auto-title from aggregated usage data
       const models = agg.models;
-      const hasClaude = models?.some((m) => m.includes("claude") || m.includes("opus") || m.includes("sonnet") || m.includes("haiku"));
-      const claudeLabel = models?.some((m) => m.includes("opus")) ? "Claude Opus"
-        : models?.some((m) => m.includes("sonnet")) ? "Claude Sonnet"
-        : models?.some((m) => m.includes("haiku")) ? "Claude Haiku" : null;
+      const claudeLabel = resolveClaudeTitleLabel(models);
+      const hasClaude = Boolean(claudeLabel || models?.some((m) => m.toLowerCase().includes("claude")));
       const codexModel = models?.find((m) => /^gpt-/i.test(m) || /^o3/i.test(m) || /^o4/i.test(m));
       const codexLabel = codexModel
         ? /^gpt-/i.test(codexModel)
@@ -682,7 +793,7 @@ export async function POST(request: Request) {
         daily_total: agg.cost_usd,
         device_count: deviceRows.length,
       };
-    }),
+    },
   );
 
   // Collect results and errors

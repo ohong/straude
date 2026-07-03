@@ -17,7 +17,8 @@ export interface RecapData {
 }
 
 const MODEL_DISPLAY_NAMES: Record<string, string> = {
-  "claude-opus-4": "Claude Opus",
+  "claude-fable": "Claude Fable",
+  "claude-opus": "Claude Opus",
   "claude-sonnet-4": "Claude Sonnet",
   "claude-haiku-4": "Claude Haiku",
 };

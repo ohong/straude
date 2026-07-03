@@ -237,7 +237,7 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
 
-  const limited = rateLimit("social", user.id, { limit: 30 });
+  const limited = await rateLimit("social", user.id, { limit: 30 });
   if (limited) return limited;
 
   const { recipientUsername, content, attachments: rawAttachments } = await request.json();

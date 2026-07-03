@@ -4,6 +4,14 @@ vi.mock("@/lib/supabase/server", () => ({
   createClient: vi.fn(),
 }));
 
+const mockServiceClient = {
+  rpc: vi.fn(),
+};
+
+vi.mock("@/lib/supabase/service", () => ({
+  getServiceClient: vi.fn(() => mockServiceClient),
+}));
+
 const mockCreate = vi.fn();
 
 vi.mock("@anthropic-ai/sdk", () => {
@@ -48,6 +56,10 @@ beforeEach(() => {
   vi.clearAllMocks();
   process.env.ANTHROPIC_API_KEY = "test-key";
   process.env.NEXT_PUBLIC_SUPABASE_URL = "https://test.supabase.co";
+  mockServiceClient.rpc.mockResolvedValue({
+    data: [{ allowed: true, retry_after_seconds: 0 }],
+    error: null,
+  });
 });
 
 describe("POST /api/ai/generate-caption", () => {
@@ -62,7 +74,7 @@ describe("POST /api/ai/generate-caption", () => {
 
     const res = await POST(
       makeRequest({
-        images: ["https://test.supabase.co/storage/v1/object/public/screenshots/1.png"],
+        images: ["https://test.supabase.co/storage/v1/object/public/post-images/user-1/1.png"],
         usage: { costUSD: 2.5, totalTokens: 10000 },
       })
     );
@@ -81,7 +93,7 @@ describe("POST /api/ai/generate-caption", () => {
 
     const res = await POST(
       makeRequest({
-        images: ["https://test.supabase.co/storage/v1/object/public/screenshots/1.png"],
+        images: ["https://test.supabase.co/storage/v1/object/public/post-images/user-1/1.png"],
         usage: { costUSD: 1 },
       })
     );
@@ -97,7 +109,7 @@ describe("POST /api/ai/generate-caption", () => {
 
     const res = await POST(
       makeRequest({
-        images: ["https://test.supabase.co/storage/v1/object/public/screenshots/1.png"],
+        images: ["https://test.supabase.co/storage/v1/object/public/post-images/user-1/1.png"],
         usage: {},
       })
     );
@@ -135,7 +147,7 @@ describe("POST /api/ai/generate-caption", () => {
 
     const res = await POST(
       makeRequest({
-        images: ["https://test.supabase.co/storage/v1/object/public/screenshots/1.png"],
+        images: ["https://test.supabase.co/storage/v1/object/public/post-images/user-1/1.png"],
         usage: {},
       })
     );
@@ -151,7 +163,7 @@ describe("POST /api/ai/generate-caption", () => {
 
     const res = await POST(
       makeRequest({
-        images: ["https://test.supabase.co/storage/v1/object/public/screenshots/1.png"],
+        images: ["https://test.supabase.co/storage/v1/object/public/post-images/user-1/1.png"],
         usage: {},
       })
     );
@@ -172,7 +184,7 @@ describe("POST /api/ai/generate-caption", () => {
 
     const res = await POST(
       makeRequest({
-        images: ["https://test.supabase.co/storage/v1/object/public/screenshots/1.png"],
+        images: ["https://test.supabase.co/storage/v1/object/public/post-images/user-1/1.png"],
         usage: {},
       })
     );
@@ -181,5 +193,42 @@ describe("POST /api/ai/generate-caption", () => {
     expect(res.status).toBe(200);
     expect(json.title.length).toBe(100);
     expect(json.description.length).toBe(5000);
+  });
+
+  it("rejects first-party storage URLs outside post-images", async () => {
+    mockSupabaseUser({ id: "user-1" });
+
+    const res = await POST(
+      makeRequest({
+        images: ["https://test.supabase.co/storage/v1/object/public/avatars/user-1/avatar.png"],
+        usage: {},
+      })
+    );
+    const json = await res.json();
+
+    expect(res.status).toBe(400);
+    expect(json.error).toBe("Images must use Straude post image uploads");
+    expect(mockCreate).not.toHaveBeenCalled();
+  });
+
+  it("applies durable AI quota before calling Anthropic", async () => {
+    mockSupabaseUser({ id: "user-1" });
+    mockServiceClient.rpc.mockResolvedValueOnce({
+      data: [{ allowed: false, retry_after_seconds: 42 }],
+      error: null,
+    });
+
+    const res = await POST(
+      makeRequest({
+        images: ["https://test.supabase.co/storage/v1/object/public/post-images/user-1/1.png"],
+        usage: {},
+      })
+    );
+    const json = await res.json();
+
+    expect(res.status).toBe(429);
+    expect(res.headers.get("Retry-After")).toBe("42");
+    expect(json.error).toContain("Too many requests");
+    expect(mockCreate).not.toHaveBeenCalled();
   });
 });

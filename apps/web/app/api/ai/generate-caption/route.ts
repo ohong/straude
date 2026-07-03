@@ -1,6 +1,17 @@
 import { NextResponse, type NextRequest } from "next/server";
 import { createClient } from "@/lib/supabase/server";
+import { rateLimit } from "@/lib/rate-limit";
+import { isFirstPartyPublicStorageUrl } from "@/lib/storage";
 import Anthropic from "@anthropic-ai/sdk";
+
+interface CaptionUsage {
+  costUSD?: number;
+  totalTokens?: number;
+  inputTokens?: number;
+  outputTokens?: number;
+  models?: string[];
+  sessionCount?: number;
+}
 
 export async function POST(request: NextRequest) {
   const supabase = await createClient();
@@ -12,7 +23,14 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
 
-  const { images, usage } = await request.json();
+  let body: { images?: unknown; usage?: CaptionUsage };
+  try {
+    body = await request.json();
+  } catch {
+    return NextResponse.json({ error: "Invalid JSON" }, { status: 400 });
+  }
+
+  const { images, usage } = body;
 
   if (!images || !Array.isArray(images) || images.length === 0) {
     return NextResponse.json(
@@ -28,25 +46,25 @@ export async function POST(request: NextRequest) {
     );
   }
 
-  // Only allow images hosted on our own Supabase storage to prevent SSRF
-  const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
-  const allowedOrigin = supabaseUrl ? new URL(supabaseUrl).origin : null;
   for (const url of images) {
     if (typeof url !== "string") {
       return NextResponse.json({ error: "Invalid image URL" }, { status: 400 });
     }
-    try {
-      const parsed = new URL(url);
-      if (!allowedOrigin || parsed.origin !== allowedOrigin) {
-        return NextResponse.json(
-          { error: "Images must be hosted on Straude storage" },
-          { status: 400 }
-        );
-      }
-    } catch {
-      return NextResponse.json({ error: "Invalid image URL" }, { status: 400 });
+    if (!isFirstPartyPublicStorageUrl(url, "post-images")) {
+      return NextResponse.json(
+        { error: "Images must use Straude post image uploads" },
+        { status: 400 }
+      );
     }
   }
+
+  const minuteLimited = await rateLimit("ai-caption:minute", user.id, { limit: 5 });
+  if (minuteLimited) return minuteLimited;
+  const dayLimited = await rateLimit("ai-caption:day", user.id, {
+    limit: 50,
+    windowSeconds: 24 * 60 * 60,
+  });
+  if (dayLimited) return dayLimited;
 
   const apiKey = process.env.ANTHROPIC_API_KEY;
   if (!apiKey) {

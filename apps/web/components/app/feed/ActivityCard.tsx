@@ -95,6 +95,7 @@ function formatModels(
 
   // Legacy fallback: pick highest-tier model
   if (!models || models.length === 0) return null;
+  if (models.some((m) => m.includes("fable"))) return "Claude Fable";
   if (models.some((m) => m.includes("opus"))) return "Claude Opus";
   if (models.some((m) => m.includes("sonnet"))) return "Claude Sonnet";
   if (models.some((m) => m.includes("haiku"))) return "Claude Haiku";
@@ -165,6 +166,7 @@ function hashString(input: string): number {
 }
 
 function modelColor(name: string): string {
+  if (/Claude Fable/.test(name)) return "#C2410C";
   if (/Claude Opus/.test(name)) return "#DF561F";
   if (/Claude Sonnet/.test(name)) return "#F08A5D";
   if (/Claude Haiku/.test(name)) return "#F7B267";

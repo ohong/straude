@@ -4,6 +4,14 @@ vi.mock("@/lib/supabase/server", () => ({
   createClient: vi.fn(),
 }));
 
+const mockServiceClient = {
+  rpc: vi.fn(),
+};
+
+vi.mock("@/lib/supabase/service", () => ({
+  getServiceClient: vi.fn(() => mockServiceClient),
+}));
+
 import { POST as followPOST, DELETE as followDELETE } from "@/app/api/follow/[username]/route";
 import {
   POST as kudosPOST,
@@ -45,6 +53,10 @@ function makeRequest(
 
 beforeEach(() => {
   vi.clearAllMocks();
+  mockServiceClient.rpc.mockResolvedValue({
+    data: [{ allowed: true, retry_after_seconds: 0 }],
+    error: null,
+  });
 });
 
 // ---------- Follow ----------

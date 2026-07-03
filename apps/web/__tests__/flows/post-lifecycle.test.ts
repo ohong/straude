@@ -12,6 +12,10 @@ vi.mock("@/lib/supabase/server", () => ({
   createClient: vi.fn(() => mockSupabase),
 }));
 
+vi.mock("@/lib/achievements", () => ({
+  checkAndAwardAchievements: vi.fn().mockResolvedValue(undefined),
+}));
+
 // ---------------------------------------------------------------------------
 // Helpers
 // ---------------------------------------------------------------------------

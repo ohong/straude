@@ -8,6 +8,7 @@ import { getDistinctId, getMachineId } from "../lib/machine-id.js";
 interface CliInitResponse {
   code: string;
   verify_url: string;
+  poll_secret: string;
 }
 
 interface CliPollResponse {
@@ -76,7 +77,11 @@ export async function loginCommand(apiUrlOverride?: string): Promise<void> {
     process.exit(1);
   }
 
-  const { code, verify_url } = initRes;
+  const { code, verify_url, poll_secret } = initRes;
+  if (!poll_secret) {
+    console.error("Failed to start login: server did not return a poll secret. Please update Straude and try again.");
+    process.exit(1);
+  }
 
   openBrowser(verify_url);
   console.log(`\nIf the browser didn't open, visit:\n  ${verify_url}\n`);
@@ -92,7 +97,7 @@ export async function loginCommand(apiUrlOverride?: string): Promise<void> {
     try {
       pollRes = await apiRequestNoAuth<CliPollResponse>(apiUrl, "/api/auth/cli/poll", {
         method: "POST",
-        body: JSON.stringify({ code }),
+        body: JSON.stringify({ code, poll_secret }),
       });
     } catch {
       // Network errors during polling are transient, keep trying
