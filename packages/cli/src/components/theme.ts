@@ -20,6 +20,7 @@ export type Theme = typeof theme;
 
 // Model color map — Claude = orange, OpenAI = purple
 export const modelColors: Record<string, string> = {
+  'Claude Fable':  '#C2410C',  // deep burnt orange — top Claude tier
   'Claude Opus':   '#DF561F',  // brand orange
   'Claude Sonnet': '#F08A5D',  // lighter orange
   'Claude Haiku':  '#F7B267',  // amber
