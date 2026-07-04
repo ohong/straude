@@ -225,3 +225,9 @@ Dedicated `/notifications` page with infinite scroll pagination, type filtering 
 Generate branded usage summary images (weekly/monthly) for sharing on social media. Includes OG image generation for link previews (1200x630), downloadable square PNG (1080x1080) for Instagram, and a live card preview page at `/recap`. Stats include total spend, output tokens, active days, session count, streak, primary model, and a mini contribution strip. Public users get shareable URLs at `/recap/[username]`; private users can still view and download their own card.
 
 Redesign: light theme with 10 FLUX-generated abstract backgrounds (selectable). Contribution strip caps at today (no future-day placeholders). Background choice persists in shareable URLs via `?bg=` param.
+
+### Activation analytics follow-ups (2026-07-04)
+
+- Add edge-case tests for the `first_sync_confirmed` gate in `/api/usage/status`: null/invalid `created_at` and earliest-row query error (implementation already fails closed; tests would lock it in).
+- Right-sidebar API: the `.not("id", "in", ...)` exclude filter inlines every followed user id into the query — will get unwieldy for users following hundreds of people. Consider an RPC or a join-based exclusion.
+- PostHog project setup (from PR #139): activation funnel actions/dashboards still need to be created in PostHog itself (no MCP/CLI key available in the checkout at the time).

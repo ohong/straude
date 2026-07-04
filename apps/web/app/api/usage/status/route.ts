@@ -18,9 +18,25 @@ type UsageTotalsRow = {
   total_tokens: number | string | null;
 };
 
+type EarliestUsageRow = {
+  created_at: string | null;
+};
+
+const FIRST_SYNC_CONFIRMATION_WINDOW_MS = 24 * 60 * 60 * 1000;
+
 function firstModel(models: unknown): string | null {
   if (!Array.isArray(models) || models.length === 0) return null;
   return typeof models[0] === "string" ? models[0] : null;
+}
+
+function isWithinFirstSyncConfirmationWindow(createdAt: string | null | undefined) {
+  if (!createdAt) return false;
+
+  const createdAtMs = new Date(createdAt).getTime();
+  if (!Number.isFinite(createdAtMs)) return false;
+
+  const ageMs = Date.now() - createdAtMs;
+  return ageMs >= 0 && ageMs < FIRST_SYNC_CONFIRMATION_WINDOW_MS;
 }
 
 export async function GET() {
@@ -33,7 +49,7 @@ export async function GET() {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
 
-  const [latestUsageResult, usageTotalsResult] = await Promise.all([
+  const [latestUsageResult, usageTotalsResult, earliestUsageResult] = await Promise.all([
     supabase
       .from("daily_usage")
       .select("id,date,cost_usd,total_tokens,session_count,models,created_at")
@@ -44,6 +60,13 @@ export async function GET() {
     supabase
       .rpc("get_user_usage_totals", { p_user_id: user.id })
       .single(),
+    supabase
+      .from("daily_usage")
+      .select("created_at")
+      .eq("user_id", user.id)
+      .order("created_at", { ascending: true })
+      .limit(1)
+      .maybeSingle(),
   ]);
 
   if (latestUsageResult.error) {
@@ -71,19 +94,25 @@ export async function GET() {
     .eq("daily_usage_id", latestUsage.id)
     .maybeSingle();
 
-  after(() => captureServerActivationEvent({
-    event: "first_sync_confirmed",
-    distinctId: user.id,
-    properties: {
-      surface: "usage_status",
-      activation_state: "activated",
-      is_authenticated: true,
-      session_count,
-      total_tokens,
-      total_cost_usd: Math.round(cost_usd * 100) / 100,
-      "$insert_id": `first_sync_confirmed:${user.id}:${latestUsage.id}`,
-    },
-  }));
+  const earliestUsage = earliestUsageResult.data as EarliestUsageRow | null;
+  if (
+    !earliestUsageResult.error
+    && isWithinFirstSyncConfirmationWindow(earliestUsage?.created_at)
+  ) {
+    after(() => captureServerActivationEvent({
+      event: "first_sync_confirmed",
+      distinctId: user.id,
+      properties: {
+        surface: "usage_status",
+        activation_state: "activated",
+        is_authenticated: true,
+        session_count,
+        total_tokens,
+        total_cost_usd: Math.round(cost_usd * 100) / 100,
+        "$insert_id": `first_sync_confirmed:${user.id}`,
+      },
+    }));
+  }
 
   return NextResponse.json({
     has_data: true,

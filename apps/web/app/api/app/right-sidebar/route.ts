@@ -85,10 +85,7 @@ export async function GET() {
     }
   }
 
-  const merged: RightSidebarSuggestedUser[] = [];
-  for (const candidate of activeUsers) {
-    if (!merged.some((item) => item.id === candidate.id)) merged.push(candidate);
-  }
+  const merged: RightSidebarSuggestedUser[] = [...activeUsers];
 
   for (const candidate of newSignups ?? []) {
     if (!candidate.username) continue;

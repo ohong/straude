@@ -2,7 +2,13 @@
 
 ## Unreleased
 
+### Added
+
+- **Daily `/api/cron/refresh-open-stats` cron** (Vercel cron, 05:00 UTC) that runs the live open-stats aggregation and persists a durable snapshot. Closes the gap left by the activation performance work, where `/open` and the landing ticker were switched to snapshot-only reads but nothing refreshed the snapshot.
+
 ### Changed
+
+- **Activation funnel events are now captured exclusively server-side.** `trackActivationEvent` no longer double-captures via browser posthog-js for consented users; the consent-exempt, privacy-limited server path (which owns anonymous→user identity stitching) is the single source of truth for funnel math.
 
 - **Unified usage collection on ccusage v20 for both Claude Code and Codex.** The CLI now bundles `ccusage@20.0.8` and invokes its native binary directly (no global install, no PATH lookup), replacing Straude's native Codex collector, token normalizer, pricing aliases, and fingerprinting code (~1,500 lines removed). A single `ccusage daily --json --no-offline` run produces unified Claude+Codex rows with `metadata.agents`; ccusage owns raw-session parsing, dedupe, token accounting, and online pricing. The 20.0.7/20.0.8 releases specifically fix Codex accuracy: archived-session inclusion + dedupe, skipping replayed parent token history in `thread_spawn` subagent sessions, and goal-rollout event dedupe. New `reasoning_output_tokens` column on `daily_usage`/`device_usage` (derived as the residual of authoritative `totalTokens`), collector metadata (`ccusage_version`, `ccusage_agents`, `pricing_mode`) persisted per row, and a one-time 30-day backfill on the first post-migration push (`ccusage_v20_migration_completed_at` config marker). The server rejects unsupported agents and non-online pricing; the new `ccusage-codex-v20` collector joins the trusted set so corrected uploads can lower inflated Codex totals.
 
@@ -12,6 +18,9 @@
 
 ### Fixed
 
+- **`first_sync_confirmed` no longer fires on every `/api/usage/status` poll for every user with usage.** It now fires only while the user's earliest `daily_usage` row is under 24 hours old (a genuine first sync), with a per-user `$insert_id` (`first_sync_confirmed:{userId}`) so PostHog dedups repeat polls inside the window.
+- **`/api/analytics/activation` is rate-limited** (20 req/min per user, or per client IP for anonymous requests) via the durable Supabase-backed limiter, so the unauthenticated funnel endpoint can't be trivially spammed.
+- Minor cleanups: shared `getCookieValue` helper in `lib/analytics/activation.ts` (was duplicated in two routes), removed a dead dedup loop in the right-sidebar API route, and the `after()` test-scope fallback now logs task errors instead of swallowing them.
 - **Codex collector token accounting.** Two bugs collapsed into one user-visible symptom:
   1. The dual-candidate token-bucket normalizer could let `cache_read_tokens` exceed `input_tokens` when bucket-level arithmetic drift made the "separate cache" candidate look more consistent than the inclusive one. Replaced with a deterministic inclusive-cache clamp on the codex path. (Defense in depth — see #2 for the actual load-bearing fix.)
   2. **The real bug:** `parseSessionFile` interpreted Codex's `total_token_usage` as a session-cumulative counter and computed deltas via subtraction. Verified against real `~/.codex/sessions/` JSONL: that field is the *current request's context snapshot*, not session cumulative — the IDE periodically prunes context, the snapshot drops, and when it grows back, the cumulative-delta logic added the entire regrowth on top of the pre-prune peak. On a real heavy-usage day this inflated the bucket sum by 70x within a single session and 18x at the day level. Fix: prefer the per-event `last_token_usage` field (Codex's actual per-request billing data) and dedupe consecutive events with identical `total_token_usage` snapshots (51% of real events are duplicates; 99.8% of those have matching `last`). Fall back to cumulative-delta only when `last_token_usage` is missing.

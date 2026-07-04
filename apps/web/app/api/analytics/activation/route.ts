@@ -4,10 +4,12 @@ import {
   ACTIVATION_ANONYMOUS_COOKIE,
   ACTIVATION_ANONYMOUS_COOKIE_MAX_AGE,
   deriveActivationState,
+  getCookieValue,
   isActivationEventName,
   sanitizeActivationProperties,
 } from "@/lib/analytics/activation";
 import { captureServerActivationEvent, identifyServerActivationUser } from "@/lib/analytics/server";
+import { rateLimit } from "@/lib/rate-limit";
 import { createClient } from "@/lib/supabase/server";
 
 const CLIENT_EVENT_ALLOWLIST = new Set([
@@ -20,16 +22,6 @@ const CLIENT_EVENT_ALLOWLIST = new Set([
   "activation_completed",
 ]);
 
-function getCookieValue(cookieHeader: string | null, name: string): string | null {
-  if (!cookieHeader) return null;
-  const target = `${name}=`;
-  const entry = cookieHeader
-    .split(";")
-    .map((part) => part.trim())
-    .find((part) => part.startsWith(target));
-  return entry ? decodeURIComponent(entry.slice(target.length)) : null;
-}
-
 async function getUserId(): Promise<string | null> {
   try {
     const supabase = await createClient();
@@ -40,6 +32,13 @@ async function getUserId(): Promise<string | null> {
   } catch {
     return null;
   }
+}
+
+function rateLimitSubject(request: Request, userId: string | null): string {
+  if (userId) return userId;
+
+  const forwardedFor = request.headers.get("x-forwarded-for");
+  return forwardedFor?.split(",")[0]?.trim() || "unknown";
 }
 
 export async function POST(request: Request) {
@@ -55,6 +54,13 @@ export async function POST(request: Request) {
   }
 
   const userId = await getUserId();
+  const limited = await rateLimit(
+    "activation-analytics",
+    rateLimitSubject(request, userId),
+    { limit: 20, windowSeconds: 60 },
+  );
+  if (limited) return limited;
+
   const cookieHeader = request.headers.get("cookie");
   const existingAnonymousId = getCookieValue(cookieHeader, ACTIVATION_ANONYMOUS_COOKIE);
   const anonymousId = existingAnonymousId ?? randomUUID();

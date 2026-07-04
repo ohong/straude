@@ -1,6 +1,6 @@
 "use client";
 
-import { Suspense, useEffect, useState } from "react";
+import { Suspense, useEffect, useRef } from "react";
 import { usePathname, useSearchParams } from "next/navigation";
 import { ConsentAwareAnalytics } from "@/components/providers/ConsentAwareAnalytics";
 import { useAnalyticsConsent } from "@/components/providers/useAnalyticsConsent";
@@ -22,7 +22,7 @@ export function PublicAnalytics() {
 function PublicPageviewTracker({ enabled }: { enabled: boolean }) {
   const pathname = usePathname();
   const searchParams = useSearchParams();
-  const [lastCapturedUrl, setLastCapturedUrl] = useState<string | null>(null);
+  const lastCapturedUrlRef = useRef<string | null>(null);
 
   useEffect(() => {
     if (!enabled || !pathname) return;
@@ -31,11 +31,11 @@ function PublicPageviewTracker({ enabled }: { enabled: boolean }) {
     const path = query ? `${pathname}?${query}` : pathname;
     const url = `${window.location.origin}${path}`;
 
-    if (url === lastCapturedUrl) return;
-    setLastCapturedUrl(url);
+    if (url === lastCapturedUrlRef.current) return;
+    lastCapturedUrlRef.current = url;
 
     void captureConsentedPostHogEvent("$pageview", { $current_url: url });
-  }, [enabled, lastCapturedUrl, pathname, searchParams]);
+  }, [enabled, pathname, searchParams]);
 
   return null;
 }

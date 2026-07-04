@@ -14,11 +14,13 @@ import { createClient } from "@/lib/supabase/server";
 
 function mockUsageStatus({
   latestUsage,
+  earliestUsage = null,
   totals = { total_cost: 0, total_tokens: 0 },
   latestPost = null,
   latestUsageError = null,
 }: {
   latestUsage: unknown;
+  earliestUsage?: unknown;
   totals?: unknown;
   latestPost?: unknown;
   latestUsageError?: unknown;
@@ -31,6 +33,16 @@ function mockUsageStatus({
     maybeSingle: vi.fn().mockResolvedValue({
       data: latestUsage,
       error: latestUsageError,
+    }),
+  };
+  const earliestUsageChain = {
+    select: vi.fn().mockReturnThis(),
+    eq: vi.fn().mockReturnThis(),
+    order: vi.fn().mockReturnThis(),
+    limit: vi.fn().mockReturnThis(),
+    maybeSingle: vi.fn().mockResolvedValue({
+      data: earliestUsage,
+      error: null,
     }),
   };
   const latestPostChain = {
@@ -47,6 +59,7 @@ function mockUsageStatus({
       error: null,
     }),
   };
+  const dailyUsageChains = [latestUsageChain, earliestUsageChain];
   vi.mocked(createClient).mockResolvedValue({
     auth: {
       getUser: vi.fn().mockResolvedValue({
@@ -54,14 +67,20 @@ function mockUsageStatus({
       }),
     },
     from: vi.fn((table: string) => {
-      if (table === "daily_usage") return latestUsageChain;
+      if (table === "daily_usage") {
+        return dailyUsageChains.shift() ?? latestUsageChain;
+      }
       if (table === "posts") return latestPostChain;
       throw new Error(`Unexpected table ${table}`);
     }),
     rpc: vi.fn(() => rpcChain),
   } as any);
 
-  return { latestUsageChain, latestPostChain, rpcChain };
+  return { latestUsageChain, earliestUsageChain, latestPostChain, rpcChain };
+}
+
+function hoursAgoIso(hours: number) {
+  return new Date(Date.now() - hours * 60 * 60 * 1000).toISOString();
 }
 
 describe("GET /api/usage/status", () => {
@@ -81,6 +100,45 @@ describe("GET /api/usage/status", () => {
     expect(captureServerActivationEvent).not.toHaveBeenCalled();
   });
 
+  it("does not capture first sync confirmation when the first usage row is older than 24 hours", async () => {
+    mockUsageStatus({
+      latestUsage: {
+        id: "usage-latest",
+        date: "2026-07-02",
+        created_at: hoursAgoIso(1),
+        cost_usd: 1.25,
+        total_tokens: 2500,
+        output_tokens: 1200,
+        session_count: 2,
+        models: ["claude-sonnet-4-5-20250929"],
+      },
+      earliestUsage: { created_at: hoursAgoIso(24 * 30) },
+      totals: {
+        total_cost: 7.75,
+        total_tokens: 9000,
+      },
+      latestPost: { id: "post-1" },
+    });
+
+    const res = await GET();
+    const json = await res.json();
+
+    expect(res.status).toBe(200);
+    expect(json).toEqual({
+      has_data: true,
+      has_usage: true,
+      cost_usd: 7.75,
+      total_tokens: 9000,
+      session_count: 2,
+      top_model: "claude-sonnet-4-5-20250929",
+      latest_usage_id: "usage-latest",
+      latest_usage_at: expect.any(String),
+      latest_usage_date: "2026-07-02",
+      latest_post_url: "/post/post-1",
+    });
+    expect(captureServerActivationEvent).not.toHaveBeenCalled();
+  });
+
   it("captures first sync confirmation when web observes usage", async () => {
     mockUsageStatus({
       latestUsage: {
@@ -93,6 +151,7 @@ describe("GET /api/usage/status", () => {
         session_count: 2,
         models: ["claude-sonnet-4-5-20250929"],
       },
+      earliestUsage: { created_at: hoursAgoIso(1) },
       totals: {
         total_cost: 7.75,
         total_tokens: 9000,
@@ -122,7 +181,7 @@ describe("GET /api/usage/status", () => {
         session_count: 2,
         total_tokens: 9000,
         total_cost_usd: 7.75,
-        "$insert_id": "first_sync_confirmed:user-1:usage-1",
+        "$insert_id": "first_sync_confirmed:user-1",
       }),
     });
   });

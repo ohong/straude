@@ -96,6 +96,16 @@ const ALLOWED_PROPERTY_KEYS = new Set([
   "$insert_id",
 ]);
 
+export function getCookieValue(cookieHeader: string | null, name: string): string | null {
+  if (!cookieHeader) return null;
+  const target = `${name}=`;
+  const entry = cookieHeader
+    .split(";")
+    .map((part) => part.trim())
+    .find((part) => part.startsWith(target));
+  return entry ? decodeURIComponent(entry.slice(target.length)) : null;
+}
+
 export function isActivationEventName(value: unknown): value is ActivationEventName {
   return typeof value === "string" && EVENT_SET.has(value as ActivationEventName);
 }
