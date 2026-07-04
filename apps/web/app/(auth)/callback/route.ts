@@ -1,19 +1,9 @@
 import { NextResponse } from "next/server";
 import { after } from "@/lib/utils/after";
-import { ACTIVATION_ANONYMOUS_COOKIE, deriveActivationState } from "@/lib/analytics/activation";
+import { ACTIVATION_ANONYMOUS_COOKIE, deriveActivationState, getCookieValue } from "@/lib/analytics/activation";
 import { captureServerActivationEvent, identifyServerActivationUser } from "@/lib/analytics/server";
 import { createClient } from "@/lib/supabase/server";
 import { getServiceClient } from "@/lib/supabase/service";
-
-function getCookieValue(cookieHeader: string | null, name: string): string | null {
-  if (!cookieHeader) return null;
-  const target = `${name}=`;
-  const entry = cookieHeader
-    .split(";")
-    .map((part) => part.trim())
-    .find((part) => part.startsWith(target));
-  return entry ? decodeURIComponent(entry.slice(target.length)) : null;
-}
 
 export async function GET(request: Request) {
   const { searchParams, origin: requestOrigin } = new URL(request.url);

@@ -19,6 +19,8 @@ export function after(task: () => unknown | Promise<unknown>) {
     });
   } catch (error) {
     if (!isOutsideRequestScopeError(error)) throw error;
-    Promise.resolve().then(task).catch(() => {});
+    Promise.resolve().then(task).catch((taskError) => {
+      console.error("after() fallback task failed:", taskError);
+    });
   }
 }

@@ -76,5 +76,5 @@ export function trackActivationEvent(
     keepalive: true,
   }).catch(() => {});
 
-  void captureConsentedPostHogEvent(event, sanitized);
+  // Activation funnel events are captured exclusively server-side.
 }

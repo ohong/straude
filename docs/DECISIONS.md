@@ -911,3 +911,15 @@ Pricing the new-logic numbers at gpt-5.5 rates: $228.68 — matches what OpenAI 
 **Bug:** npm 11 silently strips the `bin` entry during publish for ESM packages (`"type": "module"`) that lack a `main` field, with the warning `"bin[straude]" script name was invalid and removed`. The published package had no binary, so `npx straude` failed.
 
 **Fix:** Adding `main` pointing to the same entrypoint satisfies npm's validation. The `main` field is redundant for a CLI-only package but harmless.
+
+---
+**Decision (2026-07-04):** Activation funnel events are captured exclusively server-side; the browser posthog-js duplicate capture in `trackActivationEvent` was removed.
+
+**Alternatives considered:** (1) Browser capture as canonical — rejected: it only covers consented users, dropping pre-consent top-of-funnel data. (2) Keep both and filter by a `source` property in funnels — rejected: the two paths use different distinct-id graphs (Supabase user id / activation cookie server-side vs. PostHog device id client-side), so identity fragments and anonymous→signed-up conversion math stays wrong even after filtering.
+
+**Why server-side:** it fires unconditionally (consent-exempt because properties are allowlist-sanitized: no prompts, paths, emails, or raw usage), and it owns `$identify` anonymous→user stitching via the `straude_activation_id` cookie.
+
+---
+**Decision (2026-07-04):** `first_sync_confirmed` is gated on the user's *earliest* `daily_usage.created_at` being <24h old, with a per-user `$insert_id`, instead of a row-count check or a persisted flag.
+
+**Alternatives considered:** `count === 1` gate — rejected because a default first sync backfills 3 days (up to 30 with `--days 30`), creating multiple rows at once and missing most genuine first syncs. Persisted `first_sync_confirmed` flag — rejected as a schema migration for something the earliest-row query answers for free. `$insert_id` dedup alone — rejected because PostHog's dedup window is best-effort over days, not a lifetime guarantee; it serves as a backstop inside the 24h window only.
