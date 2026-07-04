@@ -10,7 +10,7 @@ export const revalidate = 86400; // refresh once per day
 export const metadata: Metadata = {
   title: { absolute: "Global AI Token Usage Statistics | Straude" },
   description:
-    "How much does the average Claude Code user spend? See daily, anonymized usage statistics: total spend, tokens processed, most popular models, and spending distribution across all Straude users.",
+    "How much does the average Claude Code user spend? See daily, anonymized usage statistics: total spend, tokens processed, most popular models, and spending distribution across the Straude community.",
   alternates: { canonical: "/open" },
   openGraph: {
     url: "/open",
@@ -80,7 +80,7 @@ export default async function OpenStatsPage() {
         name: "How much does the average Claude Code user spend?",
         acceptedAnswer: {
           "@type": "Answer",
-          text: `Based on Straude community data, the average tracked user spends about ${fmtUsdDecimal(stats.avgWeeklySpend)} per week. Spending is heavily concentrated — the top 10% of users account for ${top10Pct}% of total spend.`,
+          text: `Based on Straude community data, average weekly spend is about ${fmtUsdDecimal(stats.avgWeeklySpend)}. Spending is heavily concentrated — the top 10% of users account for ${top10Pct}% of total spend.`,
         },
       },
       {
@@ -188,19 +188,12 @@ export default async function OpenStatsPage() {
                 How Much Does the Average Claude Code User Spend?
               </h2>
               <p className="mt-3">
-                Across{" "}
-                <strong className="text-foreground">
-                  {stats.trackedUsers.toLocaleString("en-US")}
-                </strong>{" "}
-                tracked users and{" "}
-                <strong className="text-foreground">
-                  {stats.totalSessions.toLocaleString("en-US")}
-                </strong>{" "}
-                logged sessions, the average Straude user spends about{" "}
+                Based on anonymized Straude community snapshots, average weekly
+                Claude Code spend is about{" "}
                 <strong className="text-foreground">
                   {fmtUsdDecimal(stats.avgWeeklySpend)}
                 </strong>{" "}
-                per week.
+                per active profile.
               </p>
               <p className="mt-3">
                 Straude users have tracked a combined{" "}
