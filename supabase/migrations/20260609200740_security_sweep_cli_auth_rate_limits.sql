@@ -1,11 +1,11 @@
 -- Security sweep: close CLI device-flow token hijacking and add durable API rate limits.
 
--- Expire any currently in-flight login codes because the protocol now requires
--- per-flow secrets that older rows do not have.
+-- Expire legacy login codes because the protocol now requires per-flow secrets
+-- that older rows do not have. These are short-lived, one-time login artifacts,
+-- not durable user credentials.
 UPDATE public.cli_auth_codes
 SET status = 'expired'
-WHERE status IN ('pending', 'completed')
-  AND expires_at > now();
+WHERE status <> 'expired';
 
 ALTER TABLE public.cli_auth_codes
   ADD COLUMN IF NOT EXISTS poll_secret_hash text,

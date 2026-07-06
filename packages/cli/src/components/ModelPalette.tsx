@@ -16,9 +16,13 @@ function hashString(input: string): number {
   return Math.abs(hash);
 }
 
-function getModelColor(name: string): string {
+export function getModelColor(name: string): string {
   // Exact match
   if (modelColors[name]) return modelColors[name]!;
+  if (/Claude.*Fable|Fable.*Claude|Fable/i.test(name)) return modelColors['Claude Fable']!;
+  if (/Claude.*Opus|Opus.*Claude|Opus/i.test(name)) return modelColors['Claude Opus']!;
+  if (/Claude.*Sonnet|Sonnet.*Claude|Sonnet/i.test(name)) return modelColors['Claude Sonnet']!;
+  if (/Claude.*Haiku|Haiku.*Claude|Haiku/i.test(name)) return modelColors['Claude Haiku']!;
   // Claude family → orange shades
   if (/Claude/i.test(name)) return modelColors['Claude Sonnet']!;
   // OpenAI family → purple shades
@@ -34,7 +38,7 @@ interface ModelSegment {
   pct: number;
 }
 
-function buildSegments(breakdown: Array<{ model: string; cost_usd: number }>): ModelSegment[] {
+export function buildSegments(breakdown: Array<{ model: string; cost_usd: number }>): ModelSegment[] {
   const totalCost = breakdown.reduce((sum, e) => sum + e.cost_usd, 0);
   if (totalCost <= 0) return [];
 

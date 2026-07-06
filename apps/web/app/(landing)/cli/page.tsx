@@ -79,6 +79,14 @@ const cliFaqJsonLd = {
         text: "Straude reads your local Claude Code usage logs and tracks: cost per session, input/output tokens, models used, session count, and daily totals. All data stays local until you explicitly push it.",
       },
     },
+    {
+      "@type": "Question",
+      name: "What should I do if login fails with Rate limit check failed?",
+      acceptedAnswer: {
+        "@type": "Answer",
+        text: "Run npx straude@latest login to rule out an old CLI, check any custom --api-url value, then retry after a minute. If the error persists against https://straude.com, it is likely a Straude service-side rate-limit dependency issue rather than a local browser or config problem.",
+      },
+    },
   ],
 };
 
@@ -374,6 +382,44 @@ straude auto logs`}</Pre>
                 </Code>
                 . On Linux, a tagged entry is added to your crontab.
               </p>
+            </section>
+
+            {/* ---------------------------------------------------------- */}
+            <section>
+              <h2 className="text-lg font-bold text-foreground">
+                Troubleshooting
+              </h2>
+              <div className="mt-3 space-y-5">
+                <div>
+                  <h3 className="font-bold text-foreground">
+                    <Code>
+                      Failed to start login: Rate limit check failed
+                    </Code>
+                  </h3>
+                  <p className="mt-1">
+                    This means Straude could not complete its server-side
+                    rate-limit check before starting the browser login flow. It
+                    is usually not caused by your browser, saved token, or local{" "}
+                    <Code>~/.straude/config.json</Code>.
+                  </p>
+                  <ol className="mt-3 list-decimal space-y-2 pl-6">
+                    <li>
+                      Retry with the latest CLI:{" "}
+                      <Code>npx straude@latest login</Code>.
+                    </li>
+                    <li>
+                      If you use <Code>--api-url</Code>, confirm it points to
+                      the Straude server you intend to use.
+                    </li>
+                    <li>
+                      Wait a minute and retry. If the error still appears
+                      against <Code>https://straude.com</Code>, treat it as a
+                      Straude service issue and report the exact command and
+                      timestamp.
+                    </li>
+                  </ol>
+                </div>
+              </div>
             </section>
 
             {/* ---------------------------------------------------------- */}
