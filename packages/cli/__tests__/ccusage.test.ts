@@ -17,6 +17,24 @@ import {
   _setCcusageCommandForTests,
 } from "../src/lib/ccusage.js";
 
+const ALL_BUILT_IN_CCUSAGE_AGENTS = [
+  "claude",
+  "codex",
+  "opencode",
+  "amp",
+  "droid",
+  "codebuff",
+  "hermes",
+  "pi",
+  "goose",
+  "openclaw",
+  "kilo",
+  "kimi",
+  "qwen",
+  "copilot",
+  "gemini",
+].sort();
+
 function row(overrides: Record<string, unknown> = {}) {
   return {
     period: "2026-05-13",
@@ -54,11 +72,12 @@ beforeEach(() => {
 
 describe("parseCcusageOutput", () => {
   it("parses ccusage v20 daily rows and derives reasoning residuals", () => {
-    const parsed = parseCcusageOutput(rawOutput(), { version: "20.0.6" });
+    const parsed = parseCcusageOutput(rawOutput(), { version: "20.0.16" });
 
     expect(parsed.data).toHaveLength(1);
     expect(parsed.data[0]).toEqual({
       date: "2026-05-13",
+      agents: ["codex"],
       models: ["gpt-5.2-codex"],
       inputTokens: 750,
       outputTokens: 125,
@@ -73,9 +92,9 @@ describe("parseCcusageOutput", () => {
     expect(parsed.agents).toEqual(["codex"]);
     expect(parsed.collector).toEqual({
       codex: CCUSAGE_CODEX_COLLECTOR,
-      ccusage_version: "20.0.6",
+      ccusage_version: "20.0.16",
       ccusage_agents: ["codex"],
-      pricing_mode: "offline",
+      pricing_mode: "online",
     });
   });
 
@@ -96,47 +115,42 @@ describe("parseCcusageOutput", () => {
         ],
         metadata: { agents: ["claude", "codex"] },
       }),
-    ]), { version: "20.0.6" });
+    ]), { version: "20.0.16" });
 
     expect(parsed.agents).toEqual(["claude", "codex"]);
     expect(parsed.collector).toEqual({
       claude: CCUSAGE_CLAUDE_COLLECTOR,
       codex: CCUSAGE_CODEX_COLLECTOR,
-      ccusage_version: "20.0.6",
+      ccusage_version: "20.0.16",
       ccusage_agents: ["claude", "codex"],
-      pricing_mode: "offline",
+      pricing_mode: "online",
     });
     expect(parsed.data[0]!.reasoningOutputTokens).toBe(100);
+    expect(parsed.data[0]!.agents).toEqual(["claude", "codex"]);
   });
 
-  it("skips unsupported ccusage agent rows without blocking supported usage", () => {
+  it("preserves every built-in ccusage data source", () => {
     const parsed = parseCcusageOutput(rawOutput([
       row({
         period: "2026-05-11",
-        modelsUsed: ["gemini-pro"],
-        modelBreakdowns: [{ modelName: "gemini-pro", cost: 0.01 }],
-        metadata: { agents: ["gemini"] },
-      }),
-      row({
-        period: "2026-05-12",
-        modelsUsed: ["claude-sonnet-4-5-20250929", "gemini-pro"],
+        modelsUsed: ["gpt-5.6", "gemini-3-pro"],
         modelBreakdowns: [
-          { modelName: "claude-sonnet-4-5-20250929", cost: 0.2 },
-          { modelName: "gemini-pro", cost: 0.01 },
+          { modelName: "gpt-5.6", cost: 0.002 },
+          { modelName: "gemini-3-pro", cost: 0.00110625 },
         ],
-        metadata: { agents: ["claude", "gemini"] },
+        metadata: { agents: ALL_BUILT_IN_CCUSAGE_AGENTS },
       }),
-      row({ period: "2026-05-13", metadata: { agents: ["codex"] } }),
-    ]), { version: "20.0.6" });
+    ]), { version: "20.0.16" });
 
     expect(parsed.data).toHaveLength(1);
-    expect(parsed.data[0]!.date).toBe("2026-05-13");
-    expect(parsed.agents).toEqual(["codex"]);
+    expect(parsed.data[0]!.agents).toEqual(ALL_BUILT_IN_CCUSAGE_AGENTS);
+    expect(parsed.agents).toEqual(ALL_BUILT_IN_CCUSAGE_AGENTS);
     expect(parsed.collector).toEqual({
+      claude: CCUSAGE_CLAUDE_COLLECTOR,
       codex: CCUSAGE_CODEX_COLLECTOR,
-      ccusage_version: "20.0.6",
-      ccusage_agents: ["codex"],
-      pricing_mode: "offline",
+      ccusage_version: "20.0.16",
+      ccusage_agents: ALL_BUILT_IN_CCUSAGE_AGENTS,
+      pricing_mode: "online",
     });
   });
 
@@ -159,13 +173,13 @@ describe("parseCcusageOutput", () => {
   });
 
   it("returns empty output for an empty ccusage daily array", () => {
-    const parsed = parseCcusageOutput(rawOutput([]), { version: "20.0.6" });
+    const parsed = parseCcusageOutput(rawOutput([]), { version: "20.0.16" });
     expect(parsed.data).toEqual([]);
     expect(parsed.agents).toEqual([]);
     expect(parsed.collector).toEqual({
-      ccusage_version: "20.0.6",
+      ccusage_version: "20.0.16",
       ccusage_agents: [],
-      pricing_mode: "offline",
+      pricing_mode: "online",
     });
   });
 
@@ -177,7 +191,7 @@ describe("parseCcusageOutput", () => {
 });
 
 describe("version and execution", () => {
-  it("invokes the installed ccusage binary with offline unified daily args", async () => {
+  it("invokes the installed ccusage binary with current online pricing by default", async () => {
     execFileMock.mockImplementationOnce((...args: unknown[]) => {
       const cb = args.at(-1) as (err: Error | null, stdout: string, stderr: string) => void;
       cb(null, rawOutput(), "");
@@ -189,25 +203,6 @@ describe("version and execution", () => {
     expect(execFileMock).toHaveBeenCalledTimes(1);
     expect(execFileMock).toHaveBeenCalledWith(
       "/bundled/ccusage",
-      ["daily", "--json", "--since", "20260513", "--until", "20260513", "--offline"],
-      expect.objectContaining({ shell: false }),
-      expect.any(Function),
-    );
-    expect(collected.collector.pricing_mode).toBe("offline");
-  });
-
-  it("can explicitly collect with online pricing", async () => {
-    execFileMock.mockImplementationOnce((...args: unknown[]) => {
-      const cb = args.at(-1) as (err: Error | null, stdout: string, stderr: string) => void;
-      cb(null, rawOutput(), "");
-    });
-
-    const collected = await collectCcusageUsageAsync("20260513", "20260513", 10_000, {
-      pricingMode: "online",
-    });
-
-    expect(execFileMock).toHaveBeenCalledWith(
-      "/bundled/ccusage",
       ["daily", "--json", "--since", "20260513", "--until", "20260513", "--no-offline"],
       expect.objectContaining({ shell: false }),
       expect.any(Function),
@@ -215,11 +210,30 @@ describe("version and execution", () => {
     expect(collected.collector.pricing_mode).toBe("online");
   });
 
+  it("can explicitly collect with embedded offline pricing", async () => {
+    execFileMock.mockImplementationOnce((...args: unknown[]) => {
+      const cb = args.at(-1) as (err: Error | null, stdout: string, stderr: string) => void;
+      cb(null, rawOutput(), "");
+    });
+
+    const collected = await collectCcusageUsageAsync("20260513", "20260513", 10_000, {
+      pricingMode: "offline",
+    });
+
+    expect(execFileMock).toHaveBeenCalledWith(
+      "/bundled/ccusage",
+      ["daily", "--json", "--since", "20260513", "--until", "20260513", "--offline"],
+      expect.objectContaining({ shell: false }),
+      expect.any(Function),
+    );
+    expect(collected.collector.pricing_mode).toBe("offline");
+  });
+
   it("rejects ccusage versions below the v20 accuracy floor", async () => {
-    _setCcusageCommandForTests({ cmd: "/bundled/ccusage", args: [], version: "20.0.4" });
+    _setCcusageCommandForTests({ cmd: "/bundled/ccusage", args: [], version: "20.0.15" });
 
     await expect(collectCcusageUsageAsync("20260513", "20260513")).rejects.toThrow(
-      /requires ccusage >=20\.0\.5/,
+      /requires ccusage >=20\.0\.16/,
     );
   });
 
@@ -234,7 +248,9 @@ describe("version and execution", () => {
         cb(null, rawOutput(), "");
       });
 
-    const collected = await collectCcusageUsageAsync("20260513", "20260513");
+    const collected = await collectCcusageUsageAsync("20260513", "20260513", undefined, {
+      pricingMode: "offline",
+    });
 
     expect(execFileMock).toHaveBeenCalledTimes(2);
     expect(execFileMock.mock.calls[0]![1]).toContain("--offline");
@@ -249,6 +265,7 @@ describe("version and execution", () => {
     });
 
     await expect(collectCcusageUsageAsync("20260513", "20260513", undefined, {
+      pricingMode: "offline",
       allowOnlineFallback: false,
     })).rejects.toThrow(
       /fully priced offline cost data/,

@@ -150,6 +150,7 @@ export interface ModelBreakdownEntry {
 // ccusage integration types
 export interface CcusageDailyEntry {
   date: string;
+  agents?: string[];
   models: string[];
   inputTokens: number;
   outputTokens: number;

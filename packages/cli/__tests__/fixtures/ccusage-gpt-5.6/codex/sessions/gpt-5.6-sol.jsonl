@@ -1,0 +1,2 @@
+{"timestamp":"2026-07-09T10:00:00.000Z","type":"turn_context","payload":{"model":"gpt-5.6-sol"}}
+{"timestamp":"2026-07-09T10:01:00.000Z","type":"event_msg","payload":{"type":"token_count","info":{"model":"gpt-5.6-sol","last_token_usage":{"input_tokens":100000,"cached_input_tokens":20000,"output_tokens":10000,"reasoning_output_tokens":5000,"total_tokens":110000},"total_token_usage":{"input_tokens":100000,"cached_input_tokens":20000,"output_tokens":10000,"reasoning_output_tokens":5000,"total_tokens":110000}}}}

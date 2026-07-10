@@ -44,7 +44,7 @@ silenceEpipe(process.stdout);
 silenceEpipe(process.stderr);
 
 const HELP = `
-straude v${CLI_VERSION} — Push your Claude Code and Codex usage to Straude
+straude v${CLI_VERSION} — Push your AI coding-agent usage to Straude
 
 Usage:
   straude                Sync latest stats (login if needed)

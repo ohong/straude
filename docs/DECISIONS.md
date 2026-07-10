@@ -2,11 +2,11 @@
 
 ## Delegate all usage accounting to bundled ccusage v20 (2026-06-09)
 
-**Decision:** Both Claude Code and Codex ingestion run through a single bundled `ccusage` (pinned, currently 20.0.8) invoked as a native binary, with a `>=20.0.5` accuracy floor validated against the bundled package version. Straude's native Codex collector, token normalizer, and pricing aliases are deleted; Straude only parses ccusage's daily JSON into storage rows.
+**Decision:** All supported coding-agent ingestion runs through a single bundled `ccusage` (compatible `^20.0.16` range) invoked as a native binary, with a `>=20.0.16` accuracy floor validated against the bundled package version. Straude's native collectors, token normalizer, source whitelist, and pricing aliases are deleted; Straude only parses ccusage's unified daily JSON into storage rows.
 
 **Alternatives considered:** (a) Keep the native Codex collector in parallel with ccusage Claude collection — rejected because it duplicates upstream parsing/dedupe/pricing work that ccusage now does correctly (v20 ships `metadata.agents`, archived-session dedupe, `thread_spawn` replay skipping) and was the source of two past inflation incidents. (b) Use a global `ccusage` from PATH — rejected because version skew on user machines breaks the accuracy floor; bundling pins the exact behavior we tested.
 
-**Trade-off accepted:** The unified all-agent ccusage report benchmarked ~9.5% slower (median +152ms on a three-day mixed fixture) than the old parallel native path. Accepted: accuracy and a single owner for token accounting outweigh sub-second CLI latency. `reasoning_output_tokens` is derived as the residual `totalTokens - (input + output + cacheCreate + cacheRead)` because ccusage's `totalTokens` is authoritative and includes reasoning.
+**Trade-off accepted:** The unified all-agent ccusage report benchmarked ~9.5% slower (median +152ms on a three-day mixed fixture) than the old parallel native path. Accepted: accuracy and a single owner for token accounting outweigh sub-second CLI latency. `reasoning_output_tokens` is derived as a non-negative residual `totalTokens - (input + output + cacheCreate + cacheRead)` when a source exposes reasoning outside the other reported buckets.
 
 ## Roll back SQL Codex repairs; heal only from CLI source data (2026-05-07)
 
@@ -923,3 +923,15 @@ Pricing the new-logic numbers at gpt-5.5 rates: $228.68 — matches what OpenAI 
 **Decision (2026-07-04):** `first_sync_confirmed` is gated on the user's *earliest* `daily_usage.created_at` being <24h old, with a per-user `$insert_id`, instead of a row-count check or a persisted flag.
 
 **Alternatives considered:** `count === 1` gate — rejected because a default first sync backfills 3 days (up to 30 with `--days 30`), creating multiple rows at once and missing most genuine first syncs. Persisted `first_sync_confirmed` flag — rejected as a schema migration for something the earliest-row query answers for free. `$insert_id` dedup alone — rejected because PostHog's dedup window is best-effort over days, not a lifetime guarantee; it serves as a backstop inside the 24h window only.
+
+## ccusage Owns Sources and Current Model Pricing (2026-07-09)
+
+**Decision:** Require `ccusage >=20.0.16`, run unified reports with online LiteLLM pricing by default, and accept every non-empty source ID ccusage emits. Preserve each daily row's `metadata.agents` in the normalized entry and collector metadata. Claude and Codex retain explicit collector markers only for their existing repair semantics; other sources use the generic ccusage run metadata.
+
+**Alternatives considered:**
+
+1. **Keep a Straude source whitelist** — rejected because it already caused valid OpenCode, Gemini CLI, and other unified rows to be discarded, and it would drift every time ccusage adds a source or a configured pi-format store.
+2. **Keep offline pricing as the default** — rejected because the `20.0.16` embedded snapshot prices the bare `gpt-5.6` label differently from the current LiteLLM row, while `--no-offline` refreshes it correctly. Straude's cumulative spend metric values accuracy above the small pricing-fetch latency.
+3. **Reimplement GPT-5.6 prices in Straude** — rejected because duplicate model tables create another source of drift and lose ccusage's request-level long-context handling.
+
+**Why this option:** ccusage is already the authoritative local parser and pricing adapter. Straude should validate its output shape, preserve source provenance, and test the resulting totals, not maintain a parallel catalog. A real Codex JSONL fixture exercises the installed native ccusage binary against all four GPT-5.6 variants and locks both token buckets and the LiteLLM-priced total.
