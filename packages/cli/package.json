@@ -1,6 +1,6 @@
 {
   "name": "straude",
-  "version": "0.1.28",
+  "version": "0.1.29",
   "description": "CLI for pushing AI coding agent usage stats to Straude",
   "main": "dist/index.js",
   "bin": {
