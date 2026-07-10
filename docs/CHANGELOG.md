@@ -2,6 +2,10 @@
 
 ## Unreleased
 
+### Changed
+
+- **Extracted `ActivityCard`'s hardcoded model chip colors** into `apps/web/lib/constants/model-colors.ts` (`MODEL_COLOR_PATTERNS`, `MODEL_COLOR_FALLBACK_PALETTE`). No visual change — same colors, same matching order — just moved out of the component per the design-system-consistency roadmap item.
+
 ### Added
 
 - **Daily `/api/cron/refresh-open-stats` cron** (Vercel cron, 05:00 UTC) that runs the live open-stats aggregation and persists a durable snapshot. Closes the gap left by the activation performance work, where `/open` and the landing ticker were switched to snapshot-only reads but nothing refreshed the snapshot.

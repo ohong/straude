@@ -124,9 +124,6 @@ Extension of Team/Org Workspaces with premium features: private team leaderboard
 ### Client-side email validation before OTP send
 Login form uses `type="email"` + `required` but no check for common mistakes (missing TLD, etc.) before the network request. Low effort, low impact.
 
-### Model colors outside design system
-`ActivityCard.tsx:147-158` uses hardcoded hex colors for model chips. Should be extracted to `lib/constants/model-colors.ts` for consistency.
-
 ### Typing indicators in DMs
 No typing indicators in direct messages. Would require Supabase Realtime presence channels.
 
