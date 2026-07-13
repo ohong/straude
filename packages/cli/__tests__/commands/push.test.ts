@@ -35,6 +35,13 @@ vi.mock("../../src/lib/posthog.js", () => ({
   },
 }));
 
+vi.mock("ink", () => ({
+  render: vi.fn(() => ({
+    waitUntilExit: () => Promise.resolve(),
+    unmount: vi.fn(),
+  })),
+}));
+
 import { createHash } from "node:crypto";
 import { pushCommand } from "../../src/commands/push.js";
 import { loadConfig, saveConfig, updateLastPushDate } from "../../src/lib/auth.js";
@@ -42,6 +49,7 @@ import { loginCommand } from "../../src/commands/login.js";
 import { apiRequest } from "../../src/lib/api.js";
 import { collectCcusageUsageAsync } from "../../src/lib/ccusage.js";
 import { reportUsagePushFailed, shutdownTelemetryWithTimeout } from "../../src/lib/telemetry.js";
+import { render } from "ink";
 
 const mockLoadConfig = vi.mocked(loadConfig);
 const mockSaveConfig = vi.mocked(saveConfig);
@@ -322,6 +330,47 @@ describe("pushCommand", () => {
       "/api/cli/dashboard",
     );
     expect(console.log).toHaveBeenCalledWith(expect.stringContaining("dry run"));
+  });
+
+  it("waits for and renders the scorecard after submit", async () => {
+    mockApiRequest.mockImplementation(async (_config, path) => {
+      if (path === "/api/usage/submit") {
+        return {
+          results: [{
+            date: todayStr(),
+            usage_id: "u-1",
+            post_id: "p-1",
+            post_url: "https://straude.com/post/p-1",
+            action: "created",
+          }],
+        };
+      }
+
+      // Regression: the old 1.5-second dashboard race discarded this response.
+      await new Promise((resolve) => setTimeout(resolve, 1_600));
+      return {
+        username: "alice",
+        level: 3,
+        streak: 5,
+        daily: [{ date: todayStr(), cost_usd: 12.5 }],
+        week_cost: 12.5,
+        prev_week_cost: 8,
+        leaderboard: null,
+        model_breakdown: [],
+        total_output_tokens: 5_000_000,
+      };
+    });
+
+    await pushCommand({});
+
+    expect(mockApiRequest).toHaveBeenLastCalledWith(
+      expect.objectContaining(fakeConfig),
+      "/api/cli/dashboard",
+    );
+    expect(render).toHaveBeenCalledTimes(1);
+    expect(console.log).not.toHaveBeenCalledWith(
+      expect.stringContaining("Dashboard took too long"),
+    );
   });
 
   it("reports scan failures and exits before submit", async () => {

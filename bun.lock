@@ -67,7 +67,7 @@
     },
     "packages/cli": {
       "name": "straude",
-      "version": "0.1.29",
+      "version": "0.1.30",
       "bin": {
         "straude": "dist/index.js",
       },

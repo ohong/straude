@@ -2,6 +2,10 @@
 
 ## Unreleased
 
+### Fixed
+
+- **The CLI now waits for and renders the scorecard after a successful sync.** A healthy dashboard response taking longer than 1.5 seconds is no longer discarded with a suggestion to run `straude status` separately.
+
 ### Added
 
 - **Daily `/api/cron/refresh-open-stats` cron** (Vercel cron, 05:00 UTC) that runs the live open-stats aggregation and persists a durable snapshot. Closes the gap left by the activation performance work, where `/open` and the landing ticker were switched to snapshot-only reads but nothing refreshed the snapshot.
