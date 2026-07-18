@@ -1,5 +1,5 @@
 import { createClient } from "@/lib/supabase/server";
-import { getAuthUser } from "@/lib/supabase/auth";
+import { getAuthIdentity } from "@/lib/supabase/auth";
 import { getServiceClient } from "@/lib/supabase/service";
 
 type ProfileShape = {
@@ -24,7 +24,7 @@ export async function getProfileAccessContext<TProfile extends ProfileShape>(
   // Use cached auth (shared with middleware/layout) + profile fetch in parallel
   const [authUser, { data: rawProfile, error: profileError }] =
     await Promise.all([
-      getAuthUser(),
+      getAuthIdentity(),
       db
         .from("users")
         .select(selectFields)

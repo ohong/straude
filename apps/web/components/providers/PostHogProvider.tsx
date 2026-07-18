@@ -1,7 +1,8 @@
 "use client";
 
-import { Suspense, useEffect, useRef, useState } from "react";
+import { Suspense, useCallback, useEffect, useRef, useState } from "react";
 import { usePathname, useSearchParams } from "next/navigation";
+import { useReportWebVitals } from "next/web-vitals";
 import posthog from "posthog-js";
 import { PostHogProvider as PHProvider } from "posthog-js/react";
 import type { User } from "@supabase/supabase-js";
@@ -45,6 +46,7 @@ export function PostHogClientProvider({
       ui_host: "https://us.posthog.com",
       defaults: "2025-05-24",
       capture_pageview: false,
+      capture_performance: { web_vitals: true },
       person_profiles: "identified_only",
     });
     initialized.current = true;
@@ -75,12 +77,64 @@ export function PostHogClientProvider({
 
   return (
     <PHProvider client={posthog}>
+      <WebVitalsReporter ready={ready} />
       <Suspense fallback={null}>
         <PageviewTracker ready={ready} />
       </Suspense>
       {children}
     </PHProvider>
   );
+}
+
+type WebVitalsMetric = Parameters<Parameters<typeof useReportWebVitals>[0]>[0];
+
+type TtfbSample = {
+  metric: WebVitalsMetric;
+  currentUrl: string;
+  pathname: string;
+};
+
+/**
+ * PostHog's built-in web-vitals capture omits TTFB. Keep this reporter limited
+ * to TTFB so LCP, CLS, FCP, and INP are not counted twice.
+ */
+export function WebVitalsReporter({ ready }: { ready: boolean }) {
+  const [ttfbSample, setTtfbSample] = useState<TtfbSample | null>(null);
+  const reportedMetricIds = useRef(new Set<string>());
+  const reportWebVitals = useCallback((metric: WebVitalsMetric) => {
+    if (metric.name !== "TTFB") return;
+
+    setTtfbSample({
+      metric,
+      currentUrl: window.location.href,
+      pathname: window.location.pathname,
+    });
+  }, []);
+
+  useReportWebVitals(reportWebVitals);
+
+  useEffect(() => {
+    if (
+      !ready ||
+      !ttfbSample ||
+      reportedMetricIds.current.has(ttfbSample.metric.id)
+    ) {
+      return;
+    }
+
+    reportedMetricIds.current.add(ttfbSample.metric.id);
+    posthog.capture("web_vital_ttfb", {
+      metric_name: "TTFB",
+      value_ms: ttfbSample.metric.value,
+      metric_id: ttfbSample.metric.id,
+      rating: ttfbSample.metric.rating,
+      navigation_type: ttfbSample.metric.navigationType,
+      pathname: ttfbSample.pathname,
+      $current_url: ttfbSample.currentUrl,
+    });
+  }, [ready, ttfbSample]);
+
+  return null;
 }
 
 function PageviewTracker({ ready }: { ready: boolean }) {

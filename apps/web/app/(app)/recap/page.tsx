@@ -1,14 +1,11 @@
 import { redirect } from "next/navigation";
-import { createClient } from "@/lib/supabase/server";
+import { getAuthContext } from "@/lib/supabase/auth";
 import { RecapPage } from "@/components/app/recap/RecapPage";
 
 export default async function RecapRoutePage() {
-  const supabase = await createClient();
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
+  const { identity } = await getAuthContext();
 
-  if (!user) {
+  if (!identity) {
     redirect("/login");
   }
 

@@ -1,5 +1,7 @@
 import { createClient } from "@/lib/supabase/server";
+import { getAuthContext } from "@/lib/supabase/auth";
 import { notFound } from "next/navigation";
+import { cache } from "react";
 import { ActivityCard } from "@/components/app/feed/ActivityCard";
 import { CommentThread } from "@/components/app/post/CommentThread";
 import { PostEditor } from "@/components/app/post/PostEditor";
@@ -10,21 +12,28 @@ import { formatCurrency } from "@/lib/utils/format";
 import type { AggregateCount, FeedPostRow, UserSummary } from "@/types";
 import type { Metadata } from "next";
 
-type MetadataPostRow = {
-  title: string | null;
-  description: string | null;
-  user_id: string;
-  user: Array<{ username: string | null; is_public: boolean }> | null;
-  daily_usage: Array<{
-    cost_usd: number | null;
-    output_tokens: number | null;
-    models: string[] | null;
-  }> | null;
-};
-
 type RecentKudosRow = {
   user: Array<UserSummary> | null;
 };
+
+const getPost = cache(async (id: string): Promise<FeedPostRow | null> => {
+  const supabase = await createClient();
+  const { data } = await supabase
+    .from("posts")
+    .select(
+      `
+      *,
+      user:users!posts_user_id_fkey(id, username, display_name, bio, avatar_url, country, region, link, github_username, is_public),
+      daily_usage:daily_usage!posts_daily_usage_id_fkey(*),
+      kudos_count:kudos(count),
+      comment_count:comments(count)
+    `
+    )
+    .eq("id", id)
+    .single();
+
+  return data as FeedPostRow | null;
+});
 
 export async function generateMetadata({
   params,
@@ -32,22 +41,11 @@ export async function generateMetadata({
   params: Promise<{ id: string }>;
 }): Promise<Metadata> {
   const { id } = await params;
-  const supabase = await createClient();
-  const { data: rawPost } = await supabase
-    .from("posts")
-    .select(
-      "title, description, user_id, user:users!posts_user_id_fkey(username, is_public), daily_usage:daily_usage!posts_daily_usage_id_fkey(cost_usd, output_tokens, models)"
-    )
-    .eq("id", id)
-    .single();
-  const post = rawPost as MetadataPostRow | null;
-
-  const {
-    data: { user: authUser },
-  } = await supabase.auth.getUser();
+  const [post, { identity }] = await Promise.all([getPost(id), getAuthContext()]);
 
   const userRow = firstRelation(post?.user);
-  const canView = Boolean(post) && (userRow?.is_public || authUser?.id === post?.user_id);
+  const canView =
+    Boolean(post) && (userRow?.is_public || identity?.id === post?.user_id);
 
   if (!canView) {
     return {
@@ -109,30 +107,17 @@ export default async function PostDetailPage({
   searchParams: Promise<{ edit?: string }>;
 }) {
   const [{ id }, query] = await Promise.all([params, searchParams]);
-  const supabase = await createClient();
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
+  const [supabase, { identity, profile }, post] = await Promise.all([
+    createClient(),
+    getAuthContext(),
+    getPost(id),
+  ]);
 
-  const postPromise = supabase
-    .from("posts")
-    .select(
-      `
-      *,
-      user:users!posts_user_id_fkey(id, username, display_name, bio, avatar_url, country, region, link, github_username, is_public),
-      daily_usage:daily_usage!posts_daily_usage_id_fkey(*),
-      kudos_count:kudos(count),
-      comment_count:comments(count)
-    `
-    )
-    .eq("id", id)
-    .single();
-
-  const kudosCheckPromise = user
+  const kudosCheckPromise = identity
     ? supabase
         .from("kudos")
         .select("id")
-        .eq("user_id", user.id)
+        .eq("user_id", identity.id)
         .eq("post_id", id)
         .maybeSingle()
     : Promise.resolve({ data: null });
@@ -147,41 +132,29 @@ export default async function PostDetailPage({
   const commentsPromise = loadPostComments({
     supabase,
     postId: id,
-    viewerId: user?.id ?? null,
+    viewerId: identity?.id ?? null,
     limit: 100,
   });
 
-  const viewerProfilePromise = user
-    ? supabase
-        .from("users")
-        .select("username, avatar_url")
-        .eq("id", user.id)
-        .maybeSingle()
-    : Promise.resolve({ data: null });
-
   const [
-    { data: post },
     { data: kudosCheck },
     { data: recentKudos },
     { comments },
-    { data: viewerProfile },
   ] = await Promise.all([
-    postPromise,
     kudosCheckPromise,
     recentKudosPromise,
     commentsPromise,
-    viewerProfilePromise,
   ]);
 
   if (!post) notFound();
 
-  if (!post.user?.is_public && user?.id !== post.user_id) {
+  if (!post.user?.is_public && identity?.id !== post.user_id) {
     notFound();
   }
 
   const hasKudosed = !!kudosCheck;
 
-  const postRow = post as FeedPostRow;
+  const postRow = post;
   const normalizedPost = {
     ...postRow,
     kudos_count: ((postRow.kudos_count as AggregateCount[] | undefined)?.[0]?.count ?? 0),
@@ -190,9 +163,9 @@ export default async function PostDetailPage({
     has_kudosed: hasKudosed,
   };
 
-  const isOwner = user?.id === post.user_id;
-  const currentCommentUser = viewerProfile?.username
-    ? { username: viewerProfile.username, avatar_url: viewerProfile.avatar_url }
+  const isOwner = identity?.id === post.user_id;
+  const currentCommentUser = profile?.username
+    ? { username: profile.username, avatar_url: profile.avatar_url }
     : undefined;
 
   return (
@@ -224,7 +197,7 @@ export default async function PostDetailPage({
       <CommentThread
         postId={id}
         initialComments={comments ?? []}
-        userId={user?.id ?? null}
+        userId={identity?.id ?? null}
         currentUser={currentCommentUser}
       />
     </>

@@ -7,6 +7,8 @@
     "dev": "turbo dev",
     "dev:local": "bun run local:env && bun --cwd apps/web dev:plain",
     "build": "turbo build",
+    "perf": "bun run --cwd apps/web perf",
+    "perf:check": "bun run --cwd apps/web perf:check",
     "lint": "turbo lint",
     "typecheck": "turbo typecheck",
     "local:up": "bunx supabase start",

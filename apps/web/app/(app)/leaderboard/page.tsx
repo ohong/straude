@@ -1,6 +1,6 @@
 import Link from "next/link";
 import { createClient } from "@/lib/supabase/server";
-import { getAuthUser } from "@/lib/supabase/auth";
+import { getAuthIdentity } from "@/lib/supabase/auth";
 import { getServiceClient } from "@/lib/supabase/service";
 import { LeaderboardTable } from "@/components/app/leaderboard/LeaderboardTable";
 import type { LeaderboardEntry } from "@/types";
@@ -49,7 +49,7 @@ export default async function LeaderboardPage({
   searchParams: Promise<{ period?: string; region?: string }>;
 }) {
   const { period = "week", region } = await searchParams;
-  const user = await getAuthUser();
+  const user = await getAuthIdentity();
   const supabase = await createClient();
   const db = getServiceClient();
 

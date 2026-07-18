@@ -64,6 +64,10 @@ describe("GET /api/users/[username]", () => {
 
     const client: Record<string, any> = {
       auth: {
+        getClaims: vi.fn().mockResolvedValue({
+          data: { claims: { sub: "viewer-1" } },
+          error: null,
+        }),
         getUser: vi.fn().mockResolvedValue({
           data: { user: { id: "viewer-1" } },
           error: null,
@@ -192,6 +196,7 @@ describe("GET /api/users/[username]", () => {
   it("returns 404 for non-existent username", async () => {
     const client: Record<string, any> = {
       auth: {
+        getClaims: vi.fn().mockResolvedValue({ data: null, error: null }),
         getUser: vi.fn().mockResolvedValue({
           data: { user: null },
           error: null,

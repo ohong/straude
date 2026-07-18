@@ -13,7 +13,9 @@
     "typecheck": "tsc --noEmit -p tsconfig.check.json",
     "test": "vitest run",
     "test:integration": "vitest run -c vitest.integration.config.ts",
-    "test:e2e": "playwright test"
+    "test:e2e": "playwright test",
+    "perf": "bun run build && playwright test -c playwright.perf.config.ts",
+    "perf:check": "bun run build && PERF_GATE=1 playwright test -c playwright.perf.config.ts"
   },
   "dependencies": {
     "@anthropic-ai/sdk": "^0.39",

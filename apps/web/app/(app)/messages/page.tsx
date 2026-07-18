@@ -1,6 +1,7 @@
 import { redirect } from "next/navigation";
 import type { Metadata } from "next";
 import { createClient } from "@/lib/supabase/server";
+import { getAuthContext } from "@/lib/supabase/auth";
 import { getServiceClient } from "@/lib/supabase/service";
 import { normalizeMessageAttachmentInput } from "@/lib/storage";
 import { MessagesInbox } from "@/components/app/messages/MessagesInbox";
@@ -121,15 +122,13 @@ export default async function MessagesPage({
 }: {
   searchParams: Promise<{ with?: string }>;
 }) {
-  const [{ with: withUsername }, supabase] = await Promise.all([
+  const [{ with: withUsername }, supabase, { identity }] = await Promise.all([
     searchParams,
     createClient(),
+    getAuthContext(),
   ]);
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
 
-  if (!user) {
+  if (!identity) {
     redirect("/login");
   }
 
@@ -138,13 +137,13 @@ export default async function MessagesPage({
     supabase
       .from("direct_messages")
       .select("id", { count: "exact", head: true })
-      .eq("recipient_id", user.id)
+      .eq("recipient_id", identity.id)
       .is("read_at", null),
   ]);
 
   const explicitUsername = withUsername?.trim() || null;
   const explicitConversationPromise = explicitUsername
-    ? preloadConversation(user.id, explicitUsername)
+    ? preloadConversation(identity.id, explicitUsername)
     : Promise.resolve(null);
   const [threadsResults, explicitConversation] = await Promise.all([
     threadsPromise,
@@ -162,7 +161,7 @@ export default async function MessagesPage({
   const initialConversation = explicitUsername
     ? explicitConversation
     : preloadUsername
-      ? await preloadConversation(user.id, preloadUsername)
+      ? await preloadConversation(identity.id, preloadUsername)
       : null;
 
   return (

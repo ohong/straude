@@ -1,8 +1,11 @@
 import { Suspense } from "react";
 import Link from "next/link";
 import { createClient } from "@/lib/supabase/server";
-import { getServiceClient } from "@/lib/supabase/service";
-import { getAuthUser } from "@/lib/supabase/auth";
+import {
+  getAuthContext,
+  getAuthIdentity,
+  type ShellProfile,
+} from "@/lib/supabase/auth";
 import { Sidebar } from "@/components/app/shared/Sidebar";
 import { LazyRightSidebar } from "@/components/app/shared/RightSidebar";
 import { InviteButton } from "@/components/app/profile/InviteButton";
@@ -16,16 +19,6 @@ import { firstRelation } from "@/lib/utils/first-relation";
 import { loadUsageTotals } from "@/lib/data/usage-totals";
 import type { DailyUsage } from "@/types";
 
-type ShellProfile = {
-  username: string | null;
-  avatar_url: string | null;
-  display_name: string | null;
-  team_url: string | null;
-  team_favicon_url: string | null;
-  onboarding_completed: boolean | null;
-  streak_freezes: number | null;
-};
-
 type LatestPostRow = {
   id: string;
   title: string | null;
@@ -34,6 +27,12 @@ type LatestPostRow = {
 };
 
 type SupabaseServerClient = Awaited<ReturnType<typeof createClient>>;
+
+async function measure<T>(operation: () => Promise<T>): Promise<[T, number]> {
+  const start = Date.now();
+  const result = await operation();
+  return [result, Date.now() - start];
+}
 
 function formatLatestPosts(rows: LatestPostRow[]) {
   return rows
@@ -216,9 +215,10 @@ export default async function AppLayout({
 }: {
   children: React.ReactNode;
 }) {
-  const user = await getAuthUser();
+  const perfTiming = process.env.PERF_TIMING === "1";
+  const [identity, authMs] = await measure(getAuthIdentity);
   // If not logged in: allow public pages, redirect others to login
-  if (!user) {
+  if (!identity) {
     // This check runs server-side as a safety net alongside proxy.ts
     // Public pages render with a guest layout below
     return (
@@ -238,19 +238,13 @@ export default async function AppLayout({
     );
   }
 
-  const db = getServiceClient();
-  const { data: profileData } = await db
-    .from("users")
-    .select("username, avatar_url, display_name, team_url, team_favicon_url, onboarding_completed, streak_freezes")
-    .eq("id", user.id)
-    .single();
+  const [{ profile }, profileMs] = await measure(getAuthContext);
 
-  const profile = profileData as ShellProfile | null;
   const onboardingIncomplete = !profile?.onboarding_completed;
 
   const leftPanel = (
     <Suspense fallback={<SidebarFallback profile={profile} />}>
-      <DeferredSidebar userId={user.id} profile={profile} />
+      <DeferredSidebar userId={identity.id} profile={profile} />
     </Suspense>
   );
 
@@ -258,6 +252,15 @@ export default async function AppLayout({
 
   return (
     <AppProviders>
+      {perfTiming && (
+        <script
+          type="application/json"
+          id="__perf-server-timing"
+          dangerouslySetInnerHTML={{
+            __html: JSON.stringify({ layoutAuth: authMs, layoutProfile: profileMs }),
+          }}
+        />
+      )}
       <CommandPalette username={profile?.username ?? null}>
         <div className="fixed inset-0 flex flex-col overflow-hidden">
           {onboardingIncomplete && (
@@ -270,7 +273,7 @@ export default async function AppLayout({
           )}
           <Suspense fallback={null}>
             <PhotoNudge
-              userId={user.id}
+              userId={identity.id}
               onboardingIncomplete={onboardingIncomplete}
             />
           </Suspense>

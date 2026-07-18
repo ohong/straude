@@ -1,6 +1,6 @@
 import Link from "next/link";
 import { createClient } from "@/lib/supabase/server";
-import { getAuthUser } from "@/lib/supabase/auth";
+import { getAuthIdentity } from "@/lib/supabase/auth";
 import { FeedList } from "@/components/app/feed/FeedList";
 import { enrichFeedPosts, getFeedCursor, getPendingPosts } from "@/lib/feed-enrichment";
 import type { FeedPostRow } from "@/types";
@@ -45,7 +45,7 @@ export default async function FeedPage({
   searchParams: Promise<{ tab?: string }>;
 }) {
   const params = await searchParams;
-  const user = await getAuthUser();
+  const user = await getAuthIdentity();
   const supabase = await createClient();
 
   // Unauthenticated visitors can only see the global feed

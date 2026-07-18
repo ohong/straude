@@ -4,7 +4,7 @@ import { describe, it, expect, vi, beforeEach } from "vitest";
 // Mock Supabase
 // ---------------------------------------------------------------------------
 const mockSupabase = {
-  auth: { getUser: vi.fn() },
+  auth: { getUser: vi.fn(), getClaims: vi.fn() },
   from: vi.fn(),
   rpc: vi.fn(),
 };
@@ -74,6 +74,14 @@ describe("Flow: Privacy and Visibility", () => {
     mockServiceClient.rpc.mockReset();
     mockSupabase.rpc.mockReset();
     mockSupabase.from.mockReset();
+    mockSupabase.auth.getClaims.mockImplementation(async () => {
+      const result = await mockSupabase.auth.getUser();
+      const subject = result?.data?.user?.id;
+      return {
+        data: typeof subject === "string" ? { claims: { sub: subject } } : null,
+        error: result?.error ?? null,
+      };
+    });
     // Default: return array for calculate_streaks_batch (leaderboard), number for calculate_user_streak (profile)
     mockSupabase.rpc.mockImplementation((_fn: string) => {
       if (_fn === "calculate_streaks_batch") return Promise.resolve({ data: [] });
