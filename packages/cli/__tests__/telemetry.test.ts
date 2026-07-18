@@ -4,6 +4,7 @@ vi.mock("../src/lib/posthog.js", () => ({
   posthog: {
     capture: vi.fn(),
     captureException: vi.fn(),
+    _shutdown: vi.fn(() => Promise.resolve()),
   },
 }));
 
@@ -17,6 +18,7 @@ import {
   isPushInvocation,
   reportCliException,
   reportUsagePushFailed,
+  shutdownTelemetryWithTimeout,
 } from "../src/lib/telemetry.js";
 
 const mockCapture = vi.mocked(posthog.capture);
@@ -72,5 +74,16 @@ describe("telemetry", () => {
       "alice",
       { command: "login" },
     );
+  });
+
+  it("swallows the posthog shutdown-timeout rejection instead of propagating it", async () => {
+    // @posthog/core rejects _shutdown with this string when flush exceeds the
+    // timeout. If it propagates, it becomes an unhandled rejection that
+    // exception autocapture re-reports and that skips the final process.exit.
+    vi.mocked(posthog._shutdown).mockRejectedValueOnce(
+      "Timeout while shutting down PostHog. Some events may not have been sent.",
+    );
+
+    await expect(shutdownTelemetryWithTimeout(10)).resolves.toBeTypeOf("number");
   });
 });
