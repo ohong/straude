@@ -1,5 +1,16 @@
 import { describe, it, expect, vi, beforeEach } from "vitest";
 
+const leaderboardMocks = vi.hoisted(() => ({
+  loadEntries: vi.fn(),
+  loadRank: vi.fn(),
+}));
+
+vi.mock("@/lib/data/leaderboard", () => ({
+  LEADERBOARD_PERIODS: ["day", "week", "month", "all_time"],
+  loadLeaderboardEntries: leaderboardMocks.loadEntries,
+  loadLeaderboardRank: leaderboardMocks.loadRank,
+}));
+
 // ---------------------------------------------------------------------------
 // Mock Supabase
 // ---------------------------------------------------------------------------
@@ -88,6 +99,8 @@ describe("Flow: Privacy and Visibility", () => {
       return Promise.resolve({ data: 0 });
     });
     mockServiceClient.rpc.mockResolvedValue({ data: 0 });
+    leaderboardMocks.loadEntries.mockResolvedValue([]);
+    leaderboardMocks.loadRank.mockResolvedValue(null);
   });
 
   it("public user appears in leaderboard", async () => {
@@ -98,6 +111,7 @@ describe("Flow: Privacy and Visibility", () => {
     const entries = [
       { user_id: PUBLIC_USER.id, username: PUBLIC_USER.username, total_cost: 50.0, region: "north_america" },
     ];
+    leaderboardMocks.loadEntries.mockResolvedValue(entries);
 
     const lbChain = chainBuilder();
     (lbChain.select as ReturnType<typeof vi.fn>).mockReturnValue(lbChain);

@@ -2,6 +2,11 @@ import Link from "next/link";
 import { createClient } from "@/lib/supabase/server";
 import { getAuthIdentity } from "@/lib/supabase/auth";
 import { getServiceClient } from "@/lib/supabase/service";
+import {
+  LEADERBOARD_PERIODS,
+  loadLeaderboardEntries,
+  type LeaderboardPeriod,
+} from "@/lib/data/leaderboard";
 import { firstRelation } from "@/lib/utils/first-relation";
 import { LeaderboardTable } from "@/components/app/leaderboard/LeaderboardTable";
 import type { LeaderboardEntry } from "@/types";
@@ -55,21 +60,16 @@ export default async function LeaderboardPage({
     createClient(),
   ]);
   const db = getServiceClient();
-
-  // We'll use the materialized view directly for SSR
-  const viewName = `leaderboard_${period === "all_time" ? "all_time" : period === "month" ? "monthly" : period === "day" ? "daily" : "weekly"}`;
-
-  let query = supabase
-    .from(viewName)
-    .select("*")
-    .order("total_cost", { ascending: false })
-    .limit(50);
-
-  if (region) {
-    query = query.eq("region", region);
-  }
-  const { data: rawEntries } = await query;
-  const entries = (rawEntries ?? []) as LeaderboardViewRow[];
+  const leaderboardPeriod = LEADERBOARD_PERIODS.includes(
+    period as LeaderboardPeriod
+  )
+    ? (period as LeaderboardPeriod)
+    : "week";
+  const entries = (await loadLeaderboardEntries({
+    period: leaderboardPeriod,
+    region,
+    limit: 50,
+  })) as LeaderboardViewRow[];
 
   // Fetch streaks + levels + team affiliation for all leaderboard users in parallel.
   // The leaderboard materialized views don't carry team_url/team_favicon_url, so
