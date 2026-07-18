@@ -35,6 +35,11 @@ clean run at 17:15 also passed 10/10 (TTFB 33-43ms, LCP 88-466ms, sidebar
 30ms). The original pre-M2 baseline and full method notes are in
 [`BASELINE.md`](BASELINE.md).
 
+A third independent verification run at 22:07 UTC (fresh session, clean tree)
+also passed 10/10: TTFB 35-46ms, LCP 96-492ms, sidebar 29ms. Note the LCP
+margin is thin (most pages 440-490ms against the 500ms gate) — regressions of
+even ~50ms on the client render path will trip the gate, which is intended.
+
 
 ## Context
 
