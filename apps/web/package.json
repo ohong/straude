@@ -5,6 +5,7 @@
   "scripts": {
     "dev": "next dev --turbopack",
     "build": "next build",
+    "analyze": "ANALYZE=1 next build --webpack",
     "start": "next start",
     "lint": "eslint",
     "generate:og": "bun run ./scripts/generate-og.ts",
@@ -46,6 +47,7 @@
     "tailwind-merge": "^3"
   },
   "devDependencies": {
+    "@next/bundle-analyzer": "16.2.6",
     "@playwright/test": "^1.58.2",
     "@tailwindcss/postcss": "^4",
     "@testing-library/jest-dom": "^6.9.1",

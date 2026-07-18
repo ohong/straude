@@ -21,7 +21,8 @@ vi.mock("@supabase/supabase-js", () => ({
   createClient: vi.fn(),
 }));
 
-import { POST, aggregateDeviceRows } from "@/app/api/usage/submit/route";
+import { POST } from "@/app/api/usage/submit/route";
+import { aggregateDeviceRows } from "@/lib/usage/aggregate-device-rows";
 import { captureServerActivationEvent } from "@/lib/analytics/server";
 import { createClient } from "@/lib/supabase/server";
 import { verifyCliToken, verifyCliTokenWithRefresh } from "@/lib/api/cli-auth";

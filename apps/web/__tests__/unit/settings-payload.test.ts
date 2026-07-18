@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { buildProfileUpdatePayload } from "@/app/(app)/settings/page";
+import { buildProfileUpdatePayload } from "@/components/app/settings/SettingsClient";
 
 const baseInput = {
   username: "alice",
