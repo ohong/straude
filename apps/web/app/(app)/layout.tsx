@@ -1,4 +1,4 @@
-import { Suspense } from "react";
+import { cache, Suspense } from "react";
 import Link from "next/link";
 import { createClient } from "@/lib/supabase/server";
 import {
@@ -26,8 +26,6 @@ type LatestPostRow = {
   daily_usage: Array<Pick<DailyUsage, "date">> | null;
 };
 
-type SupabaseServerClient = Awaited<ReturnType<typeof createClient>>;
-
 async function measure<T>(operation: () => Promise<T>): Promise<[T, number]> {
   const start = Date.now();
   const result = await operation();
@@ -48,7 +46,8 @@ function formatLatestPosts(rows: LatestPostRow[]) {
     .sort((a, b) => b.sortKey.localeCompare(a.sortKey));
 }
 
-async function loadLatestPosts(supabase: SupabaseServerClient, userId: string) {
+const loadLatestPosts = cache(async (userId: string) => {
+  const supabase = await createClient();
   // Order by daily_usage.date so backfills (which insert many posts in the same
   // second) still surface the most recent activity. !inner is required for
   // referencedTable ordering to apply to the parent rows.
@@ -61,7 +60,7 @@ async function loadLatestPosts(supabase: SupabaseServerClient, userId: string) {
     .limit(3);
 
   return formatLatestPosts((data ?? []) as LatestPostRow[]);
-}
+});
 
 function SidebarFallback({ profile }: { profile: ShellProfile | null }) {
   const username = profile?.username ?? null;
@@ -151,7 +150,7 @@ async function DeferredSidebar({
       .from("posts")
       .select("id", { count: "exact", head: true })
       .eq("user_id", userId),
-    loadLatestPosts(supabase, userId),
+    loadLatestPosts(userId),
     loadUsageTotals(supabase, userId),
     supabase.rpc("calculate_user_streak", {
       p_user_id: userId,
@@ -187,15 +186,16 @@ async function PhotoNudge({
 }) {
   if (onboardingIncomplete) return null;
 
-  const supabase = await createClient();
   const [latestPosts, photoAchievementRes] = await Promise.all([
-    loadLatestPosts(supabase, userId),
-    supabase
-      .from("user_achievements")
-      .select("id")
-      .eq("user_id", userId)
-      .eq("achievement_slug", "first-photo")
-      .maybeSingle(),
+    loadLatestPosts(userId),
+    createClient().then((supabase) =>
+      supabase
+        .from("user_achievements")
+        .select("id")
+        .eq("user_id", userId)
+        .eq("achievement_slug", "first-photo")
+        .maybeSingle(),
+    ),
   ]);
 
   if (latestPosts.length === 0 || photoAchievementRes.data) return null;

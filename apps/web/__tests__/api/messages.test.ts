@@ -510,8 +510,12 @@ describe("message attachments", () => {
       }),
       storage: {
         from: vi.fn().mockReturnValue({
-          createSignedUrl: vi.fn().mockResolvedValue({
-            data: { signedUrl: "https://example.supabase.co/storage/v1/object/sign/dm-attachments/user-2/file.png?token=abc" },
+          createSignedUrls: vi.fn().mockResolvedValue({
+            data: [{
+              path: "user-2/file.png",
+              signedUrl: "https://example.supabase.co/storage/v1/object/sign/dm-attachments/user-2/file.png?token=abc",
+              error: null,
+            }],
             error: null,
           }),
         }),
@@ -539,8 +543,12 @@ describe("message attachments", () => {
         }),
       },
     };
-    const createSignedUrl = vi.fn().mockResolvedValue({
-      data: { signedUrl: "https://example.supabase.co/storage/v1/object/sign/dm-attachments/user-2/file.png?token=abc" },
+    const createSignedUrls = vi.fn().mockResolvedValue({
+      data: [{
+        path: "user-2/file.png",
+        signedUrl: "https://example.supabase.co/storage/v1/object/sign/dm-attachments/user-2/file.png?token=abc",
+        error: null,
+      }],
       error: null,
     });
     const serviceClient: Record<string, any> = {
@@ -619,7 +627,7 @@ describe("message attachments", () => {
       }),
       storage: {
         from: vi.fn().mockReturnValue({
-          createSignedUrl,
+          createSignedUrls,
         }),
       },
     };
@@ -634,7 +642,7 @@ describe("message attachments", () => {
 
     expect(response.status).toBe(200);
     expect(json.messages[0].attachments).toEqual([]);
-    expect(createSignedUrl).not.toHaveBeenCalled();
+    expect(createSignedUrls).not.toHaveBeenCalled();
   });
 });
 

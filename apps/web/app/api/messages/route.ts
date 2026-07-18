@@ -3,12 +3,16 @@ import { after } from "@/lib/utils/after";
 import { createClient } from "@/lib/supabase/server";
 import { getServiceClient } from "@/lib/supabase/service";
 import {
+  buildSignedMessageAttachmentBatches,
+  buildSignedMessageAttachments,
+} from "@/lib/message-attachments";
+import {
   isStoragePathOwnedByUser,
   normalizeMessageAttachmentInput,
 } from "@/lib/storage";
 import { sendDirectMessageEmail } from "@/lib/email/send-direct-message-email";
 import { rateLimit } from "@/lib/rate-limit";
-import type { MessageAttachment, MessageAttachmentInput } from "@/types";
+import type { MessageAttachmentInput } from "@/types";
 
 const USERNAME_RE = /^[a-zA-Z0-9_]{3,20}$/;
 const MAX_MESSAGE_LENGTH = 1000;
@@ -105,52 +109,6 @@ async function fireDirectMessageNotificationEmail(opts: {
   }
 }
 
-async function buildSignedAttachments(
-  rawAttachments: unknown,
-  expectedOwnerId?: string,
-): Promise<MessageAttachment[]> {
-  const db = getServiceClient();
-  const attachments = Array.isArray(rawAttachments)
-    ? rawAttachments
-        .map(normalizeMessageAttachmentInput)
-        .filter((attachment): attachment is MessageAttachmentInput => {
-          if (attachment === null) return false;
-          return expectedOwnerId
-            ? isStoragePathOwnedByUser(attachment.path, expectedOwnerId)
-            : true;
-        })
-    : [];
-
-  if (attachments.length === 0) {
-    return [];
-  }
-
-  const signedAttachments: Array<MessageAttachment | null> = await Promise.all(
-    attachments.map(async (attachment): Promise<MessageAttachment | null> => {
-      const { data, error } = await db.storage
-        .from(attachment.bucket)
-        .createSignedUrl(attachment.path, 60 * 60);
-
-      if (error || !data?.signedUrl) {
-        console.error(
-          "[messages] failed to sign DM attachment:",
-          error?.message ?? "missing signed URL",
-        );
-        return null;
-      }
-
-      return {
-        ...attachment,
-        url: data.signedUrl,
-      };
-    }),
-  );
-
-  return signedAttachments.filter(
-    (attachment): attachment is MessageAttachment => attachment !== null,
-  );
-}
-
 export async function GET(request: NextRequest) {
   const supabase = await createClient();
   const {
@@ -205,17 +163,19 @@ export async function GET(request: NextRequest) {
   }
 
   const selfProfile = selfRes.data as ConversationUser;
-  const messages = await Promise.all(
-    [...(messagesRes.data ?? [])].slice(0, limit).reverse().map(async (message) => ({
-      ...message,
-      attachments: await buildSignedAttachments(
-        message.attachments,
-        message.sender_id,
-      ),
-      sender: message.sender_id === user.id ? selfProfile : counterpart,
-      recipient: message.sender_id === user.id ? counterpart : selfProfile,
+  const rawMessages = [...(messagesRes.data ?? [])].slice(0, limit).reverse();
+  const signedAttachmentGroups = await buildSignedMessageAttachmentBatches(
+    rawMessages.map((message) => ({
+      rawAttachments: message.attachments,
+      expectedOwnerId: message.sender_id,
     })),
   );
+  const messages = rawMessages.map((message, index) => ({
+    ...message,
+    attachments: signedAttachmentGroups[index] ?? [],
+    sender: message.sender_id === user.id ? selfProfile : counterpart,
+    recipient: message.sender_id === user.id ? counterpart : selfProfile,
+  }));
 
   const hasMore = (messagesRes.data?.length ?? 0) > limit;
 
@@ -325,7 +285,7 @@ export async function POST(request: NextRequest) {
   }
 
   const sender = senderRes.data as ConversationUser;
-  const signedAttachments = await buildSignedAttachments(
+  const signedAttachments = await buildSignedMessageAttachments(
     messageRes.data.attachments,
     user.id,
   );

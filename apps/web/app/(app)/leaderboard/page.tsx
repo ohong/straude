@@ -2,6 +2,7 @@ import Link from "next/link";
 import { createClient } from "@/lib/supabase/server";
 import { getAuthIdentity } from "@/lib/supabase/auth";
 import { getServiceClient } from "@/lib/supabase/service";
+import { firstRelation } from "@/lib/utils/first-relation";
 import { LeaderboardTable } from "@/components/app/leaderboard/LeaderboardTable";
 import type { LeaderboardEntry } from "@/types";
 import type { Metadata } from "next";
@@ -48,9 +49,11 @@ export default async function LeaderboardPage({
 }: {
   searchParams: Promise<{ period?: string; region?: string }>;
 }) {
-  const { period = "week", region } = await searchParams;
-  const user = await getAuthIdentity();
-  const supabase = await createClient();
+  const [{ period = "week", region }, user, supabase] = await Promise.all([
+    searchParams,
+    getAuthIdentity(),
+    createClient(),
+  ]);
   const db = getServiceClient();
 
   // We'll use the materialized view directly for SSR
@@ -72,13 +75,15 @@ export default async function LeaderboardPage({
   // The leaderboard materialized views don't carry team_url/team_favicon_url, so
   // we side-fetch them (mirrors the level/streak pattern below).
   const userIds = entries.map((entry) => entry.user_id);
-  const [{ data: streakRows }, { data: levelRows }, { data: teamRows }] = userIds.length > 0
+  const [{ data: streakRows }, { data: userRows }] = userIds.length > 0
     ? await Promise.all([
         supabase.rpc("calculate_streaks_batch", { p_user_ids: userIds }),
-        db.from("user_levels").select("user_id, level").in("user_id", userIds),
-        db.from("users").select("id, team_url, team_favicon_url").in("id", userIds),
+        db
+          .from("users")
+          .select("id, team_url, team_favicon_url, user_levels(level)")
+          .in("id", userIds),
       ])
-    : [{ data: [] }, { data: [] }, { data: [] }];
+    : [{ data: [] }, { data: [] }];
 
   const streakMap = new Map<string, number>();
   for (const row of streakRows ?? []) {
@@ -86,12 +91,12 @@ export default async function LeaderboardPage({
   }
 
   const levelMap = new Map<string, number>();
-  for (const row of levelRows ?? []) {
-    levelMap.set(row.user_id, Number(row.level));
-  }
-
   const teamMap = new Map<string, { team_url: string | null; team_favicon_url: string | null }>();
-  for (const row of teamRows ?? []) {
+  for (const row of userRows ?? []) {
+    const level = firstRelation(row.user_levels)?.level;
+    if (level !== undefined && level !== null) {
+      levelMap.set(row.id, Number(level));
+    }
     teamMap.set(row.id, {
       team_url: row.team_url ?? null,
       team_favicon_url: row.team_favicon_url ?? null,

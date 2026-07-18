@@ -20,16 +20,36 @@ export async function getProfileAccessContext<TProfile extends ProfileShape>(
   selectFields: string,
 ): Promise<ProfileAccessContext<TProfile> | null> {
   const db = getServiceClient();
+  const authPromise = getAuthIdentity();
+  const userClientPromise = createClient();
 
-  // Use cached auth (shared with middleware/layout) + profile fetch in parallel
-  const [authUser, { data: rawProfile, error: profileError }] =
+  // The follow lookup can filter through the target username, so it does not
+  // need to wait for the profile query to return its id.
+  const followPromise = Promise.all([authPromise, userClientPromise]).then(
+    async ([authUser, supabase]) => {
+      if (!authUser) return null;
+
+      const { data } = await supabase
+        .from("follows")
+        .select("id, following:users!follows_following_id_fkey!inner(username)")
+        .eq("follower_id", authUser.id)
+        .eq("following.username", username)
+        .maybeSingle();
+
+      return data;
+    },
+  );
+
+  // Auth, target profile, and follow status are one parallel request wave.
+  const [authUser, { data: rawProfile, error: profileError }, follow] =
     await Promise.all([
-      getAuthIdentity(),
+      authPromise,
       db
         .from("users")
         .select(selectFields)
         .eq("username", username)
         .single(),
+      followPromise,
     ]);
 
   if (profileError || !rawProfile) {
@@ -48,19 +68,7 @@ export async function getProfileAccessContext<TProfile extends ProfileShape>(
 
   const authUserId = authUser?.id ?? null;
   const isOwn = authUserId === profile.id;
-  let isFollowing = false;
-
-  if (authUserId && !isOwn) {
-    const supabase = await createClient();
-    const { data: follow } = await supabase
-      .from("follows")
-      .select("id")
-      .eq("follower_id", authUserId)
-      .eq("following_id", profile.id)
-      .maybeSingle();
-
-    isFollowing = !!follow;
-  }
+  const isFollowing = !isOwn && Boolean(follow);
 
   return {
     authUserId,

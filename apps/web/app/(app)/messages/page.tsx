@@ -3,13 +3,9 @@ import type { Metadata } from "next";
 import { createClient } from "@/lib/supabase/server";
 import { getAuthContext } from "@/lib/supabase/auth";
 import { getServiceClient } from "@/lib/supabase/service";
-import { normalizeMessageAttachmentInput } from "@/lib/storage";
+import { buildSignedMessageAttachmentBatches } from "@/lib/message-attachments";
 import { MessagesInbox } from "@/components/app/messages/MessagesInbox";
-import type {
-  DirectMessageThread,
-  MessageAttachment,
-  MessageAttachmentInput,
-} from "@/types";
+import type { DirectMessageThread } from "@/types";
 
 export const metadata: Metadata = { title: "Messages" };
 
@@ -25,37 +21,6 @@ interface ConversationUser {
 
 function buildPairFilter(a: string, b: string) {
   return `and(sender_id.eq.${a},recipient_id.eq.${b}),and(sender_id.eq.${b},recipient_id.eq.${a})`;
-}
-
-async function buildSignedAttachments(
-  rawAttachments: unknown,
-): Promise<MessageAttachment[]> {
-  const db = getServiceClient();
-  const attachments = Array.isArray(rawAttachments)
-    ? rawAttachments
-        .map(normalizeMessageAttachmentInput)
-        .filter((attachment): attachment is MessageAttachmentInput => attachment !== null)
-    : [];
-
-  if (attachments.length === 0) return [];
-
-  const signedAttachments = await Promise.all(
-    attachments.map(async (attachment): Promise<MessageAttachment | null> => {
-      const { data, error } = await db.storage
-        .from(attachment.bucket)
-        .createSignedUrl(attachment.path, 60 * 60);
-
-      if (error || !data?.signedUrl) return null;
-      return {
-        ...attachment,
-        url: data.signedUrl,
-      };
-    }),
-  );
-
-  return signedAttachments.filter(
-    (attachment): attachment is MessageAttachment => attachment !== null,
-  );
 }
 
 async function preloadConversation(viewerId: string, username: string) {
@@ -100,14 +65,19 @@ async function preloadConversation(viewerId: string, username: string) {
   if (selfRes.error || messagesRes.error) return null;
 
   const selfProfile = selfRes.data as ConversationUser;
-  const messages = await Promise.all(
-    [...(messagesRes.data ?? [])].slice(0, 50).reverse().map(async (message) => ({
-      ...message,
-      attachments: await buildSignedAttachments(message.attachments),
-      sender: message.sender_id === viewerId ? selfProfile : counterpart,
-      recipient: message.sender_id === viewerId ? counterpart : selfProfile,
+  const rawMessages = [...(messagesRes.data ?? [])].slice(0, 50).reverse();
+  const signedAttachmentGroups = await buildSignedMessageAttachmentBatches(
+    rawMessages.map((message) => ({
+      rawAttachments: message.attachments,
+      expectedOwnerId: message.sender_id,
     })),
   );
+  const messages = rawMessages.map((message, index) => ({
+    ...message,
+    attachments: signedAttachmentGroups[index] ?? [],
+    sender: message.sender_id === viewerId ? selfProfile : counterpart,
+    recipient: message.sender_id === viewerId ? counterpart : selfProfile,
+  }));
 
   return {
     counterpart: counterpart as ConversationUser,
@@ -156,19 +126,11 @@ export default async function MessagesPage({
     unread_count: unreadRes.count ?? 0,
   };
 
-  const preloadUsername =
-    explicitUsername ?? initialThreads.threads[0]?.counterpart_username ?? null;
-  const initialConversation = explicitUsername
-    ? explicitConversation
-    : preloadUsername
-      ? await preloadConversation(identity.id, preloadUsername)
-      : null;
-
   return (
     <MessagesInbox
       initialUsername={explicitUsername}
       initialThreads={threadsRes.error || unreadRes.error ? undefined : initialThreads}
-      initialConversation={initialConversation}
+      initialConversation={explicitConversation}
     />
   );
 }

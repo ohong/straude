@@ -54,20 +54,24 @@ export default async function FeedPage({
       ? params.tab
       : "global";
 
-  // Feed + pending posts in parallel (independent queries)
-  const [{ data: feedData }, pendingPosts] = await Promise.all([
-    supabase.rpc("get_feed", {
-      p_type: feedType,
-      p_user_id: user?.id ?? null,
-      p_limit: 20,
+  const feedPromise = supabase.rpc("get_feed", {
+    p_type: feedType,
+    p_user_id: user?.id ?? null,
+    p_limit: 20,
+  });
+  // Start enrichment as soon as get_feed resolves instead of waiting for the
+  // independent pending-post query to finish.
+  const postsPromise = feedPromise.then(({ data: feedData }) =>
+    enrichFeedPosts({
+      posts: (feedData ?? []) as FeedPostRow[],
+      userId: user?.id ?? null,
+      userScopedClient: supabase,
     }),
+  );
+  const [posts, pendingPosts] = await Promise.all([
+    postsPromise,
     getPendingPosts(supabase, user?.id ?? null),
   ]);
-  const posts = await enrichFeedPosts({
-    posts: (feedData ?? []) as FeedPostRow[],
-    userId: user?.id ?? null,
-    userScopedClient: supabase,
-  });
   const nextCursor = getFeedCursor(posts, 20);
 
   const faqJsonLd = {
