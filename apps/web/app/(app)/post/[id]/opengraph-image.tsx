@@ -1,6 +1,7 @@
 import { ImageResponse } from "next/og";
 import { createClient } from "@/lib/supabase/server";
 import { loadFonts } from "@/lib/og-fonts";
+import { loadSafeOgImage } from "@/lib/og-safe-image";
 import { ShareCardImage } from "@/lib/utils/share-image";
 import { DEFAULT_SHARE_THEME } from "@/lib/share-themes";
 
@@ -81,16 +82,20 @@ export default async function Image({
     is_verified: boolean;
   } | null;
 
-  const fonts = await loadFonts();
+  const [fonts, heroImage, avatarImage] = await Promise.all([
+    loadFonts(),
+    loadSafeOgImage(post.images?.[0]),
+    loadSafeOgImage(user?.avatar_url),
+  ]);
 
   return new ImageResponse(
     <ShareCardImage
       post={{
         title: post.title,
         description: post.description,
-        images: post.images ?? [],
+        images: heroImage ? [heroImage] : [],
         username: user?.username ?? "anonymous",
-        avatar_url: user?.avatar_url ?? null,
+        avatar_url: avatarImage,
         cost_usd: usage?.cost_usd ?? null,
         input_tokens: usage?.input_tokens ?? 0,
         output_tokens: usage?.output_tokens ?? 0,
