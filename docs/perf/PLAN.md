@@ -4,7 +4,7 @@
 
 - [x] M0 harness — acceptance: `bun run perf` scorecard for all 10 pages; `BASELINE.md` ready for the owner commit
 - [ ] M1 PostHog RUM — acceptance: `$web_vitals` in PostHog after deploy
-- [ ] M2 auth consolidation — acceptance: TTFB drop; no direct `auth.getUser()` in (app); tests green
+- [x] M2 auth consolidation — acceptance: TTFB drop; no direct `auth.getUser()` in (app); tests green
 - [ ] M3 waterfalls/duplicates — acceptance: per-page deltas; no regressions
 - [ ] M4 DB layer — acceptance: EXPLAIN deltas; advisors clean; tests green
 - [ ] M5 server caching — acceptance: right-sidebar timing; leakage test green
@@ -13,24 +13,24 @@
 
 ## Latest scorecard
 
-Captured 2026-07-18. Targets: TTFB <300ms and LCP <500ms. Five of 10 pages
-pass both gates; all 10 pass the TTFB gate.
+Captured 2026-07-18 after M2 auth consolidation. Targets: TTFB <300ms and
+LCP <500ms. Nine of 10 pages pass both gates; all 10 pass the TTFB gate.
 
 | Page | TTFB | FCP | LCP | Server-Timing | Layout attribution | Pass |
 |---|---:|---:|---:|---|---|:---:|
-| `/feed` | 87ms | 148ms | 504ms | mw-auth:25ms | layoutAuth:25ms layoutProfile:29ms | FAIL |
-| `/leaderboard` | 92ms | 152ms | 510ms | mw-auth:30ms | layoutAuth:29ms layoutProfile:30ms | FAIL |
-| `/u/[username]` | 85ms | 144ms | 518ms | mw-auth:26ms | layoutAuth:26ms layoutProfile:30ms | FAIL |
-| `/post/[id]` | 100ms | 162ms | 362ms | mw-auth:25ms | layoutAuth:27ms layoutProfile:38ms | PASS |
-| `/notifications` | 87ms | 148ms | 494ms | mw-auth:29ms | layoutAuth:26ms layoutProfile:27ms | PASS |
-| `/messages` | 92ms | 154ms | 500ms | mw-auth:26ms | layoutAuth:25ms layoutProfile:32ms | FAIL |
-| `/prompts` | 84ms | 144ms | 144ms | mw-auth:25ms | layoutAuth:24ms layoutProfile:28ms | PASS |
-| `/recap` | 88ms | 148ms | 626ms | mw-auth:29ms | layoutAuth:26ms layoutProfile:27ms | FAIL |
-| `/settings` | 82ms | 142ms | 484ms | mw-auth:25ms | layoutAuth:25ms layoutProfile:27ms | PASS |
-| `/search` | 85ms | 142ms | 486ms | mw-auth:26ms | layoutAuth:24ms layoutProfile:28ms | PASS |
+| `/feed` | 37ms | 96ms | 448ms | mw-auth:0ms | layoutAuth:2ms layoutProfile:29ms | PASS |
+| `/leaderboard` | 38ms | 94ms | 452ms | mw-auth:1ms | layoutAuth:2ms layoutProfile:31ms | PASS |
+| `/u/[username]` | 37ms | 96ms | 480ms | mw-auth:1ms | layoutAuth:2ms layoutProfile:30ms | PASS |
+| `/post/[id]` | 36ms | 92ms | 438ms | mw-auth:1ms | layoutAuth:3ms layoutProfile:29ms | PASS |
+| `/notifications` | 34ms | 92ms | 434ms | mw-auth:1ms | layoutAuth:2ms layoutProfile:28ms | PASS |
+| `/messages` | 59ms | 116ms | 470ms | mw-auth:1ms | layoutAuth:1ms layoutProfile:28ms | PASS |
+| `/prompts` | 59ms | 116ms | 116ms | mw-auth:0ms | layoutAuth:2ms layoutProfile:28ms | PASS |
+| `/recap` | 35ms | 92ms | 552ms | mw-auth:0ms | layoutAuth:1ms layoutProfile:29ms | FAIL |
+| `/settings` | 33ms | 88ms | 132ms | mw-auth:0ms | layoutAuth:2ms layoutProfile:27ms | PASS |
+| `/search` | 32ms | 84ms | 428ms | mw-auth:0ms | layoutAuth:2ms layoutProfile:27ms | PASS |
 
-Right-sidebar API: 125ms. Full method and environment notes are in
-[`BASELINE.md`](BASELINE.md).
+Right-sidebar API: 102ms. The original pre-M2 baseline and full method notes
+are in [`BASELINE.md`](BASELINE.md).
 
 
 ## Context
@@ -117,20 +117,22 @@ Each milestone is independently committable; record scorecard-before/after in `d
 - Optional: `@lhci/cli` in GitHub Actions for public pages (authed scorecard stays local — needs secrets).
 - **Acceptance:** two consecutive `perf:check` passes on a clean checkout → mission complete; update `docs/CHANGELOG.md` + `docs/DECISIONS.md` (JWT keys, pg_cron, snapshot pattern).
 
-## Current state snapshot (as of 2026-07-18, M0 complete)
+## Current state snapshot (as of 2026-07-18, M2 complete)
 
 - **Done:** M0 production-build Playwright harness, authenticated perf fixture,
   10-page scorecard, right-sidebar measurement, strict goal gate, timing
   attribution, and durable baseline. `bun run perf` completed 12/12 Playwright
   tests and recorded 5/10 pages passing both gates.
-- **Baseline:** every page passes TTFB. The next user-visible bottleneck is LCP,
-  led by `/recap` at 626ms. See [`BASELINE.md`](BASELINE.md).
-- **In flight in the shared working tree:** M1 PostHog RUM and M2 auth
-  consolidation edits are being developed separately. The M0 baseline predates
-  the auth-consolidation edits.
-- **Exact next action:** finish M1 by deploying the consent-gated web-vitals
-  capture and verifying production events, then run `bun run perf` again after
-  M2 verification to record the auth-consolidation delta.
+- **M2 result:** the ES256-backed `getClaims()` path reduced middleware auth
+  attribution from 25-30ms to 0-1ms and median page TTFB from 82-100ms to
+  32-59ms. Nine of 10 pages now pass both gates.
+- **Remaining gate:** `/recap` LCP is 552ms. Every other page is below both
+  thresholds; the right-sidebar median improved from 125ms to 102ms.
+- **In flight:** M3 page-query deduplication and M6 rendering/bundle work.
+  M1 code and query documentation are complete locally, but production
+  `$web_vitals` visibility still requires a deploy.
+- **Exact next action:** finish M3 and M6, rerun `bun run perf:check`, and work
+  `/recap` first if it remains above the LCP gate.
 
 ## Implementation notes
 
