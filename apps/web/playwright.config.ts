@@ -5,6 +5,7 @@ const useDevServer = process.env.PLAYWRIGHT_USE_DEV_SERVER === "1";
 
 export default defineConfig({
   testDir: "./e2e",
+  testIgnore: "**/perf/**",
   fullyParallel: false,
   forbidOnly: !!process.env.CI,
   retries: process.env.CI ? 2 : 0,
