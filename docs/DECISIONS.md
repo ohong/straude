@@ -1,5 +1,37 @@
 # Architecture & Design Decisions
 
+## Authenticated Request Verification Uses Asymmetric ES256 Claims (2026-07-18)
+
+**Decision:** Use Supabase asymmetric ES256 signing keys and verify authenticated request cookies in middleware with `getClaims()`. Keep authorization and data access on trusted server boundaries; the claims check replaces the remote middleware identity round trip, not application authorization.
+
+**Why:** The previous middleware `getUser()` call contacted Supabase on every navigation before the application could render. Local JWKS-backed claim verification reduced measured middleware auth from 25-30ms to 0-1ms and helped every authenticated route pass the TTFB gate.
+
+**Tradeoff:** Signing-key rollout and CLI authentication must be regression-tested together. Claim verification proves the signed identity, while pages and APIs must still enforce privacy and ownership when reading data.
+
+## Private Periodic Snapshots for Public Aggregate Data (2026-07-18)
+
+**Decision:** Materialize leaderboard rows and profile radar percentiles into private, service-role-only snapshot tables. Refresh both transactionally with one SECURITY DEFINER function scheduled by `pg_cron` every 10 minutes. Request paths read snapshots first and retain the existing leaderboard views as a rollout fallback.
+
+**Why:** The data is public aggregate output, but computing it required repeated full-table scans. Private snapshots allow bounded `unstable_cache` use for the shared result without exposing the underlying tables or accidentally caching personalized data. One transaction ensures readers see either the previous complete snapshot or the next complete snapshot.
+
+**Tradeoff:** Rankings and radar scores may be up to 10 minutes stale. The migration requires a production apply plus an advisor and EXPLAIN comparison; until then, the application falls back to existing views.
+
+## Server Initial Data, Route Loading, and Bundle Analysis (2026-07-18)
+
+**Decision:** Render initial settings, search, card, and recap data on the server; keep subsequent interactions client-side. Give every authenticated gating route an accessible `loading.tsx` boundary. Run `@next/bundle-analyzer` only when `ANALYZE=1`, using its required webpack build while normal production builds remain on Turbopack.
+
+**Why:** Fetch-on-mount delayed useful content and made placeholders the initial page state. Server initial data removes that waterfall, loading boundaries preserve responsive navigation, and the analyzer exposed a development-only Agentation import that cost every authenticated route about 39 KiB gzip.
+
+**Tradeoff:** The actual useful page can become the LCP candidate, so a metric may rise from a trivial loading label even when the page is more usable. Heavy dependencies that were already correctly lazy-loaded remain unchanged.
+
+## Local Performance Gate and Post-Deploy RUM (2026-07-18)
+
+**Decision:** Gate the mission locally on `bun run perf:check`: TTFB under 300ms and LCP under 500ms for all 10 authenticated pages in a production build. Treat PostHog p75 web vitals as a post-deploy honesty check, not a blocker for the local goal.
+
+**Result:** The 2026-07-18 17:04 run passed 10/10 pages, with TTFB 33-42ms, LCP 94-466ms, and the right-sidebar API at 52ms. M3 waterfall work and the combined M4/M5 snapshot/cache work landed before this final score; M6 then completed server-first rendering and bundle reductions.
+
+**Remaining acceptance:** Repeat the clean local scorecard once more for the two-consecutive-run M7 criterion, apply and verify the database migration in production, and confirm `$web_vitals` after deploy.
+
 ## Delegate all usage accounting to bundled ccusage v20 (2026-06-09)
 
 **Decision:** All supported coding-agent ingestion runs through a single bundled `ccusage` (compatible `^20.0.16` range) invoked as a native binary, with a `>=20.0.16` accuracy floor validated against the bundled package version. Straude's native collectors, token normalizer, source whitelist, and pricing aliases are deleted; Straude only parses ccusage's unified daily JSON into storage rows.
