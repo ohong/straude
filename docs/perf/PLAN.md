@@ -6,32 +6,34 @@
 - [ ] M1 PostHog RUM — code/docs complete; post-deploy `$web_vitals` acceptance remains non-gating
 - [x] M2 auth consolidation — acceptance: TTFB drop; no direct `auth.getUser()` in (app); tests green
 - [x] M3 waterfalls/duplicates — completed with M4/M5 before the final scorecard; tests green
-- [x] M4 DB layer — snapshot migration and EXPLAIN baseline ready; production apply/advisor comparison remains a deploy check
+- [x] M4 DB layer — snapshots live; EXPLAIN and advisor comparison clean
 - [x] M5 server caching — public snapshot reads cached; private/user-scoped data remains request-scoped; leakage tests green
 - [x] M6 rendering/bundle — loading shells, server initial data, and analyzer baseline complete
-- [ ] M7 goal loop — 10/10 local pass recorded; second consecutive clean-checkout pass remains
+- [x] M7 goal loop — two consecutive clean-checkout `perf:check` runs passed 10/10
 
 ## Latest scorecard
 
-Captured 2026-07-18 at 17:04 after M3 and the combined M4/M5 work, followed
-by M6 rendering and bundle changes. Targets: TTFB <300ms and LCP <500ms.
-All 10 pages pass both local gates.
+Captured 2026-07-18 at 17:16 after M3-M6, the live snapshot migrations, and
+the second consecutive clean-checkout goal run. Targets: TTFB <300ms and LCP
+<500ms. All 10 pages pass both local gates.
 
 | Page | TTFB | FCP | LCP | Server-Timing | Layout attribution | Pass |
 |---|---:|---:|---:|---|---|:---:|
-| `/feed` | 38ms | 94ms | 448ms | mw-auth:1ms | layoutAuth:2ms layoutProfile:30ms | PASS |
-| `/leaderboard` | 38ms | 98ms | 452ms | mw-auth:1ms | layoutAuth:2ms layoutProfile:31ms | PASS |
-| `/u/[username]` | 37ms | 94ms | 466ms | mw-auth:1ms | layoutAuth:2ms layoutProfile:29ms | PASS |
-| `/post/[id]` | 37ms | 94ms | 444ms | mw-auth:1ms | layoutAuth:2ms layoutProfile:29ms | PASS |
-| `/notifications` | 37ms | 92ms | 438ms | mw-auth:1ms | layoutAuth:1ms layoutProfile:30ms | PASS |
-| `/messages` | 34ms | 110ms | 440ms | mw-auth:0ms | layoutAuth:2ms layoutProfile:28ms | PASS |
-| `/prompts` | 35ms | 94ms | 94ms | mw-auth:1ms | layoutAuth:2ms layoutProfile:28ms | PASS |
-| `/recap` | 39ms | 94ms | 442ms | mw-auth:0ms | layoutAuth:2ms layoutProfile:32ms | PASS |
-| `/settings` | 42ms | 100ms | 454ms | mw-auth:0ms | layoutAuth:1ms layoutProfile:36ms | PASS |
-| `/search` | 33ms | 88ms | 434ms | mw-auth:0ms | layoutAuth:1ms layoutProfile:28ms | PASS |
+| `/feed` | 35ms | 92ms | 442ms | mw-auth:1ms | layoutAuth:2ms layoutProfile:28ms | PASS |
+| `/leaderboard` | 44ms | 108ms | 160ms | mw-auth:1ms | layoutAuth:3ms layoutProfile:36ms | PASS |
+| `/u/[username]` | 43ms | 98ms | 466ms | mw-auth:1ms | layoutAuth:2ms layoutProfile:36ms | PASS |
+| `/post/[id]` | 36ms | 90ms | 432ms | mw-auth:0ms | layoutAuth:2ms layoutProfile:29ms | PASS |
+| `/notifications` | 35ms | 92ms | 438ms | mw-auth:1ms | layoutAuth:1ms layoutProfile:29ms | PASS |
+| `/messages` | 43ms | 100ms | 444ms | mw-auth:1ms | layoutAuth:2ms layoutProfile:36ms | PASS |
+| `/prompts` | 42ms | 98ms | 98ms | mw-auth:0ms | layoutAuth:2ms layoutProfile:35ms | PASS |
+| `/recap` | 39ms | 94ms | 434ms | mw-auth:1ms | layoutAuth:2ms layoutProfile:32ms | PASS |
+| `/settings` | 43ms | 100ms | 444ms | mw-auth:1ms | layoutAuth:2ms layoutProfile:36ms | PASS |
+| `/search` | 37ms | 92ms | 430ms | mw-auth:0ms | layoutAuth:1ms layoutProfile:31ms | PASS |
 
-Right-sidebar API: 52ms. **10/10 pages passing.** The original pre-M2 baseline
-and full method notes are in [`BASELINE.md`](BASELINE.md).
+Right-sidebar API: 30ms. **10/10 pages passing.** The immediately preceding
+clean run at 17:15 also passed 10/10 (TTFB 33-43ms, LCP 88-466ms, sidebar
+30ms). The original pre-M2 baseline and full method notes are in
+[`BASELINE.md`](BASELINE.md).
 
 
 ## Context
@@ -120,22 +122,23 @@ Each milestone is independently committable; record scorecard-before/after in `d
 
 ## Current state snapshot (as of 2026-07-18, local performance gate passing)
 
-- **Local result:** the 17:04 production-build harness completed 12/12
-  Playwright checks with all 10 authenticated pages below both gates. TTFB is
-  33-42ms, LCP is 94-466ms, and the right-sidebar median is 52ms.
+- **Local result:** consecutive 17:15 and 17:16 production-build harness runs
+  each completed 12/12 Playwright checks with all 10 authenticated pages below
+  both gates. The second run measured TTFB at 35-44ms, LCP at 98-466ms, and
+  the right-sidebar median at 30ms.
 - **Auth:** asymmetric ES256 signing plus `getClaims()` reduced middleware auth
   attribution from 25-30ms to 0-1ms while preserving authenticated behavior.
 - **M3-M5:** waterfall/query deduplication and the private, service-only
   leaderboard/profile snapshot pattern were completed together before the
   final scorecard. Public snapshot reads use bounded shared caching; per-user
-  data is not shared-cached. The pg_cron migration refreshes snapshots every
-  10 minutes, but still requires production apply and advisor comparison.
+  data is not shared-cached. The live pg_cron job refreshes snapshots every
+  10 minutes. Production verification found 355 leaderboard rows and 561
+  profile-stat rows; advisors returned to the exact pre-change baseline.
 - **M6:** every gating route has a loading boundary, initial settings/search/
   card/recap data is server-rendered, and bundle analysis removed about 39 KiB
   gzip of development-only JavaScript from each authenticated route.
-- **Remaining checks:** run a second consecutive `bun run perf:check` on a
-  clean checkout for M7. After deploy, confirm PostHog `$web_vitals` for M1;
-  RUM is an honesty check and does not gate the local mission.
+- **Remaining check:** after deploy, confirm PostHog `$web_vitals` for M1. RUM
+  is an honesty check and does not gate the completed local mission.
 
 ## Implementation notes
 
