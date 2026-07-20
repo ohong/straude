@@ -28,6 +28,24 @@ import { verifyCliToken, verifyCliTokenWithRefresh } from "@/lib/api/cli-auth";
 import { getServiceClient } from "@/lib/supabase/service";
 import { resetRateLimiters } from "@/lib/rate-limit";
 
+const ALL_BUILT_IN_CCUSAGE_AGENTS = [
+  "claude",
+  "codex",
+  "opencode",
+  "amp",
+  "droid",
+  "codebuff",
+  "hermes",
+  "pi",
+  "goose",
+  "openclaw",
+  "kilo",
+  "kimi",
+  "qwen",
+  "copilot",
+  "gemini",
+];
+
 function mockAllowedRpc() {
   return vi.fn((fn: string) => Promise.resolve(
     fn === "check_rate_limit"
@@ -379,7 +397,7 @@ describe("POST /api/usage/submit", () => {
     expect(json.error).toContain("Negative reasoning output tokens");
   });
 
-  it("rejects unsupported ccusage collector agents", async () => {
+  it("rejects invalid empty ccusage collector agent ids", async () => {
     (verifyCliToken as any).mockReturnValue("user-1");
     mockServiceClient();
 
@@ -389,7 +407,7 @@ describe("POST /api/usage/submit", () => {
         source: "cli",
         collector: {
           ccusage_version: "20.0.6",
-          ccusage_agents: ["claude", "gemini"],
+          ccusage_agents: ["claude", ""],
           pricing_mode: "online",
         },
       })
@@ -397,7 +415,7 @@ describe("POST /api/usage/submit", () => {
     const json = await res.json();
 
     expect(res.status).toBe(400);
-    expect(json.error).toContain("Unsupported ccusage agents");
+    expect(json.error).toContain("Invalid ccusage_agents");
   });
 
   it("rejects unsupported ccusage pricing metadata", async () => {
@@ -1583,7 +1601,7 @@ describe("POST /api/usage/submit", () => {
     });
   });
 
-  it("stores ccusage collector metadata fields with the source collector", async () => {
+  it("accepts every ccusage source and stores row-specific collector metadata", async () => {
     (verifyCliToken as any).mockReturnValue("user-collector-meta");
     const svc = mockServiceClient();
     svc.single
@@ -1593,21 +1611,25 @@ describe("POST /api/usage/submit", () => {
 
     const res = await POST(
       mockRequest({
-        entries: [makeEntry(todayStr())],
+        entries: [makeEntry(todayStr(), {
+          agents: ["opencode"],
+          models: ["gpt-5.6"],
+          modelBreakdown: [{ model: "gpt-5.6", cost_usd: 0.05 }],
+        })],
         source: "cli",
         collector: {
           claude: "ccusage-claude-v20",
-          ccusage_version: "20.0.6",
-          ccusage_agents: ["claude"],
+          codex: "ccusage-codex-v20",
+          ccusage_version: "20.0.16",
+          ccusage_agents: ALL_BUILT_IN_CCUSAGE_AGENTS,
           pricing_mode: "offline",
         },
       })
     );
 
     const expectedMeta = {
-      claude: "ccusage-claude-v20",
-      ccusage_version: "20.0.6",
-      ccusage_agents: ["claude"],
+      ccusage_version: "20.0.16",
+      ccusage_agents: ["opencode"],
       pricing_mode: "offline",
     };
     expect(res.status).toBe(200);

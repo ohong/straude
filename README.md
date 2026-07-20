@@ -18,7 +18,7 @@ Sync your stats with a single command — no install needed:
 npx straude@latest
 ```
 
-The CLI reads your local [ccusage](https://github.com/ryoppippi/ccusage) data (cost, tokens, models, sessions), uploads it to Straude, and auto-creates a post on your feed. First run opens a browser login; after that, just run `npx straude@latest` daily. It automatically pushes new stats since your last sync.
+The CLI reads your local [ccusage](https://github.com/ccusage/ccusage) data (cost, tokens, models, sessions), uploads it to Straude, and auto-creates a post on your feed. That includes every source ccusage detects, currently Claude Code, Codex, OpenCode, Amp, Droid, Codebuff, Hermes Agent, pi-agent, Goose, OpenClaw, Kilo, Kimi, Qwen, GitHub Copilot CLI, and Gemini CLI. First run opens a browser login; after that, just run `npx straude@latest` daily. It automatically pushes new stats since your last sync.
 
 Options: `--date YYYY-MM-DD` to push a specific date, `--days N` to backfill the last N days (max 7), `--dry-run` to preview without posting. Run `npx straude@latest status` to check your streak and rank.
 
@@ -83,11 +83,11 @@ Only **aggregate token usage statistics** — the same numbers you'd see on your
 - Model names used (e.g. "Claude Opus", "GPT-4.1")
 - Session count and dates
 
-That's it. **We have zero access to your prompts, code, conversations, file contents, or anything you do inside Claude Code or Codex.** The CLI reads pre-aggregated daily totals from local [ccusage](https://github.com/ryoppippi/ccusage) data — it never touches your session transcripts or project files.
+That's it. **We have zero access to your prompts, code, conversations, or file contents.** The CLI receives pre-aggregated daily totals from local [ccusage](https://github.com/ccusage/ccusage) output. It never uploads session transcripts or project files.
 
 ### Where does the usage data come from?
 
-The CLI runs [ccusage](https://github.com/ryoppippi/ccusage) locally on your machine, which reads the JSONL log files that Claude Code writes to `~/.claude/`. These logs contain token counts and cost per API call. ccusage aggregates them into daily totals, and the Straude CLI sends those totals to the server. The raw logs never leave your machine.
+The CLI runs [ccusage](https://github.com/ccusage/ccusage) locally on your machine. ccusage reads the local usage stores created by supported coding agents, calculates current API-equivalent spend from token counts and model pricing, and aggregates everything into daily totals. Straude sends only those totals to the server. The raw logs never leave your machine.
 
 ### Can Straude see my code or prompts?
 

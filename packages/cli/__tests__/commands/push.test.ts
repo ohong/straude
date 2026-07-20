@@ -17,7 +17,7 @@ vi.mock("../../src/lib/api.js", () => ({
 vi.mock("../../src/lib/ccusage.js", () => ({
   CCUSAGE_CLAUDE_COLLECTOR: "ccusage-claude-v20",
   CCUSAGE_CODEX_COLLECTOR: "ccusage-codex-v20",
-  CCUSAGE_DEFAULT_PRICING_MODE: "offline",
+  CCUSAGE_DEFAULT_PRICING_MODE: "online",
   collectCcusageUsageAsync: vi.fn(),
 }));
 
@@ -35,6 +35,13 @@ vi.mock("../../src/lib/posthog.js", () => ({
   },
 }));
 
+vi.mock("ink", () => ({
+  render: vi.fn(() => ({
+    waitUntilExit: () => Promise.resolve(),
+    unmount: vi.fn(),
+  })),
+}));
+
 import { createHash } from "node:crypto";
 import { pushCommand } from "../../src/commands/push.js";
 import { loadConfig, saveConfig, updateLastPushDate } from "../../src/lib/auth.js";
@@ -42,6 +49,7 @@ import { loginCommand } from "../../src/commands/login.js";
 import { apiRequest } from "../../src/lib/api.js";
 import { collectCcusageUsageAsync } from "../../src/lib/ccusage.js";
 import { reportUsagePushFailed, shutdownTelemetryWithTimeout } from "../../src/lib/telemetry.js";
+import { render } from "ink";
 
 const mockLoadConfig = vi.mocked(loadConfig);
 const mockSaveConfig = vi.mocked(saveConfig);
@@ -87,6 +95,7 @@ function daysAgoStr(days: number): string {
 function usageEntry(date = todayStr(), overrides: Record<string, unknown> = {}) {
   return {
     date,
+    agents: ["claude", "codex"],
     models: ["claude-sonnet-4-5-20250929", "gpt-5.2-codex"],
     inputTokens: 1200,
     outputTokens: 400,
@@ -119,11 +128,11 @@ function ccusageOutput(entries = [usageEntry()], overrides: Record<string, unkno
     collector: {
       claude: "ccusage-claude-v20",
       codex: "ccusage-codex-v20",
-      ccusage_version: "20.0.6",
+      ccusage_version: "20.0.16",
       ccusage_agents: ["claude", "codex"],
-      pricing_mode: "offline",
+      pricing_mode: "online",
     },
-    version: "20.0.6",
+    version: "20.0.16",
     raw: JSON.stringify({ daily: entries }),
     stderr: "",
     ...overrides,
@@ -171,7 +180,7 @@ describe("pushCommand", () => {
       expect.any(String),
       expect.any(String),
       undefined,
-      { pricingMode: "offline" },
+      { pricingMode: "online" },
     );
     expect(mockApiRequest).toHaveBeenCalledWith(
       expect.objectContaining(fakeConfig),
@@ -186,9 +195,9 @@ describe("pushCommand", () => {
     expect(body.collector).toEqual({
       claude: "ccusage-claude-v20",
       codex: "ccusage-codex-v20",
-      ccusage_version: "20.0.6",
+      ccusage_version: "20.0.16",
       ccusage_agents: ["claude", "codex"],
-      pricing_mode: "offline",
+      pricing_mode: "online",
     });
     expect(body.device_id).toBe("device-1");
     expect(body.device_name).toBe("work-laptop");
@@ -232,7 +241,7 @@ describe("pushCommand", () => {
       compact(twoDaysAgo),
       compact(today),
       undefined,
-      { pricingMode: "offline" },
+      { pricingMode: "online" },
     );
     expect(mockUpdateLastPushDate).toHaveBeenCalledWith(todayStr());
     expect(mockSaveConfig).not.toHaveBeenCalledWith(expect.objectContaining({
@@ -256,7 +265,7 @@ describe("pushCommand", () => {
       compact(twentyNineDaysAgo),
       compact(today),
       undefined,
-      { pricingMode: "offline" },
+      { pricingMode: "online" },
     );
     expect(mockSaveConfig).toHaveBeenLastCalledWith(expect.objectContaining({
       ccusage_v20_migration_completed_at: expect.any(String),
@@ -276,7 +285,7 @@ describe("pushCommand", () => {
     await pushCommand({ date: "2026-03-12" });
 
     expect(mockCollectCcusageUsageAsync).toHaveBeenCalledWith("20260312", "20260312", undefined, {
-      pricingMode: "offline",
+      pricingMode: "online",
     });
     expect(mockUpdateLastPushDate).toHaveBeenCalledWith(todayStr());
     expect(mockSaveConfig).not.toHaveBeenCalledWith(expect.objectContaining({
@@ -290,7 +299,7 @@ describe("pushCommand", () => {
       expect.any(String),
       expect.any(String),
       300_000,
-      { pricingMode: "offline" },
+      { pricingMode: "online" },
     );
   });
 
@@ -323,6 +332,47 @@ describe("pushCommand", () => {
     expect(console.log).toHaveBeenCalledWith(expect.stringContaining("dry run"));
   });
 
+  it("waits for and renders the scorecard after submit", async () => {
+    mockApiRequest.mockImplementation(async (_config, path) => {
+      if (path === "/api/usage/submit") {
+        return {
+          results: [{
+            date: todayStr(),
+            usage_id: "u-1",
+            post_id: "p-1",
+            post_url: "https://straude.com/post/p-1",
+            action: "created",
+          }],
+        };
+      }
+
+      // Regression: the old 1.5-second dashboard race discarded this response.
+      await new Promise((resolve) => setTimeout(resolve, 1_600));
+      return {
+        username: "alice",
+        level: 3,
+        streak: 5,
+        daily: [{ date: todayStr(), cost_usd: 12.5 }],
+        week_cost: 12.5,
+        prev_week_cost: 8,
+        leaderboard: null,
+        model_breakdown: [],
+        total_output_tokens: 5_000_000,
+      };
+    });
+
+    await pushCommand({});
+
+    expect(mockApiRequest).toHaveBeenLastCalledWith(
+      expect.objectContaining(fakeConfig),
+      "/api/cli/dashboard",
+    );
+    expect(render).toHaveBeenCalledTimes(1);
+    expect(console.log).not.toHaveBeenCalledWith(
+      expect.stringContaining("Dashboard took too long"),
+    );
+  });
+
   it("reports scan failures and exits before submit", async () => {
     const error = new Error("ccusage 20.0.4 is unsupported");
     mockCollectCcusageUsageAsync.mockRejectedValue(error);
@@ -335,7 +385,7 @@ describe("pushCommand", () => {
       expect.objectContaining({
         command: "push",
         stage: "scan",
-        pricing_mode: "offline",
+        pricing_mode: "online",
         collection_ms: expect.any(Number),
         total_ms: expect.any(Number),
       }),
@@ -356,7 +406,7 @@ describe("pushCommand", () => {
       expect.objectContaining({
         command: "push",
         stage: "submit",
-        pricing_mode: "offline",
+        pricing_mode: "online",
         collection_ms: expect.any(Number),
         submit_ms: expect.any(Number),
         total_ms: expect.any(Number),
@@ -397,9 +447,9 @@ describe("pushCommand", () => {
     mockCollectCcusageUsageAsync.mockResolvedValue(ccusageOutput([], {
       agents: [],
       collector: {
-        ccusage_version: "20.0.6",
+        ccusage_version: "20.0.16",
         ccusage_agents: [],
-        pricing_mode: "offline",
+        pricing_mode: "online",
       },
       raw: '{"daily":[]}',
     }) as never);

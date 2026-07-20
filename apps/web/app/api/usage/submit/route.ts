@@ -75,9 +75,8 @@ function validateCollectorMeta(collector: UsageCollectorMeta | undefined): strin
     if (!Array.isArray(collector.ccusage_agents)) {
       return "Invalid ccusage_agents collector metadata";
     }
-    const unsupported = collector.ccusage_agents.filter((agent) => agent !== "claude" && agent !== "codex");
-    if (unsupported.length > 0) {
-      return `Unsupported ccusage agents: ${[...new Set(unsupported)].join(", ")}`;
+    if (collector.ccusage_agents.some((agent) => typeof agent !== "string" || agent.length === 0)) {
+      return "Invalid ccusage_agents collector metadata";
     }
   }
   return null;
@@ -240,15 +239,26 @@ function collectorForEntry(
   if (!collector) return undefined;
 
   const entryCollector: Record<string, unknown> = {};
-  if (collector.claude && entryContainsNonCodexUsage(entry)) {
+  const reportedAgents = Array.isArray(entry.agents) && entry.agents.length > 0
+    ? [...new Set(entry.agents)]
+    : undefined;
+  const containsClaude = reportedAgents
+    ? reportedAgents.includes("claude")
+    : entryContainsNonCodexUsage(entry);
+  const containsCodex = reportedAgents
+    ? reportedAgents.includes("codex")
+    : entryContainsCodexUsage(entry);
+
+  if (collector.claude && containsClaude) {
     entryCollector.claude = collector.claude;
   }
-  if (collector.codex && entryContainsCodexUsage(entry)) {
+  if (collector.codex && containsCodex) {
     entryCollector.codex = collector.codex;
   }
-  if (Object.keys(entryCollector).length > 0) {
-    mergeCollectorRunMeta(entryCollector, collector);
-  }
+  mergeCollectorRunMeta(entryCollector, {
+    ...collector,
+    ccusage_agents: reportedAgents ?? collector.ccusage_agents,
+  });
 
   return Object.keys(entryCollector).length > 0 ? entryCollector as UsageCollectorMeta : undefined;
 }
@@ -508,9 +518,6 @@ export async function POST(request: Request) {
 
   const deviceId = body.device_id;
   const deviceName = body.device_name;
-  const requestHasTrustedCodexCollector = typeof body.collector?.codex === "string"
-    && TRUSTED_CODEX_COLLECTORS.has(body.collector.codex);
-
   if (!deviceId) {
     return NextResponse.json(
       { error: "device_id is required. Please update your CLI: npx straude@latest" },
@@ -535,8 +542,10 @@ export async function POST(request: Request) {
 
       let usage: { id: string } | null = null;
       let usageErrorMessage: string | null = null;
-      const entryIsTrustedCodexCorrection = requestHasTrustedCodexCollector && entryContainsCodexUsage(entry.data);
       const entryCollector = collectorForEntry(body.collector, entry.data);
+      const entryIsTrustedCodexCorrection = typeof entryCollector?.codex === "string"
+        && TRUSTED_CODEX_COLLECTORS.has(entryCollector.codex)
+        && entryContainsCodexUsage(entry.data);
 
       // Guard against decreasing values (e.g., ccusage log rotation). Trusted
       // Codex collectors may lower totals because they repair inflated rows

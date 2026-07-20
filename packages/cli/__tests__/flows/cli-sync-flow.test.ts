@@ -78,7 +78,7 @@ function ccusageJson(date = todayStr()) {
         outputTokens: 400,
         cacheCreationTokens: 100,
         cacheReadTokens: 300,
-        totalTokens: 2100,
+        totalTokens: 2000,
         totalCost: 0.25,
         modelBreakdowns: [
           { modelName: "claude-sonnet-4-5-20250929", cost: 0.2 },
@@ -90,7 +90,7 @@ function ccusageJson(date = todayStr()) {
   });
 }
 
-const TEST_CCUSAGE_VERSION = "20.0.11";
+const TEST_CCUSAGE_VERSION = "20.0.16";
 
 function mockCcusage(json = ccusageJson()) {
   execFileMock.mockImplementation((_cmd: string, _args: string[], _options: unknown, callback: (err: Error | null, stdout: string, stderr: string) => void) => {
@@ -146,20 +146,20 @@ describe("unified ccusage CLI flow", () => {
 
     expect(execFileMock).toHaveBeenCalledWith(
       "/bundled/ccusage",
-      expect.arrayContaining(["daily", "--json", "--offline"]),
+      expect.arrayContaining(["daily", "--json", "--no-offline"]),
       expect.any(Object),
       expect.any(Function),
     );
 
     const [, options] = mockFetch.mock.calls[0]!;
     const body = JSON.parse(options.body);
-    expect(body.entries[0].data.reasoningOutputTokens).toBe(100);
+    expect(body.entries[0].data.reasoningOutputTokens).toBe(0);
     expect(body.collector).toEqual({
       claude: "ccusage-claude-v20",
       codex: "ccusage-codex-v20",
       ccusage_version: TEST_CCUSAGE_VERSION,
       ccusage_agents: ["claude", "codex"],
-      pricing_mode: "offline",
+      pricing_mode: "online",
     });
     expect(readPersistedConfig().last_push_date).toBe(todayStr());
   });
@@ -200,8 +200,9 @@ describe("unified ccusage CLI flow", () => {
     expect(readPersistedConfig().ccusage_v20_migration_completed_at).toEqual(expect.any(String));
   });
 
-  it("ignores unsupported-only ccusage rows without throwing", async () => {
+  it("submits usage from ccusage sources beyond Claude and Codex", async () => {
     seedConfig();
+    mockSuccessfulSubmit();
     mockCcusage(JSON.stringify({
       daily: [
         {
@@ -221,11 +222,20 @@ describe("unified ccusage CLI flow", () => {
 
     await pushCommand({});
 
-    expect(mockFetch).not.toHaveBeenCalled();
+    const [, options] = mockFetch.mock.calls[0]!;
+    const body = JSON.parse(options.body);
+    expect(body.entries[0].data).toMatchObject({
+      agents: ["gemini"],
+      models: ["gemini-pro"],
+      totalTokens: 2,
+      costUSD: 0.01,
+    });
+    expect(body.collector).toEqual({
+      ccusage_version: TEST_CCUSAGE_VERSION,
+      ccusage_agents: ["gemini"],
+      pricing_mode: "online",
+    });
     expect(process.exit).not.toHaveBeenCalled();
     expect(console.error).not.toHaveBeenCalled();
-    expect(console.log).toHaveBeenCalledWith(
-      expect.stringContaining("No usage data found"),
-    );
   });
 });

@@ -1,6 +1,6 @@
 # straude CLI
 
-Push your Claude Code and Codex usage stats to [Straude](https://straude.com).
+Push your AI coding-agent usage stats to [Straude](https://straude.com).
 
 ## Quick start
 
@@ -15,9 +15,9 @@ Running with no arguments performs a smart sync: logs you in if needed, then pus
 ## Requirements
 
 - Node 18+
-- Local Claude Code and/or Codex session data.
+- Local session data from any source supported by ccusage.
 
-Straude invokes its installed [`ccusage`](https://github.com/ryoppippi/ccusage) dependency directly. Fresh installs resolve npm's current `ccusage@latest`, so new model parsing and pricing updates stay owned by ccusage instead of Straude.
+Straude invokes its installed [`ccusage`](https://github.com/ccusage/ccusage) dependency directly. The compatible `ccusage@^20.0.16` range owns source parsing, model recognition, token accounting, and LiteLLM pricing updates. Straude uses ccusage's unified report, so all detected sources are included by default: Claude Code, Codex, OpenCode, Amp, Droid, Codebuff, Hermes Agent, pi-agent, Goose, OpenClaw, Kilo, Kimi, Qwen, GitHub Copilot CLI, Gemini CLI, and compatible custom source IDs.
 
 ## Commands
 

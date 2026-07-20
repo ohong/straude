@@ -3,21 +3,17 @@ import { chmodSync, readFileSync, statSync } from "node:fs";
 import { createRequire } from "node:module";
 import { DEFAULT_SUBPROCESS_TIMEOUT_MS } from "../config.js";
 
-export const CCUSAGE_MIN_VERSION = "20.0.5";
+export const CCUSAGE_MIN_VERSION = "20.0.16";
 export const CCUSAGE_CLAUDE_COLLECTOR = "ccusage-claude-v20" as const;
 export const CCUSAGE_CODEX_COLLECTOR = "ccusage-codex-v20" as const;
-export const CCUSAGE_DEFAULT_PRICING_MODE = "offline" as const;
-export const CCUSAGE_FALLBACK_PRICING_MODE = "online" as const;
+export const CCUSAGE_DEFAULT_PRICING_MODE = "online" as const;
 
-export type CcusagePricingMode =
-  | typeof CCUSAGE_DEFAULT_PRICING_MODE
-  | typeof CCUSAGE_FALLBACK_PRICING_MODE;
+export type CcusagePricingMode = "offline" | "online";
 
-const SUPPORTED_AGENTS = ["claude", "codex"] as const;
 const MAX_CCUSAGE_BUFFER = 20 * 1024 * 1024;
 const MISSING_PRICING_RE = /(missing|unavailable|unknown|could not fetch|failed to fetch).{0,80}(pricing|price|cost)|pricing.{0,80}(missing|unavailable|unknown)|cost excludes/i;
 
-export type CcusageAgent = typeof SUPPORTED_AGENTS[number];
+export type CcusageAgent = string;
 
 /** Type-safe representation of the error surfaced by execFile. */
 interface ExecError extends Error {
@@ -52,6 +48,7 @@ export interface ModelBreakdownEntry {
 /** Normalized entry used throughout the CLI and sent to the API. */
 export interface CcusageDailyEntry {
   date: string;
+  agents: CcusageAgent[];
   models: string[];
   inputTokens: number;
   outputTokens: number;
@@ -297,12 +294,7 @@ function asStringArray(value: unknown, field: string, date: string): string[] {
   return value.filter((item): item is string => typeof item === "string" && item.length > 0);
 }
 
-interface ParsedAgents {
-  supported: CcusageAgent[];
-  unsupported: string[];
-}
-
-function parseAgents(row: CcusageRawEntry, date: string): ParsedAgents {
+function parseAgents(row: CcusageRawEntry, date: string): CcusageAgent[] {
   if (!isRecord(row.metadata) || !Array.isArray(row.metadata.agents)) {
     throw new Error(`Invalid ccusage row for ${date}: metadata.agents is required.`);
   }
@@ -312,19 +304,7 @@ function parseAgents(row: CcusageRawEntry, date: string): ParsedAgents {
     throw new Error(`Invalid ccusage row for ${date}: metadata.agents must contain agent names.`);
   }
 
-  const unsupported = rawAgents.filter((agent): agent is string =>
-    typeof agent === "string" && !SUPPORTED_AGENTS.includes(agent as CcusageAgent),
-  );
-  const supported = rawAgents.filter((agent): agent is CcusageAgent =>
-    typeof agent === "string" && SUPPORTED_AGENTS.includes(agent as CcusageAgent),
-  );
-
-  return {
-    supported: [...new Set(supported)].sort((a, b) =>
-      SUPPORTED_AGENTS.indexOf(a) - SUPPORTED_AGENTS.indexOf(b),
-    ),
-    unsupported: [...new Set(unsupported)].sort(),
-  };
+  return [...new Set(rawAgents)].sort();
 }
 
 function parseModelBreakdown(value: unknown, date: string): ModelBreakdownEntry[] | undefined {
@@ -412,12 +392,7 @@ export function parseCcusageOutput(raw: string, options: ParseOptions = {}): Ccu
     }
 
     const rowAgents = parseAgents(row, date);
-    if (rowAgents.unsupported.length > 0) return [];
-
-    const rowSupportedAgents = rowAgents.supported;
-    if (rowSupportedAgents.length === 0) return [];
-
-    rowSupportedAgents.forEach((agent) => seenAgents.add(agent));
+    rowAgents.forEach((agent) => seenAgents.add(agent));
 
     const inputTokens = asFiniteNumber(row.inputTokens, "inputTokens", date);
     const outputTokens = asFiniteNumber(row.outputTokens, "outputTokens", date);
@@ -441,6 +416,7 @@ export function parseCcusageOutput(raw: string, options: ParseOptions = {}): Ccu
 
     return [{
       date,
+      agents: rowAgents,
       models: [...modelNames],
       inputTokens,
       outputTokens,
@@ -455,9 +431,7 @@ export function parseCcusageOutput(raw: string, options: ParseOptions = {}): Ccu
 
   data.sort((a, b) => a.date.localeCompare(b.date));
 
-  const agents = [...seenAgents].sort((a, b) =>
-    SUPPORTED_AGENTS.indexOf(a) - SUPPORTED_AGENTS.indexOf(b),
-  );
+  const agents = [...seenAgents].sort();
   const version = options.version ?? "unknown";
   const pricingMode = options.pricingMode ?? CCUSAGE_DEFAULT_PRICING_MODE;
 
@@ -508,15 +482,15 @@ export async function collectCcusageUsageAsync(
     hasMissingPricingWarning(result.stderr)
   ) {
     const fallback = await execCcusageAsync(
-      argsForPricingMode(sinceDate, untilDate, CCUSAGE_FALLBACK_PRICING_MODE),
+      argsForPricingMode(sinceDate, untilDate, "online"),
       timeoutMs,
     );
-    rejectMissingPricing(fallback.stderr, CCUSAGE_FALLBACK_PRICING_MODE);
+    rejectMissingPricing(fallback.stderr, "online");
 
     return parseCcusageOutput(fallback.stdout, {
       version,
       stderr: fallback.stderr,
-      pricingMode: CCUSAGE_FALLBACK_PRICING_MODE,
+      pricingMode: "online",
     });
   }
 

@@ -60,10 +60,7 @@ interface PushOptions {
   days?: number;
   dryRun?: boolean;
   timeoutMs?: number;
-  dashboardTimeoutMs?: number;
 }
-
-const DASHBOARD_TIMEOUT_MS = 1_500;
 
 type PushRangeMode =
   | "explicit_date"
@@ -80,7 +77,6 @@ interface PushTimings {
 
 interface DashboardRenderResult {
   rendered: boolean;
-  timedOut: boolean;
   durationMs: number;
 }
 
@@ -221,7 +217,6 @@ function pushTelemetryProperties(args: {
   ccusageVersion?: string;
   ccusageAgents?: CcusageCollectorMeta["ccusage_agents"];
   dashboardRendered?: boolean;
-  dashboardTimedOut?: boolean;
 }): Record<string, string | number | boolean | string[] | undefined> {
   return {
     first_run: args.firstRun,
@@ -233,67 +228,39 @@ function pushTelemetryProperties(args: {
     ccusage_version: args.ccusageVersion,
     ccusage_agents: args.ccusageAgents,
     dashboard_rendered: args.dashboardRendered,
-    dashboard_timed_out: args.dashboardTimedOut,
     telemetry_shutdown_timeout_ms: TELEMETRY_SHUTDOWN_TIMEOUT_MS,
     total_ms: elapsedMs(args.totalStartedAt),
     ...args.timings,
   };
 }
 
-async function renderDashboardWithTimeout(
+async function renderDashboard(
   config: StraudeConfig,
   results: UsageSubmitResponse["results"] | undefined,
-  timeoutMs = DASHBOARD_TIMEOUT_MS,
 ): Promise<DashboardRenderResult> {
   const startedAt = performance.now();
-  const abortController = new AbortController();
-  let timer: NodeJS.Timeout | undefined;
-  let unmountDashboard: (() => void) | undefined;
-
-  const dashboardTask = (async () => {
-    const dashboard = await apiRequest<DashboardResponse>(config, "/api/cli/dashboard", {
-      signal: abortController.signal,
-    });
+  try {
+    const dashboard = await apiRequest<DashboardResponse>(config, "/api/cli/dashboard");
     const { render } = await import("ink");
     const { createElement } = await import("react");
     const { PushSummary } = await import("../components/PushSummary.js");
 
-    const { waitUntilExit, unmount } = render(
+    const { waitUntilExit } = render(
       createElement(PushSummary, {
         dashboard,
         results,
       }),
     );
-    unmountDashboard = unmount;
     await waitUntilExit();
-  })();
-
-  const timeoutTask = new Promise<"timeout">((resolve) => {
-    timer = setTimeout(() => resolve("timeout"), timeoutMs);
-    timer.unref?.();
-  });
-
-  try {
-    const winner = await Promise.race([
-      dashboardTask.then(() => "rendered" as const).catch(() => "failed" as const),
-      timeoutTask,
-    ]);
-
-    if (winner === "timeout") {
-      abortController.abort();
-      unmountDashboard?.();
-    }
-
     return {
-      rendered: winner === "rendered",
-      timedOut: winner === "timeout",
+      rendered: true,
       durationMs: elapsedMs(startedAt),
     };
-  } finally {
-    if (timer) clearTimeout(timer);
-    dashboardTask.catch(() => {
-      // The command has already moved on after timeout/failure.
-    });
+  } catch {
+    return {
+      rendered: false,
+      durationMs: elapsedMs(startedAt),
+    };
   }
 }
 
@@ -566,15 +533,11 @@ export async function pushCommand(options: PushOptions, apiUrlOverride?: string)
   const datesCreated = response.results.filter((r) => r.action === "created").length;
   const datesUpdated = response.results.filter((r) => r.action === "updated").length;
 
-  const dashboard = await renderDashboardWithTimeout(
+  const dashboard = await renderDashboard(
     config,
     response.results,
-    options.dashboardTimeoutMs,
   );
   timings.dashboard_ms = dashboard.durationMs;
-  if (dashboard.timedOut) {
-    console.log(`Dashboard took too long to load. Run \`straude status\` anytime for the full view.`);
-  }
 
   posthog.capture({
     distinctId: getDistinctId(config),
@@ -598,7 +561,6 @@ export async function pushCommand(options: PushOptions, apiUrlOverride?: string)
         ccusageVersion: ccusage.version,
         ccusageAgents: ccusage.agents,
         dashboardRendered: dashboard.rendered,
-        dashboardTimedOut: dashboard.timedOut,
       }),
     },
   });
