@@ -1,0 +1,1068 @@
+{
+  "date": "2026-07-18T22:07:05.151Z",
+  "targets": {
+    "ttfbMs": 300,
+    "lcpMs": 500
+  },
+  "sample": {
+    "runs": 5,
+    "warmRuns": 4,
+    "discardedRuns": 1
+  },
+  "gate": true,
+  "rightSidebarMs": 29,
+  "pages": [
+    {
+      "path": "/feed",
+      "ttfb": 38.69999998807907,
+      "fcp": 116,
+      "lcp": 462,
+      "serverTiming": {
+        "mw-auth": 0
+      },
+      "layoutTiming": {
+        "layoutAuth": 2,
+        "layoutProfile": 29.5
+      },
+      "pass": true
+    },
+    {
+      "path": "/leaderboard",
+      "ttfb": 45.90000003576279,
+      "fcp": 108,
+      "lcp": 476,
+      "serverTiming": {
+        "mw-auth": 0.5
+      },
+      "layoutTiming": {
+        "layoutAuth": 3,
+        "layoutProfile": 35.5
+      },
+      "pass": true
+    },
+    {
+      "path": "/u/[username]",
+      "ttfb": 40.84999996423721,
+      "fcp": 104,
+      "lcp": 492,
+      "serverTiming": {
+        "mw-auth": 1
+      },
+      "layoutTiming": {
+        "layoutAuth": 3,
+        "layoutProfile": 30.5
+      },
+      "pass": true
+    },
+    {
+      "path": "/post/[id]",
+      "ttfb": 40.60000002384186,
+      "fcp": 110,
+      "lcp": 454,
+      "serverTiming": {
+        "mw-auth": 0
+      },
+      "layoutTiming": {
+        "layoutAuth": 3,
+        "layoutProfile": 30
+      },
+      "pass": true
+    },
+    {
+      "path": "/notifications",
+      "ttfb": 34.750000059604645,
+      "fcp": 92,
+      "lcp": 444,
+      "serverTiming": {
+        "mw-auth": 0
+      },
+      "layoutTiming": {
+        "layoutAuth": 1,
+        "layoutProfile": 27.5
+      },
+      "pass": true
+    },
+    {
+      "path": "/messages",
+      "ttfb": 37.250000059604645,
+      "fcp": 92,
+      "lcp": 444,
+      "serverTiming": {
+        "mw-auth": 0
+      },
+      "layoutTiming": {
+        "layoutAuth": 1,
+        "layoutProfile": 30
+      },
+      "pass": true
+    },
+    {
+      "path": "/prompts",
+      "ttfb": 36.549999952316284,
+      "fcp": 96,
+      "lcp": 96,
+      "serverTiming": {
+        "mw-auth": 0
+      },
+      "layoutTiming": {
+        "layoutAuth": 2,
+        "layoutProfile": 29.5
+      },
+      "pass": true
+    },
+    {
+      "path": "/recap",
+      "ttfb": 40.200000047683716,
+      "fcp": 112,
+      "lcp": 446,
+      "serverTiming": {
+        "mw-auth": 0
+      },
+      "layoutTiming": {
+        "layoutAuth": 1.5,
+        "layoutProfile": 32.5
+      },
+      "pass": true
+    },
+    {
+      "path": "/settings",
+      "ttfb": 45.09999996423721,
+      "fcp": 114,
+      "lcp": 460,
+      "serverTiming": {
+        "mw-auth": 0.5
+      },
+      "layoutTiming": {
+        "layoutAuth": 1.5,
+        "layoutProfile": 37.5
+      },
+      "pass": true
+    },
+    {
+      "path": "/search",
+      "ttfb": 43.14999997615814,
+      "fcp": 110,
+      "lcp": 444,
+      "serverTiming": {
+        "mw-auth": 1
+      },
+      "layoutTiming": {
+        "layoutAuth": 1.5,
+        "layoutProfile": 33
+      },
+      "pass": true
+    }
+  ],
+  "raw": [
+    {
+      "path": "/feed",
+      "ttfb": 38.69999998807907,
+      "fcp": 116,
+      "lcp": 462,
+      "serverTiming": {
+        "mw-auth": 0
+      },
+      "layoutTiming": {
+        "layoutAuth": 2,
+        "layoutProfile": 29.5
+      },
+      "runs": [
+        {
+          "ttfb": 257.39999997615814,
+          "fcp": 352,
+          "lcp": 724,
+          "serverTiming": [
+            {
+              "name": "mw-auth",
+              "dur": 67
+            }
+          ],
+          "layoutTiming": {
+            "layoutAuth": 24,
+            "layoutProfile": 103
+          }
+        },
+        {
+          "ttfb": 40,
+          "fcp": 124,
+          "lcp": 452,
+          "serverTiming": [
+            {
+              "name": "mw-auth",
+              "dur": 0
+            }
+          ],
+          "layoutTiming": {
+            "layoutAuth": 2,
+            "layoutProfile": 30
+          }
+        },
+        {
+          "ttfb": 37.39999997615814,
+          "fcp": 112,
+          "lcp": 472,
+          "serverTiming": [
+            {
+              "name": "mw-auth",
+              "dur": 0
+            }
+          ],
+          "layoutTiming": {
+            "layoutAuth": 2,
+            "layoutProfile": 29
+          }
+        },
+        {
+          "ttfb": 58.10000002384186,
+          "fcp": 120,
+          "lcp": 472,
+          "serverTiming": [
+            {
+              "name": "mw-auth",
+              "dur": 1
+            }
+          ],
+          "layoutTiming": {
+            "layoutAuth": 3,
+            "layoutProfile": 49
+          }
+        },
+        {
+          "ttfb": 36,
+          "fcp": 92,
+          "lcp": 444,
+          "serverTiming": [
+            {
+              "name": "mw-auth",
+              "dur": 0
+            }
+          ],
+          "layoutTiming": {
+            "layoutAuth": 1,
+            "layoutProfile": 29
+          }
+        }
+      ],
+      "pass": true
+    },
+    {
+      "path": "/leaderboard",
+      "ttfb": 45.90000003576279,
+      "fcp": 108,
+      "lcp": 476,
+      "serverTiming": {
+        "mw-auth": 0.5
+      },
+      "layoutTiming": {
+        "layoutAuth": 3,
+        "layoutProfile": 35.5
+      },
+      "runs": [
+        {
+          "ttfb": 42,
+          "fcp": 108,
+          "lcp": 160,
+          "serverTiming": [
+            {
+              "name": "mw-auth",
+              "dur": 1
+            }
+          ],
+          "layoutTiming": {
+            "layoutAuth": 2,
+            "layoutProfile": 32
+          }
+        },
+        {
+          "ttfb": 48.5,
+          "fcp": 112,
+          "lcp": 468,
+          "serverTiming": [
+            {
+              "name": "mw-auth",
+              "dur": 0
+            }
+          ],
+          "layoutTiming": {
+            "layoutAuth": 3,
+            "layoutProfile": 39
+          }
+        },
+        {
+          "ttfb": 44.700000047683716,
+          "fcp": 108,
+          "lcp": 488,
+          "serverTiming": [
+            {
+              "name": "mw-auth",
+              "dur": 0
+            }
+          ],
+          "layoutTiming": {
+            "layoutAuth": 4,
+            "layoutProfile": 33
+          }
+        },
+        {
+          "ttfb": 39.10000002384186,
+          "fcp": 108,
+          "lcp": 172,
+          "serverTiming": [
+            {
+              "name": "mw-auth",
+              "dur": 2
+            }
+          ],
+          "layoutTiming": {
+            "layoutAuth": 3,
+            "layoutProfile": 29
+          }
+        },
+        {
+          "ttfb": 47.10000002384186,
+          "fcp": 108,
+          "lcp": 484,
+          "serverTiming": [
+            {
+              "name": "mw-auth",
+              "dur": 1
+            }
+          ],
+          "layoutTiming": {
+            "layoutAuth": 3,
+            "layoutProfile": 38
+          }
+        }
+      ],
+      "pass": true
+    },
+    {
+      "path": "/u/[username]",
+      "ttfb": 40.84999996423721,
+      "fcp": 104,
+      "lcp": 492,
+      "serverTiming": {
+        "mw-auth": 1
+      },
+      "layoutTiming": {
+        "layoutAuth": 3,
+        "layoutProfile": 30.5
+      },
+      "runs": [
+        {
+          "ttfb": 44.700000047683716,
+          "fcp": 100,
+          "lcp": 1856,
+          "serverTiming": [
+            {
+              "name": "mw-auth",
+              "dur": 1
+            }
+          ],
+          "layoutTiming": {
+            "layoutAuth": 2,
+            "layoutProfile": 29
+          }
+        },
+        {
+          "ttfb": 38.199999928474426,
+          "fcp": 108,
+          "lcp": 516,
+          "serverTiming": [
+            {
+              "name": "mw-auth",
+              "dur": 1
+            }
+          ],
+          "layoutTiming": {
+            "layoutAuth": 3,
+            "layoutProfile": 28
+          }
+        },
+        {
+          "ttfb": 43.5,
+          "fcp": 100,
+          "lcp": 492,
+          "serverTiming": [
+            {
+              "name": "mw-auth",
+              "dur": 1
+            }
+          ],
+          "layoutTiming": {
+            "layoutAuth": 3,
+            "layoutProfile": 32
+          }
+        },
+        {
+          "ttfb": 46.60000002384186,
+          "fcp": 116,
+          "lcp": 492,
+          "serverTiming": [
+            {
+              "name": "mw-auth",
+              "dur": 0
+            }
+          ],
+          "layoutTiming": {
+            "layoutAuth": 3,
+            "layoutProfile": 37
+          }
+        },
+        {
+          "ttfb": 37.09999990463257,
+          "fcp": 100,
+          "lcp": 472,
+          "serverTiming": [
+            {
+              "name": "mw-auth",
+              "dur": 1
+            }
+          ],
+          "layoutTiming": {
+            "layoutAuth": 2,
+            "layoutProfile": 29
+          }
+        }
+      ],
+      "pass": true
+    },
+    {
+      "path": "/post/[id]",
+      "ttfb": 40.60000002384186,
+      "fcp": 110,
+      "lcp": 454,
+      "serverTiming": {
+        "mw-auth": 0
+      },
+      "layoutTiming": {
+        "layoutAuth": 3,
+        "layoutProfile": 30
+      },
+      "runs": [
+        {
+          "ttfb": 35.10000002384186,
+          "fcp": 92,
+          "lcp": 452,
+          "serverTiming": [
+            {
+              "name": "mw-auth",
+              "dur": 1
+            }
+          ],
+          "layoutTiming": {
+            "layoutAuth": 2,
+            "layoutProfile": 27
+          }
+        },
+        {
+          "ttfb": 42.5,
+          "fcp": 140,
+          "lcp": 468,
+          "serverTiming": [
+            {
+              "name": "mw-auth",
+              "dur": 0
+            }
+          ],
+          "layoutTiming": {
+            "layoutAuth": 3,
+            "layoutProfile": 29
+          }
+        },
+        {
+          "ttfb": 36.60000002384186,
+          "fcp": 96,
+          "lcp": 456,
+          "serverTiming": [
+            {
+              "name": "mw-auth",
+              "dur": 0
+            }
+          ],
+          "layoutTiming": {
+            "layoutAuth": 3,
+            "layoutProfile": 25
+          }
+        },
+        {
+          "ttfb": 40.700000047683716,
+          "fcp": 120,
+          "lcp": 452,
+          "serverTiming": [
+            {
+              "name": "mw-auth",
+              "dur": 0
+            }
+          ],
+          "layoutTiming": {
+            "layoutAuth": 2,
+            "layoutProfile": 31
+          }
+        },
+        {
+          "ttfb": 40.5,
+          "fcp": 100,
+          "lcp": 100,
+          "serverTiming": [
+            {
+              "name": "mw-auth",
+              "dur": 0
+            }
+          ],
+          "layoutTiming": {
+            "layoutAuth": 3,
+            "layoutProfile": 32
+          }
+        }
+      ],
+      "pass": true
+    },
+    {
+      "path": "/notifications",
+      "ttfb": 34.750000059604645,
+      "fcp": 92,
+      "lcp": 444,
+      "serverTiming": {
+        "mw-auth": 0
+      },
+      "layoutTiming": {
+        "layoutAuth": 1,
+        "layoutProfile": 27.5
+      },
+      "runs": [
+        {
+          "ttfb": 44.89999997615814,
+          "fcp": 120,
+          "lcp": 480,
+          "serverTiming": [
+            {
+              "name": "mw-auth",
+              "dur": 0
+            }
+          ],
+          "layoutTiming": {
+            "layoutAuth": 2,
+            "layoutProfile": 30
+          }
+        },
+        {
+          "ttfb": 34.60000002384186,
+          "fcp": 92,
+          "lcp": 444,
+          "serverTiming": [
+            {
+              "name": "mw-auth",
+              "dur": 0
+            }
+          ],
+          "layoutTiming": {
+            "layoutAuth": 1,
+            "layoutProfile": 27
+          }
+        },
+        {
+          "ttfb": 38.200000047683716,
+          "fcp": 96,
+          "lcp": 452,
+          "serverTiming": [
+            {
+              "name": "mw-auth",
+              "dur": 1
+            }
+          ],
+          "layoutTiming": {
+            "layoutAuth": 1,
+            "layoutProfile": 31
+          }
+        },
+        {
+          "ttfb": 34.90000009536743,
+          "fcp": 92,
+          "lcp": 444,
+          "serverTiming": [
+            {
+              "name": "mw-auth",
+              "dur": 0
+            }
+          ],
+          "layoutTiming": {
+            "layoutAuth": 2,
+            "layoutProfile": 28
+          }
+        },
+        {
+          "ttfb": 32.39999997615814,
+          "fcp": 88,
+          "lcp": 444,
+          "serverTiming": [
+            {
+              "name": "mw-auth",
+              "dur": 0
+            }
+          ],
+          "layoutTiming": {
+            "layoutAuth": 1,
+            "layoutProfile": 27
+          }
+        }
+      ],
+      "pass": true
+    },
+    {
+      "path": "/messages",
+      "ttfb": 37.250000059604645,
+      "fcp": 92,
+      "lcp": 444,
+      "serverTiming": {
+        "mw-auth": 0
+      },
+      "layoutTiming": {
+        "layoutAuth": 1,
+        "layoutProfile": 30
+      },
+      "runs": [
+        {
+          "ttfb": 40.10000002384186,
+          "fcp": 96,
+          "lcp": 464,
+          "serverTiming": [
+            {
+              "name": "mw-auth",
+              "dur": 0
+            }
+          ],
+          "layoutTiming": {
+            "layoutAuth": 2,
+            "layoutProfile": 32
+          }
+        },
+        {
+          "ttfb": 37.200000047683716,
+          "fcp": 92,
+          "lcp": 440,
+          "serverTiming": [
+            {
+              "name": "mw-auth",
+              "dur": 0
+            }
+          ],
+          "layoutTiming": {
+            "layoutAuth": 2,
+            "layoutProfile": 30
+          }
+        },
+        {
+          "ttfb": 37.300000071525574,
+          "fcp": 92,
+          "lcp": 444,
+          "serverTiming": [
+            {
+              "name": "mw-auth",
+              "dur": 0
+            }
+          ],
+          "layoutTiming": {
+            "layoutAuth": 1,
+            "layoutProfile": 30
+          }
+        },
+        {
+          "ttfb": 35.89999997615814,
+          "fcp": 112,
+          "lcp": 444,
+          "serverTiming": [
+            {
+              "name": "mw-auth",
+              "dur": 1
+            }
+          ],
+          "layoutTiming": {
+            "layoutAuth": 1,
+            "layoutProfile": 29
+          }
+        },
+        {
+          "ttfb": 38,
+          "fcp": 92,
+          "lcp": 448,
+          "serverTiming": [
+            {
+              "name": "mw-auth",
+              "dur": 0
+            }
+          ],
+          "layoutTiming": {
+            "layoutAuth": 1,
+            "layoutProfile": 32
+          }
+        }
+      ],
+      "pass": true
+    },
+    {
+      "path": "/prompts",
+      "ttfb": 36.549999952316284,
+      "fcp": 96,
+      "lcp": 96,
+      "serverTiming": {
+        "mw-auth": 0
+      },
+      "layoutTiming": {
+        "layoutAuth": 2,
+        "layoutProfile": 29.5
+      },
+      "runs": [
+        {
+          "ttfb": 44.89999997615814,
+          "fcp": 100,
+          "lcp": 456,
+          "serverTiming": [
+            {
+              "name": "mw-auth",
+              "dur": 0
+            }
+          ],
+          "layoutTiming": {
+            "layoutAuth": 3,
+            "layoutProfile": 32
+          }
+        },
+        {
+          "ttfb": 34.299999952316284,
+          "fcp": 92,
+          "lcp": 92,
+          "serverTiming": [
+            {
+              "name": "mw-auth",
+              "dur": 0
+            }
+          ],
+          "layoutTiming": {
+            "layoutAuth": 2,
+            "layoutProfile": 27
+          }
+        },
+        {
+          "ttfb": 53.200000047683716,
+          "fcp": 112,
+          "lcp": 112,
+          "serverTiming": [
+            {
+              "name": "mw-auth",
+              "dur": 1
+            }
+          ],
+          "layoutTiming": {
+            "layoutAuth": 1,
+            "layoutProfile": 46
+          }
+        },
+        {
+          "ttfb": 37.59999990463257,
+          "fcp": 96,
+          "lcp": 96,
+          "serverTiming": [
+            {
+              "name": "mw-auth",
+              "dur": 0
+            }
+          ],
+          "layoutTiming": {
+            "layoutAuth": 2,
+            "layoutProfile": 31
+          }
+        },
+        {
+          "ttfb": 35.5,
+          "fcp": 96,
+          "lcp": 96,
+          "serverTiming": [
+            {
+              "name": "mw-auth",
+              "dur": 0
+            }
+          ],
+          "layoutTiming": {
+            "layoutAuth": 2,
+            "layoutProfile": 28
+          }
+        }
+      ],
+      "pass": true
+    },
+    {
+      "path": "/recap",
+      "ttfb": 40.200000047683716,
+      "fcp": 112,
+      "lcp": 446,
+      "serverTiming": {
+        "mw-auth": 0
+      },
+      "layoutTiming": {
+        "layoutAuth": 1.5,
+        "layoutProfile": 32.5
+      },
+      "runs": [
+        {
+          "ttfb": 47.10000002384186,
+          "fcp": 104,
+          "lcp": 460,
+          "serverTiming": [
+            {
+              "name": "mw-auth",
+              "dur": 0
+            }
+          ],
+          "layoutTiming": {
+            "layoutAuth": 1,
+            "layoutProfile": 35
+          }
+        },
+        {
+          "ttfb": 40.200000047683716,
+          "fcp": 116,
+          "lcp": 440,
+          "serverTiming": [
+            {
+              "name": "mw-auth",
+              "dur": 0
+            }
+          ],
+          "layoutTiming": {
+            "layoutAuth": 1,
+            "layoutProfile": 34
+          }
+        },
+        {
+          "ttfb": 34.5,
+          "fcp": 92,
+          "lcp": 440,
+          "serverTiming": [
+            {
+              "name": "mw-auth",
+              "dur": 0
+            }
+          ],
+          "layoutTiming": {
+            "layoutAuth": 1,
+            "layoutProfile": 28
+          }
+        },
+        {
+          "ttfb": 49.39999997615814,
+          "fcp": 112,
+          "lcp": 464,
+          "serverTiming": [
+            {
+              "name": "mw-auth",
+              "dur": 1
+            }
+          ],
+          "layoutTiming": {
+            "layoutAuth": 6,
+            "layoutProfile": 35
+          }
+        },
+        {
+          "ttfb": 40.200000047683716,
+          "fcp": null,
+          "lcp": 452,
+          "serverTiming": [
+            {
+              "name": "mw-auth",
+              "dur": 0
+            }
+          ],
+          "layoutTiming": {
+            "layoutAuth": 2,
+            "layoutProfile": 31
+          }
+        }
+      ],
+      "pass": true
+    },
+    {
+      "path": "/settings",
+      "ttfb": 45.09999996423721,
+      "fcp": 114,
+      "lcp": 460,
+      "serverTiming": {
+        "mw-auth": 0.5
+      },
+      "layoutTiming": {
+        "layoutAuth": 1.5,
+        "layoutProfile": 37.5
+      },
+      "runs": [
+        {
+          "ttfb": 60.60000002384186,
+          "fcp": 120,
+          "lcp": 476,
+          "serverTiming": [
+            {
+              "name": "mw-auth",
+              "dur": 0
+            }
+          ],
+          "layoutTiming": {
+            "layoutAuth": 1,
+            "layoutProfile": 48
+          }
+        },
+        {
+          "ttfb": 44.199999928474426,
+          "fcp": 108,
+          "lcp": 464,
+          "serverTiming": [
+            {
+              "name": "mw-auth",
+              "dur": 0
+            }
+          ],
+          "layoutTiming": {
+            "layoutAuth": 2,
+            "layoutProfile": 37
+          }
+        },
+        {
+          "ttfb": 46,
+          "fcp": 112,
+          "lcp": 456,
+          "serverTiming": [
+            {
+              "name": "mw-auth",
+              "dur": 0
+            }
+          ],
+          "layoutTiming": {
+            "layoutAuth": 2,
+            "layoutProfile": 38
+          }
+        },
+        {
+          "ttfb": 39.800000071525574,
+          "fcp": 124,
+          "lcp": 448,
+          "serverTiming": [
+            {
+              "name": "mw-auth",
+              "dur": 1
+            }
+          ],
+          "layoutTiming": {
+            "layoutAuth": 1,
+            "layoutProfile": 31
+          }
+        },
+        {
+          "ttfb": 46.300000071525574,
+          "fcp": 116,
+          "lcp": 476,
+          "serverTiming": [
+            {
+              "name": "mw-auth",
+              "dur": 1
+            }
+          ],
+          "layoutTiming": {
+            "layoutAuth": 1,
+            "layoutProfile": 39
+          }
+        }
+      ],
+      "pass": true
+    },
+    {
+      "path": "/search",
+      "ttfb": 43.14999997615814,
+      "fcp": 110,
+      "lcp": 444,
+      "serverTiming": {
+        "mw-auth": 1
+      },
+      "layoutTiming": {
+        "layoutAuth": 1.5,
+        "layoutProfile": 33
+      },
+      "runs": [
+        {
+          "ttfb": 36.10000002384186,
+          "fcp": 92,
+          "lcp": 440,
+          "serverTiming": [
+            {
+              "name": "mw-auth",
+              "dur": 0
+            }
+          ],
+          "layoutTiming": {
+            "layoutAuth": 2,
+            "layoutProfile": 29
+          }
+        },
+        {
+          "ttfb": 35.300000071525574,
+          "fcp": 120,
+          "lcp": 444,
+          "serverTiming": [
+            {
+              "name": "mw-auth",
+              "dur": 1
+            }
+          ],
+          "layoutTiming": {
+            "layoutAuth": 1,
+            "layoutProfile": 28
+          }
+        },
+        {
+          "ttfb": 41.39999997615814,
+          "fcp": 96,
+          "lcp": 440,
+          "serverTiming": [
+            {
+              "name": "mw-auth",
+              "dur": 0
+            }
+          ],
+          "layoutTiming": {
+            "layoutAuth": 2,
+            "layoutProfile": 35
+          }
+        },
+        {
+          "ttfb": 44.89999997615814,
+          "fcp": 124,
+          "lcp": 456,
+          "serverTiming": [
+            {
+              "name": "mw-auth",
+              "dur": 1
+            }
+          ],
+          "layoutTiming": {
+            "layoutAuth": 2,
+            "layoutProfile": 31
+          }
+        },
+        {
+          "ttfb": 45.10000002384186,
+          "fcp": 100,
+          "lcp": 444,
+          "serverTiming": [
+            {
+              "name": "mw-auth",
+              "dur": 1
+            }
+          ],
+          "layoutTiming": {
+            "layoutAuth": 1,
+            "layoutProfile": 39
+          }
+        }
+      ],
+      "pass": true
+    }
+  ]
+}
