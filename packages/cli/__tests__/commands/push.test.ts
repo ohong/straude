@@ -166,11 +166,11 @@ function collected(entries = [usageEntry()]) {
     agents: ["codex"],
     collector: {
       codex: "ccusage-codex-v20",
-      ccusage_version: "20.0.16",
+      ccusage_version: "20.0.18",
       ccusage_agents: ["codex"],
       pricing_mode: "online",
     },
-    version: "20.0.16",
+    version: "20.0.18",
     raw: "{}",
     stderr: "",
   };
@@ -258,7 +258,7 @@ describe("pushCommand v2", () => {
       },
       collector: {
         name: "ccusage",
-        version: "20.0.16",
+        version: "20.0.18",
         pricing_mode: "online",
       },
     });

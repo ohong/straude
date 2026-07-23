@@ -228,7 +228,23 @@ DECLARE
     p_is_verified
     AND p_source = 'cli'
     AND p_collector ->> 'name' = 'ccusage'
-    AND p_collector ->> 'version' = '20.0.16'
+    AND CASE
+      WHEN COALESCE(p_collector ->> 'version', '') ~
+        '^(0|[1-9][0-9]{0,15})\.(0|[1-9][0-9]{0,15})\.(0|[1-9][0-9]{0,15})(\+[0-9A-Za-z-]+(\.[0-9A-Za-z-]+)*)?$'
+      THEN
+        split_part(split_part(p_collector ->> 'version', '+', 1), '.', 1)::NUMERIC
+          <= 9007199254740991
+        AND split_part(split_part(p_collector ->> 'version', '+', 1), '.', 2)::NUMERIC
+          <= 9007199254740991
+        AND split_part(split_part(p_collector ->> 'version', '+', 1), '.', 3)::NUMERIC
+          <= 9007199254740991
+        AND (
+          split_part(split_part(p_collector ->> 'version', '+', 1), '.', 1)::NUMERIC,
+          split_part(split_part(p_collector ->> 'version', '+', 1), '.', 2)::NUMERIC,
+          split_part(split_part(p_collector ->> 'version', '+', 1), '.', 3)::NUMERIC
+        ) >= (20::NUMERIC, 0::NUMERIC, 18::NUMERIC)
+      ELSE false
+    END
     AND p_collector ->> 'pricing_mode' = 'online';
   v_authoritative BOOLEAN :=
     v_trusted_partitioned_snapshot

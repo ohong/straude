@@ -9,6 +9,15 @@ import { promisify } from "node:util";
 const execFileAsync = promisify(execFile);
 const packageDir = resolve(dirname(fileURLToPath(import.meta.url)), "..");
 const npm = process.platform === "win32" ? "npm.cmd" : "npm";
+const expectedCcusageRange = ">=20.0.18";
+
+function isCompatibleCcusageVersion(version) {
+  const match = /^(0|[1-9]\d*)\.(0|[1-9]\d*)\.(0|[1-9]\d*)(?:\+[0-9A-Za-z-]+(?:\.[0-9A-Za-z-]+)*)?$/
+    .exec(version);
+  if (!match) return false;
+  const [, major, minor, patch] = match.map(Number);
+  return major > 20 || (major === 20 && (minor > 0 || patch >= 18));
+}
 
 function readOption(name) {
   const index = process.argv.indexOf(name);
@@ -93,11 +102,21 @@ try {
   if (packageJson.bin?.straude !== "dist/index.js") {
     throw new Error(`Packed CLI has an invalid bin entry: ${JSON.stringify(packageJson.bin)}`);
   }
-  if (packageJson.dependencies?.ccusage !== "20.0.16") {
-    throw new Error(`Packed CLI must pin ccusage 20.0.16, got ${packageJson.dependencies?.ccusage}`);
+  if (packageJson.dependencies?.ccusage !== expectedCcusageRange) {
+    throw new Error(
+      `Packed CLI must declare ccusage ${expectedCcusageRange}, got ${packageJson.dependencies?.ccusage}`,
+    );
   }
   if (packageJson.engines?.node !== ">=20") {
     throw new Error(`Packed CLI must require Node >=20, got ${packageJson.engines?.node}`);
+  }
+  const installedCcusage = JSON.parse(
+    await readFile(join(installDir, "node_modules", "ccusage", "package.json"), "utf8"),
+  );
+  if (!isCompatibleCcusageVersion(installedCcusage.version)) {
+    throw new Error(
+      `Packed CLI installed incompatible ccusage ${installedCcusage.version}; expected a stable version >=20.0.18`,
+    );
   }
 
   const cli = join(installedPackageDir, "dist", "index.js");
@@ -125,8 +144,10 @@ try {
       if (submission.protocol_version !== 2) {
         throw new Error(`Expected usage protocol v2, got ${submission.protocol_version}`);
       }
-      if (submission.collector?.version !== "20.0.16") {
-        throw new Error(`Expected ccusage 20.0.16, got ${submission.collector?.version}`);
+      if (submission.collector?.version !== installedCcusage.version) {
+        throw new Error(
+          `Expected installed ccusage ${installedCcusage.version}, got ${submission.collector?.version}`,
+        );
       }
       response.end(JSON.stringify({
         request_id: submission.request_id,
@@ -202,7 +223,7 @@ try {
   }
 
   console.log(
-    `straude v${packageJson.version} packed-install scorecard passed on Node ${process.version} (${elapsedMs}ms)`,
+    `straude v${packageJson.version} with ccusage ${installedCcusage.version} packed-install scorecard passed on Node ${process.version} (${elapsedMs}ms)`,
   );
 } finally {
   if (server) {

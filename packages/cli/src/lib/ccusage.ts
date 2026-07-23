@@ -3,8 +3,7 @@ import { chmodSync, readFileSync, statSync } from "node:fs";
 import { createRequire } from "node:module";
 import { DEFAULT_SUBPROCESS_TIMEOUT_MS } from "../config.js";
 
-export const CCUSAGE_MIN_VERSION = "20.0.16";
-export const CCUSAGE_VERIFIED_VERSION = "20.0.16";
+export const CCUSAGE_MIN_VERSION = "20.0.18";
 export const CCUSAGE_CLAUDE_COLLECTOR = "ccusage-claude-v20" as const;
 export const CCUSAGE_CODEX_COLLECTOR = "ccusage-codex-v20" as const;
 export const CCUSAGE_DEFAULT_PRICING_MODE = "online" as const;
@@ -257,20 +256,46 @@ export function _setCcusageCommandForTests(command: { cmd: string; args: string[
   resolvedCommand = undefined;
 }
 
-function compareSemver(a: string, b: string): number {
-  const left = a.split(".").map((part) => Number(part));
-  const right = b.split(".").map((part) => Number(part));
-  for (let i = 0; i < 3; i += 1) {
-    const diff = (left[i] ?? 0) - (right[i] ?? 0);
-    if (diff !== 0) return diff;
-  }
-  return 0;
+interface StableSemver {
+  major: number;
+  minor: number;
+  patch: number;
 }
 
-function assertSupportedVersion(version: string): void {
-  if (compareSemver(version, CCUSAGE_VERIFIED_VERSION) !== 0) {
+function parseStableSemver(version: string): StableSemver | undefined {
+  const match = /^(0|[1-9]\d*)\.(0|[1-9]\d*)\.(0|[1-9]\d*)(?:\+[0-9A-Za-z-]+(?:\.[0-9A-Za-z-]+)*)?$/
+    .exec(version);
+  if (!match) return undefined;
+  const [major, minor, patch] = match.slice(1, 4).map(Number);
+  if (
+    major === undefined
+    || minor === undefined
+    || patch === undefined
+    || !Number.isSafeInteger(major)
+    || !Number.isSafeInteger(minor)
+    || !Number.isSafeInteger(patch)
+  ) {
+    return undefined;
+  }
+  return { major, minor, patch };
+}
+
+function compareSemver(a: StableSemver, b: StableSemver): number {
+  if (a.major !== b.major) return a.major - b.major;
+  if (a.minor !== b.minor) return a.minor - b.minor;
+  return a.patch - b.patch;
+}
+
+export function assertSupportedCcusageVersion(version: string): void {
+  const parsed = parseStableSemver(version);
+  const minimum = parseStableSemver(CCUSAGE_MIN_VERSION);
+  if (
+    !parsed
+    || !minimum
+    || compareSemver(parsed, minimum) < 0
+  ) {
     throw new Error(
-      `ccusage ${version} is unsupported. Straude requires the fixture-verified ccusage ${CCUSAGE_VERIFIED_VERSION}. Reinstall Straude and retry.`,
+      `ccusage ${version} is unsupported. Straude requires a stable ccusage version >=${CCUSAGE_MIN_VERSION}. Reinstall Straude and retry.`,
     );
   }
 }
@@ -568,6 +593,17 @@ function parseAgentBreakdown(value: unknown, date: string): CcusageAgentEntry[] 
     const totalTokens = asFiniteNumber(raw.totalTokens, `agents[${index}].totalTokens`, date);
     const costUSD = asFiniteNumber(raw.totalCost, `agents[${index}].totalCost`, date);
     const parsedModelBreakdown = parseModelBreakdown(raw.modelBreakdowns, date) ?? [];
+    const tokensRequirePaidPricing = raw.agent === "claude" || raw.agent === "codex";
+    if (tokensRequirePaidPricing && totalTokens > 0 && costUSD === 0) {
+      throw new PricingUnavailableError(
+        `ccusage did not provide pricing for ${raw.agent} usage on ${date}.`,
+      );
+    }
+    if (tokensRequirePaidPricing && totalTokens > 0 && parsedModelBreakdown.length === 0) {
+      throw new PricingUnavailableError(
+        `ccusage did not provide model pricing for ${raw.agent} usage on ${date}.`,
+      );
+    }
     if (costUSD > 0 && parsedModelBreakdown.length === 0) {
       throw new Error(`Invalid ccusage row for ${date}: agents[${index}] priced usage requires modelBreakdowns.`);
     }
@@ -583,6 +619,13 @@ function parseAgentBreakdown(value: unknown, date: string): CcusageAgentEntry[] 
       parsedModelBreakdown,
       reasoningOutputTokens,
     );
+    for (const model of modelBreakdown) {
+      if (tokensRequirePaidPricing && model.totalTokens > 0 && model.cost_usd === 0) {
+        throw new PricingUnavailableError(
+          `ccusage did not provide pricing for ${raw.agent} model ${model.model} on ${date}.`,
+        );
+      }
+    }
 
     const models = asStringArray(raw.modelsUsed, `agents[${index}].modelsUsed`, date);
     const allModels = new Set(models);
@@ -815,7 +858,7 @@ export async function collectCcusageUsageAsync(
   options: CollectOptions = {},
 ): Promise<CcusageOutput> {
   const { version } = resolveInstalledCcusageCommand();
-  assertSupportedVersion(version);
+  assertSupportedCcusageVersion(version);
   const pricingMode = options.pricingMode ?? CCUSAGE_DEFAULT_PRICING_MODE;
   const timezone = options.timezone ?? resolveLocalTimezone();
   const startedAt = Date.now();

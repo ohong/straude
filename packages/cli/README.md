@@ -17,7 +17,7 @@ Running with no arguments performs a smart sync: logs you in if needed, then pus
 - Node 20+
 - Local session data from any source supported by ccusage.
 
-Straude invokes its installed [`ccusage`](https://github.com/ccusage/ccusage) dependency directly. Version `20.0.16` is pinned so the parser, token accounting, and native binary match the release fixture tested by Straude. Live LiteLLM pricing is required; embedded-price fallback is detected, retried within a bounded recovery budget, and never submitted. Straude uses ccusage's unified per-agent report, so all detected sources are included by default: Claude Code, Codex, OpenCode, Amp, Droid, Codebuff, Hermes Agent, pi-agent, Goose, OpenClaw, Kilo, Kimi, Qwen, GitHub Copilot CLI, Gemini CLI, and compatible custom source IDs.
+Straude invokes its installed [`ccusage`](https://github.com/ccusage/ccusage) dependency directly. It accepts any stable release `>=20.0.18`, while the repository lockfile keeps CI reproducible. Fresh Straude installs can therefore resolve newer collector support, including a future major whose output still satisfies Straude's strict schema and accounting checks; an existing installation keeps its current `node_modules` until the package is reinstalled or upgraded. Live LiteLLM pricing is required, and Straude fails closed when Claude or Codex usage has tokens but no price. Straude uses ccusage's unified per-agent report, so future source and model IDs do not need a Straude allowlist update.
 
 ## Commands
 

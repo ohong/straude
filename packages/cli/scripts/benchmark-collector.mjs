@@ -27,8 +27,21 @@ const iterations = Number.parseInt(
 );
 const anchor = "2026-07-09";
 
-if (collectorPackage.version !== "20.0.16") {
-  throw new Error(`Expected ccusage 20.0.16, found ${collectorPackage.version}`);
+const collectorVersion =
+  /^(0|[1-9]\d*)\.(0|[1-9]\d*)\.(0|[1-9]\d*)(?:\+[0-9A-Za-z-]+(?:\.[0-9A-Za-z-]+)*)?$/
+    .exec(collectorPackage.version);
+if (
+  !collectorVersion
+  || Number(collectorVersion[1]) < 20
+  || (
+    Number(collectorVersion[1]) === 20
+    && Number(collectorVersion[2]) === 0
+    && Number(collectorVersion[3]) < 18
+  )
+) {
+  throw new Error(
+    `Expected stable ccusage >=20.0.18, found ${collectorPackage.version}`,
+  );
 }
 if (!Number.isInteger(iterations) || iterations < 3) {
   throw new Error(

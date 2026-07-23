@@ -47,6 +47,13 @@ failures, and no operation running past its deadline. Compare performance
 changes on the same runner class using `benchmark` and `benchmark:collector`;
 accuracy fixtures must pass regardless of latency.
 
+The frozen-lock CI gate and the `ccusage compatibility` canary serve different
+purposes. CI proves the release graph in `bun.lock`; the weekly/manual canary
+installs `ccusage@latest` in isolation and passes a new major through the same
+production parser and accounting gates. Schema drift, zero-priced Claude/Codex
+usage, or a collector run beyond 60 seconds fails clearly. A canary failure does not alter
+already-installed CLIs or download collector code at runtime.
+
 ## Historical repair
 
 Only a service-role database session may call the repair functions. Start a

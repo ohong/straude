@@ -27,7 +27,8 @@
     "test": "bun run build:shared && vitest run",
     "test:packaged": "node scripts/packaged-cli-e2e.mjs",
     "benchmark": "node scripts/benchmark-cli.mjs",
-    "benchmark:collector": "node scripts/benchmark-collector.mjs"
+    "benchmark:collector": "node scripts/benchmark-collector.mjs",
+    "canary:ccusage": "bun scripts/check-ccusage-compatibility.ts"
   },
   "devDependencies": {
     "@straude/shared": "workspace:*",
@@ -39,7 +40,7 @@
   },
   "dependencies": {
     "@pppp606/ink-chart": "^0.2.4",
-    "ccusage": "20.0.16",
+    "ccusage": ">=20.0.18",
     "chalk": "^5.6.2",
     "ink": "^6.8.0",
     "posthog-node": "^5.29.1",

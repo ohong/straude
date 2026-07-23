@@ -143,20 +143,22 @@ on Windows. Claude Code hooks are independent of the OS scheduler.
 
 ## Data Sources
 
-Straude invokes its installed, exact `ccusage@20.0.16` native binary once per sync:
+Straude invokes its installed `ccusage` native binary once per sync. Supported
+collector versions are stable releases `>=20.0.18`:
 
 ```bash
 ccusage daily --json --since YYYYMMDD --until YYYYMMDD --no-offline --by-agent --timezone IANA_TIMEZONE
 ```
 
-The unified report automatically detects and combines every source ccusage supports. As of ccusage 20.0.16, those built-in sources are Claude Code, Codex, OpenCode, Amp, Droid, Codebuff, Hermes Agent, pi-agent, Goose, OpenClaw, Kilo, Kimi, Qwen, GitHub Copilot CLI, and Gemini CLI. Configured custom pi-format stores are accepted too.
+The unified report automatically detects and combines every source ccusage supports. Source and model IDs are preserved as generic strings, so later stable releases can add them without a Straude allowlist change.
 
 ccusage owns local path discovery, source-format parsing, deduplication, token accounting, model aliases, and per-model cost calculation. Straude validates the unified daily JSON, preserves each row's `metadata.agents`, and submits the aggregate token buckets, models, and model cost breakdown. The raw local logs and paths are never uploaded.
 
 Online LiteLLM pricing is required, so model prices can change independently of
-the pinned collector code. If ccusage reports missing prices or falls back to
-its embedded snapshot, Straude retries within a bounded 60-second recovery
-budget and submits nothing unless live pricing becomes complete.
+the installed collector code. If ccusage reports missing prices, falls back to
+its embedded snapshot, or emits nonzero-token Claude/Codex usage at zero cost,
+Straude retries within a bounded 60-second recovery budget and submits nothing
+unless live pricing becomes complete. Other sources may legitimately be free.
 
 A SHA-256 hash of the ccusage version, detected sources, date range, and raw unified JSON is sent for deduplication.
 
@@ -268,10 +270,22 @@ bun run --cwd packages/cli test:packaged
 ```
 
 `test:packaged` performs a clean build through `npm pack`, installs the tarball
-in a temporary project, checks its manifest and version, runs the real pinned
-ccusage binary against the GPT-5.6 fixture, submits to a local HTTP server, and
+in a temporary project, checks the declared dependency range and actual
+compatible collector version, runs that binary against the GPT-5.6 fixture,
+submits to a local HTTP server, and
 waits for the scorecard render. CI repeats the installed-tarball check on Linux,
 macOS, and Windows with Node 20 and 22.
+
+The normal gate remains frozen to `bun.lock`. A separate weekly/manual
+`ccusage compatibility` workflow installs `ccusage@latest` in isolation and
+runs the real fixture through the production parser. A new major is accepted
+when its output passes; schema drift, missing paid-model pricing, or a run
+beyond the 60-second budget fails.
+The product runtime never invokes `npx ccusage@latest`.
+
+The published `>=20.0.18` range affects dependency resolution on fresh installs.
+An existing installation keeps its installed collector until Straude is
+reinstalled or upgraded.
 
 Tags of the form `straude@<package-version>` trigger the release workflow. It
 publishes the exact matrix-tested tarball to npm with provenance and creates a
@@ -294,7 +308,7 @@ caches, then prints JSON with median and p95 `--version` process latency.
 Override its default 15 samples with `STRAUDE_BENCH_ITERATIONS`.
 
 The collector harness creates deterministic 1, 3, 7, and 30-day Codex fixture
-sets and records the first process plus warm median/p95 for the pinned ccusage
+sets and records the first process plus warm median/p95 for the lockfile-resolved ccusage
 binary. Override its default seven warm samples with
 `STRAUDE_COLLECTOR_BENCH_ITERATIONS`. It uses offline fixture pricing to isolate
 local scan cost from network availability. CI archives these measurements;

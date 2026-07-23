@@ -2,9 +2,17 @@
 
 ## Delegate all usage accounting to bundled ccusage v20 (2026-06-09)
 
-**Decision:** All supported coding-agent ingestion runs through a single bundled `ccusage` (compatible `^20.0.16` range) invoked as a native binary, with a `>=20.0.16` accuracy floor validated against the bundled package version. Straude's native collectors, token normalizer, source whitelist, and pricing aliases are deleted; Straude only parses ccusage's unified daily JSON into storage rows.
+**Decision:** All supported coding-agent ingestion runs through a single installed `ccusage` v20 dependency invoked as a native binary. The current floor is `20.0.18`; Straude's native collectors, token normalizer, source whitelist, and pricing aliases are deleted, so Straude only parses ccusage's unified daily JSON into storage rows.
 
-**Alternatives considered:** (a) Keep the native Codex collector in parallel with ccusage Claude collection — rejected because it duplicates upstream parsing/dedupe/pricing work that ccusage now does correctly (v20 ships `metadata.agents`, archived-session dedupe, `thread_spawn` replay skipping) and was the source of two past inflation incidents. (b) Use a global `ccusage` from PATH — rejected because version skew on user machines breaks the accuracy floor; bundling pins the exact behavior we tested.
+**Alternatives considered:** (a) Keep the native Codex collector in parallel with ccusage Claude collection — rejected because it duplicates upstream parsing/dedupe/pricing work that ccusage now does correctly (v20 ships `metadata.agents`, archived-session dedupe, `thread_spawn` replay skipping) and was the source of two past inflation incidents. (b) Use a global `ccusage` from PATH — rejected because uncontrolled version skew can bypass the package dependency and accuracy floor.
+
+## Accept stable ccusage releases above the accuracy floor and fail closed on paid-model pricing (2026-07-23)
+
+**Decision:** Publish `ccusage: >=20.0.18`, accept any stable semantic version at or above that floor, and record the version actually installed. Agent and model IDs remain opaque strings. Any Claude or Codex model breakdown with nonzero tokens and zero cost is rejected with `PricingUnavailableError`; other sources may legitimately report zero-cost usage.
+
+**Why:** ccusage owns source adapters and pricing support, so a patch or major ceiling delays new models and sources until Straude republishes. The open-ended floor lets fresh installs pick up a newer stable collector when its output still passes Straude's strict parser, accounting, and pricing invariants. Existing installs do not mutate in place; they receive the newer collector only after reinstalling or upgrading Straude.
+
+**Verification:** The frozen lockfile keeps the normal CI gate on `20.0.18`. A separate scheduled/manual workflow installs `ccusage@latest` in isolation, runs the real GPT-5.6 fixture through the production collector/parser regardless of major, checks a bounded runtime, and proves unknown Codex pricing fails closed.
 
 **Trade-off accepted:** The unified all-agent ccusage report benchmarked ~9.5% slower (median +152ms on a three-day mixed fixture) than the old parallel native path. Accepted: accuracy and a single owner for token accounting outweigh sub-second CLI latency. `reasoning_output_tokens` is derived as a non-negative residual `totalTokens - (input + output + cacheCreate + cacheRead)` when a source exposes reasoning outside the other reported buckets.
 
@@ -926,7 +934,7 @@ Pricing the new-logic numbers at gpt-5.5 rates: $228.68 — matches what OpenAI 
 
 ## ccusage Owns Sources and Current Model Pricing (2026-07-09)
 
-**Decision:** Require `ccusage >=20.0.16`, run unified reports with online LiteLLM pricing by default, and accept every non-empty source ID ccusage emits. Preserve each daily row's `metadata.agents` in the normalized entry and collector metadata. Claude and Codex retain explicit collector markers only for their existing repair semantics; other sources use the generic ccusage run metadata.
+**Decision:** Require stable `ccusage >=20.0.18`, run unified reports with online LiteLLM pricing by default, and accept every non-empty source ID ccusage emits. Preserve each daily row's `metadata.agents` in the normalized entry and collector metadata. Claude and Codex retain explicit collector markers only for their existing repair semantics; other sources use the generic ccusage run metadata.
 
 **Alternatives considered:**
 

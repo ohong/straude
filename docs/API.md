@@ -324,7 +324,7 @@ imports are adapted server-side during the migration.
     },
     "collector": {
       "name": "ccusage",
-      "version": "20.0.16",
+      "version": "20.0.18",
       "pricing_mode": "online"
     },
     "entries": [

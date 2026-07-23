@@ -93,14 +93,19 @@ function v2Agent(overrides: Record<string, unknown> = {}) {
   };
 }
 
-function v2Body(requestId: string, contentHash: string, overrides: Record<string, unknown> = {}) {
+function v2Body(
+  requestId: string,
+  contentHash: string,
+  overrides: Record<string, unknown> = {},
+  collectorVersion = "20.0.18",
+) {
   return {
     protocol_version: 2,
     request_id: requestId,
     source: "cli",
     timezone: "UTC",
     installation: { id: DEVICE_ID, name: "integration-device" },
-    collector: { name: "ccusage", version: "20.0.16", pricing_mode: "online" },
+    collector: { name: "ccusage", version: collectorVersion, pricing_mode: "online" },
     entries: [{
       date: today,
       content_hash: contentHash,
@@ -200,7 +205,7 @@ describe("POST /api/usage/submit (real Supabase)", () => {
           [
             userId,
             JSON.stringify({ id: DEVICE_ID, name: "concurrent-device" }),
-            JSON.stringify({ name: "ccusage", version: "20.0.16", pricing_mode: "online" }),
+            JSON.stringify({ name: "ccusage", version: "20.0.18", pricing_mode: "online" }),
             JSON.stringify(entry),
             "9".repeat(64),
           ],
@@ -309,7 +314,7 @@ describe("POST /api/usage/submit (real Supabase)", () => {
            'cache_read_tokens', 30, 'total_tokens', 160, 'cost_usd', 0.25
          )),
          repeat('a', 64),
-         '{"name":"ccusage","version":"20.0.16","pricing_mode":"online"}'::jsonb
+         '{"name":"ccusage","version":"20.0.18","pricing_mode":"online"}'::jsonb
        FROM unnest($2::date[]) AS day
        CROSS JOIN unnest($3::uuid[]) AS device`,
       [userId, dates, [deviceA, deviceB]],
@@ -326,7 +331,7 @@ describe("POST /api/usage/submit (real Supabase)", () => {
          '["gpt-5.6"]'::jsonb,
          '[{"model":"gpt-5.6","cost_usd":0.25}]'::jsonb,
          1, repeat('a', 64),
-         '{"name":"ccusage","version":"20.0.16","pricing_mode":"online"}'::jsonb
+         '{"name":"ccusage","version":"20.0.18","pricing_mode":"online"}'::jsonb
        FROM unnest($2::date[]) AS day
        CROSS JOIN unnest($3::uuid[]) AS device`,
       [userId, dates, [deviceA, deviceB]],
@@ -488,7 +493,7 @@ describe("POST /api/usage/submit (real Supabase)", () => {
             cost_usd: 0.5,
           }],
         }).model_breakdown),
-        JSON.stringify({ name: "ccusage", version: "20.0.16", pricing_mode: "online" }),
+        JSON.stringify({ name: "ccusage", version: "20.0.18", pricing_mode: "online" }),
       ],
     );
     await db.query(
@@ -509,7 +514,7 @@ describe("POST /api/usage/submit (real Supabase)", () => {
         today,
         deviceA,
         deviceB,
-        JSON.stringify({ name: "ccusage", version: "20.0.16", pricing_mode: "online" }),
+        JSON.stringify({ name: "ccusage", version: "20.0.18", pricing_mode: "online" }),
       ],
     );
     await db.query(
@@ -638,7 +643,7 @@ describe("POST /api/usage/submit (real Supabase)", () => {
       [
         userId,
         JSON.stringify({ id: DEVICE_ID, name: "rollback-device" }),
-        JSON.stringify({ name: "ccusage", version: "20.0.16", pricing_mode: "online" }),
+        JSON.stringify({ name: "ccusage", version: "20.0.18", pricing_mode: "online" }),
         JSON.stringify(invalidEntry),
         "f".repeat(64),
       ],
@@ -693,10 +698,26 @@ describe("POST /api/usage/submit (real Supabase)", () => {
     expect(Number(row.rows[0].total_tokens)).toBe(260);
     expect(Number(row.rows[0].cost_usd)).toBeCloseTo(0.5, 6);
 
-    await callSubmit(v2Body("v2-trusted-low", "3".repeat(64), {
+    await callSubmit(v2Body("v2-below-floor-low", "3".repeat(64), {
       authoritative_correction: true,
       migration_id: "ccusage-by-agent-v2",
-    }), token);
+    }, "20.0.17"), token);
+    await callSubmit(v2Body("v2-invalid-version-low", "4".repeat(64), {
+      authoritative_correction: true,
+      migration_id: "ccusage-by-agent-v2",
+    }, "not-semver"), token);
+    row = await db.query(
+      "SELECT total_tokens, cost_usd, migration_id FROM public.usage_agent_daily WHERE user_id = $1",
+      [userId],
+    );
+    expect(Number(row.rows[0].total_tokens)).toBe(260);
+    expect(Number(row.rows[0].cost_usd)).toBeCloseTo(0.5, 6);
+    expect(row.rows[0].migration_id).toBeNull();
+
+    await callSubmit(v2Body("v2-trusted-later-major-low", "5".repeat(64), {
+      authoritative_correction: true,
+      migration_id: "ccusage-by-agent-v2",
+    }, "21.0.0+canary.1"), token);
     row = await db.query(
       "SELECT total_tokens, cost_usd, migration_id FROM public.usage_agent_daily WHERE user_id = $1",
       [userId],

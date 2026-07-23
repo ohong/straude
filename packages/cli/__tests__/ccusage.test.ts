@@ -11,13 +11,14 @@ vi.mock("node:child_process", () => ({
 import {
   CCUSAGE_CLAUDE_COLLECTOR,
   CCUSAGE_CODEX_COLLECTOR,
+  PricingUnavailableError,
   collectCcusageUsageAsync,
   parseCcusageOutput,
   _resetCcusageResolver,
   _setCcusageCommandForTests,
 } from "../src/lib/ccusage.js";
 
-const ALL_BUILT_IN_CCUSAGE_AGENTS = [
+const SOURCE_IDS = [
   "claude",
   "codex",
   "opencode",
@@ -33,6 +34,7 @@ const ALL_BUILT_IN_CCUSAGE_AGENTS = [
   "qwen",
   "copilot",
   "gemini",
+  "future-agent",
 ].sort();
 
 function row(overrides: Record<string, unknown> = {}) {
@@ -96,7 +98,7 @@ beforeEach(() => {
 
 describe("parseCcusageOutput", () => {
   it("parses ccusage v20 daily rows and derives reasoning residuals", () => {
-    const parsed = parseCcusageOutput(rawOutput(), { version: "20.0.16" });
+    const parsed = parseCcusageOutput(rawOutput(), { version: "20.0.18" });
 
     expect(parsed.data).toHaveLength(1);
     expect(parsed.data[0]).toEqual({
@@ -146,7 +148,7 @@ describe("parseCcusageOutput", () => {
     expect(parsed.agents).toEqual(["codex"]);
     expect(parsed.collector).toEqual({
       codex: CCUSAGE_CODEX_COLLECTOR,
-      ccusage_version: "20.0.16",
+      ccusage_version: "20.0.18",
       ccusage_agents: ["codex"],
       pricing_mode: "online",
     });
@@ -193,13 +195,13 @@ describe("parseCcusageOutput", () => {
           },
         ],
       }),
-    ]), { version: "20.0.16" });
+    ]), { version: "20.0.18" });
 
     expect(parsed.agents).toEqual(["claude", "codex"]);
     expect(parsed.collector).toEqual({
       claude: CCUSAGE_CLAUDE_COLLECTOR,
       codex: CCUSAGE_CODEX_COLLECTOR,
-      ccusage_version: "20.0.16",
+      ccusage_version: "20.0.18",
       ccusage_agents: ["claude", "codex"],
       pricing_mode: "online",
     });
@@ -207,7 +209,7 @@ describe("parseCcusageOutput", () => {
     expect(parsed.data[0]!.agents).toEqual(["claude", "codex"]);
   });
 
-  it("preserves every built-in ccusage data source", () => {
+  it("preserves current and future ccusage source IDs without an allowlist", () => {
     const parsed = parseCcusageOutput(rawOutput([
       row({
         period: "2026-05-11",
@@ -216,8 +218,8 @@ describe("parseCcusageOutput", () => {
           { modelName: "gpt-5.6", cost: 0.002 },
           { modelName: "gemini-3-pro", cost: 0.00110625 },
         ],
-        metadata: { agents: ALL_BUILT_IN_CCUSAGE_AGENTS },
-        agents: ALL_BUILT_IN_CCUSAGE_AGENTS.map((agent, index) => ({
+        metadata: { agents: SOURCE_IDS },
+        agents: SOURCE_IDS.map((agent, index) => ({
           agent,
           modelsUsed: index === 0 ? ["gpt-5.6", "gemini-3-pro"] : [],
           inputTokens: index === 0 ? 750 : 0,
@@ -234,16 +236,16 @@ describe("parseCcusageOutput", () => {
             : [],
         })),
       }),
-    ]), { version: "20.0.16" });
+    ]), { version: "20.0.18" });
 
     expect(parsed.data).toHaveLength(1);
-    expect(parsed.data[0]!.agents).toEqual(ALL_BUILT_IN_CCUSAGE_AGENTS);
-    expect(parsed.agents).toEqual(ALL_BUILT_IN_CCUSAGE_AGENTS);
+    expect(parsed.data[0]!.agents).toEqual(SOURCE_IDS);
+    expect(parsed.agents).toEqual(SOURCE_IDS);
     expect(parsed.collector).toEqual({
       claude: CCUSAGE_CLAUDE_COLLECTOR,
       codex: CCUSAGE_CODEX_COLLECTOR,
-      ccusage_version: "20.0.16",
-      ccusage_agents: ALL_BUILT_IN_CCUSAGE_AGENTS,
+      ccusage_version: "20.0.18",
+      ccusage_agents: SOURCE_IDS,
       pricing_mode: "online",
     });
   });
@@ -303,12 +305,186 @@ describe("parseCcusageOutput", () => {
     ]))).toThrow(/did not produce live pricing/);
   });
 
+  it.each(["claude", "codex"])(
+    "fails closed when %s reports a future paid model with tokens but no price",
+    (agent) => {
+      const model = agent === "claude" ? "claude-fable-6" : "gpt-6-codex";
+      expect(() => parseCcusageOutput(rawOutput([
+        row({
+          modelsUsed: [model],
+          totalCost: 0,
+          modelBreakdowns: [{
+            modelName: model,
+            inputTokens: 750,
+            outputTokens: 125,
+            cacheCreationTokens: 0,
+            cacheReadTokens: 250,
+            totalTokens: 1125,
+            cost: 0,
+          }],
+          metadata: { agents: [agent] },
+          agents: [{
+            agent,
+            modelsUsed: [model],
+            inputTokens: 750,
+            outputTokens: 125,
+            cacheCreationTokens: 0,
+            cacheReadTokens: 250,
+            totalTokens: 1200,
+            totalCost: 0,
+            modelBreakdowns: [{
+              modelName: model,
+              inputTokens: 750,
+              outputTokens: 125,
+              cacheCreationTokens: 0,
+              cacheReadTokens: 250,
+              totalTokens: 1125,
+              cost: 0,
+            }],
+          }],
+        }),
+      ]))).toThrow(PricingUnavailableError);
+    },
+  );
+
+  it("fails closed before reasoning-only paid usage can receive residual model tokens", () => {
+    expect(() => parseCcusageOutput(rawOutput([
+      row({
+        modelsUsed: ["gpt-future-reasoning"],
+        inputTokens: 0,
+        outputTokens: 0,
+        cacheCreationTokens: 0,
+        cacheReadTokens: 0,
+        totalTokens: 50,
+        totalCost: 0,
+        modelBreakdowns: [{
+          modelName: "gpt-future-reasoning",
+          inputTokens: 0,
+          outputTokens: 0,
+          cacheCreationTokens: 0,
+          cacheReadTokens: 0,
+          totalTokens: 0,
+          cost: 0,
+        }],
+        metadata: { agents: ["codex"] },
+        agents: [{
+          agent: "codex",
+          modelsUsed: ["gpt-future-reasoning"],
+          inputTokens: 0,
+          outputTokens: 0,
+          cacheCreationTokens: 0,
+          cacheReadTokens: 0,
+          totalTokens: 50,
+          totalCost: 0,
+          modelBreakdowns: [{
+            modelName: "gpt-future-reasoning",
+            inputTokens: 0,
+            outputTokens: 0,
+            cacheCreationTokens: 0,
+            cacheReadTokens: 0,
+            totalTokens: 0,
+            cost: 0,
+          }],
+        }],
+      }),
+    ]))).toThrow(PricingUnavailableError);
+  });
+
+  it("fails closed when reasoning allocation gives tokens to an unpriced paid model", () => {
+    const modelBreakdowns = [
+      {
+        modelName: "priced-model",
+        inputTokens: 1,
+        outputTokens: 0,
+        cacheCreationTokens: 0,
+        cacheReadTokens: 0,
+        totalTokens: 1,
+        cost: 0.1,
+      },
+      {
+        modelName: "aaa-unpriced-model",
+        inputTokens: 0,
+        outputTokens: 0,
+        cacheCreationTokens: 0,
+        cacheReadTokens: 0,
+        totalTokens: 0,
+        cost: 0,
+      },
+    ];
+    expect(() => parseCcusageOutput(rawOutput([
+      row({
+        modelsUsed: ["priced-model", "aaa-unpriced-model"],
+        inputTokens: 1,
+        outputTokens: 0,
+        cacheCreationTokens: 0,
+        cacheReadTokens: 0,
+        totalTokens: 2,
+        totalCost: 0.1,
+        modelBreakdowns,
+        metadata: { agents: ["codex"] },
+        agents: [{
+          agent: "codex",
+          modelsUsed: ["priced-model", "aaa-unpriced-model"],
+          inputTokens: 1,
+          outputTokens: 0,
+          cacheCreationTokens: 0,
+          cacheReadTokens: 0,
+          totalTokens: 2,
+          totalCost: 0.1,
+          modelBreakdowns,
+        }],
+      }),
+    ]))).toThrow(PricingUnavailableError);
+  });
+
+  it("allows a future source to report legitimately zero-cost usage", () => {
+    const parsed = parseCcusageOutput(rawOutput([
+      row({
+        modelsUsed: ["future-free-model"],
+        totalCost: 0,
+        modelBreakdowns: [{
+          modelName: "future-free-model",
+          inputTokens: 750,
+          outputTokens: 125,
+          cacheCreationTokens: 0,
+          cacheReadTokens: 250,
+          totalTokens: 1125,
+          cost: 0,
+        }],
+        metadata: { agents: ["future-agent"] },
+        agents: [{
+          agent: "future-agent",
+          modelsUsed: ["future-free-model"],
+          inputTokens: 750,
+          outputTokens: 125,
+          cacheCreationTokens: 0,
+          cacheReadTokens: 250,
+          totalTokens: 1200,
+          totalCost: 0,
+          modelBreakdowns: [{
+            modelName: "future-free-model",
+            inputTokens: 750,
+            outputTokens: 125,
+            cacheCreationTokens: 0,
+            cacheReadTokens: 250,
+            totalTokens: 1125,
+            cost: 0,
+          }],
+        }],
+      }),
+    ]));
+
+    expect(parsed.agents).toEqual(["future-agent"]);
+    expect(parsed.data[0]!.models).toEqual(["future-free-model"]);
+    expect(parsed.data[0]!.costUSD).toBe(0);
+  });
+
   it("returns empty output for an empty ccusage daily array", () => {
-    const parsed = parseCcusageOutput(rawOutput([]), { version: "20.0.16" });
+    const parsed = parseCcusageOutput(rawOutput([]), { version: "20.0.18" });
     expect(parsed.data).toEqual([]);
     expect(parsed.agents).toEqual([]);
     expect(parsed.collector).toEqual({
-      ccusage_version: "20.0.16",
+      ccusage_version: "20.0.18",
       ccusage_agents: [],
       pricing_mode: "online",
     });
@@ -388,12 +564,33 @@ describe("version and execution", () => {
     expect(collected.collector.pricing_mode).toBe("offline");
   });
 
-  it("rejects ccusage versions below the v20 accuracy floor", async () => {
-    _setCcusageCommandForTests({ cmd: "/bundled/ccusage", args: [], version: "20.0.15" });
-
-    await expect(collectCcusageUsageAsync("20260513", "20260513")).rejects.toThrow(
-      /fixture-verified ccusage 20\.0\.16/,
-    );
+  it.each([
+    ["minimum", "20.0.18", true],
+    ["later v20 patch", "20.0.99", true],
+    ["later v20 minor", "20.9.0", true],
+    ["build metadata", "20.0.18+straude.1", true],
+    ["below floor", "20.0.17", false],
+    ["next major", "21.0.0", true],
+    ["later major", "22.1.0", true],
+    ["prerelease", "20.0.19-beta.1", false],
+    ["leading zero", "20.00.18", false],
+    ["incomplete", "20.0", false],
+    ["invalid", "latest", false],
+  ])("%s version %s is supported: %s", async (_case, version, supported) => {
+    _setCcusageCommandForTests({ cmd: "/bundled/ccusage", args: [], version });
+    if (!supported) {
+      await expect(collectCcusageUsageAsync("20260513", "20260513")).rejects.toThrow(
+        /stable ccusage version >=20\.0\.18/,
+      );
+      return;
+    }
+    execFileMock.mockImplementationOnce((...args: unknown[]) => {
+      const cb = args.at(-1) as (err: Error | null, stdout: string, stderr: string) => void;
+      cb(null, rawOutput(), "");
+    });
+    const collected = await collectCcusageUsageAsync("20260513", "20260513");
+    expect(collected.version).toBe(version);
+    expect(collected.collector.ccusage_version).toBe(version);
   });
 
   it("retries live pricing fallback failures at most three times", async () => {
