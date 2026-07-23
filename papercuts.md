@@ -11,3 +11,8 @@ making CLI checks build the shared workspace first → bun with --cwd before run
 2026-07-23T19:29:59.532Z — gpt-5.6-sol — ohong
 
 checking the real-Supabase integration test → local Docker/OrbStack daemon is not running, so the integration stack cannot be inspected or started; unit/type checks remain available
+
+2026-07-23T19:42:00.064Z — gpt-5.6-sol — ohong
+
+updating a same-repository pull request through the GitHub connector → maintainer_can_modify=true returned 422 because fork collaboration only applies cross-repository; retrying without that optional field succeeded
+
