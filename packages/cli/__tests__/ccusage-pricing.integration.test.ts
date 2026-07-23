@@ -1,7 +1,6 @@
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { fileURLToPath } from "node:url";
 import {
-  CCUSAGE_MIN_VERSION,
   _resetCcusageResolver,
   collectCcusageUsageAsync,
 } from "../src/lib/ccusage.js";
@@ -25,11 +24,6 @@ const ISOLATED_SOURCE_ENV = [
 
 const originalEnvironment = new Map<string, string | undefined>();
 
-function comparableVersion(version: string): number {
-  const [major = 0, minor = 0, patch = 0] = version.split(".").map(Number);
-  return major * 1_000_000 + minor * 1_000 + patch;
-}
-
 beforeAll(() => {
   originalEnvironment.set("HOME", process.env.HOME);
   originalEnvironment.set("CODEX_HOME", process.env.CODEX_HOME);
@@ -51,15 +45,13 @@ afterAll(() => {
   _resetCcusageResolver();
 });
 
-describe("bundled ccusage GPT-5.6 pricing", () => {
-  it("logs Codex tokens and LiteLLM API spend for the complete GPT-5.6 family", async () => {
+describe("lockfile ccusage 20.0.18 GPT-5.6 pricing", () => {
+  it("parses production JSON with Codex tokens and the complete GPT-5.6 family", async () => {
     const usage = await collectCcusageUsageAsync("20260709", "20260709", 10_000, {
       pricingMode: "online",
     });
 
-    expect(comparableVersion(usage.version)).toBeGreaterThanOrEqual(
-      comparableVersion(CCUSAGE_MIN_VERSION),
-    );
+    expect(usage.version).toBe("20.0.18");
     expect(usage.agents).toEqual(["codex"]);
     expect(usage.data).toHaveLength(1);
 

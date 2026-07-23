@@ -1,170 +1,238 @@
-import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+
+const {
+  apiRequestMock,
+  collectMock,
+  loadConfigMock,
+  updateConfigMock,
+  loginMock,
+  pendingBatches,
+  upsertBatchMock,
+  removeBatchMock,
+  releaseMock,
+  acknowledgeQueuedDatesMock,
+} = vi.hoisted(() => ({
+  apiRequestMock: vi.fn(),
+  collectMock: vi.fn(),
+  loadConfigMock: vi.fn(),
+  updateConfigMock: vi.fn(),
+  loginMock: vi.fn(),
+  pendingBatches: [] as unknown[],
+  upsertBatchMock: vi.fn(),
+  removeBatchMock: vi.fn(),
+  releaseMock: vi.fn(),
+  acknowledgeQueuedDatesMock: vi.fn(),
+}));
 
 vi.mock("../../src/lib/auth.js", () => ({
-  loadConfig: vi.fn(),
-  updateLastPushDate: vi.fn(),
-  saveConfig: vi.fn(),
+  loadConfig: loadConfigMock,
+  updateConfig: updateConfigMock,
 }));
 
 vi.mock("../../src/commands/login.js", () => ({
-  loginCommand: vi.fn(),
+  loginCommand: loginMock,
+  NonInteractiveLoginError: class NonInteractiveLoginError extends Error {},
 }));
 
-vi.mock("../../src/lib/api.js", () => ({
-  apiRequest: vi.fn(),
+vi.mock("../../src/lib/api.js", async (importOriginal) => {
+  const actual = await importOriginal<typeof import("../../src/lib/api.js")>();
+  return { ...actual, apiRequest: apiRequestMock };
+});
+
+vi.mock("../../src/lib/ccusage.js", async (importOriginal) => {
+  const actual = await importOriginal<typeof import("../../src/lib/ccusage.js")>();
+  return {
+    ...actual,
+    collectCcusageUsageAsync: collectMock,
+    resolveLocalTimezone: () => "America/Vancouver",
+  };
+});
+
+vi.mock("../../src/lib/machine-id.js", () => ({
+  getInstallationId: () => "11111111-1111-4111-8111-111111111111",
+  getDistinctId: () => "alice",
 }));
 
-vi.mock("../../src/lib/ccusage.js", () => ({
-  CCUSAGE_CLAUDE_COLLECTOR: "ccusage-claude-v20",
-  CCUSAGE_CODEX_COLLECTOR: "ccusage-codex-v20",
-  CCUSAGE_DEFAULT_PRICING_MODE: "online",
-  collectCcusageUsageAsync: vi.fn(),
+vi.mock("../../src/lib/prompt.js", () => ({
+  isInteractive: () => true,
+}));
+
+vi.mock("../../src/lib/sync-state.js", () => ({
+  acquireSyncLease: vi.fn(async () => ({
+    queuedDates: [],
+    acknowledgeQueuedDates: acknowledgeQueuedDatesMock,
+    release: releaseMock,
+  })),
+  loadPendingBatches: vi.fn(() => [...pendingBatches]),
+  upsertPendingBatch: upsertBatchMock,
+  removePendingBatch: removeBatchMock,
 }));
 
 vi.mock("../../src/lib/telemetry.js", () => ({
   reportUsagePushFailed: vi.fn(),
-  shutdownTelemetryWithTimeout: vi.fn(() => Promise.resolve(0)),
+  shutdownTelemetryWithTimeout: vi.fn(async () => 0),
   TELEMETRY_SHUTDOWN_TIMEOUT_MS: 150,
   errorMessage: (error: unknown) => error instanceof Error ? error.message : String(error),
 }));
 
 vi.mock("../../src/lib/posthog.js", () => ({
-  posthog: {
-    capture: vi.fn(),
-    _shutdown: vi.fn(() => Promise.resolve()),
-  },
+  posthog: { capture: vi.fn() },
 }));
 
 vi.mock("ink", () => ({
-  render: vi.fn(() => ({
-    waitUntilExit: () => Promise.resolve(),
-    unmount: vi.fn(),
-  })),
+  render: vi.fn(() => ({ waitUntilExit: () => Promise.resolve() })),
 }));
 
-import { createHash } from "node:crypto";
-import { pushCommand } from "../../src/commands/push.js";
-import { loadConfig, saveConfig, updateLastPushDate } from "../../src/lib/auth.js";
-import { loginCommand } from "../../src/commands/login.js";
-import { apiRequest } from "../../src/lib/api.js";
-import { collectCcusageUsageAsync } from "../../src/lib/ccusage.js";
-import { reportUsagePushFailed, shutdownTelemetryWithTimeout } from "../../src/lib/telemetry.js";
-import { render } from "ink";
+import {
+  CLI_EXIT,
+  pushCommand,
+} from "../../src/commands/push.js";
+import { PricingUnavailableError } from "../../src/lib/ccusage.js";
 
-const mockLoadConfig = vi.mocked(loadConfig);
-const mockSaveConfig = vi.mocked(saveConfig);
-const mockUpdateLastPushDate = vi.mocked(updateLastPushDate);
-const mockLoginCommand = vi.mocked(loginCommand);
-const mockApiRequest = vi.mocked(apiRequest);
-const mockCollectCcusageUsageAsync = vi.mocked(collectCcusageUsageAsync);
-const mockReportUsagePushFailed = vi.mocked(reportUsagePushFailed);
-const mockShutdownTelemetry = vi.mocked(shutdownTelemetryWithTimeout);
+const today = "2026-03-13";
+const priorDevice = "22222222-2222-4222-8222-222222222222";
 
-const fakeConfig = {
-  token: "tok",
-  username: "alice",
-  api_url: "https://straude.com",
-  device_id: "device-1",
-  device_name: "work-laptop",
-  ccusage_v20_migration_completed_at: "2026-05-01T00:00:00.000Z",
-};
-
-class ExitError extends Error {
-  code: number;
-  constructor(code: number) {
-    super(`process.exit(${code})`);
-    this.code = code;
-  }
-}
-
-function compact(date: Date): string {
-  return `${date.getFullYear()}${String(date.getMonth() + 1).padStart(2, "0")}${String(date.getDate()).padStart(2, "0")}`;
-}
-
-function todayStr(): string {
-  const d = new Date();
-  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
-}
-
-function daysAgoStr(days: number): string {
-  const d = new Date();
-  d.setDate(d.getDate() - days);
-  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
-}
-
-function usageEntry(date = todayStr(), overrides: Record<string, unknown> = {}) {
+function config(overrides: Record<string, unknown> = {}) {
   return {
-    date,
-    agents: ["claude", "codex"],
-    models: ["claude-sonnet-4-5-20250929", "gpt-5.2-codex"],
-    inputTokens: 1200,
-    outputTokens: 400,
-    reasoningOutputTokens: 100,
-    cacheCreationTokens: 100,
-    cacheReadTokens: 300,
-    totalTokens: 2100,
-    costUSD: 0.25,
-    modelBreakdown: [
-      { model: "claude-sonnet-4-5-20250929", cost_usd: 0.2 },
-      { model: "gpt-5.2-codex", cost_usd: 0.05 },
-    ],
+    token: "tok",
+    username: "alice",
+    api_url: "https://straude.com",
+    device_id: priorDevice,
+    device_name: "work-laptop",
+    last_push_date: "2026-03-12",
+    usage_protocol_v2_migration_completed_at: "2026-03-01T00:00:00.000Z",
     ...overrides,
   };
 }
 
-function ccusageOutput(entries = [usageEntry()], overrides: Record<string, unknown> = {}) {
+function usageEntry(date = today) {
+  return {
+    date,
+    agents: ["codex"],
+    agentBreakdown: [{
+      agent: "codex",
+      models: ["gpt-5"],
+      inputTokens: 10,
+      outputTokens: 3,
+      reasoningOutputTokens: 2,
+      cacheCreationTokens: 0,
+      cacheReadTokens: 5,
+      totalTokens: 20,
+      costUSD: 0.02,
+      modelBreakdown: [{
+        model: "gpt-5",
+        inputTokens: 10,
+        outputTokens: 3,
+        reasoningOutputTokens: 2,
+        cacheCreationTokens: 0,
+        cacheReadTokens: 5,
+        totalTokens: 20,
+        cost_usd: 0.02,
+      }],
+    }],
+    models: ["gpt-5"],
+    inputTokens: 10,
+    outputTokens: 3,
+    reasoningOutputTokens: 2,
+    cacheCreationTokens: 0,
+    cacheReadTokens: 5,
+    totalTokens: 20,
+    costUSD: 0.02,
+    modelBreakdown: [{
+      model: "gpt-5",
+      inputTokens: 10,
+      outputTokens: 3,
+      reasoningOutputTokens: 2,
+      cacheCreationTokens: 0,
+      cacheReadTokens: 5,
+      totalTokens: 20,
+      cost_usd: 0.02,
+    }],
+  };
+}
+
+function collected(entries = [usageEntry()]) {
   return {
     data: entries,
     summary: {
-      totalInputTokens: entries.reduce((sum, entry) => sum + entry.inputTokens, 0),
-      totalOutputTokens: entries.reduce((sum, entry) => sum + entry.outputTokens, 0),
-      totalReasoningOutputTokens: entries.reduce((sum, entry) => sum + (entry.reasoningOutputTokens ?? 0), 0),
-      totalCacheCreationTokens: entries.reduce((sum, entry) => sum + entry.cacheCreationTokens, 0),
-      totalCacheReadTokens: entries.reduce((sum, entry) => sum + entry.cacheReadTokens, 0),
-      totalTokens: entries.reduce((sum, entry) => sum + entry.totalTokens, 0),
-      totalCostUSD: entries.reduce((sum, entry) => sum + entry.costUSD, 0),
+      totalInputTokens: 10,
+      totalOutputTokens: 3,
+      totalReasoningOutputTokens: 2,
+      totalCacheCreationTokens: 0,
+      totalCacheReadTokens: 5,
+      totalTokens: 20,
+      totalCostUSD: 0.02,
     },
-    agents: ["claude", "codex"],
+    agents: ["codex"],
     collector: {
-      claude: "ccusage-claude-v20",
       codex: "ccusage-codex-v20",
-      ccusage_version: "20.0.16",
-      ccusage_agents: ["claude", "codex"],
+      ccusage_version: "20.0.18",
+      ccusage_agents: ["codex"],
       pricing_mode: "online",
     },
-    version: "20.0.16",
-    raw: JSON.stringify({ daily: entries }),
+    version: "20.0.18",
+    raw: "{}",
     stderr: "",
-    ...overrides,
+  };
+}
+
+function outcome(
+  requestId: string,
+  date: string,
+  status: "committed" | "unchanged" | "retryable_error" = "committed",
+) {
+  return {
+    request_id: requestId,
+    outcomes: [{
+      date,
+      status,
+      ...(status !== "retryable_error"
+        ? {
+          result: {
+            usage_id: `usage-${date}`,
+            post_id: `post-${date}`,
+            post_url: `https://straude.com/post/${date}`,
+            action: "created",
+          },
+        }
+        : {}),
+      ...(status === "retryable_error"
+        ? { error: { code: "TRANSIENT", message: "retry" } }
+        : {}),
+    }],
   };
 }
 
 beforeEach(() => {
-  vi.useFakeTimers({ now: new Date("2026-03-13T12:00:00Z"), toFake: ["Date"] });
+  vi.useFakeTimers({ now: new Date("2026-03-13T20:00:00.000Z"), toFake: ["Date"] });
   vi.clearAllMocks();
-  mockLoadConfig.mockReturnValue({ ...fakeConfig });
-  mockCollectCcusageUsageAsync.mockResolvedValue(ccusageOutput() as never);
-  mockApiRequest.mockImplementation(async (_config, path) => {
-    if (path === "/api/cli/dashboard") {
-      throw new Error("dashboard not mocked");
-    }
-    return {
-      results: [
-        {
-          date: todayStr(),
-          usage_id: "u-1",
-          post_id: "p-1",
-          post_url: "https://straude.com/post/p-1",
-          action: "created",
-        },
-      ],
-    };
+  pendingBatches.splice(0);
+  const initial = config();
+  loadConfigMock.mockReturnValue(initial);
+  updateConfigMock.mockImplementation((updater) => updater(initial));
+  collectMock.mockResolvedValue(collected());
+  upsertBatchMock.mockImplementation((batch) => {
+    const index = pendingBatches.findIndex(
+      (candidate: { request: { request_id: string } }) =>
+        candidate.request.request_id === batch.request.request_id,
+    );
+    if (index === -1) pendingBatches.push(batch);
+    else pendingBatches[index] = batch;
+  });
+  removeBatchMock.mockImplementation((requestId) => {
+    const index = pendingBatches.findIndex(
+      (candidate: { request: { request_id: string } }) =>
+        candidate.request.request_id === requestId,
+    );
+    if (index >= 0) pendingBatches.splice(index, 1);
+  });
+  apiRequestMock.mockImplementation(async (_config, path, options) => {
+    if (path === "/api/cli/dashboard") throw new Error("dashboard unavailable");
+    const body = JSON.parse(options.body);
+    return outcome(body.request_id, body.entries[0].date);
   });
   vi.spyOn(console, "log").mockImplementation(() => {});
   vi.spyOn(console, "error").mockImplementation(() => {});
-  vi.spyOn(process, "exit").mockImplementation((code) => {
-    throw new ExitError(code as number);
-  });
 });
 
 afterEach(() => {
@@ -172,293 +240,263 @@ afterEach(() => {
   vi.restoreAllMocks();
 });
 
-describe("pushCommand", () => {
-  it("submits unified ccusage rows with v20 collector metadata", async () => {
-    await pushCommand({});
+describe("pushCommand v2", () => {
+  it("persists and submits a validated per-agent v2 request", async () => {
+    const exitCode = await pushCommand({});
 
-    expect(mockCollectCcusageUsageAsync).toHaveBeenCalledWith(
-      expect.any(String),
-      expect.any(String),
-      undefined,
-      { pricingMode: "online" },
-    );
-    expect(mockApiRequest).toHaveBeenCalledWith(
-      expect.objectContaining(fakeConfig),
-      "/api/usage/submit",
-      expect.objectContaining({ method: "POST" }),
-    );
-
-    const submitCall = mockApiRequest.mock.calls.find(([, path]) => path === "/api/usage/submit")!;
-    const body = JSON.parse((submitCall[2] as { body: string }).body);
-    expect(body.entries).toHaveLength(1);
-    expect(body.entries[0].data.reasoningOutputTokens).toBe(100);
-    expect(body.collector).toEqual({
-      claude: "ccusage-claude-v20",
-      codex: "ccusage-codex-v20",
-      ccusage_version: "20.0.16",
-      ccusage_agents: ["claude", "codex"],
-      pricing_mode: "online",
+    expect(exitCode).toBe(CLI_EXIT.OK);
+    expect(upsertBatchMock).toHaveBeenCalledBefore(apiRequestMock);
+    const submitCall = apiRequestMock.mock.calls.find(([, path]) => path === "/api/usage/submit")!;
+    const body = JSON.parse(submitCall[2].body);
+    expect(body).toMatchObject({
+      protocol_version: 2,
+      timezone: "America/Vancouver",
+      installation: {
+        id: "11111111-1111-4111-8111-111111111111",
+        previous_device_id: priorDevice,
+        name: "work-laptop",
+      },
+      collector: {
+        name: "ccusage",
+        version: "20.0.18",
+        pricing_mode: "online",
+      },
     });
-    expect(body.device_id).toBe("device-1");
-    expect(body.device_name).toBe("work-laptop");
-  });
-
-  it("hashes the ccusage v20 raw payload and collector run metadata", async () => {
-    const output = ccusageOutput([usageEntry()], {
-      raw: '{"daily":[{"period":"2026-03-13"}]}',
+    expect(body.entries[0].agents[0]).toMatchObject({
+      agent: "codex",
+      reasoning_output_tokens: 2,
+      total_tokens: 20,
+      model_breakdown: [{ model: "gpt-5", total_tokens: 20 }],
     });
-    mockCollectCcusageUsageAsync.mockResolvedValue(output as never);
-
-    await pushCommand({});
-
-    const submitCall = mockApiRequest.mock.calls.find(([, path]) => path === "/api/usage/submit")!;
-    const body = JSON.parse((submitCall[2] as { body: string }).body);
-    const [since, until] = mockCollectCcusageUsageAsync.mock.calls[0]!;
-    const concreteHash = createHash("sha256").update(JSON.stringify({
-      collector: "ccusage-v20",
-      version: output.version,
-      agents: output.agents,
-      since,
-      until,
-      raw: output.raw,
-    })).digest("hex");
-    expect(body.hash).toBe(concreteHash);
-  });
-
-  it("respects explicit --days even when the migration backfill marker is missing", async () => {
-    const today = new Date();
-    const twoDaysAgo = new Date(today);
-    twoDaysAgo.setDate(today.getDate() - 2);
-    mockLoadConfig.mockReturnValue({
-      ...fakeConfig,
-      ccusage_v20_migration_completed_at: undefined,
-      last_push_date: daysAgoStr(2),
+    expect(body.entries[0].content_hash).toMatch(/^[a-f0-9]{64}$/);
+    expect(submitCall[2].headers).toEqual({
+      "X-Straude-CLI-Version": "0.2.0",
+      "X-Straude-Retry-Attempt": "0",
     });
-
-    await pushCommand({ days: 3 });
-
-    expect(mockCollectCcusageUsageAsync).toHaveBeenCalledWith(
-      compact(twoDaysAgo),
-      compact(today),
-      undefined,
-      { pricingMode: "online" },
-    );
-    expect(mockUpdateLastPushDate).toHaveBeenCalledWith(todayStr());
-    expect(mockSaveConfig).not.toHaveBeenCalledWith(expect.objectContaining({
-      ccusage_v20_migration_completed_at: expect.any(String),
-    }));
+    expect(removeBatchMock).toHaveBeenCalledWith(body.request_id);
+    expect(updateConfigMock).toHaveBeenCalled();
+    expect(releaseMock).toHaveBeenCalled();
   });
 
-  it("marks the ccusage v20 migration complete after an explicit 30-day backfill", async () => {
-    const today = new Date();
-    const twentyNineDaysAgo = new Date(today);
-    twentyNineDaysAgo.setDate(today.getDate() - 29);
-    mockLoadConfig.mockReturnValue({
-      ...fakeConfig,
-      ccusage_v20_migration_completed_at: undefined,
-      last_push_date: daysAgoStr(2),
-    });
-
-    await pushCommand({ days: 30 });
-
-    expect(mockCollectCcusageUsageAsync).toHaveBeenCalledWith(
-      compact(twentyNineDaysAgo),
-      compact(today),
-      undefined,
-      { pricingMode: "online" },
-    );
-    expect(mockSaveConfig).toHaveBeenLastCalledWith(expect.objectContaining({
-      ccusage_v20_migration_completed_at: expect.any(String),
-      last_push_date: todayStr(),
-    }));
-    expect(mockSaveConfig).not.toHaveBeenCalledWith(expect.objectContaining({
-      codex_native_repair_completed_at: expect.any(String),
-    }));
-  });
-
-  it("uses exact --date without running migration backfill", async () => {
-    mockLoadConfig.mockReturnValue({
-      ...fakeConfig,
-      ccusage_v20_migration_completed_at: undefined,
-    });
-
-    await pushCommand({ date: "2026-03-12" });
-
-    expect(mockCollectCcusageUsageAsync).toHaveBeenCalledWith("20260312", "20260312", undefined, {
-      pricingMode: "online",
-    });
-    expect(mockUpdateLastPushDate).toHaveBeenCalledWith(todayStr());
-    expect(mockSaveConfig).not.toHaveBeenCalledWith(expect.objectContaining({
-      ccusage_v20_migration_completed_at: expect.any(String),
-    }));
-  });
-
-  it("forwards --timeout to ccusage", async () => {
-    await pushCommand({ timeoutMs: 300_000 });
-    expect(mockCollectCcusageUsageAsync).toHaveBeenCalledWith(
-      expect.any(String),
-      expect.any(String),
-      300_000,
-      { pricingMode: "online" },
-    );
-  });
-
-  it("filters out-of-window ccusage rows before submit", async () => {
-    const oldDate = "2026-01-12";
-    mockCollectCcusageUsageAsync.mockResolvedValue(ccusageOutput([
-      usageEntry(oldDate),
-      usageEntry(todayStr()),
-    ]) as never);
-
-    await pushCommand({ days: 30 });
-
-    const submitCall = mockApiRequest.mock.calls.find(([, path]) => path === "/api/usage/submit")!;
-    const body = JSON.parse((submitCall[2] as { body: string }).body);
-    expect(body.entries).toHaveLength(1);
-    expect(body.entries[0].date).toBe(todayStr());
-    expect(console.log).toHaveBeenCalledWith(
-      expect.stringContaining(`skipping 1 date(s) outside the 30-day backfill window: ${oldDate}`),
-    );
-  });
-
-  it("dry-run fetches dashboard but skips submit", async () => {
-    await pushCommand({ dryRun: true });
-
-    expect(mockApiRequest).toHaveBeenCalledTimes(1);
-    expect(mockApiRequest).toHaveBeenCalledWith(
-      expect.objectContaining(fakeConfig),
-      "/api/cli/dashboard",
-    );
-    expect(console.log).toHaveBeenCalledWith(expect.stringContaining("dry run"));
-  });
-
-  it("waits for and renders the scorecard after submit", async () => {
-    mockApiRequest.mockImplementation(async (_config, path) => {
-      if (path === "/api/usage/submit") {
+  it("retries only failed dates with the same request id", async () => {
+    collectMock.mockResolvedValue(collected([
+      usageEntry("2026-03-12"),
+      usageEntry("2026-03-13"),
+    ]));
+    let call = 0;
+    apiRequestMock.mockImplementation(async (_config, path, options) => {
+      if (path === "/api/cli/dashboard") throw new Error("dashboard unavailable");
+      const body = JSON.parse(options.body);
+      call += 1;
+      if (call === 1) {
         return {
-          results: [{
-            date: todayStr(),
-            usage_id: "u-1",
-            post_id: "p-1",
-            post_url: "https://straude.com/post/p-1",
-            action: "created",
-          }],
+          request_id: body.request_id,
+          outcomes: [
+            outcome(body.request_id, "2026-03-12").outcomes[0],
+            outcome(body.request_id, "2026-03-13", "retryable_error").outcomes[0],
+          ],
         };
       }
+      return outcome(body.request_id, "2026-03-13", "unchanged");
+    });
 
-      // Regression: the old 1.5-second dashboard race discarded this response.
-      await new Promise((resolve) => setTimeout(resolve, 1_600));
+    const exitCode = await pushCommand({ days: 2 });
+
+    expect(exitCode).toBe(CLI_EXIT.OK);
+    const submitCalls = apiRequestMock.mock.calls.filter(([, path]) => path === "/api/usage/submit");
+    const first = JSON.parse(submitCalls[0]![2].body);
+    const second = JSON.parse(submitCalls[1]![2].body);
+    expect(second.request_id).toBe(first.request_id);
+    expect(second.entries.map((entry: { date: string }) => entry.date)).toEqual(["2026-03-13"]);
+    expect(pendingBatches).toEqual([]);
+  });
+
+  it("keeps the committed outbox entry when watermark persistence crashes", async () => {
+    updateConfigMock.mockImplementation(() => {
+      throw new Error("injected config fsync failure");
+    });
+
+    await expect(pushCommand({})).rejects.toThrow("injected config fsync failure");
+
+    expect(pendingBatches).toHaveLength(1);
+    expect(removeBatchMock).not.toHaveBeenCalled();
+    expect(releaseMock).toHaveBeenCalled();
+  });
+
+  it("retains unresolved partials and returns temporary failure", async () => {
+    apiRequestMock.mockImplementation(async (_config, path, options) => {
+      if (path === "/api/cli/dashboard") throw new Error("dashboard unavailable");
+      const body = JSON.parse(options.body);
+      return outcome(body.request_id, body.entries[0].date, "retryable_error");
+    });
+
+    const exitCode = await pushCommand({});
+
+    expect(exitCode).toBe(CLI_EXIT.TEMPORARY);
+    expect(apiRequestMock.mock.calls.filter(([, path]) => path === "/api/usage/submit")).toHaveLength(3);
+    expect(pendingBatches).toHaveLength(1);
+    expect(updateConfigMock).not.toHaveBeenCalled();
+  });
+
+  it("removes permanently rejected dates from the retry outbox", async () => {
+    collectMock.mockResolvedValue(collected([
+      usageEntry("2026-03-12"),
+      usageEntry("2026-03-13"),
+    ]));
+    apiRequestMock.mockImplementation(async (_config, path, options) => {
+      if (path === "/api/cli/dashboard") throw new Error("dashboard unavailable");
+      const body = JSON.parse(options.body);
       return {
-        username: "alice",
-        level: 3,
-        streak: 5,
-        daily: [{ date: todayStr(), cost_usd: 12.5 }],
-        week_cost: 12.5,
-        prev_week_cost: 8,
-        leaderboard: null,
-        model_breakdown: [],
-        total_output_tokens: 5_000_000,
+        request_id: body.request_id,
+        outcomes: [
+          outcome(body.request_id, "2026-03-12").outcomes[0],
+          {
+            date: "2026-03-13",
+            status: "permanent_error",
+            error: { code: "INVALID_USAGE", message: "invalid usage" },
+          },
+        ],
       };
     });
 
-    await pushCommand({});
+    const exitCode = await pushCommand({ days: 2 });
 
-    expect(mockApiRequest).toHaveBeenLastCalledWith(
-      expect.objectContaining(fakeConfig),
-      "/api/cli/dashboard",
-    );
-    expect(render).toHaveBeenCalledTimes(1);
-    expect(console.log).not.toHaveBeenCalledWith(
-      expect.stringContaining("Dashboard took too long"),
+    expect(exitCode).toBe(CLI_EXIT.PERMANENT);
+    expect(pendingBatches).toEqual([]);
+    expect(updateConfigMock).not.toHaveBeenCalled();
+    expect(console.error).toHaveBeenCalledWith(
+      expect.stringContaining("permanently rejected"),
     );
   });
 
-  it("reports scan failures and exits before submit", async () => {
-    const error = new Error("ccusage 20.0.4 is unsupported");
-    mockCollectCcusageUsageAsync.mockRejectedValue(error);
-
-    await expect(pushCommand({})).rejects.toThrow(ExitError);
-
-    expect(mockReportUsagePushFailed).toHaveBeenCalledWith(
-      expect.objectContaining(fakeConfig),
-      error,
-      expect.objectContaining({
-        command: "push",
-        stage: "scan",
-        pricing_mode: "online",
-        collection_ms: expect.any(Number),
-        total_ms: expect.any(Number),
-      }),
-    );
-    expect(mockShutdownTelemetry).toHaveBeenCalled();
-    expect(mockApiRequest).not.toHaveBeenCalled();
-  });
-
-  it("reports submit failures and exits", async () => {
-    const error = new Error("Server error");
-    mockApiRequest.mockRejectedValue(error);
-
-    await expect(pushCommand({})).rejects.toThrow(ExitError);
-
-    expect(mockReportUsagePushFailed).toHaveBeenCalledWith(
-      expect.objectContaining(fakeConfig),
-      error,
-      expect.objectContaining({
-        command: "push",
-        stage: "submit",
-        pricing_mode: "online",
-        collection_ms: expect.any(Number),
-        submit_ms: expect.any(Number),
-        total_ms: expect.any(Number),
-      }),
-    );
-    expect(process.exit).toHaveBeenCalledWith(1);
-  });
-
-  it("logs in when config is missing", async () => {
-    mockLoadConfig
-      .mockReturnValueOnce(null)
-      .mockReturnValueOnce({ ...fakeConfig });
-
-    await pushCommand({});
-
-    expect(mockLoginCommand).toHaveBeenCalledTimes(1);
-  });
-
-  it("generates and persists a device id on first push", async () => {
-    mockLoadConfig.mockReturnValue({
-      token: "tok",
-      username: "alice",
-      api_url: "https://straude.com",
-      ccusage_v20_migration_completed_at: "2026-05-01T00:00:00.000Z",
+  it("keeps only retryable dates and caps their future watermark before a permanent gap", async () => {
+    loadConfigMock.mockReturnValue(config({ last_push_date: "2026-03-10" }));
+    collectMock.mockResolvedValue(collected([
+      usageEntry("2026-03-11"),
+      usageEntry("2026-03-12"),
+      usageEntry("2026-03-13"),
+    ]));
+    apiRequestMock.mockImplementation(async (_config, path, options) => {
+      if (path === "/api/cli/dashboard") throw new Error("dashboard unavailable");
+      const body = JSON.parse(options.body);
+      return {
+        request_id: body.request_id,
+        outcomes: body.entries.map((entry: { date: string }) => {
+          if (entry.date === "2026-03-11") {
+            return outcome(body.request_id, entry.date).outcomes[0];
+          }
+          if (entry.date === "2026-03-12") {
+            return {
+              date: entry.date,
+              status: "permanent_error",
+              error: { code: "INVALID_USAGE", message: "invalid usage" },
+            };
+          }
+          return outcome(body.request_id, entry.date, "retryable_error").outcomes[0];
+        }),
+      };
     });
 
-    await pushCommand({});
+    const exitCode = await pushCommand({});
 
-    const savedConfig = mockSaveConfig.mock.calls[0]![0];
-    expect(savedConfig.device_id).toMatch(/^[0-9a-f-]{36}$/i);
-    expect(savedConfig.device_name).toBeDefined();
-    const submitCall = mockApiRequest.mock.calls.find(([, path]) => path === "/api/usage/submit")!;
-    const body = JSON.parse((submitCall[2] as { body: string }).body);
-    expect(body.device_id).toBe(savedConfig.device_id);
+    expect(exitCode).toBe(CLI_EXIT.PERMANENT);
+    expect(pendingBatches).toHaveLength(1);
+    expect((pendingBatches[0] as {
+      request: { entries: Array<{ date: string }> };
+      watermark_date?: string;
+    })).toMatchObject({
+      request: { entries: [{ date: "2026-03-13" }] },
+      watermark_date: "2026-03-11",
+    });
   });
 
-  it("returns without submit when ccusage has no rows", async () => {
-    mockCollectCcusageUsageAsync.mockResolvedValue(ccusageOutput([], {
-      agents: [],
-      collector: {
-        ccusage_version: "20.0.16",
-        ccusage_agents: [],
-        pricing_mode: "online",
-      },
-      raw: '{"daily":[]}',
-    }) as never);
+  it("surfaces structured HTTP 409 identity conflicts through device resolution", async () => {
+    apiRequestMock.mockImplementation(async (_config, path, options) => {
+      if (path === "/api/cli/dashboard") throw new Error("dashboard unavailable");
+      const body = JSON.parse(options.body);
+      return {
+        request_id: body.request_id,
+        outcomes: [{
+          date: body.entries[0].date,
+          status: "identity_conflict",
+          error: {
+            code: "device_reconciliation_required",
+            message: "Device identity must be resolved",
+          },
+        }],
+      };
+    });
 
-    await pushCommand({});
+    const exitCode = await pushCommand({});
 
-    expect(mockApiRequest).not.toHaveBeenCalled();
-    expect(console.log).toHaveBeenCalledWith(
-      expect.stringContaining("No usage data found"),
+    expect(exitCode).toBe(CLI_EXIT.PERMANENT);
+    expect(console.error).toHaveBeenCalledWith(
+      expect.stringContaining("straude devices"),
     );
+    expect(pendingBatches).toHaveLength(1);
+    const submitCall = apiRequestMock.mock.calls.find(
+      ([, path]) => path === "/api/usage/submit",
+    )!;
+    expect(submitCall[2]).toMatchObject({
+      maxRetries: 0,
+      acceptedStatuses: [400, 409, 503],
+    });
+  });
+
+  it("renders only the newly collected local payload during dry-run", async () => {
+    const exitCode = await pushCommand({ dryRun: true });
+
+    expect(exitCode).toBe(CLI_EXIT.OK);
+    expect(apiRequestMock).not.toHaveBeenCalled();
+    expect(upsertBatchMock).not.toHaveBeenCalled();
+    expect(console.log).toHaveBeenCalledWith(expect.stringContaining("nothing submitted"));
+  });
+
+  it("keeps a committed sync successful when the dashboard is unavailable", async () => {
+    const exitCode = await pushCommand({});
+
+    expect(exitCode).toBe(CLI_EXIT.OK);
+    expect(console.log).toHaveBeenCalledWith("Usage synced; dashboard unavailable.");
+  });
+
+  it("returns temporary failure for unavailable live pricing without advancing state", async () => {
+    collectMock.mockRejectedValue(new PricingUnavailableError("embedded fallback"));
+
+    const exitCode = await pushCommand({});
+
+    expect(exitCode).toBe(CLI_EXIT.TEMPORARY);
+    expect(apiRequestMock).not.toHaveBeenCalled();
+    expect(updateConfigMock).not.toHaveBeenCalled();
+  });
+
+  it("fails fast with AUTH_REQUIRED in background execution", async () => {
+    loadConfigMock.mockReturnValue(null);
+
+    const exitCode = await pushCommand({ nonInteractive: true });
+
+    expect(exitCode).toBe(CLI_EXIT.AUTH_REQUIRED);
+    expect(loginMock).not.toHaveBeenCalled();
+    expect(collectMock).not.toHaveBeenCalled();
+  });
+
+  it("advances an empty automatic range and writes the v2 migration marker", async () => {
+    const legacy = config({
+      last_push_date: undefined,
+      usage_protocol_v2_migration_completed_at: undefined,
+      ccusage_v20_migration_completed_at: "legacy",
+      codex_native_repair_completed_at: "legacy",
+    });
+    loadConfigMock.mockReturnValue(legacy);
+    updateConfigMock.mockImplementation((updater) => updater(legacy));
+    collectMock.mockResolvedValue(collected([]));
+
+    const exitCode = await pushCommand({});
+
+    expect(exitCode).toBe(CLI_EXIT.OK);
+    const next = updateConfigMock.mock.results[0]!.value;
+    expect(next.last_push_date).toBe(today);
+    expect(next.usage_protocol_v2_migration_completed_at).toEqual(expect.any(String));
+    expect(next.ccusage_v20_migration_completed_at).toBeUndefined();
+    expect(next.codex_native_repair_completed_at).toBeUndefined();
   });
 });

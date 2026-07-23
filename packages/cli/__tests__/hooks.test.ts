@@ -5,14 +5,33 @@ import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
 // ---------------------------------------------------------------------------
 
 let fileStore: Record<string, string> = {};
+let nextFd = 10;
+const fdPaths = new Map<number, string>();
 
 vi.mock("node:fs", () => ({
+  chmodSync: vi.fn(),
   existsSync: vi.fn((path: string) => path in fileStore),
   readFileSync: vi.fn((path: string) => fileStore[path] ?? ""),
-  writeFileSync: vi.fn((path: string, data: string) => {
+  writeFileSync: vi.fn((pathOrFd: string | number, data: string) => {
+    const path = typeof pathOrFd === "number" ? fdPaths.get(pathOrFd)! : pathOrFd;
     fileStore[path] = data;
   }),
   mkdirSync: vi.fn(),
+  openSync: vi.fn((path: string) => {
+    const fd = nextFd++;
+    fdPaths.set(fd, path);
+    return fd;
+  }),
+  closeSync: vi.fn(),
+  fsyncSync: vi.fn(),
+  renameSync: vi.fn((from: string, to: string) => {
+    fileStore[to] = fileStore[from]!;
+    delete fileStore[from];
+  }),
+  unlinkSync: vi.fn((path: string) => {
+    delete fileStore[path];
+  }),
+  realpathSync: vi.fn((path: string) => path),
 }));
 
 // ---------------------------------------------------------------------------
@@ -25,6 +44,7 @@ import {
   isClaudeCodeHookInstalled,
   CLAUDE_SETTINGS_PATH,
 } from "../src/lib/hooks.js";
+import { renameSync } from "node:fs";
 
 // ---------------------------------------------------------------------------
 // Setup
@@ -33,6 +53,8 @@ import {
 beforeEach(() => {
   vi.clearAllMocks();
   fileStore = {};
+  nextFd = 10;
+  fdPaths.clear();
 });
 
 afterEach(() => {
@@ -66,8 +88,14 @@ describe("installClaudeCodeHook", () => {
     const sessionEnd = hooks.SessionEnd as Array<{ hooks: Array<{ type: string; command: string; async?: boolean }> }>;
     expect(sessionEnd).toHaveLength(1);
     expect(sessionEnd[0]!.hooks[0]!.type).toBe("command");
-    expect(sessionEnd[0]!.hooks[0]!.command).toBe("straude push");
+    expect(sessionEnd[0]!.hooks[0]!.command).toBe(
+      "npx --yes straude@0.2.0 push --non-interactive",
+    );
     expect(sessionEnd[0]!.hooks[0]!.async).toBe(true);
+    expect(renameSync).toHaveBeenCalledWith(
+      expect.stringContaining("settings.json."),
+      CLAUDE_SETTINGS_PATH,
+    );
   });
 
   it("preserves existing hooks on other events", () => {
@@ -99,7 +127,9 @@ describe("installClaudeCodeHook", () => {
     const sessionEnd = hooks.SessionEnd as Array<{ hooks: Array<{ command: string }> }>;
     expect(sessionEnd).toHaveLength(2);
     expect(sessionEnd[0]!.hooks[0]!.command).toBe("other-tool cleanup");
-    expect(sessionEnd[1]!.hooks[0]!.command).toBe("straude push");
+    expect(sessionEnd[1]!.hooks[0]!.command).toBe(
+      "npx --yes straude@0.2.0 push --non-interactive",
+    );
   });
 
   it("is idempotent — does not duplicate entry", () => {

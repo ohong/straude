@@ -1,6 +1,13 @@
 import { createInterface } from "node:readline";
 
+let interactiveOverride: boolean | null = null;
+
+export function setInteractiveOverride(value: boolean | null): void {
+  interactiveOverride = value;
+}
+
 export function isInteractive(): boolean {
+  if (interactiveOverride !== null) return interactiveOverride;
   return Boolean(process.stdin.isTTY) && Boolean(process.stdout.isTTY);
 }
 

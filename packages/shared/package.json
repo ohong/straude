@@ -20,6 +20,11 @@
       "types": "./dist/format.d.ts",
       "import": "./dist/format.js",
       "default": "./dist/format.js"
+    },
+    "./usage-protocol": {
+      "types": "./dist/usage-protocol.d.ts",
+      "import": "./dist/usage-protocol.js",
+      "default": "./dist/usage-protocol.js"
     }
   },
   "files": [

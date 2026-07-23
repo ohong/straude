@@ -82,9 +82,25 @@ describe("Flow: Web JSON Import", () => {
 
   beforeEach(() => {
     vi.clearAllMocks();
-    mockServiceClient.rpc.mockImplementation((fn: string) => {
+    mockServiceClient.rpc.mockImplementation((fn: string, params?: Record<string, any>) => {
       if (fn === "check_rate_limit") {
         return Promise.resolve({ data: [{ allowed: true, retry_after_seconds: 0 }], error: null });
+      }
+      if (fn === "submit_usage_day_v2") {
+        return Promise.resolve({
+          data: {
+            date: params?.p_entry.date,
+            status: "committed",
+            result: {
+              usage_id: "usage-w1",
+              post_id: "post-w1",
+              action: "created",
+              daily_total: 0.25,
+              device_count: 1,
+            },
+          },
+          error: null,
+        });
       }
       return Promise.resolve({ data: null, error: null });
     });
@@ -141,10 +157,13 @@ describe("Flow: Web JSON Import", () => {
     expect(data.results).toHaveLength(1);
     expect(data.results[0].post_id).toBe("post-w1");
 
-    // Verify is_verified is false for web source
-    const upsertCall = (usageChain.upsert as ReturnType<typeof vi.fn>).mock.calls[0];
-    expect(upsertCall[0].is_verified).toBe(false);
-    expect(upsertCall[0].raw_hash).toBeNull();
+    expect(mockServiceClient.rpc).toHaveBeenCalledWith(
+      "submit_usage_day_v2",
+      expect.objectContaining({
+        p_is_verified: false,
+        p_source: "web",
+      }),
+    );
   });
 
   it("user edits auto-created post with title and description", async () => {

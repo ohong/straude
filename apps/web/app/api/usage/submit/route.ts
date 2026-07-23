@@ -1,4 +1,17 @@
+import { createHash } from "node:crypto";
 import { NextResponse } from "next/server";
+import {
+  canonicalizeUsageEntryV2,
+  parseUsageSubmitV2,
+  parseUsageSubmitResponseV2,
+  type AgentUsageComponent,
+  type JsonValue,
+  type ModelUsageComponent,
+  type UsageEntryV2,
+  type UsageOutcomeV2,
+  type UsageSubmitRequestV2,
+  type UsageSubmitResponseV2,
+} from "@straude/shared/usage-protocol";
 import { after } from "@/lib/utils/after";
 import { captureServerActivationEvent } from "@/lib/analytics/server";
 import { createClient } from "@/lib/supabase/server";
@@ -6,90 +19,85 @@ import { verifyCliTokenWithRefresh } from "@/lib/api/cli-auth";
 import { getServiceClient } from "@/lib/supabase/service";
 import { checkAndAwardAchievements } from "@/lib/achievements";
 import { rateLimit } from "@/lib/rate-limit";
-import { formatCurrency } from "@/lib/utils/format";
-import type { UsageSubmitRequest, UsageSubmitResponse, CcusageDailyEntry, ModelBreakdownEntry, UsageCollectorMeta } from "@/types";
+import type {
+  CcusageDailyEntry,
+  UsageCollectorMeta,
+  UsageSubmitResponse,
+} from "@/types";
 
 const MAX_BACKFILL_DAYS = 30;
 const MAX_USAGE_ENTRIES = MAX_BACKFILL_DAYS + 2;
 const MAX_USAGE_BODY_BYTES = 256 * 1024;
 const USAGE_PROCESS_CONCURRENCY = 4;
-// Trusted collectors are the only ones allowed to *lower* Codex totals on
-// UPSERT, which is how the server accepts retroactive collector corrections.
-const TRUSTED_CODEX_COLLECTORS = new Set([
+const COST_EPSILON_USD = 0.005;
+const DEFAULT_V1_CUTOFF = "2026-08-06";
+const RETRYABLE_DATABASE_CODES = new Set([
+  "40001",
+  "40P01",
+  "53300",
+  "55P03",
+  "57014",
+  "57P01",
+  "57P02",
+  "57P03",
+]);
+const TRUSTED_CORRECTION_COLLECTORS = new Set([
   "straude-codex-native-last-token-usage",
   "ccusage-codex-v20",
 ]);
-const LEGACY_DEVICE_ID = "00000000-0000-0000-0000-000000000000";
-const CODEX_MODEL_RE = /^(gpt-|o3|o4)/i;
-const COST_EPSILON_USD = 0.005;
-const REPAIR_META_KEYS = [
-  "repair",
-  "previous_cost_usd",
-  "previous_input_tokens",
-  "previous_cache_read_tokens",
-  "repaired_at",
-  "repair_v3_codex_only",
-  "cost_before_v3",
-  "total_tokens_before_v3",
-  "cache_read_before_v3",
-  "model_breakdown_before_v3",
-  "repaired_at_v3",
-  "claude_restore_2026_05_07",
-  "cost_before_claude_restore",
-] as const;
 
-function isValidDate(dateStr: string): boolean {
-  const match = dateStr.match(/^(\d{4})-(\d{2})-(\d{2})$/);
-  if (!match) return false;
-  const d = new Date(dateStr);
-  return !isNaN(d.getTime());
+interface AuthContext {
+  userId: string;
+  source: "cli" | "web";
+  refreshedToken?: string | null;
 }
 
-function isWithinBackfillWindow(dateStr: string, maxBackfillDays: number): boolean {
-  const now = new Date();
-  const target = new Date(dateStr);
-  const diffMs = now.getTime() - target.getTime();
-  const diffDays = diffMs / (1000 * 60 * 60 * 24);
-  return diffDays >= -1 && diffDays <= maxBackfillDays;
+interface RpcError {
+  code?: string;
+  message: string;
 }
 
-function validateEntry(entry: CcusageDailyEntry): string | null {
-  if (entry.costUSD < 0) return `Negative cost for ${entry.date}`;
-  if (entry.inputTokens < 0) return `Negative input tokens for ${entry.date}`;
-  if (entry.outputTokens < 0) return `Negative output tokens for ${entry.date}`;
-  if ((entry.reasoningOutputTokens ?? 0) < 0) return `Negative reasoning output tokens for ${entry.date}`;
-  if (entry.totalTokens < 0) return `Negative total tokens for ${entry.date}`;
-  return null;
+interface UsageRpcClient {
+  rpc(
+    name: string,
+    params: Record<string, unknown>,
+  ): PromiseLike<{ data: unknown; error: RpcError | null }>;
 }
 
-function validateCollectorMeta(collector: UsageCollectorMeta | undefined): string | null {
-  if (!collector) return null;
-  if (
-    collector.pricing_mode != null &&
-    collector.pricing_mode !== "online" &&
-    collector.pricing_mode !== "offline"
-  ) {
-    return "Unsupported pricing mode; ccusage submissions must use online or offline pricing";
-  }
-  if (collector.ccusage_agents != null) {
-    if (!Array.isArray(collector.ccusage_agents)) {
-      return "Invalid ccusage_agents collector metadata";
-    }
-    if (collector.ccusage_agents.some((agent) => typeof agent !== "string" || agent.length === 0)) {
-      return "Invalid ccusage_agents collector metadata";
-    }
-  }
-  return null;
+interface JsonReadSuccess {
+  ok: true;
+  body: unknown;
 }
 
-type JsonReadResult<T> =
-  | { ok: true; body: T }
-  | { ok: false; response: NextResponse };
+interface JsonReadFailure {
+  ok: false;
+  response: NextResponse;
+}
 
-async function readJsonBodyWithLimit<T>(
+type JsonReadResult = JsonReadSuccess | JsonReadFailure;
+
+interface LegacyAdaptResult {
+  request: UsageSubmitRequestV2;
+}
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === "object" && value !== null && !Array.isArray(value);
+}
+
+function isV2Request(value: unknown): boolean {
+  return isRecord(value) && value.protocol_version === 2;
+}
+
+function isLegacyProtocolSunset(): boolean {
+  const configured = process.env.STRAUDE_USAGE_V1_CUTOFF ?? DEFAULT_V1_CUTOFF;
+  const cutoff = Date.parse(`${configured}T00:00:00Z`);
+  return Number.isFinite(cutoff) && Date.now() >= cutoff;
+}
+
+async function readJsonBodyWithLimit(
   request: Request,
   maxBytes: number,
-): Promise<JsonReadResult<T>> {
+): Promise<JsonReadResult> {
   const contentLength = request.headers.get("content-length");
   if (contentLength) {
     const parsedLength = Number(contentLength);
@@ -100,7 +108,6 @@ async function readJsonBodyWithLimit<T>(
       };
     }
   }
-
   if (!request.body) {
     return {
       ok: false,
@@ -111,12 +118,10 @@ async function readJsonBodyWithLimit<T>(
   const reader = request.body.getReader();
   const chunks: Uint8Array[] = [];
   let totalBytes = 0;
-
   while (true) {
     const { done, value } = await reader.read();
     if (done) break;
     if (!value) continue;
-
     totalBytes += value.byteLength;
     if (totalBytes > maxBytes) {
       return {
@@ -133,12 +138,8 @@ async function readJsonBodyWithLimit<T>(
     bytes.set(chunk, offset);
     offset += chunk.byteLength;
   }
-
   try {
-    return {
-      ok: true,
-      body: JSON.parse(new TextDecoder().decode(bytes)) as T,
-    };
+    return { ok: true, body: JSON.parse(new TextDecoder().decode(bytes)) };
   } catch {
     return {
       ok: false,
@@ -147,733 +148,608 @@ async function readJsonBodyWithLimit<T>(
   }
 }
 
-async function mapSettledWithConcurrency<T, R>(
+async function resolveAuthContext(request: Request): Promise<AuthContext | null> {
+  const cliAuth = verifyCliTokenWithRefresh(request.headers.get("authorization"));
+  if (cliAuth) {
+    return {
+      userId: cliAuth.userId,
+      source: "cli",
+      refreshedToken: cliAuth.refreshedToken,
+    };
+  }
+  try {
+    const supabase = await createClient();
+    const { data: { user } } = await supabase.auth.getUser();
+    return user?.id ? { userId: user.id, source: "web" } : null;
+  } catch {
+    return null;
+  }
+}
+
+function calendarDateInTimezone(timezone: string): string {
+  const parts = new Intl.DateTimeFormat("en-US", {
+    timeZone: timezone,
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit",
+  }).formatToParts(new Date());
+  const value = Object.fromEntries(parts.map((part) => [part.type, part.value]));
+  return `${value.year}-${value.month}-${value.day}`;
+}
+
+function isWithinBackfillWindow(date: string, timezone = "UTC"): boolean {
+  const match = /^(\d{4})-(\d{2})-(\d{2})$/.exec(date);
+  if (!match) return false;
+  const targetDay = Date.UTC(Number(match[1]), Number(match[2]) - 1, Number(match[3]));
+  const localToday = calendarDateInTimezone(timezone);
+  const today = Date.UTC(
+    Number(localToday.slice(0, 4)),
+    Number(localToday.slice(5, 7)) - 1,
+    Number(localToday.slice(8, 10)),
+  );
+  const difference = Math.round((today - targetDay) / 86_400_000);
+  return difference >= 0 && difference <= MAX_BACKFILL_DAYS;
+}
+
+function hashCanonicalEntry(entry: UsageEntryV2): string {
+  return createHash("sha256")
+    .update(canonicalizeUsageEntryV2(entry))
+    .digest("hex");
+}
+
+function sumAgentUsage(agents: AgentUsageComponent[]) {
+  return agents.reduce((total, agent) => ({
+    cost_usd: total.cost_usd + agent.cost_usd,
+    total_tokens: total.total_tokens + agent.total_tokens,
+  }), { cost_usd: 0, total_tokens: 0 });
+}
+
+function isRetryableRpcError(error: RpcError): boolean {
+  if (error.code && RETRYABLE_DATABASE_CODES.has(error.code)) return true;
+  return /(connection|timeout|temporar|unavailable|too many clients|network)/i.test(error.message);
+}
+
+function responseHeaders(auth: AuthContext): Record<string, string> {
+  return auth.source === "cli" && auth.refreshedToken
+    ? { "X-Straude-Refreshed-Token": auth.refreshedToken }
+    : {};
+}
+
+async function mapWithConcurrency<T, R>(
   items: T[],
   concurrency: number,
-  mapper: (item: T, index: number) => Promise<R>,
-): Promise<PromiseSettledResult<R>[]> {
-  const results = new Array<PromiseSettledResult<R>>(items.length);
+  mapper: (item: T) => Promise<R>,
+): Promise<R[]> {
+  const results = new Array<R>(items.length);
   let nextIndex = 0;
-
-  async function worker() {
+  async function worker(): Promise<void> {
     while (nextIndex < items.length) {
       const index = nextIndex;
       nextIndex += 1;
-
-      try {
-        results[index] = { status: "fulfilled", value: await mapper(items[index]!, index) };
-      } catch (reason) {
-        results[index] = { status: "rejected", reason };
-      }
+      results[index] = await mapper(items[index]!);
     }
   }
-
   await Promise.all(
     Array.from({ length: Math.min(concurrency, items.length) }, () => worker()),
   );
   return results;
 }
 
-function isCodexModel(model: unknown): boolean {
-  return typeof model === "string" && CODEX_MODEL_RE.test(model);
-}
-
-function isRecord(value: unknown): value is Record<string, unknown> {
-  return typeof value === "object" && value !== null && !Array.isArray(value);
-}
-
-function containsCodexModel(models: unknown): boolean {
-  return Array.isArray(models) && models.some(isCodexModel);
-}
-
-function containsNonCodexModel(models: unknown): boolean {
-  return Array.isArray(models) && models.some((model) => !isCodexModel(model));
-}
-
-function hasNonCodexModels(models: unknown): boolean {
-  if (!Array.isArray(models) || models.length === 0) return true;
-  return containsNonCodexModel(models);
-}
-
-function sumBreakdownCost(
-  breakdown: unknown,
-  matchesModel: (model: unknown) => boolean,
-): number | null {
-  if (!Array.isArray(breakdown)) return null;
-
-  let total = 0;
-  for (const item of breakdown) {
-    if (!isRecord(item)) return null;
-    if (!matchesModel(item.model)) continue;
-
-    const cost = Number(item.cost_usd);
-    if (!Number.isFinite(cost)) return null;
-    total += cost;
-  }
-
-  return total;
-}
-
-function entryContainsCodexUsage(entry: CcusageDailyEntry): boolean {
-  if (containsCodexModel(entry.models)) return true;
-  const codexBreakdownCost = sumBreakdownCost(entry.modelBreakdown, isCodexModel);
-  return codexBreakdownCost != null && codexBreakdownCost > 0;
-}
-
-function entryContainsNonCodexUsage(entry: CcusageDailyEntry): boolean {
-  if (containsNonCodexModel(entry.models)) return true;
-  const nonCodexBreakdownCost = sumBreakdownCost(entry.modelBreakdown, (model) => !isCodexModel(model));
-  return nonCodexBreakdownCost != null && nonCodexBreakdownCost > 0;
-}
-
-function rowContainsNonCodexUsage(models: unknown, breakdown: unknown): boolean {
-  if (hasNonCodexModels(models)) return true;
-  const nonCodexBreakdownCost = sumBreakdownCost(breakdown, (model) => !isCodexModel(model));
-  return nonCodexBreakdownCost != null && nonCodexBreakdownCost > 0;
-}
-
-function collectorForEntry(
-  collector: UsageCollectorMeta | undefined,
-  entry: CcusageDailyEntry,
-): UsageCollectorMeta | undefined {
-  if (!collector) return undefined;
-
-  const entryCollector: Record<string, unknown> = {};
-  const reportedAgents = Array.isArray(entry.agents) && entry.agents.length > 0
-    ? [...new Set(entry.agents)]
-    : undefined;
-  const containsClaude = reportedAgents
-    ? reportedAgents.includes("claude")
-    : entryContainsNonCodexUsage(entry);
-  const containsCodex = reportedAgents
-    ? reportedAgents.includes("codex")
-    : entryContainsCodexUsage(entry);
-
-  if (collector.claude && containsClaude) {
-    entryCollector.claude = collector.claude;
-  }
-  if (collector.codex && containsCodex) {
-    entryCollector.codex = collector.codex;
-  }
-  mergeCollectorRunMeta(entryCollector, {
-    ...collector,
-    ccusage_agents: reportedAgents ?? collector.ccusage_agents,
+async function submitEntry(
+  db: UsageRpcClient,
+  auth: AuthContext,
+  request: UsageSubmitRequestV2,
+  entry: UsageEntryV2,
+  appUrl: string,
+  cliVersion: string | null,
+  retryAttempt: number,
+): Promise<UsageOutcomeV2> {
+  const startedAt = performance.now();
+  const finish = (outcome: UsageOutcomeV2): UsageOutcomeV2 => {
+    const elapsedMs = Math.round(performance.now() - startedAt);
+    console.info(JSON.stringify({
+      event: "usage_submit_day",
+      protocol_version: request.protocol_version,
+      request_id: request.request_id,
+      date: entry.date,
+      source: request.source,
+      collector_name: request.collector.name,
+      collector_version: request.collector.version,
+      cli_version: cliVersion,
+      stage_timings_ms: {
+        transaction: elapsedMs,
+        total: elapsedMs,
+      },
+      outcome: outcome.status,
+      error_code: outcome.error?.code ?? null,
+      retry_count: retryAttempt,
+    }));
+    return outcome;
+  };
+  const canonicalPayloadHash = hashCanonicalEntry(entry);
+  const { data, error } = await db.rpc("submit_usage_day_v2", {
+    p_user_id: auth.userId,
+    p_request_id: request.request_id,
+    p_source: request.source,
+    p_timezone: request.timezone,
+    p_installation: request.installation,
+    p_collector: request.collector,
+    p_entry: entry,
+    p_canonical_payload_hash: canonicalPayloadHash,
+    p_is_verified: auth.source === "cli",
   });
-
-  return Object.keys(entryCollector).length > 0 ? entryCollector as UsageCollectorMeta : undefined;
-}
-
-function nonCodexCostIsPreserved(
-  existingBreakdown: unknown,
-  incomingBreakdown: unknown,
-): boolean {
-  const existingNonCodexCost = sumBreakdownCost(existingBreakdown, (model) => !isCodexModel(model));
-  const incomingNonCodexCost = sumBreakdownCost(incomingBreakdown, (model) => !isCodexModel(model));
-  if (existingNonCodexCost == null || incomingNonCodexCost == null) return false;
-  return incomingNonCodexCost + COST_EPSILON_USD >= existingNonCodexCost;
-}
-
-function trustedCodexEntryPreservesNonCodex(
-  existingModels: unknown,
-  existingBreakdown: unknown,
-  incomingEntry: CcusageDailyEntry,
-): boolean {
-  if (!rowContainsNonCodexUsage(existingModels, existingBreakdown)) return true;
-  return nonCodexCostIsPreserved(existingBreakdown, incomingEntry.modelBreakdown);
-}
-
-function isTruthyMetaValue(value: unknown): boolean {
-  if (typeof value === "boolean") return value;
-  if (typeof value === "number") return value !== 0;
-  if (typeof value !== "string") return value != null;
-
-  const normalized = value.trim().toLowerCase();
-  return normalized !== "" && normalized !== "false" && normalized !== "0";
-}
-
-function rowWasRepaired(meta: unknown): boolean {
-  if (!isRecord(meta)) return false;
-  return isTruthyMetaValue(meta.repair)
-    || isTruthyMetaValue(meta.repair_v3_codex_only)
-    || isTruthyMetaValue(meta.claude_restore_2026_05_07);
-}
-
-function mergeRepairMeta(target: Record<string, unknown>, meta: unknown): void {
-  if (!isRecord(meta) || !rowWasRepaired(meta)) return;
-  for (const key of REPAIR_META_KEYS) {
-    if (key in meta) target[key] = meta[key];
+  if (error) {
+    const retryable = isRetryableRpcError(error);
+    return finish({
+      date: entry.date,
+      status: retryable ? "retryable_error" : "permanent_error",
+      error: {
+        code: error.code ?? "database_error",
+        message: retryable
+          ? "Usage transaction is temporarily unavailable"
+          : "Usage transaction failed",
+      },
+    });
   }
-}
-
-function mergeCollectorRunMeta(target: Record<string, unknown>, meta: unknown): void {
-  if (!isRecord(meta)) return;
-  if (typeof meta.ccusage_version === "string") target.ccusage_version = meta.ccusage_version;
-  if (Array.isArray(meta.ccusage_agents) && meta.ccusage_agents.every((agent) => typeof agent === "string")) {
-    target.ccusage_agents = meta.ccusage_agents;
-  }
-  if (typeof meta.pricing_mode === "string") target.pricing_mode = meta.pricing_mode;
-}
-
-function mergeCollectorSourceMeta(target: Record<string, unknown>, meta: unknown): void {
-  if (!isRecord(meta)) return;
-  if (typeof meta.claude === "string") target.claude = meta.claude;
-  if (typeof meta.codex === "string") target.codex = meta.codex;
-  mergeCollectorRunMeta(target, meta);
-}
-
-function mergeDailyCollectorMeta(
-  currentCollector: UsageCollectorMeta | undefined,
-  existingDailyMeta: unknown,
-  deviceRows: DeviceUsageRow[],
-): UsageCollectorMeta | null {
-  const merged: Record<string, unknown> = {};
-  mergeCollectorSourceMeta(merged, existingDailyMeta);
-  mergeRepairMeta(merged, existingDailyMeta);
-  for (const row of deviceRows) {
-    mergeCollectorSourceMeta(merged, row.collector_meta);
-    mergeRepairMeta(merged, row.collector_meta);
-  }
-  if (currentCollector) Object.assign(merged, currentCollector);
-  return Object.keys(merged).length > 0 ? merged as UsageCollectorMeta : null;
-}
-
-function mergeCollectorWithRepairMeta(
-  currentCollector: UsageCollectorMeta | undefined,
-  existingMeta: unknown,
-): UsageCollectorMeta | null {
-  const merged: Record<string, unknown> = {};
-  mergeCollectorSourceMeta(merged, existingMeta);
-  mergeRepairMeta(merged, existingMeta);
-  if (currentCollector) Object.assign(merged, currentCollector);
-  return Object.keys(merged).length > 0 ? merged as UsageCollectorMeta : null;
-}
-
-interface AuthContext {
-  userId: string;
-  username?: string | null;
-  source: "cli" | "web";
-  /** When set, the response should include X-Straude-Refreshed-Token. */
-  refreshedToken?: string | null;
-}
-
-async function resolveAuthContext(request: Request): Promise<AuthContext | null> {
-  // Try CLI JWT first
-  const authHeader = request.headers.get("authorization");
-  const cliAuth = verifyCliTokenWithRefresh(authHeader);
-  if (cliAuth) {
-    return {
-      userId: cliAuth.userId,
-      username: cliAuth.username,
-      source: "cli",
-      refreshedToken: cliAuth.refreshedToken,
-    };
-  }
-
-  // Fall back to Supabase session (web)
-  try {
-    const supabase = await createClient();
-    const { data: { user } } = await supabase.auth.getUser();
-    if (!user?.id) return null;
-    return { userId: user.id, source: "web" };
-  } catch {
-    return null;
-  }
-}
-
-interface DeviceUsageRow {
-  cost_usd: number;
-  input_tokens: number;
-  output_tokens: number;
-  reasoning_output_tokens?: number;
-  cache_creation_tokens: number;
-  cache_read_tokens: number;
-  total_tokens: number;
-  models: string[];
-  model_breakdown: ModelBreakdownEntry[] | null;
-  collector_meta?: UsageCollectorMeta | null;
-}
-
-/**
- * Aggregate multiple device_usage rows into a single daily_usage summary.
- * SUMs numeric fields, unions models (deduplicated), merges model_breakdowns
- * by summing cost_usd per model name.
- */
-export function aggregateDeviceRows(rows: DeviceUsageRow[]) {
-  let cost_usd = 0;
-  let input_tokens = 0;
-  let output_tokens = 0;
-  let reasoning_output_tokens = 0;
-  let cache_creation_tokens = 0;
-  let cache_read_tokens = 0;
-  let total_tokens = 0;
-  const modelsSet = new Set<string>();
-  const breakdownMap = new Map<string, number>();
-
-  for (const row of rows) {
-    cost_usd += Number(row.cost_usd);
-    input_tokens += Number(row.input_tokens);
-    output_tokens += Number(row.output_tokens);
-    reasoning_output_tokens += Number(row.reasoning_output_tokens ?? 0);
-    cache_creation_tokens += Number(row.cache_creation_tokens ?? 0);
-    cache_read_tokens += Number(row.cache_read_tokens ?? 0);
-    total_tokens += Number(row.total_tokens);
-
-    if (Array.isArray(row.models)) {
-      for (const m of row.models) modelsSet.add(m);
+  const rawCandidate = Array.isArray(data) ? data[0] : data;
+  const candidate = isRecord(rawCandidate)
+    && isRecord(rawCandidate.result)
+    && typeof rawCandidate.result.post_id === "string"
+    && typeof rawCandidate.result.post_url !== "string"
+    ? {
+      ...rawCandidate,
+      result: {
+        ...rawCandidate.result,
+        post_url: `${appUrl}/post/${rawCandidate.result.post_id}`,
+      },
     }
-    if (Array.isArray(row.model_breakdown)) {
-      for (const entry of row.model_breakdown) {
-        breakdownMap.set(entry.model, (breakdownMap.get(entry.model) ?? 0) + entry.cost_usd);
-      }
-    }
+    : rawCandidate;
+  const parsedResponse = parseUsageSubmitResponseV2({
+    request_id: request.request_id,
+    outcomes: [candidate],
+  });
+  if (!parsedResponse.ok) {
+    return finish({
+      date: entry.date,
+      status: "retryable_error",
+      error: {
+        code: "invalid_rpc_response",
+        message: "Usage transaction returned an invalid response",
+      },
+    });
+  }
+  const parsedOutcome = parsedResponse.value.outcomes[0]!;
+  return finish(parsedOutcome);
+}
+
+function statusForOutcomes(outcomes: UsageOutcomeV2[], allowPartialSuccess: boolean): number {
+  const hasSuccess = outcomes.some(
+    (outcome) => outcome.status === "committed" || outcome.status === "unchanged",
+  );
+  const hasFailure = outcomes.some(
+    (outcome) => outcome.status !== "committed" && outcome.status !== "unchanged",
+  );
+  if (allowPartialSuccess && hasSuccess && hasFailure) return 207;
+  if (outcomes.some((outcome) => outcome.status === "identity_conflict")) return 409;
+  if (outcomes.some((outcome) => outcome.status === "permanent_error")) return 400;
+  if (outcomes.some((outcome) => outcome.status === "retryable_error")) return 503;
+  return 200;
+}
+
+function legacyError(message: string): { ok: false; error: string } {
+  return { ok: false, error: message };
+}
+
+function isLegacyError(
+  value: unknown,
+): value is { ok: false; error: string } {
+  return isRecord(value) && value.ok === false && typeof value.error === "string";
+}
+
+function readLegacyNumber(
+  value: unknown,
+  field: string,
+  date: string,
+): number | { ok: false; error: string } {
+  if (typeof value !== "number" || !Number.isFinite(value) || value < 0) {
+    return legacyError(`Invalid ${field} for ${date}`);
+  }
+  return value;
+}
+
+function legacyAgentId(entry: CcusageDailyEntry): string {
+  void entry;
+  return "legacy-unpartitioned";
+}
+
+function legacyEntryIsCodexOnly(entry: CcusageDailyEntry): boolean {
+  if (entry.agents?.length === 1) return entry.agents[0] === "codex";
+  return entry.models.length > 0
+    && entry.models.every((model) => /^(gpt-|o3|o4|codex)/i.test(model));
+}
+
+function legacyModelBreakdown(
+  entry: CcusageDailyEntry,
+  numbers: Omit<ModelUsageComponent, "model">,
+): ModelUsageComponent[] | { ok: false; error: string } {
+  const models = [...new Set(entry.models)];
+  if (models.length === 1) {
+    return [{ model: models[0]!, ...numbers }];
   }
 
-  const models = [...modelsSet];
-  const model_breakdown: ModelBreakdownEntry[] = breakdownMap.size > 0
-    ? [...breakdownMap.entries()].map(([model, cost]) => ({ model, cost_usd: cost }))
-    : [];
+  const costs = new Map<string, number>();
+  for (const item of entry.modelBreakdown ?? []) {
+    if (
+      !item
+      || typeof item.model !== "string"
+      || item.model.length === 0
+      || typeof item.cost_usd !== "number"
+      || !Number.isFinite(item.cost_usd)
+      || item.cost_usd < 0
+    ) {
+      return legacyError(`Invalid model breakdown for ${entry.date}`);
+    }
+    costs.set(item.model, (costs.get(item.model) ?? 0) + item.cost_usd);
+  }
+  const attributedCost = [...costs.values()].reduce((sum, cost) => sum + cost, 0);
+  if (attributedCost > numbers.cost_usd + COST_EPSILON_USD) {
+    return legacyError(`Model breakdown exceeds total cost for ${entry.date}`);
+  }
 
-  return {
-    cost_usd,
-    input_tokens,
-    output_tokens,
-    reasoning_output_tokens,
-    cache_creation_tokens,
-    cache_read_tokens,
-    total_tokens,
+  for (const model of models) {
+    if (!costs.has(model)) costs.set(model, 0);
+  }
+  const breakdown = [...costs.entries()].map(([model, cost]) => ({
+    model,
+    input_tokens: 0,
+    output_tokens: 0,
+    reasoning_output_tokens: 0,
+    cache_creation_tokens: 0,
+    cache_read_tokens: 0,
+    total_tokens: 0,
+    cost_usd: cost,
+  }));
+  const unattributedModel = models.includes("legacy-unattributed")
+    ? "legacy-combined-unattributed"
+    : "legacy-unattributed";
+  breakdown.push({
+    model: unattributedModel,
+    ...numbers,
+    cost_usd: Math.max(numbers.cost_usd - attributedCost, 0),
+  });
+  return breakdown;
+}
+
+function legacyEntryToV2(
+  outerDate: string,
+  entry: CcusageDailyEntry,
+  collector: UsageCollectorMeta | undefined,
+): UsageEntryV2 | { ok: false; error: string } {
+  if (entry.date !== outerDate || !isWithinBackfillWindow(outerDate)) {
+    return legacyError(
+      `Date ${outerDate} is invalid or outside the 30-day backfill window`,
+    );
+  }
+  if (!Array.isArray(entry.models) || entry.models.some((model) => typeof model !== "string")) {
+    return legacyError(`Invalid models for ${outerDate}`);
+  }
+  const input = readLegacyNumber(entry.inputTokens, "input tokens", outerDate);
+  if (typeof input !== "number") return input;
+  const output = readLegacyNumber(entry.outputTokens, "output tokens", outerDate);
+  if (typeof output !== "number") return output;
+  const cacheCreation = readLegacyNumber(entry.cacheCreationTokens, "cache creation tokens", outerDate);
+  if (typeof cacheCreation !== "number") return cacheCreation;
+  const cacheRead = readLegacyNumber(entry.cacheReadTokens, "cache read tokens", outerDate);
+  if (typeof cacheRead !== "number") return cacheRead;
+  const total = readLegacyNumber(entry.totalTokens, "total tokens", outerDate);
+  if (typeof total !== "number") return total;
+  const inferredReasoning = total - input - output - cacheCreation - cacheRead;
+  const reasoning = readLegacyNumber(
+    entry.reasoningOutputTokens ?? inferredReasoning,
+    "reasoning tokens",
+    outerDate,
+  );
+  if (typeof reasoning !== "number") return reasoning;
+  const cost = readLegacyNumber(entry.costUSD, "cost", outerDate);
+  if (typeof cost !== "number") return cost;
+  if (total !== input + output + reasoning + cacheCreation + cacheRead) {
+    return legacyError(`Token categories do not equal total tokens for ${outerDate}`);
+  }
+
+  const numeric = {
+    input_tokens: input,
+    output_tokens: output,
+    reasoning_output_tokens: reasoning,
+    cache_creation_tokens: cacheCreation,
+    cache_read_tokens: cacheRead,
+    total_tokens: total,
+    cost_usd: cost,
+  };
+  const modelBreakdown = legacyModelBreakdown(entry, numeric);
+  if (!Array.isArray(modelBreakdown)) return modelBreakdown;
+  const models = modelBreakdown.map((model) => model.model);
+  const agentId = legacyAgentId(entry);
+  const agents: AgentUsageComponent[] = [{
+    agent: agentId,
     models,
-    model_breakdown: model_breakdown.length > 0 ? model_breakdown : null,
-    session_count: rows.length,
+    ...numeric,
+    model_breakdown: modelBreakdown,
+  }];
+  const trustedCodexCorrection = legacyEntryIsCodexOnly(entry)
+    && typeof collector?.codex === "string"
+    && TRUSTED_CORRECTION_COLLECTORS.has(collector.codex);
+  const v2Entry: UsageEntryV2 = {
+    date: outerDate,
+    content_hash: "0".repeat(64),
+    agents,
+    ...(trustedCodexCorrection
+      ? {
+        authoritative_correction: true,
+        migration_id: "legacy-codex-correction-v1",
+      }
+      : {}),
+  };
+  return { ...v2Entry, content_hash: hashCanonicalEntry(v2Entry) };
+}
+
+function jsonMetadata(value: unknown): { [key: string]: JsonValue } {
+  if (!isRecord(value)) return {};
+  return JSON.parse(JSON.stringify(value));
+}
+
+function adaptLegacyRequest(value: unknown): LegacyAdaptResult | { ok: false; error: string } {
+  if (!isRecord(value)) return legacyError("Invalid request body");
+  if (!Array.isArray(value.entries) || value.entries.length === 0) {
+    return legacyError("No entries provided");
+  }
+  if (value.entries.length > MAX_USAGE_ENTRIES) {
+    return legacyError(`Too many entries provided. Maximum is ${MAX_USAGE_ENTRIES}.`);
+  }
+  if (value.source !== "cli" && value.source !== "web") return legacyError("Invalid source");
+  if (typeof value.device_id !== "string") {
+    return legacyError("device_id is required. Please update your CLI: npx straude@latest");
+  }
+  const collector = isRecord(value.collector)
+    ? jsonMetadata(value.collector)
+    : {};
+  const rawCollector = value.collector as UsageCollectorMeta | undefined;
+  const entries: UsageEntryV2[] = [];
+  const seenDates = new Set<string>();
+  for (const raw of value.entries) {
+    if (!isRecord(raw) || typeof raw.date !== "string" || !isRecord(raw.data)) {
+      return legacyError("Invalid usage entry");
+    }
+    if (seenDates.has(raw.date)) return legacyError(`Duplicate date: ${raw.date}`);
+    seenDates.add(raw.date);
+    const data = raw.data as unknown as CcusageDailyEntry;
+    const converted = legacyEntryToV2(raw.date, data, rawCollector);
+    if (isLegacyError(converted)) return converted;
+    entries.push(converted);
+  }
+  const pricingMode = collector.pricing_mode === "offline" ? "offline" : "online";
+  const requestId = createHash("sha256")
+    .update([
+      "straude-legacy-v1",
+      value.source,
+      value.device_id,
+      ...entries
+        .map((entry) => `${entry.date}:${entry.content_hash}`)
+        .sort(),
+    ].join("\0"))
+    .digest("hex");
+  return {
+    request: {
+      protocol_version: 2,
+      request_id: typeof value.hash === "string" && value.hash.length > 0
+        ? value.hash
+        : requestId,
+      source: value.source,
+      timezone: "UTC",
+      installation: {
+        id: value.device_id,
+        ...(typeof value.device_name === "string" ? { name: value.device_name } : {}),
+      },
+      collector: {
+        name: "legacy-ccusage",
+        version: typeof collector.ccusage_version === "string"
+          ? collector.ccusage_version
+          : "legacy",
+        pricing_mode: pricingMode,
+        metadata: collector,
+      },
+      entries,
+    },
   };
 }
 
-function resolveClaudeTitleLabel(models: string[] | null | undefined): string | null {
-  if (!models || models.length === 0) return null;
-  const slugs = models.map((model) => model.trim().toLowerCase());
-  return slugs.some((slug) => slug.includes("fable")) ? "Claude Fable"
-    : slugs.some((slug) => slug.includes("opus")) ? "Claude Opus"
-    : slugs.some((slug) => slug.includes("sonnet")) ? "Claude Sonnet"
-    : slugs.some((slug) => slug.includes("haiku")) ? "Claude Haiku"
-    : null;
+function schedulePostCommitWork(
+  userId: string,
+  request: UsageSubmitRequestV2,
+  outcomes: UsageOutcomeV2[],
+): void {
+  const successful = outcomes.filter(
+    (outcome) => outcome.status === "committed" || outcome.status === "unchanged",
+  );
+  if (successful.length === 0) return;
+  const totals = request.entries.reduce((sum, entry) => {
+    const entryTotal = sumAgentUsage(entry.agents);
+    return {
+      cost: sum.cost + entryTotal.cost_usd,
+      tokens: sum.tokens + entryTotal.total_tokens,
+    };
+  }, { cost: 0, tokens: 0 });
+
+  after(async () => {
+    await Promise.allSettled([
+      checkAndAwardAchievements(userId, "usage"),
+      Promise.resolve(
+        getServiceClient().rpc("recalculate_user_level", { p_user_id: userId }),
+      ),
+      captureServerActivationEvent({
+        event: "usage_submit_succeeded",
+        distinctId: userId,
+        properties: {
+          surface: "usage_submit",
+          activation_state: "first_usage_submitted",
+          is_authenticated: true,
+          protocol_version: 2,
+          days_pushed: successful.length,
+          result_count: successful.length,
+          total_cost_usd: Math.round(totals.cost * 100) / 100,
+          total_tokens: totals.tokens,
+          has_errors: successful.length !== outcomes.length,
+          "$insert_id": `usage_submit_succeeded:${userId}:${request.request_id}`,
+        },
+      }),
+    ]);
+  });
 }
 
-export async function POST(request: Request) {
-  const parsed = await readJsonBodyWithLimit<UsageSubmitRequest>(request, MAX_USAGE_BODY_BYTES);
-  if (!parsed.ok) return parsed.response;
-  const body = parsed.body;
-
-  if (!body.entries || !Array.isArray(body.entries) || body.entries.length === 0) {
-    return NextResponse.json({ error: "No entries provided" }, { status: 400 });
-  }
-  if (body.entries.length > MAX_USAGE_ENTRIES) {
-    return NextResponse.json(
-      { error: `Too many entries provided. Maximum is ${MAX_USAGE_ENTRIES}.` },
-      { status: 400 },
-    );
-  }
-
-  if (!body.source || !["cli", "web"].includes(body.source)) {
-    return NextResponse.json({ error: "Invalid source" }, { status: 400 });
-  }
-
-  const collectorValidationError = validateCollectorMeta(body.collector);
-  if (collectorValidationError) {
-    return NextResponse.json({ error: collectorValidationError }, { status: 400 });
-  }
+export async function POST(request: Request): Promise<NextResponse> {
+  const requestStartedAt = performance.now();
+  const rawCliVersion = request.headers.get("x-straude-cli-version");
+  const cliVersion = rawCliVersion && /^[0-9A-Za-z.+_-]{1,64}$/.test(rawCliVersion)
+    ? rawCliVersion
+    : null;
+  const rawRetryAttempt = request.headers.get("x-straude-retry-attempt");
+  const retryAttempt = rawRetryAttempt && /^\d{1,2}$/.test(rawRetryAttempt)
+    ? Math.min(Number(rawRetryAttempt), 99)
+    : 0;
+  const parsedBody = await readJsonBodyWithLimit(request, MAX_USAGE_BODY_BYTES);
+  if (!parsedBody.ok) return parsedBody.response;
 
   const auth = await resolveAuthContext(request);
-  if (!auth) {
-    return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  if (!auth) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+
+  const v2 = isV2Request(parsedBody.body);
+  if (!v2 && auth.source === "cli" && isLegacyProtocolSunset()) {
+    return NextResponse.json({
+      error: "This Straude CLI version is no longer supported.",
+      code: "usage_protocol_upgrade_required",
+      update_command: "npx straude@latest",
+    }, { status: 426 });
+  }
+  let usageRequest: UsageSubmitRequestV2;
+  if (v2) {
+    const parsed = parseUsageSubmitV2(parsedBody.body);
+    if (!parsed.ok) {
+      return NextResponse.json({ error: parsed.error }, { status: 400 });
+    }
+    usageRequest = parsed.value;
+  } else {
+    const adapted = adaptLegacyRequest(parsedBody.body);
+    if (isLegacyError(adapted)) {
+      return NextResponse.json({ error: adapted.error }, { status: 400 });
+    }
+    usageRequest = adapted.request;
+  }
+  const outOfWindow = usageRequest.entries.find(
+    (entry) => !isWithinBackfillWindow(entry.date, usageRequest.timezone),
+  );
+  if (outOfWindow) {
+    const message = `Date ${outOfWindow.date} is outside the ${MAX_BACKFILL_DAYS}-day backfill window`;
+    return v2
+      ? NextResponse.json({
+        request_id: usageRequest.request_id,
+        outcomes: [{
+          date: outOfWindow.date,
+          status: "permanent_error",
+          error: { code: "date_out_of_range", message },
+        }],
+      }, { status: 400 })
+      : NextResponse.json({ error: message }, { status: 400 });
   }
 
-  const userId = auth.userId;
-
-  const limited = await rateLimit("usage-submit", userId, { limit: 20 });
+  if (usageRequest.source !== auth.source) {
+    const message = `Authenticated ${auth.source} requests cannot submit source ${usageRequest.source}`;
+    return v2
+      ? NextResponse.json({
+        request_id: usageRequest.request_id,
+        outcomes: usageRequest.entries.map((entry) => ({
+          date: entry.date,
+          status: "permanent_error",
+          error: { code: "source_mismatch", message },
+        })),
+      }, { status: 403, headers: responseHeaders(auth) })
+      : NextResponse.json({ error: message }, { status: 403, headers: responseHeaders(auth) });
+  }
+  const limited = await rateLimit("usage-submit", auth.userId, { limit: 20 });
   if (limited) return limited;
 
-  const seenDates = new Set<string>();
-  for (const entry of body.entries) {
-    if (!isValidDate(entry.date)) {
-      return NextResponse.json({ error: `Invalid date: ${entry.date}` }, { status: 400 });
-    }
-    if (seenDates.has(entry.date)) {
-      return NextResponse.json({ error: `Duplicate date: ${entry.date}` }, { status: 400 });
-    }
-    seenDates.add(entry.date);
-    if (!isWithinBackfillWindow(entry.date, MAX_BACKFILL_DAYS)) {
-      return NextResponse.json(
-        { error: `Date ${entry.date} is outside the ${MAX_BACKFILL_DAYS}-day backfill window` },
-        { status: 400 },
-      );
-    }
-    const validationError = validateEntry(entry.data);
-    if (validationError) {
-      return NextResponse.json({ error: validationError }, { status: 400 });
-    }
-  }
-
-  const db = getServiceClient();
-  const isVerified = auth.source === "cli";
   const appUrl = (process.env.NEXT_PUBLIC_APP_URL ?? "https://straude.com").replace(/\/+$/, "");
-
-  const deviceId = body.device_id;
-  const deviceName = body.device_name;
-  if (!deviceId) {
-    return NextResponse.json(
-      { error: "device_id is required. Please update your CLI: npx straude@latest" },
-      { status: 400 },
-    );
-  }
-
-  const settled = await mapSettledWithConcurrency(
-    body.entries,
+  const db = getServiceClient();
+  const outcomes = await mapWithConcurrency(
+    usageRequest.entries,
     USAGE_PROCESS_CONCURRENCY,
-    async (entry) => {
-      // Check if a record already exists to determine create vs update
-      const { data: existing } = await db
-        .from("daily_usage")
-        .select("id, cost_usd, models, model_breakdown, collector_meta")
-        .eq("user_id", userId)
-        .eq("date", entry.date)
-        .maybeSingle();
-
-      const action: "created" | "updated" = existing ? "updated" : "created";
-      const previousCost = existing ? Number(existing.cost_usd) : undefined;
-
-      let usage: { id: string } | null = null;
-      let usageErrorMessage: string | null = null;
-      const entryCollector = collectorForEntry(body.collector, entry.data);
-      const entryIsTrustedCodexCorrection = typeof entryCollector?.codex === "string"
-        && TRUSTED_CODEX_COLLECTORS.has(entryCollector.codex)
-        && entryContainsCodexUsage(entry.data);
-
-      // Guard against decreasing values (e.g., ccusage log rotation). Trusted
-      // Codex collectors may lower totals because they repair inflated rows
-      // produced by older Codex aggregation behavior.
-      const { data: existingDevice } = await db
-        .from("device_usage")
-        .select("cost_usd,models,model_breakdown,collector_meta")
-        .eq("user_id", userId)
-        .eq("date", entry.date)
-        .eq("device_id", deviceId)
-        .maybeSingle();
-      const existingDeviceMeta = (existingDevice as { collector_meta?: UsageCollectorMeta | null } | null | undefined)?.collector_meta;
-      const existingDeviceWasRepaired = rowWasRepaired(existingDeviceMeta);
-
-      let preexistingDeviceCount = 0;
-      if (existing) {
-        const { count } = await db
-          .from("device_usage")
-          .select("id", { count: "exact", head: true })
-          .eq("user_id", userId)
-          .eq("date", entry.date);
-        preexistingDeviceCount = count ?? 0;
-      }
-
-      const trustedEntryCanOverwriteDevice = entryIsTrustedCodexCorrection
-        && (!existingDevice || trustedCodexEntryPreservesNonCodex(
-          (existingDevice as { models?: unknown }).models,
-          (existingDevice as { model_breakdown?: unknown }).model_breakdown,
-          entry.data,
-        ));
-
-      // Protect rows that the codex-only repair migration corrected from
-      // being re-inflated by an older untrusted collector. Without this guard, a
-      // user still on the older collector auto-pushes their next daily payload, the
-      // payload's cost is higher than the repaired row, and the existing
-      // "raise allowed" path overwrites the repair. Trusted uploads bypass the
-      // guard and heal the row to ground truth.
-      const mayOverwriteDevice = (
-        !existingDevice
-        || (entry.data.costUSD >= Number(existingDevice.cost_usd) && !existingDeviceWasRepaired)
-        || trustedEntryCanOverwriteDevice
-      );
-
-      // Only upsert if new data is >= existing, unless this is a trusted repair.
-      if (mayOverwriteDevice) {
-        const { error: deviceError } = await db
-          .from("device_usage")
-          .upsert(
-            {
-              user_id: userId,
-              device_id: deviceId,
-              device_name: deviceName ?? null,
-              date: entry.date,
-              cost_usd: entry.data.costUSD,
-              input_tokens: entry.data.inputTokens,
-              output_tokens: entry.data.outputTokens,
-              reasoning_output_tokens: entry.data.reasoningOutputTokens ?? 0,
-              cache_creation_tokens: entry.data.cacheCreationTokens,
-              cache_read_tokens: entry.data.cacheReadTokens,
-              total_tokens: entry.data.totalTokens,
-              models: entry.data.models,
-              model_breakdown: entry.data.modelBreakdown ?? null,
-              session_count: 1,
-              raw_hash: body.hash ?? null,
-              collector_meta: mergeCollectorWithRepairMeta(entryCollector, existingDeviceMeta),
-              updated_at: new Date().toISOString(),
-            },
-            { onConflict: "user_id,date,device_id" },
-          )
-          .select("id")
-          .single();
-
-        if (deviceError) {
-          throw new Error(`Failed to upsert device_usage for ${entry.date}: ${deviceError.message}`);
-        }
-      }
-
-      const existingHasNonCodexUsage = existing
-        ? rowContainsNonCodexUsage(
-          (existing as { models?: unknown }).models,
-          (existing as { model_breakdown?: unknown }).model_breakdown,
-        )
-        : false;
-      const canDropLegacyDevice = entryIsTrustedCodexCorrection
-        && (!existingHasNonCodexUsage || nonCodexCostIsPreserved(
-          (existing as { model_breakdown?: unknown } | null)?.model_breakdown,
-          entry.data.modelBreakdown,
-        ));
-
-      if (canDropLegacyDevice) {
-        await db
-          .from("device_usage")
-          .delete()
-          .eq("user_id", userId)
-          .eq("date", entry.date)
-          .eq("device_id", LEGACY_DEVICE_ID);
-      }
-
-      // Backfill legacy data: if daily_usage exists but has no device_usage rows,
-      // the data was written before device tracking. Insert it as a "legacy" device
-      // so the aggregation doesn't discard it.
-      if (existing && !canDropLegacyDevice) {
-        if (preexistingDeviceCount === 0) {
-          const { data: legacyRow } = await db
-            .from("daily_usage")
-            .select("cost_usd,input_tokens,output_tokens,reasoning_output_tokens,cache_creation_tokens,cache_read_tokens,total_tokens,models,model_breakdown,raw_hash")
-            .eq("id", existing.id)
-            .single();
-
-          if (legacyRow) {
-            await db.from("device_usage").insert({
-              user_id: userId,
-              device_id: LEGACY_DEVICE_ID,
-              device_name: "legacy",
-              date: entry.date,
-              cost_usd: legacyRow.cost_usd,
-              input_tokens: legacyRow.input_tokens,
-              output_tokens: legacyRow.output_tokens,
-              reasoning_output_tokens: legacyRow.reasoning_output_tokens ?? 0,
-              cache_creation_tokens: legacyRow.cache_creation_tokens ?? 0,
-              cache_read_tokens: legacyRow.cache_read_tokens ?? 0,
-              total_tokens: legacyRow.total_tokens,
-              models: legacyRow.models ?? [],
-              model_breakdown: legacyRow.model_breakdown ?? null,
-              session_count: 1,
-              raw_hash: legacyRow.raw_hash ?? null,
-              collector_meta: null,
-              updated_at: new Date().toISOString(),
-            });
-          }
-        }
-      }
-
-      // Fetch all device rows for this (user_id, date) and aggregate
-      const { data: deviceRows, error: fetchError } = await db
-        .from("device_usage")
-        .select("cost_usd,input_tokens,output_tokens,reasoning_output_tokens,cache_creation_tokens,cache_read_tokens,total_tokens,models,model_breakdown,collector_meta")
-        .eq("user_id", userId)
-        .eq("date", entry.date);
-
-      if (fetchError || !deviceRows) {
-        throw new Error(`Failed to fetch device_usage for ${entry.date}: ${fetchError?.message}`);
-      }
-
-      const agg = aggregateDeviceRows(deviceRows as DeviceUsageRow[]);
-      const dailyCollectorMeta = mergeDailyCollectorMeta(
-        mayOverwriteDevice ? entryCollector : undefined,
-        (existing as { collector_meta?: unknown } | null)?.collector_meta,
-        deviceRows as DeviceUsageRow[],
-      );
-
-      const { data, error } = await db
-        .from("daily_usage")
-        .upsert(
-          {
-            user_id: userId,
-            date: entry.date,
-            cost_usd: agg.cost_usd,
-            input_tokens: agg.input_tokens,
-            output_tokens: agg.output_tokens,
-            reasoning_output_tokens: agg.reasoning_output_tokens,
-            cache_creation_tokens: agg.cache_creation_tokens,
-            cache_read_tokens: agg.cache_read_tokens,
-            total_tokens: agg.total_tokens,
-            models: agg.models,
-            model_breakdown: agg.model_breakdown,
-            session_count: agg.session_count,
-            is_verified: isVerified,
-            raw_hash: body.hash ?? null,
-            collector_meta: dailyCollectorMeta,
-            updated_at: new Date().toISOString(),
-          },
-          { onConflict: "user_id,date" },
-        )
-        .select("id")
-        .single();
-
-      usage = data;
-      usageErrorMessage = error?.message ?? null;
-
-      if (usageErrorMessage || !usage) {
-        throw new Error(`Failed to upsert usage for ${entry.date}: ${usageErrorMessage ?? "Unknown error"}`);
-      }
-
-      // Build auto-title from aggregated usage data
-      const models = agg.models;
-      const claudeLabel = resolveClaudeTitleLabel(models);
-      const hasClaude = Boolean(claudeLabel || models?.some((m) => m.toLowerCase().includes("claude")));
-      const codexModel = models?.find((m) => /^gpt-/i.test(m) || /^o3/i.test(m) || /^o4/i.test(m));
-      const codexLabel = codexModel
-        ? /^gpt-/i.test(codexModel)
-          ? codexModel.replace(/^gpt/i, "GPT").replace(/-codex$/i, "-Codex")
-          : /^o3/i.test(codexModel) ? "o3"
-          : /^o4/i.test(codexModel) ? "o4"
-          : codexModel
-        : null;
-      const toolLabels = [claudeLabel, codexLabel].filter(Boolean);
-      const modelLabel = toolLabels.length > 0 ? toolLabels.join(" + ") : (hasClaude ? "Claude" : null);
-      const dateLabel = new Date(entry.date).toLocaleDateString("en-US", { month: "short", day: "numeric" });
-      const costLabel = agg.cost_usd > 0 ? `, $${formatCurrency(agg.cost_usd)}` : "";
-      const autoTitle = modelLabel ? `${dateLabel} — ${modelLabel}${costLabel}` : `${dateLabel}${costLabel}`;
-
-      // Create or update post linked to the daily_usage record
-      // Only overwrite the title on re-sync if it's still auto-generated
-      const { data: existingPost } = await db
-        .from("posts")
-        .select("id, title")
-        .eq("daily_usage_id", usage.id)
-        .maybeSingle();
-
-      let post: { id: string } | null = null;
-      let postErrorMessage: string | null = null;
-
-      if (existingPost) {
-        // Auto-generated titles match "Mon DD" or "Mon DD — Models, $X.XX"
-        const isAutoTitle = !existingPost.title || /^[A-Z][a-z]{2} \d{1,2}( — .+)?$/.test(existingPost.title);
-        const updateFields: Record<string, unknown> = { updated_at: new Date().toISOString() };
-        if (isAutoTitle) updateFields.title = autoTitle;
-
-        const { data, error } = await db
-          .from("posts")
-          .update(updateFields)
-          .eq("id", existingPost.id)
-          .select("id")
-          .single();
-        post = data;
-        postErrorMessage = error?.message ?? null;
-      } else {
-        const { data, error } = await db
-          .from("posts")
-          .insert({
-            user_id: userId,
-            daily_usage_id: usage.id,
-            title: autoTitle,
-            updated_at: new Date().toISOString(),
-          })
-          .select("id")
-          .single();
-        post = data;
-        postErrorMessage = error?.message ?? null;
-      }
-
-      if (postErrorMessage || !post) {
-        throw new Error(`Failed to create post for ${entry.date}: ${postErrorMessage ?? "Unknown error"}`);
-      }
-
-      return {
-        date: entry.date,
-        usage_id: usage.id,
-        post_id: post.id,
-        post_url: `${appUrl}/post/${post.id}`,
-        action,
-        previous_cost: previousCost,
-        daily_total: agg.cost_usd,
-        device_count: deviceRows.length,
-      };
-    },
+    (entry) => submitEntry(
+      db,
+      auth,
+      usageRequest,
+      entry,
+      appUrl,
+      cliVersion,
+      retryAttempt,
+    ),
   );
-
-  // Collect results and errors
-  const results: UsageSubmitResponse["results"] = [];
-  const errors: string[] = [];
-
-  for (const result of settled) {
-    if (result.status === "fulfilled") {
-      results.push(result.value);
-    } else {
-      errors.push(result.reason?.message ?? "Unknown error");
-    }
-  }
-
-  if (errors.length > 0 && results.length === 0) {
-    return NextResponse.json({ error: errors.join("; ") }, { status: 500 });
-  }
-
-  checkAndAwardAchievements(userId, "usage").catch(() => {});
-  Promise.resolve(
-    db.rpc("recalculate_user_level", { p_user_id: userId }),
-  ).catch(() => {});
-
-  // Recheck referrer's crew-spend achievements when a referred user logs usage
-  Promise.resolve(
-    getServiceClient()
-      .from("users")
-      .select("referred_by")
-      .eq("id", userId)
-      .single(),
-  )
-    .then(({ data }) => {
-      if (data?.referred_by) {
-        checkAndAwardAchievements(data.referred_by, "referral").catch(() => {});
-      }
-    })
-    .catch(() => {});
-
-  const responseHeaders: Record<string, string> = {};
-  if (auth.source === "cli" && auth.refreshedToken) {
-    responseHeaders["X-Straude-Refreshed-Token"] = auth.refreshedToken;
-  }
-  const datesCreated = results.filter((r) => r.action === "created").length;
-  const datesUpdated = results.filter((r) => r.action === "updated").length;
-  const totalCost = body.entries.reduce((sum, entry) => sum + entry.data.costUSD, 0);
-  const totalTokens = body.entries.reduce((sum, entry) => sum + entry.data.totalTokens, 0);
-
-  after(() => captureServerActivationEvent({
-    event: "usage_submit_succeeded",
-    distinctId: userId,
-    properties: {
-      surface: "usage_submit",
-      activation_state: "first_usage_submitted",
-      is_authenticated: true,
-      days_pushed: results.length,
-      dates_created: datesCreated,
-      dates_updated: datesUpdated,
-      result_count: results.length,
-      total_cost_usd: Math.round(totalCost * 100) / 100,
-      total_tokens: totalTokens,
-      pricing_mode: body.collector?.pricing_mode,
-      ccusage_version: body.collector?.ccusage_version,
-      ccusage_agents: body.collector?.ccusage_agents,
-      has_errors: errors.length > 0,
-      "$insert_id": `usage_submit_succeeded:${userId}:${body.hash ?? body.device_id ?? "unknown"}:${results.map((r) => r.date).join(",")}`,
-    },
+  const status = statusForOutcomes(outcomes, v2);
+  const headers = responseHeaders(auth);
+  const outcomeCounts = outcomes.reduce<Record<string, number>>((counts, outcome) => {
+    counts[outcome.status] = (counts[outcome.status] ?? 0) + 1;
+    return counts;
+  }, {});
+  console.info(JSON.stringify({
+    event: "usage_submit_request",
+    protocol_version: v2 ? 2 : 1,
+    request_id: usageRequest.request_id,
+    cli_version: cliVersion,
+    collector_name: usageRequest.collector.name,
+    collector_version: usageRequest.collector.version,
+    pricing_mode: usageRequest.collector.pricing_mode,
+    date_count: usageRequest.entries.length,
+    outcome_counts: outcomeCounts,
+    retry_count: retryAttempt,
+    unresolved_partial: status === 207,
+    http_status: status,
+    submit_duration_ms: Math.round(performance.now() - requestStartedAt),
   }));
+  schedulePostCommitWork(auth.userId, usageRequest, outcomes);
 
-  const response: UsageSubmitResponse = { results };
-  if (errors.length > 0) {
-    return NextResponse.json({ ...response, errors }, { status: 207, headers: responseHeaders });
+  if (v2) {
+    const response: UsageSubmitResponseV2 = {
+      request_id: usageRequest.request_id,
+      outcomes,
+    };
+    return NextResponse.json(response, { status, headers });
   }
-  return NextResponse.json(response, { headers: responseHeaders });
+
+  const results: UsageSubmitResponse["results"] = outcomes.flatMap((outcome) => {
+    if (
+      (outcome.status !== "committed" && outcome.status !== "unchanged")
+      || !outcome.result
+    ) {
+      return [];
+    }
+    return [{
+      date: outcome.date,
+      usage_id: outcome.result.usage_id,
+      post_id: outcome.result.post_id,
+      post_url: outcome.result.post_url,
+      action: outcome.result.action,
+      previous_cost: outcome.result.previous_cost,
+      daily_total: outcome.result.daily_total,
+      device_count: outcome.result.device_count,
+    }];
+  });
+  const errors = outcomes.flatMap((outcome) => outcome.error ? [outcome.error.message] : []);
+  if (status !== 200) {
+    return NextResponse.json({
+      error: errors.join("; ") || "Usage submission failed",
+      results,
+      errors,
+    }, { status, headers });
+  }
+
+  // Keep the legacy response contract until current clients adopt protocol v2.
+  const response: UsageSubmitResponse = { results };
+  return NextResponse.json(response, { headers });
 }

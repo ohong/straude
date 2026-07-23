@@ -5,6 +5,10 @@ import { join } from "path";
 const MIGRATIONS_DIR = join(__dirname, "../../../../supabase/migrations");
 const DIRECT_USAGE_REPAIR_ROLLBACK =
   "20260507000200_rollback_codex_sql_repairs.sql";
+const USAGE_SUBMISSION_RPC =
+  "20260723133731_usage_submission_v2.sql";
+const USAGE_RECONCILIATION =
+  "20260723135641_usage_reconciliation.sql";
 
 function getAllMigrations(): { name: string; content: string }[] {
   const files = readdirSync(MIGRATIONS_DIR)
@@ -246,7 +250,9 @@ describe("Migration safety", () => {
     const futureMigrations = migrations.filter(
       (migration) =>
         migration.name > DIRECT_USAGE_REPAIR_ROLLBACK
-        && migration.name !== DIRECT_USAGE_REPAIR_ROLLBACK,
+        && migration.name !== DIRECT_USAGE_REPAIR_ROLLBACK
+        && migration.name !== USAGE_SUBMISSION_RPC
+        && migration.name !== USAGE_RECONCILIATION,
     );
 
     for (const migration of futureMigrations) {
@@ -257,6 +263,37 @@ describe("Migration safety", () => {
         /\b(UPDATE|INSERT\s+INTO|DELETE\s+FROM)\s+public\.(daily_usage|device_usage)\b/i,
       );
     }
+
+    const submissionMigration = migrations.find(
+      (migration) => migration.name === USAGE_SUBMISSION_RPC,
+    );
+    expect(submissionMigration, "Expected the atomic usage submission RPC migration").toBeTruthy();
+    expect(submissionMigration!.content).toMatch(
+      /CREATE\s+OR\s+REPLACE\s+FUNCTION\s+public\.submit_usage_day_v2/i,
+    );
+    expect(submissionMigration!.content).toMatch(
+      /pg_catalog\.left\(max\(usage\.device_name\),\s*255\)/i,
+    );
+
+    const reconciliationMigration = migrations.find(
+      (migration) => migration.name === USAGE_RECONCILIATION,
+    );
+    expect(reconciliationMigration, "Expected the ledgered usage reconciliation migration").toBeTruthy();
+    expect(reconciliationMigration!.content).toMatch(
+      /CREATE\s+TABLE\s+public\.usage_corrections_ledger/i,
+    );
+    expect(reconciliationMigration!.content).toMatch(
+      /CREATE\s+OR\s+REPLACE\s+FUNCTION\s+public\.rollback_usage_repair_batch/i,
+    );
+    expect(reconciliationMigration!.content).toMatch(
+      /\^\[A-Z\]\[a-z\]\{2\}\s+\[0-9\]\{1,2\}\(\s+—\s+\.\+\)\?\$/,
+    );
+    expect(reconciliationMigration!.content).toMatch(
+      /canonical\.model_breakdown\s+IS\s+NOT\s+DISTINCT\s+FROM\s+duplicate\.model_breakdown/i,
+    );
+    expect(reconciliationMigration!.content).toMatch(
+      /UPDATE\s+public\.usage_agent_daily\s+AS\s+rows[\s\S]*?AND\s+NOT\s+EXISTS/i,
+    );
   });
 
   it("rollback migration does not undo rows already healed by the fixed CLI collector", () => {

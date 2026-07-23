@@ -23,6 +23,13 @@ export async function openTestDb(): Promise<Client> {
  * usually doesn't require updating this list.
  */
 const TRUNCATE_TABLES = [
+  "usage_corrections_ledger",
+  "usage_device_reconciliation_decisions",
+  "usage_device_reconciliation_candidates",
+  "usage_repair_batches",
+  "usage_submission_outcomes",
+  "usage_agent_daily",
+  "usage_installation_aliases",
   "device_usage",
   "daily_usage",
   "posts",
@@ -30,8 +37,21 @@ const TRUNCATE_TABLES = [
 ];
 
 export async function cleanDb(client: Client): Promise<void> {
+  const truncate = `TRUNCATE TABLE ${
+    TRUNCATE_TABLES.map((t) => `public.${t}`).join(", ")
+  } RESTART IDENTITY CASCADE`;
+  for (let attempt = 0; ; attempt += 1) {
+    try {
+      await client.query(truncate);
+      break;
+    } catch (error) {
+      const retryable = (error as { code?: string }).code === "40P01";
+      if (!retryable || attempt >= 4) throw error;
+      await new Promise((resolve) => setTimeout(resolve, 25 * 2 ** attempt));
+    }
+  }
   await client.query(
-    `TRUNCATE TABLE ${TRUNCATE_TABLES.map((t) => `public.${t}`).join(", ")} RESTART IDENTITY CASCADE`,
+    "DELETE FROM auth.users WHERE email LIKE '%@example.test'",
   );
 }
 

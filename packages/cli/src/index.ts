@@ -4,6 +4,7 @@ import { loginCommand } from "./commands/login.js";
 import { pushCommand } from "./commands/push.js";
 import { statusCommand } from "./commands/status.js";
 import { autoCommand, enableAutoPush, disableAutoPush } from "./commands/auto.js";
+import { devicesCommand } from "./commands/devices.js";
 import { loadConfig } from "./lib/auth.js";
 import { setAuthRefreshStrategy } from "./lib/api.js";
 import { CLI_VERSION } from "./config.js";
@@ -18,6 +19,12 @@ import {
   reportUsagePushFailed,
   shutdownTelemetryWithTimeout,
 } from "./lib/telemetry.js";
+import {
+  assertSupportedNodeRuntime,
+  CliArgumentError,
+  parseCliArgs,
+} from "./lib/args.js";
+import { setInteractiveOverride } from "./lib/prompt.js";
 
 // On 401, transparently re-run the browser login flow and let api.ts retry
 // the failed request. apiRequest gates this on isInteractive() so auto-push
@@ -55,6 +62,7 @@ Commands:
   push               Push usage data to Straude
   status             Show your current stats
   auto               Show auto-push status or logs
+  devices            List or resolve installation identity conflicts
 
 Push options:
   --date YYYY-MM-DD  Push a specific date (within last 30 days)
@@ -66,6 +74,7 @@ Push options:
   --auto --time HH:MM  Set auto-push time (default: 21:00)
   --no-auto          Disable auto-push
   --debug            Print extra diagnostic detail (also: STRAUDE_DEBUG=1)
+  --non-interactive  Never open a browser or wait for login
 
 Examples:
   npx straude@latest
@@ -79,65 +88,15 @@ Examples:
   straude status
 `.trim();
 
-function parseArgs(args: string[]): { command: string | null; subcommand: string | null; options: Record<string, string | boolean> } {
-  const options: Record<string, string | boolean> = {};
-  let command: string | null = null;
-  let subcommand: string | null = null;
-
-  for (let i = 0; i < args.length; i++) {
-    const arg = args[i]!;
-    if (arg === "--dry-run") {
-      options.dryRun = true;
-    } else if (arg === "--auto") {
-      options.auto = true;
-      // Peek at next arg for mechanism (e.g., "hooks")
-      if (i + 1 < args.length && args[i + 1] === "hooks") {
-        options.autoMechanism = args[++i]!;
-      }
-    } else if (arg === "--no-auto") {
-      options.noAuto = true;
-    } else if (arg === "--time" && i + 1 < args.length) {
-      options.time = args[++i]!;
-    } else if (arg === "--date" && i + 1 < args.length) {
-      options.date = args[++i]!;
-    } else if (arg === "--days" && i + 1 < args.length) {
-      options.days = args[++i]!;
-    } else if (arg === "--timeout" && i + 1 < args.length) {
-      options.timeout = args[++i]!;
-    } else if (arg === "--api-url" && i + 1 < args.length) {
-      options.apiUrl = args[++i]!;
-    } else if (arg === "--help" || arg === "-h") {
-      options.help = true;
-    } else if (arg === "--version" || arg === "-v") {
-      options.version = true;
-    } else if (arg === "--debug") {
-      options.debug = true;
-    } else if (!arg.startsWith("-") && !command) {
-      command = arg;
-    } else if (!arg.startsWith("-") && command && !subcommand) {
-      subcommand = arg;
-    }
-  }
-
-  return { command, subcommand, options };
-}
-
-function parseTimeout(value: string): number {
-  const seconds = parseInt(value, 10);
-  if (isNaN(seconds) || seconds <= 0) {
-    console.error(`Invalid --timeout value: ${value} (must be a positive integer)`);
-    process.exit(1);
-  }
-  return seconds * 1000;
-}
-
 let activeCommand: string | null = null;
 
 async function main(): Promise<void> {
+  assertSupportedNodeRuntime();
   const args = process.argv.slice(2);
-  const { command, subcommand, options } = parseArgs(args);
+  const { command, subcommand, operand, options } = parseCliArgs(args);
   activeCommand = command;
 
+  if (options.nonInteractive) setInteractiveOverride(false);
   if (options.debug) {
     setDebug(true);
   }
@@ -182,24 +141,27 @@ async function main(): Promise<void> {
     });
   }
 
-  const apiUrl = options.apiUrl as string | undefined;
+  const apiUrl = options.apiUrl;
 
   if (!command || command === "push") {
-    await pushCommand(
+    exitCode = await pushCommand(
       {
-        date: options.date as string | undefined,
-        days: options.days ? parseInt(options.days as string, 10) : undefined,
+        date: options.date,
+        days: options.days,
         dryRun: options.dryRun === true,
-        timeoutMs: options.timeout ? parseTimeout(options.timeout as string) : undefined,
+        timeoutMs: options.timeoutMs,
+        nonInteractive: options.nonInteractive === true,
       },
       apiUrl,
     );
+    process.exitCode = exitCode;
+    if (exitCode !== 0) return;
 
     // Handle --auto / --no-auto after successful push
     if (options.auto) {
       const config = loadConfig();
       if (config) {
-        enableAutoPush(config, options.time as string | undefined, options.autoMechanism as string | undefined);
+        enableAutoPush(config, options.time, options.autoMechanism);
       }
     } else if (options.noAuto) {
       const config = loadConfig();
@@ -220,6 +182,10 @@ async function main(): Promise<void> {
     case "auto":
       autoCommand(subcommand);
       break;
+    case "devices":
+      exitCode = await devicesCommand(subcommand, operand);
+      process.exitCode = exitCode;
+      break;
     default:
       console.error(`Unknown command: ${command}\n`);
       console.log(HELP);
@@ -233,7 +199,12 @@ main()
   .catch((err: unknown) => {
     exitCode = 1;
     process.exitCode = 1;
-    const config = loadConfig();
+    let config = null;
+    try {
+      config = loadConfig();
+    } catch {
+      // Preserve the original error.
+    }
     if (isPushInvocation(activeCommand)) {
       reportUsagePushFailed(config, err, {
         command: activeCommand ?? "push",
@@ -244,6 +215,7 @@ main()
         command: activeCommand ?? "unknown",
       });
     }
-    console.error(`Error: ${errorMessage(err)}`);
+    const prefix = err instanceof CliArgumentError ? `${err.code}: ` : "Error: ";
+    console.error(`${prefix}${errorMessage(err)}`);
   })
   .finally(() => shutdownTelemetryWithTimeout().then(() => process.exit(exitCode)));

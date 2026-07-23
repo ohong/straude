@@ -2,11 +2,23 @@ import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
 
 vi.mock("../../src/lib/api.js", () => ({
   apiRequestNoAuth: vi.fn(),
+  ApiHttpError: class ApiHttpError extends Error {
+    status: number;
+    retryAfterMs: number | null;
+    retryable: boolean;
+    constructor(message: string, status: number, retryAfterMs: number | null = null) {
+      super(message);
+      this.status = status;
+      this.retryAfterMs = retryAfterMs;
+      this.retryable = [408, 425, 429, 500, 502, 503, 504].includes(status);
+    }
+  },
 }));
 
 vi.mock("../../src/lib/auth.js", () => ({
   loadConfig: vi.fn(() => null),
   saveConfig: vi.fn(),
+  updateConfig: vi.fn(),
 }));
 
 vi.mock("../../src/config.js", async (importOriginal) => {
@@ -25,30 +37,24 @@ vi.mock("node:child_process", () => ({
   })),
 }));
 
-import { loginCommand } from "../../src/commands/login.js";
-import { apiRequestNoAuth } from "../../src/lib/api.js";
-import { loadConfig, saveConfig } from "../../src/lib/auth.js";
+vi.mock("../../src/lib/prompt.js", () => ({
+  isInteractive: vi.fn(() => false),
+}));
+
+import { LoginCommandError, loginCommand } from "../../src/commands/login.js";
+import { ApiHttpError, apiRequestNoAuth } from "../../src/lib/api.js";
+import { loadConfig, updateConfig } from "../../src/lib/auth.js";
 
 const mockApiRequestNoAuth = vi.mocked(apiRequestNoAuth);
 const mockLoadConfig = vi.mocked(loadConfig);
-const mockSaveConfig = vi.mocked(saveConfig);
-
-class ExitError extends Error {
-  code: number;
-  constructor(code: number) {
-    super(`process.exit(${code})`);
-    this.code = code;
-  }
-}
+const mockUpdateConfig = vi.mocked(updateConfig);
 
 beforeEach(() => {
   vi.clearAllMocks();
+  mockUpdateConfig.mockImplementation((updater) => updater(mockLoadConfig()));
   vi.spyOn(console, "log").mockImplementation(() => {});
   vi.spyOn(console, "error").mockImplementation(() => {});
   vi.spyOn(process.stdout, "write").mockImplementation(() => true);
-  vi.spyOn(process, "exit").mockImplementation((code) => {
-    throw new ExitError(code as number);
-  });
 });
 
 afterEach(() => {
@@ -56,6 +62,13 @@ afterEach(() => {
 });
 
 describe("loginCommand", () => {
+  it("fails fast when a background caller requires interactive auth", async () => {
+    await expect(
+      loginCommand("https://straude.com", { requireInteractive: true }),
+    ).rejects.toThrow(/interactive terminal/);
+    expect(mockApiRequestNoAuth).not.toHaveBeenCalled();
+  });
+
   it("opens browser and prints verify URL", async () => {
     mockApiRequestNoAuth
       .mockResolvedValueOnce({
@@ -70,13 +83,16 @@ describe("loginCommand", () => {
     expect(console.log).toHaveBeenCalledWith(
       expect.stringContaining("https://straude.com/cli/verify?code=ABCD-EFGH"),
     );
-    expect(mockSaveConfig).toHaveBeenCalledWith({
+    expect(mockApiRequestNoAuth).toHaveBeenNthCalledWith(
+      1,
+      "https://straude.com",
+      "/api/auth/cli/init",
+      expect.objectContaining({ timeoutMs: 10_000 }),
+    );
+    expect(mockUpdateConfig.mock.results[0]!.value).toEqual({
       token: "tok-123",
       username: "alice",
       api_url: "https://straude.com",
-      last_push_date: undefined,
-      device_id: undefined,
-      device_name: undefined,
     });
   });
 
@@ -93,7 +109,7 @@ describe("loginCommand", () => {
 
     await loginCommand("https://straude.com");
 
-    expect(mockSaveConfig).toHaveBeenCalledWith(
+    expect(mockUpdateConfig.mock.results[0]!.value).toEqual(
       expect.objectContaining({ token: "tok-456", username: "bob" }),
     );
     expect(mockApiRequestNoAuth).toHaveBeenCalledWith(
@@ -114,18 +130,33 @@ describe("loginCommand", () => {
       })
       .mockResolvedValueOnce({ status: "expired" });
 
-    await expect(loginCommand("https://straude.com")).rejects.toThrow(ExitError);
+    await expect(loginCommand("https://straude.com")).rejects.toThrow(
+      new LoginCommandError("Login code expired. Please try again."),
+    );
+    expect(mockUpdateConfig).not.toHaveBeenCalled();
+  });
 
-    expect(process.exit).toHaveBeenCalledWith(1);
-    expect(mockSaveConfig).not.toHaveBeenCalled();
+  it("stops polling on a permanent HTTP error", async () => {
+    mockApiRequestNoAuth
+      .mockResolvedValueOnce({
+        code: "ABCD-EFGH",
+        verify_url: "https://straude.com/cli/verify?code=ABCD-EFGH",
+        poll_secret: "poll-secret-123",
+      })
+      .mockRejectedValueOnce(new ApiHttpError("invalid poll secret", 400));
+
+    await expect(loginCommand("https://straude.com")).rejects.toThrow(
+      /invalid poll secret/,
+    );
+    expect(mockApiRequestNoAuth).toHaveBeenCalledTimes(2);
   });
 
   it("handles init failure", async () => {
     mockApiRequestNoAuth.mockRejectedValueOnce(new Error("Network error"));
 
-    await expect(loginCommand("https://straude.com")).rejects.toThrow(ExitError);
-
-    expect(process.exit).toHaveBeenCalledWith(1);
+    await expect(loginCommand("https://straude.com")).rejects.toThrow(
+      /Failed to start login: Network error/,
+    );
   });
 
   it("rejects init responses without poll_secret", async () => {
@@ -134,10 +165,10 @@ describe("loginCommand", () => {
       verify_url: "https://straude.com/cli/verify?code=ABCD-EFGH",
     });
 
-    await expect(loginCommand("https://straude.com")).rejects.toThrow(ExitError);
-
-    expect(process.exit).toHaveBeenCalledWith(1);
-    expect(mockSaveConfig).not.toHaveBeenCalled();
+    await expect(loginCommand("https://straude.com")).rejects.toThrow(
+      /server did not return a poll secret/,
+    );
+    expect(mockUpdateConfig).not.toHaveBeenCalled();
   });
 
   it("preserves config fields when re-logging into the same account", async () => {
@@ -148,6 +179,13 @@ describe("loginCommand", () => {
       last_push_date: "2026-03-20",
       device_id: "dev-123",
       device_name: "my-laptop",
+      ccusage_v20_migration_completed_at: "2026-03-21T00:00:00.000Z",
+      auto_push: {
+        enabled: true,
+        time: "21:00",
+        scheduler: "launchd",
+        mechanism: "scheduler",
+      },
     });
     mockApiRequestNoAuth
       .mockResolvedValueOnce({
@@ -159,13 +197,22 @@ describe("loginCommand", () => {
 
     await loginCommand("https://straude.com");
 
-    expect(mockSaveConfig).toHaveBeenCalledWith({
+    expect(mockUpdateConfig).toHaveBeenCalled();
+    const saved = mockUpdateConfig.mock.results[0]!.value;
+    expect(saved).toEqual({
       token: "new-tok",
       username: "alice",
       api_url: "https://straude.com",
       last_push_date: "2026-03-20",
       device_id: "dev-123",
       device_name: "my-laptop",
+      ccusage_v20_migration_completed_at: "2026-03-21T00:00:00.000Z",
+      auto_push: {
+        enabled: true,
+        time: "21:00",
+        scheduler: "launchd",
+        mechanism: "scheduler",
+      },
     });
   });
 
@@ -188,13 +235,10 @@ describe("loginCommand", () => {
 
     await loginCommand("https://straude.com");
 
-    expect(mockSaveConfig).toHaveBeenCalledWith({
+    expect(mockUpdateConfig.mock.results[0]!.value).toEqual({
       token: "new-tok",
       username: "bob",
       api_url: "https://straude.com",
-      last_push_date: undefined,
-      device_id: undefined,
-      device_name: undefined,
     });
   });
 
@@ -217,13 +261,10 @@ describe("loginCommand", () => {
 
     await loginCommand("https://other.com");
 
-    expect(mockSaveConfig).toHaveBeenCalledWith({
+    expect(mockUpdateConfig.mock.results[0]!.value).toEqual({
       token: "new-tok",
       username: "alice",
       api_url: "https://other.com",
-      last_push_date: undefined,
-      device_id: undefined,
-      device_name: undefined,
     });
   });
 });

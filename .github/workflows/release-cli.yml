@@ -1,0 +1,141 @@
+name: Release CLI
+
+on:
+  push:
+    tags:
+      - "straude@*"
+
+permissions:
+  contents: read
+
+jobs:
+  package:
+    name: Build release candidate
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: 1.3.3
+
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 20
+          registry-url: https://registry.npmjs.org
+
+      - name: Verify tag matches package version
+        run: |
+          node -e "const pkg = require('./packages/cli/package.json'); const expected = 'straude@' + pkg.version; if (process.env.GITHUB_REF_NAME !== expected) { throw new Error('Expected tag ' + expected + ', got ' + process.env.GITHUB_REF_NAME); }"
+
+      - name: Install dependencies
+        run: bun install --frozen-lockfile
+
+      - name: Typecheck CLI
+        run: bun run typecheck
+        working-directory: packages/cli
+
+      - name: Test CLI
+        run: bun run test
+        working-directory: packages/cli
+
+      - name: Pack once
+        run: |
+          mkdir -p ../../artifacts
+          npm pack --json --pack-destination ../../artifacts
+          cd ../../artifacts
+          sha256sum ./*.tgz > SHA256SUMS
+        working-directory: packages/cli
+
+      - name: Upload exact package
+        uses: actions/upload-artifact@v7
+        with:
+          name: straude-cli-package
+          path: |
+            artifacts/*.tgz
+            artifacts/SHA256SUMS
+          if-no-files-found: error
+
+      - name: Upload CI source map
+        uses: actions/upload-artifact@v7
+        with:
+          name: straude-cli-sourcemap-${{ github.sha }}
+          path: packages/cli/dist/index.js.map
+          if-no-files-found: error
+          retention-days: 30
+
+  package-matrix:
+    name: Verify (${{ matrix.os }}, Node ${{ matrix.node }})
+    needs: package
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, macos-latest, windows-latest]
+        node: [20, 22]
+
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: actions/setup-node@v7
+        with:
+          node-version: ${{ matrix.node }}
+
+      - uses: actions/download-artifact@v8
+        with:
+          name: straude-cli-package
+          path: artifacts
+
+      - name: Test installed package
+        run: node packages/cli/scripts/packaged-cli-e2e.mjs --tarball artifacts
+
+  publish:
+    name: Publish exact package
+    needs: package-matrix
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+      id-token: write
+
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 22
+          registry-url: https://registry.npmjs.org
+
+      - uses: actions/download-artifact@v8
+        with:
+          name: straude-cli-package
+          path: artifacts
+
+      - name: Publish to npm with provenance
+        run: |
+          VERSION=$(node -p "require('./packages/cli/package.json').version")
+          LOCAL_INTEGRITY=$(node -e "const crypto = require('node:crypto'); const fs = require('node:fs'); const file = fs.readdirSync('artifacts').find((name) => name.endsWith('.tgz')); if (!file) throw new Error('Missing package artifact'); process.stdout.write('sha512-' + crypto.createHash('sha512').update(fs.readFileSync('artifacts/' + file)).digest('base64'));")
+          PUBLISHED_INTEGRITY=$(npm view "straude@${VERSION}" dist.integrity --json 2>/dev/null | tr -d '"' || true)
+          if [ -n "$PUBLISHED_INTEGRITY" ]; then
+            if [ "$PUBLISHED_INTEGRITY" != "$LOCAL_INTEGRITY" ]; then
+              echo "::error::straude@${VERSION} already exists with different integrity"
+              exit 1
+            fi
+            echo "straude@${VERSION} is already published with matching integrity"
+          else
+            npm publish artifacts/*.tgz --access public --provenance
+          fi
+
+      - name: Create matching GitHub release
+        run: |
+          VERSION=$(node -p "require('./packages/cli/package.json').version")
+          if gh release view "$GITHUB_REF_NAME" >/dev/null 2>&1; then
+            gh release upload "$GITHUB_REF_NAME" artifacts/*.tgz artifacts/SHA256SUMS --clobber
+          else
+            gh release create "$GITHUB_REF_NAME" artifacts/*.tgz artifacts/SHA256SUMS \
+              --verify-tag \
+              --generate-notes \
+              --title "Straude CLI v${VERSION}"
+          fi
+        env:
+          GH_TOKEN: ${{ github.token }}

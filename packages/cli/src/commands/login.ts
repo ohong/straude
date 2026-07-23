@@ -1,9 +1,10 @@
 import { spawn } from "node:child_process";
 import { CONFIG_FILE, DEFAULT_API_URL, POLL_INTERVAL_MS, POLL_TIMEOUT_MS } from "../config.js";
-import { loadConfig, saveConfig } from "../lib/auth.js";
-import { apiRequestNoAuth } from "../lib/api.js";
+import { updateConfig } from "../lib/auth.js";
+import { ApiHttpError, apiRequestNoAuth } from "../lib/api.js";
 import { posthog } from "../lib/posthog.js";
 import { getDistinctId, getMachineId } from "../lib/machine-id.js";
+import { isInteractive } from "../lib/prompt.js";
 
 interface CliInitResponse {
   code: string;
@@ -62,7 +63,44 @@ function sleep(ms: number): Promise<void> {
   return new Promise((resolve) => setTimeout(resolve, ms));
 }
 
-export async function loginCommand(apiUrlOverride?: string): Promise<void> {
+export interface LoginOptions {
+  /** Reject before opening a browser when invoked by a background process. */
+  requireInteractive?: boolean;
+  /** Useful for remote terminals where the URL must be opened manually. */
+  openBrowser?: boolean;
+}
+
+export class NonInteractiveLoginError extends Error {
+  constructor() {
+    super(
+      "Authentication requires an interactive terminal. Run `straude login` " +
+        "in a terminal before using auto-push or CI.",
+    );
+    this.name = "NonInteractiveLoginError";
+  }
+}
+
+export class LoginCommandError extends Error {
+  constructor(message: string) {
+    super(message);
+    this.name = "LoginCommandError";
+  }
+}
+
+export function assertInteractiveLogin(): void {
+  if (!isInteractive()) throw new NonInteractiveLoginError();
+}
+
+function pollDelayMs(failures: number, retryAfterMs: number | null): number {
+  if (retryAfterMs != null) return Math.min(retryAfterMs, 10_000);
+  return Math.min(POLL_INTERVAL_MS * 2 ** Math.min(failures, 3), 10_000);
+}
+
+export async function loginCommand(
+  apiUrlOverride?: string,
+  options: LoginOptions = {},
+): Promise<void> {
+  if (options.requireInteractive) assertInteractiveLogin();
   const apiUrl = apiUrlOverride ?? DEFAULT_API_URL;
 
   console.log("Opening browser for authentication...");
@@ -71,54 +109,80 @@ export async function loginCommand(apiUrlOverride?: string): Promise<void> {
   try {
     initRes = await apiRequestNoAuth<CliInitResponse>(apiUrl, "/api/auth/cli/init", {
       method: "POST",
+      timeoutMs: 10_000,
+      maxRetries: 2,
     });
   } catch (err) {
-    console.error(`Failed to start login: ${(err as Error).message}`);
-    process.exit(1);
+    throw new LoginCommandError(`Failed to start login: ${(err as Error).message}`);
   }
 
   const { code, verify_url, poll_secret } = initRes;
   if (!poll_secret) {
-    console.error("Failed to start login: server did not return a poll secret. Please update Straude and try again.");
-    process.exit(1);
+    throw new LoginCommandError(
+      "Failed to start login: server did not return a poll secret. " +
+        "Please update Straude and try again.",
+    );
   }
 
-  openBrowser(verify_url);
+  if (options.openBrowser !== false) openBrowser(verify_url);
   console.log(`\nIf the browser didn't open, visit:\n  ${verify_url}\n`);
   console.log("Confirm in the browser, then keep this terminal open — Straude will continue syncing here.");
   process.stdout.write("Waiting for confirmation...");
 
   const startTime = Date.now();
+  const deadlineAt = startTime + POLL_TIMEOUT_MS;
+  let nextDelayMs = POLL_INTERVAL_MS;
 
-  while (Date.now() - startTime < POLL_TIMEOUT_MS) {
-    await sleep(POLL_INTERVAL_MS);
+  while (Date.now() < deadlineAt) {
+    await sleep(Math.min(nextDelayMs, Math.max(0, deadlineAt - Date.now())));
+    if (Date.now() >= deadlineAt) break;
 
     let pollRes: CliPollResponse;
     try {
       pollRes = await apiRequestNoAuth<CliPollResponse>(apiUrl, "/api/auth/cli/poll", {
         method: "POST",
         body: JSON.stringify({ code, poll_secret }),
+        timeoutMs: 10_000,
+        deadlineAt,
+        maxRetries: 0,
       });
-    } catch {
-      // Network errors during polling are transient, keep trying
+      nextDelayMs = POLL_INTERVAL_MS;
+    } catch (error) {
+      if (error instanceof ApiHttpError && !error.retryable) {
+        process.stdout.write(" failed\n\n");
+        throw new LoginCommandError(
+          `Login failed while waiting for confirmation: ${error.message}`,
+        );
+      }
+      nextDelayMs = pollDelayMs(
+        Math.max(1, Math.round(nextDelayMs / POLL_INTERVAL_MS)),
+        error instanceof ApiHttpError ? error.retryAfterMs : null,
+      );
       continue;
     }
 
     if (pollRes.status === "completed" && pollRes.token) {
       process.stdout.write(" done\n\n");
 
-      const existing = loadConfig();
-      const sameIdentity =
-        existing != null &&
-        existing.api_url === apiUrl &&
-        existing.username === (pollRes.username ?? "");
-      saveConfig({
-        token: pollRes.token,
-        username: pollRes.username ?? "",
-        api_url: apiUrl,
-        last_push_date: sameIdentity ? existing.last_push_date : undefined,
-        device_id: sameIdentity ? existing.device_id : undefined,
-        device_name: sameIdentity ? existing.device_name : undefined,
+      let sameIdentity = false;
+      updateConfig((existing) => {
+        sameIdentity =
+          existing != null &&
+          existing.api_url === apiUrl &&
+          existing.username === (pollRes.username ?? "");
+        if (sameIdentity) {
+          return {
+            ...existing,
+            token: pollRes.token!,
+            username: pollRes.username ?? "",
+            api_url: apiUrl,
+          };
+        }
+        return {
+          token: pollRes.token!,
+          username: pollRes.username ?? "",
+          api_url: apiUrl,
+        };
       });
 
       const username = pollRes.username ?? "";
@@ -142,8 +206,7 @@ export async function loginCommand(apiUrlOverride?: string): Promise<void> {
 
     if (pollRes.status === "expired") {
       process.stdout.write(" expired\n\n");
-      console.error("Login code expired. Please try again.");
-      process.exit(1);
+      throw new LoginCommandError("Login code expired. Please try again.");
     }
 
     // Still pending, continue polling
@@ -151,6 +214,5 @@ export async function loginCommand(apiUrlOverride?: string): Promise<void> {
   }
 
   process.stdout.write(" timed out\n\n");
-  console.error("Login timed out. Please try again.");
-  process.exit(1);
+  throw new LoginCommandError("Login timed out. Please try again.");
 }
