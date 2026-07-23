@@ -68,13 +68,14 @@ const maximumDurationMs = Number.parseInt(
   process.env.STRAUDE_CCUSAGE_CANARY_MAX_MS ?? "60000",
   10,
 );
+const nodeExecutable = process.env.STRAUDE_CCUSAGE_NODE_EXECUTABLE ?? "node";
 if (!Number.isInteger(maximumDurationMs) || maximumDurationMs <= 0) {
   throw new Error("STRAUDE_CCUSAGE_CANARY_MAX_MS must be a positive integer.");
 }
 
 try {
   _setCcusageCommandForTests({
-    cmd: process.execPath,
+    cmd: nodeExecutable,
     args: [resolve(ccusagePackageDir, bin)],
     version: ccusageVersion,
   });

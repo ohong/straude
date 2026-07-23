@@ -274,7 +274,8 @@ in a temporary project, checks the declared dependency range and actual
 compatible collector version, runs that binary against the GPT-5.6 fixture,
 submits to a local HTTP server, and
 waits for the scorecard render. CI repeats the installed-tarball check on Linux,
-macOS, and Windows with Node 20 and 22.
+macOS, and Windows with Node 22, plus Ubuntu with Node 20. The release workflow
+keeps the full Linux/macOS/Windows matrix on Node 20 and 22.
 
 The normal gate remains frozen to `bun.lock`. A separate weekly/manual
 `ccusage compatibility` workflow installs `ccusage@latest` in isolation and
@@ -311,9 +312,9 @@ The collector harness creates deterministic 1, 3, 7, and 30-day Codex fixture
 sets and records the first process plus warm median/p95 for the lockfile-resolved ccusage
 binary. Override its default seven warm samples with
 `STRAUDE_COLLECTOR_BENCH_ITERATIONS`. It uses offline fixture pricing to isolate
-local scan cost from network availability. CI archives these measurements;
-accuracy tests gate the release, while benchmark thresholds are compared only
-between runs on the same class of machine.
+local scan cost from network availability. Run it manually when comparing
+collector changes, and compare results only between runs on the same class of
+machine.
 
 ## Constants
 

@@ -17,13 +17,13 @@ jobs:
     runs-on: ubuntu-latest
 
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
 
       - uses: oven-sh/setup-bun@v2
         with:
           bun-version: 1.3.3
 
-      - uses: actions/cache@v4
+      - uses: actions/cache@v6
         with:
           path: ~/.bun/install/cache
           key: ${{ runner.os }}-bun-${{ hashFiles('bun.lock') }}
@@ -56,11 +56,11 @@ jobs:
           echo "No phantom dependencies."
         working-directory: apps/web
 
-      - name: Typecheck
-        run: bun run typecheck
+      - name: Typecheck web and shared
+        run: bun run typecheck --filter=@straude/web
 
-      - name: Build
-        run: bun run build
+      - name: Build web and shared
+        run: bun run build --filter=@straude/web
         env:
           NEXT_PUBLIC_SUPABASE_URL: http://localhost:54321
           NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY: sb_publishable_placeholder
@@ -75,7 +75,7 @@ jobs:
           SUPABASE_SECRET_KEY: sb_secret_placeholder
 
       - name: Setup Supabase CLI
-        uses: supabase/setup-cli@v1
+        uses: supabase/setup-cli@v3
         with:
           version: latest
 
@@ -104,13 +104,13 @@ jobs:
     runs-on: ubuntu-latest
 
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
 
       - uses: oven-sh/setup-bun@v2
         with:
           bun-version: 1.3.3
 
-      - uses: actions/setup-node@v4
+      - uses: actions/setup-node@v7
         with:
           node-version: 20
 
@@ -125,20 +125,6 @@ jobs:
         run: bun run test
         working-directory: packages/cli
 
-      - name: Benchmark collector fixture
-        run: bun run benchmark:collector > ../../collector-benchmark.json
-        working-directory: packages/cli
-        env:
-          STRAUDE_COLLECTOR_BENCH_ITERATIONS: "3"
-
-      - name: Upload collector benchmark
-        uses: actions/upload-artifact@v4
-        with:
-          name: straude-collector-benchmark-${{ github.sha }}
-          path: collector-benchmark.json
-          if-no-files-found: error
-          retention-days: 14
-
       - name: Pack release candidate
         run: |
           mkdir -p ../../artifacts
@@ -146,19 +132,11 @@ jobs:
         working-directory: packages/cli
 
       - name: Upload exact package
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: straude-cli-package
           path: artifacts/*.tgz
           if-no-files-found: error
-
-      - name: Upload CI source map
-        uses: actions/upload-artifact@v4
-        with:
-          name: straude-cli-sourcemap-${{ github.sha }}
-          path: packages/cli/dist/index.js.map
-          if-no-files-found: error
-          retention-days: 14
 
   cli-package-matrix:
     name: CLI package (${{ matrix.os }}, Node ${{ matrix.node }})
@@ -167,17 +145,24 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        os: [ubuntu-latest, macos-latest, windows-latest]
-        node: [20, 22]
+        include:
+          - os: ubuntu-latest
+            node: 20
+          - os: ubuntu-latest
+            node: 22
+          - os: macos-latest
+            node: 22
+          - os: windows-latest
+            node: 22
 
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
 
-      - uses: actions/setup-node@v4
+      - uses: actions/setup-node@v7
         with:
           node-version: ${{ matrix.node }}
 
-      - uses: actions/download-artifact@v4
+      - uses: actions/download-artifact@v8
         with:
           name: straude-cli-package
           path: artifacts

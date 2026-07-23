@@ -14,13 +14,13 @@ jobs:
     timeout-minutes: 10
 
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
 
       - uses: oven-sh/setup-bun@v2
         with:
           bun-version: 1.3.3
 
-      - uses: actions/setup-node@v4
+      - uses: actions/setup-node@v7
         with:
           node-version: 20
 
@@ -35,8 +35,10 @@ jobs:
           canary_dir="$(mktemp -d)"
           npm install --prefix "$canary_dir" --no-audit --no-fund ccusage@latest
           echo "package_dir=$canary_dir/node_modules/ccusage" >> "$GITHUB_OUTPUT"
+          echo "node_executable=$(node -p 'process.execPath')" >> "$GITHUB_OUTPUT"
 
       - name: Run latest through the production parser
         run: bun packages/cli/scripts/check-ccusage-compatibility.ts --package-dir "${{ steps.latest.outputs.package_dir }}"
         env:
           STRAUDE_CCUSAGE_CANARY_MAX_MS: "60000"
+          STRAUDE_CCUSAGE_NODE_EXECUTABLE: ${{ steps.latest.outputs.node_executable }}
