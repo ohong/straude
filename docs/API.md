@@ -306,38 +306,98 @@ Check if a username is available.
 
 ### `POST /api/usage/submit`
 
-Submit daily usage data. Primary endpoint for CLI syncs and web imports.
+Submit daily usage data. Protocol v2 is the primary CLI contract; legacy web
+imports are adapted server-side during the migration.
 
 - **Auth**: CLI JWT or Session
 - **Rate limit**: `usage-submit` (20/min)
-- **Request body**:
+- **Protocol v2 request body**:
   ```json
   {
-    "source": "cli" | "web",
-    "device_id": "uuid (optional, enables multi-device aggregation)",
-    "device_name": "string (optional)",
-    "hash": "sha256 hex string (optional)",
+    "protocol_version": 2,
+    "request_id": "019f8f0b-08ee-78d3-8063-19a0485cc61f",
+    "source": "cli",
+    "timezone": "America/Vancouver",
+    "installation": {
+      "id": "6e3d74e2-c82b-4ed4-81e3-96a76ce39d11",
+      "name": "work-laptop"
+    },
+    "collector": {
+      "name": "ccusage",
+      "version": "20.0.16",
+      "pricing_mode": "online"
+    },
     "entries": [
       {
         "date": "YYYY-MM-DD",
-        "data": {
-          "costUSD": 4.82,
-          "inputTokens": 150000,
-          "outputTokens": 50000,
-          "cacheCreationTokens": 0,
-          "cacheReadTokens": 10000,
-          "totalTokens": 210000,
-          "models": ["claude-sonnet-4-6"],
-          "modelBreakdown": [{ "model": "claude-sonnet-4-6", "cost_usd": 4.82 }]
-        }
+        "content_hash": "0000000000000000000000000000000000000000000000000000000000000000",
+        "agents": [{
+          "agent": "codex",
+          "models": ["gpt-5.6"],
+          "input_tokens": 150000,
+          "output_tokens": 50000,
+          "reasoning_output_tokens": 0,
+          "cache_creation_tokens": 0,
+          "cache_read_tokens": 10000,
+          "total_tokens": 210000,
+          "cost_usd": 4.82,
+          "model_breakdown": [{
+            "model": "gpt-5.6",
+            "input_tokens": 150000,
+            "output_tokens": 50000,
+            "reasoning_output_tokens": 0,
+            "cache_creation_tokens": 0,
+            "cache_read_tokens": 10000,
+            "total_tokens": 210000,
+            "cost_usd": 4.82
+          }]
+        }]
       }
     ]
   }
   ```
-- **Validation**: Dates must be valid ISO format within a 7-day backfill window. No negative values.
-- **Response**: `{ results: [{ date, usage_id, post_id, post_url, action }] }`
-- **Status codes**: `200` success, `207` partial failure (some entries failed), `400` validation error, `401` unauthorized.
-- **Side effects**: Creates/updates `daily_usage` rows, creates posts with auto-generated titles, triggers achievement checks, multi-device aggregation when `device_id` provided.
+- **Validation**: Body size is capped at 256 KiB. Requests contain 1–32 unique
+  dates inside the 30-day backfill window; token totals must equal their
+  components; costs must be finite and non-negative; installation IDs are
+  UUIDs; and every entry has a content hash.
+- **Protocol v2 response**:
+  `{ request_id, outcomes: [{ date, status, result?, error? }] }`. Status is one
+  of `committed`, `unchanged`, `retryable_error`, `permanent_error`, or
+  `identity_conflict`. Successful results include `usage_id`, `post_id`,
+  `post_url`, and `action`.
+- **Status codes**: `200` success, `207` mixed outcomes, `400` invalid request
+  or permanent failure, `401` unauthorized, `403` authenticated-source
+  mismatch, `409` installation identity conflict, `413` oversized body, `429`
+  rate limited, `426` legacy protocol expired, and `503` retryable failure.
+- **Side effects**: Reconciles installation-scoped daily usage transactionally,
+  creates or updates posts, and schedules achievements and analytics after
+  committed outcomes. Stable request IDs and entry hashes make retries
+  idempotent.
+- **Legacy cutoff**: Protocol v1 is routed through the same transactional
+  function until `2026-08-06` by default (override with
+  `STRAUDE_USAGE_V1_CUTOFF`). After the cutoff it receives `426` with the exact
+  update command `npx straude@latest`.
+
+### `GET /api/usage/devices`
+
+List unresolved installation identity candidates for the authenticated user.
+
+- **Auth**: CLI JWT or Session
+- **Response**:
+  `{ candidates: [{ id, device_id_a, device_id_b, normalized_hostname, overlap_dates, status, created_at }] }`
+- **Notes**: Candidates remain quarantined from new aggregation until resolved.
+
+### `POST /api/usage/devices/resolve`
+
+Resolve an installation identity candidate.
+
+- **Auth**: CLI JWT or Session
+- **Request body**:
+  `{ candidate_id: string, decision: "merge" | "keep_separate" }`
+- **Response**:
+  `{ candidate: { id, status, decision, canonical_device_id? } }`
+- **Errors**: `400` invalid decision/UUID, `401` unauthorized, `404` candidate
+  not found, `500` resolution failed.
 
 ### `GET /api/usage/status`
 
@@ -345,6 +405,13 @@ Aggregated usage stats for the authenticated user.
 
 - **Auth**: Session
 - **Response**: `{ has_data: boolean, cost_usd?: number, total_tokens?: number, session_count?: number, top_model?: string }`
+
+### `GET /api/cli/dashboard`
+
+Return the scorecard rendered by `straude status` and after a successful push.
+
+- **Auth**: CLI JWT
+- **Response**: Username, level, streak, 28 days of daily cost, current and previous week cost, leaderboard neighbors, model breakdown, and total output tokens.
 
 ---
 

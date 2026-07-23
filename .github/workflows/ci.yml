@@ -5,6 +5,9 @@ on:
     branches: [main]
   pull_request:
 
+permissions:
+  contents: read
+
 concurrency:
   group: ${{ github.workflow }}-${{ github.ref }}
   cancel-in-progress: ${{ github.event_name == 'pull_request' }}
@@ -18,7 +21,7 @@ jobs:
 
       - uses: oven-sh/setup-bun@v2
         with:
-          bun-version: latest
+          bun-version: 1.3.3
 
       - uses: actions/cache@v4
         with:
@@ -28,7 +31,7 @@ jobs:
             ${{ runner.os }}-bun-
 
       - name: Install dependencies
-        run: bun install
+        run: bun install --frozen-lockfile
         env:
           BUN_INSTALL_CACHE_DIR: ~/.bun/install/cache
 
@@ -71,10 +74,6 @@ jobs:
           NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY: sb_publishable_placeholder
           SUPABASE_SECRET_KEY: sb_secret_placeholder
 
-      - name: Test (cli)
-        run: bun run test
-        working-directory: packages/cli
-
       - name: Setup Supabase CLI
         uses: supabase/setup-cli@v1
         with:
@@ -99,3 +98,89 @@ jobs:
           NEXT_PUBLIC_SUPABASE_URL: http://localhost:54321
           NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY: sb_publishable_placeholder
           SUPABASE_SECRET_KEY: sb_secret_placeholder
+
+  cli-package:
+    name: CLI package
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: 1.3.3
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+
+      - name: Install dependencies
+        run: bun install --frozen-lockfile
+
+      - name: Typecheck CLI
+        run: bun run typecheck
+        working-directory: packages/cli
+
+      - name: Test CLI
+        run: bun run test
+        working-directory: packages/cli
+
+      - name: Benchmark collector fixture
+        run: bun run benchmark:collector > ../../collector-benchmark.json
+        working-directory: packages/cli
+        env:
+          STRAUDE_COLLECTOR_BENCH_ITERATIONS: "3"
+
+      - name: Upload collector benchmark
+        uses: actions/upload-artifact@v4
+        with:
+          name: straude-collector-benchmark-${{ github.sha }}
+          path: collector-benchmark.json
+          if-no-files-found: error
+          retention-days: 14
+
+      - name: Pack release candidate
+        run: |
+          mkdir -p ../../artifacts
+          npm pack --json --pack-destination ../../artifacts
+        working-directory: packages/cli
+
+      - name: Upload exact package
+        uses: actions/upload-artifact@v4
+        with:
+          name: straude-cli-package
+          path: artifacts/*.tgz
+          if-no-files-found: error
+
+      - name: Upload CI source map
+        uses: actions/upload-artifact@v4
+        with:
+          name: straude-cli-sourcemap-${{ github.sha }}
+          path: packages/cli/dist/index.js.map
+          if-no-files-found: error
+          retention-days: 14
+
+  cli-package-matrix:
+    name: CLI package (${{ matrix.os }}, Node ${{ matrix.node }})
+    needs: cli-package
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, macos-latest, windows-latest]
+        node: [20, 22]
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: ${{ matrix.node }}
+
+      - uses: actions/download-artifact@v4
+        with:
+          name: straude-cli-package
+          path: artifacts
+
+      - name: Test installed package
+        run: node packages/cli/scripts/packaged-cli-e2e.mjs --tarball artifacts

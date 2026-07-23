@@ -1,146 +1,51 @@
-import { describe, it, expect, vi, beforeEach } from "vitest";
+import { beforeEach, describe, expect, it, vi } from "vitest";
 
 vi.mock("@/lib/supabase/server", () => ({
   createClient: vi.fn(),
 }));
 
 vi.mock("@/lib/api/cli-auth", () => ({
-  verifyCliToken: vi.fn(),
   verifyCliTokenWithRefresh: vi.fn(),
 }));
 
+const rpc = vi.fn();
+
 vi.mock("@/lib/supabase/service", () => ({
-  getServiceClient: vi.fn(),
+  getServiceClient: vi.fn(() => ({ rpc })),
 }));
 
 vi.mock("@/lib/analytics/server", () => ({
   captureServerActivationEvent: vi.fn().mockResolvedValue(true),
 }));
 
-vi.mock("@supabase/supabase-js", () => ({
-  createClient: vi.fn(),
-}));
-
-import { POST, aggregateDeviceRows } from "@/app/api/usage/submit/route";
-import { captureServerActivationEvent } from "@/lib/analytics/server";
+import { POST } from "@/app/api/usage/submit/route";
 import { createClient } from "@/lib/supabase/server";
-import { verifyCliToken, verifyCliTokenWithRefresh } from "@/lib/api/cli-auth";
-import { getServiceClient } from "@/lib/supabase/service";
+import { verifyCliTokenWithRefresh } from "@/lib/api/cli-auth";
 import { resetRateLimiters } from "@/lib/rate-limit";
 
-const ALL_BUILT_IN_CCUSAGE_AGENTS = [
-  "claude",
-  "codex",
-  "opencode",
-  "amp",
-  "droid",
-  "codebuff",
-  "hermes",
-  "pi",
-  "goose",
-  "openclaw",
-  "kilo",
-  "kimi",
-  "qwen",
-  "copilot",
-  "gemini",
-];
+const DEVICE_ID = "aaaaaaaa-bbbb-4ccc-8ddd-eeeeeeeeeeee";
+const DATE = new Date().toISOString().slice(0, 10);
 
-function mockAllowedRpc() {
-  return vi.fn((fn: string) => Promise.resolve(
-    fn === "check_rate_limit"
-      ? { data: [{ allowed: true, retry_after_seconds: 0 }], error: null }
-      : { data: null, error: null },
-  ));
-}
-
-function makeEntry(dateStr: string, overrides: Record<string, any> = {}) {
+function legacyEntry(date = DATE) {
   return {
-    date: dateStr,
+    date,
     data: {
-      date: dateStr,
-      models: ["claude-sonnet-4-5-20250929"],
-      inputTokens: 1000,
-      outputTokens: 500,
+      date,
+      agents: ["codex"],
+      models: ["gpt-5.6"],
+      inputTokens: 100,
+      outputTokens: 20,
+      reasoningOutputTokens: 10,
       cacheCreationTokens: 0,
-      cacheReadTokens: 0,
-      totalTokens: 1500,
-      costUSD: 0.05,
-      ...overrides,
+      cacheReadTokens: 30,
+      totalTokens: 160,
+      costUSD: 0.25,
+      modelBreakdown: [{ model: "gpt-5.6", cost_usd: 0.25 }],
     },
   };
 }
 
-function todayStr() {
-  return new Date().toISOString().split("T")[0]!;
-}
-
-function daysAgo(n: number) {
-  const d = new Date();
-  d.setDate(d.getDate() - n);
-  return d.toISOString().split("T")[0]!;
-}
-
-function mockServiceClient(overrides: Record<string, any> = {}) {
-  const chain: Record<string, any> = {
-    from: vi.fn().mockReturnThis(),
-    rpc: mockAllowedRpc(),
-    upsert: vi.fn().mockReturnThis(),
-    insert: vi.fn().mockReturnThis(),
-    delete: vi.fn().mockReturnThis(),
-    update: vi.fn().mockReturnThis(),
-    select: vi.fn().mockReturnThis(),
-    eq: vi.fn().mockReturnThis(),
-    maybeSingle: vi.fn().mockResolvedValue({
-      data: null,
-      error: null,
-    }),
-    single: vi.fn().mockResolvedValue({
-      data: { id: "usage-1" },
-      error: null,
-    }),
-    // These make the chain itself act as a resolved query result,
-    // needed for calls that end with .eq() (e.g. device_usage fetch)
-    data: [],
-    error: null,
-    count: 0,
-    ...overrides,
-  };
-  (getServiceClient as any).mockReturnValue(chain);
-  return chain;
-}
-
-function mockSupabaseAuth(userId: string | null) {
-  const client: Record<string, any> = {
-    auth: {
-      getUser: vi.fn().mockResolvedValue({
-        data: { user: userId ? { id: userId } : null },
-        error: null,
-      }),
-    },
-  };
-  (createClient as any).mockResolvedValue(client);
-  return client;
-}
-
-const DEFAULT_DEVICE_ID = "aaaaaaaa-bbbb-cccc-dddd-eeeeeeeeeeee";
-const DEFAULT_DEVICE_NAME = "test-device";
-
-function mockRequest(body: any, headers: Record<string, string> = {}) {
-  // All requests must include device_id unless explicitly testing the rejection
-  const withDevice = {
-    device_id: DEFAULT_DEVICE_ID,
-    device_name: DEFAULT_DEVICE_NAME,
-    ...body,
-  };
-  return new Request("http://localhost/api/usage/submit", {
-    method: "POST",
-    headers: { "Content-Type": "application/json", ...headers },
-    body: JSON.stringify(withDevice),
-  });
-}
-
-function mockRequestRaw(body: any, headers: Record<string, string> = {}) {
+function request(body: unknown, headers: Record<string, string> = {}): Request {
   return new Request("http://localhost/api/usage/submit", {
     method: "POST",
     headers: { "Content-Type": "application/json", ...headers },
@@ -148,1870 +53,220 @@ function mockRequestRaw(body: any, headers: Record<string, string> = {}) {
   });
 }
 
+function legacyBody(entries = [legacyEntry()]) {
+  return {
+    entries,
+    hash: "a".repeat(64),
+    source: "cli",
+    device_id: DEVICE_ID,
+    device_name: "work-laptop",
+  };
+}
+
 beforeEach(() => {
   vi.clearAllMocks();
   resetRateLimiters();
-  process.env.NEXT_PUBLIC_SUPABASE_URL = "https://test.supabase.co";
-  process.env.SUPABASE_SECRET_KEY = "secret";
   process.env.NEXT_PUBLIC_APP_URL = "https://straude.com";
-  (verifyCliToken as any).mockReturnValue(null);
-  // Auto-derive verifyCliTokenWithRefresh from verifyCliToken so existing
-  // tests can keep setting `verifyCliToken.mockReturnValue("cli-user-id")`.
-  (verifyCliTokenWithRefresh as any).mockImplementation((header: string | null) => {
-    const userId = (verifyCliToken as any)(header);
-    return userId ? { userId, username: null, refreshedToken: null } : null;
+  vi.mocked(verifyCliTokenWithRefresh).mockReturnValue({
+    userId: "user-1",
+    username: "user",
+    refreshedToken: null,
+  });
+  rpc.mockImplementation((name: string, params: Record<string, unknown>) => {
+    if (name === "check_rate_limit") {
+      return Promise.resolve({ data: [{ allowed: true, retry_after_seconds: 0 }], error: null });
+    }
+    if (name !== "submit_usage_day_v2") {
+      return Promise.resolve({ data: null, error: null });
+    }
+    const entry = params.p_entry as { date: string };
+    return Promise.resolve({
+      data: {
+        date: entry.date,
+        status: "committed",
+        result: {
+          usage_id: `usage-${entry.date}`,
+          post_id: `post-${entry.date}`,
+          action: "created",
+          daily_total: 0.25,
+          device_count: 1,
+        },
+      },
+      error: null,
+    });
   });
 });
 
-describe("POST /api/usage/submit", () => {
+describe("POST /api/usage/submit legacy adapter", () => {
+  it("returns 426 with the exact update command after the configured v1 sunset", async () => {
+    vi.stubEnv("STRAUDE_USAGE_V1_CUTOFF", "2000-01-01");
+
+    const response = await POST(request(legacyBody()));
+
+    expect(response.status).toBe(426);
+    expect(await response.json()).toEqual({
+      error: "This Straude CLI version is no longer supported.",
+      code: "usage_protocol_upgrade_required",
+      update_command: "npx straude@latest",
+    });
+    expect(rpc).not.toHaveBeenCalledWith("submit_usage_day_v2", expect.anything());
+    vi.unstubAllEnvs();
+  });
+
+  it("keeps authenticated web imports available after the CLI v1 sunset", async () => {
+    vi.stubEnv("STRAUDE_USAGE_V1_CUTOFF", "2000-01-01");
+    vi.mocked(verifyCliTokenWithRefresh).mockReturnValue(null);
+    vi.mocked(createClient).mockResolvedValue({
+      auth: {
+        getUser: vi.fn().mockResolvedValue({ data: { user: { id: "web-user" } } }),
+      },
+    } as never);
+
+    const response = await POST(request({
+      ...legacyBody(),
+      source: "web",
+    }));
+
+    expect(response.status).toBe(200);
+    expect(rpc).toHaveBeenCalledWith(
+      "submit_usage_day_v2",
+      expect.objectContaining({ p_source: "web", p_is_verified: false }),
+    );
+    vi.unstubAllEnvs();
+  });
+
   it("rejects unauthenticated requests", async () => {
-    mockSupabaseAuth(null);
-    const svc = mockServiceClient();
+    vi.mocked(verifyCliTokenWithRefresh).mockReturnValue(null);
+    vi.mocked(createClient).mockResolvedValue({
+      auth: {
+        getUser: vi.fn().mockResolvedValue({ data: { user: null } }),
+      },
+    } as never);
 
-    const res = await POST(
-      mockRequest({ entries: [makeEntry(todayStr())], source: "web" })
-    );
-    const json = await res.json();
+    const response = await POST(request(legacyBody()));
 
-    expect(res.status).toBe(401);
-    expect(json.error).toBe("Unauthorized");
+    expect(response.status).toBe(401);
   });
 
-  it("handles CLI JWT auth (Bearer token)", async () => {
-    (verifyCliToken as any).mockReturnValue("cli-user-id");
-    mockSupabaseAuth(null);
-    const svc = mockServiceClient();
-    // Each entry needs three .single() calls: device upsert + daily upsert + post
-    svc.single
-      .mockResolvedValueOnce({ data: { id: "dev-1" }, error: null })
-      .mockResolvedValueOnce({ data: { id: "usage-1" }, error: null })
-      .mockResolvedValueOnce({ data: { id: "post-1" }, error: null });
+  it("adapts legacy entries through submit_usage_day_v2", async () => {
+    const response = await POST(request(
+      legacyBody(),
+      { authorization: "Bearer token" },
+    ));
+    const json = await response.json();
 
-    const res = await POST(
-      mockRequest(
-        { entries: [makeEntry(todayStr())], source: "cli" },
-        { authorization: "Bearer some-token" }
-      )
-    );
-    const json = await res.json();
-
-    expect(res.status).toBe(200);
-    expect(verifyCliToken).toHaveBeenCalledWith("Bearer some-token");
-    expect(json.results).toHaveLength(1);
-  });
-
-  it("handles Supabase session auth (cookie/web)", async () => {
-    mockSupabaseAuth("web-user-id");
-    const svc = mockServiceClient();
-    svc.single
-      .mockResolvedValueOnce({ data: { id: "dev-1" }, error: null })
-      .mockResolvedValueOnce({ data: { id: "usage-1" }, error: null })
-      .mockResolvedValueOnce({ data: { id: "post-1" }, error: null });
-
-    const res = await POST(
-      mockRequest({ entries: [makeEntry(todayStr())], source: "web" })
-    );
-    const json = await res.json();
-
-    expect(res.status).toBe(200);
-    expect(json.results).toHaveLength(1);
-  });
-
-  it("submits a single day entry successfully", async () => {
-    (verifyCliToken as any).mockReturnValue("user-1");
-    const svc = mockServiceClient();
-    svc.single
-      .mockResolvedValueOnce({ data: { id: "dev-1" }, error: null })
-      .mockResolvedValueOnce({ data: { id: "usage-1" }, error: null })
-      .mockResolvedValueOnce({ data: { id: "post-1" }, error: null });
-
-    const res = await POST(
-      mockRequest({ entries: [makeEntry(todayStr())], source: "cli" })
-    );
-    const json = await res.json();
-
-    expect(res.status).toBe(200);
-    expect(json.results).toHaveLength(1);
-    expect(json.results[0].date).toBe(todayStr());
-    expect(json.results[0].usage_id).toBe("usage-1");
-    expect(json.results[0].post_id).toBe("post-1");
-    expect(json.results[0].post_url).toBe("https://straude.com/post/post-1");
-    expect(svc.rpc).toHaveBeenCalledWith("recalculate_user_level", { p_user_id: "user-1" });
-    expect(captureServerActivationEvent).toHaveBeenCalledWith(expect.objectContaining({
-      event: "usage_submit_succeeded",
-      distinctId: "user-1",
-      properties: expect.objectContaining({
-        surface: "usage_submit",
-        activation_state: "first_usage_submitted",
-        is_authenticated: true,
-        days_pushed: 1,
-        result_count: 1,
-        total_tokens: 1500,
+    expect(response.status).toBe(200);
+    expect(json.results).toEqual([expect.objectContaining({
+      date: DATE,
+      usage_id: `usage-${DATE}`,
+      post_url: `https://straude.com/post/post-${DATE}`,
+    })]);
+    expect(rpc).toHaveBeenCalledWith("submit_usage_day_v2", expect.objectContaining({
+      p_request_id: "a".repeat(64),
+      p_installation: { id: DEVICE_ID, name: "work-laptop" },
+      p_entry: expect.objectContaining({
+        date: DATE,
+        agents: [expect.objectContaining({
+          agent: "legacy-unpartitioned",
+          input_tokens: 100,
+          total_tokens: 160,
+        })],
       }),
     }));
   });
 
-  it("submits multiple days (batch)", async () => {
-    (verifyCliToken as any).mockReturnValue("user-1");
-    const svc = mockServiceClient();
-    // 2 entries, each needing 3 .single() calls (device + daily + post)
-    svc.single
-      .mockResolvedValueOnce({ data: { id: "d1" }, error: null })
-      .mockResolvedValueOnce({ data: { id: "u1" }, error: null })
-      .mockResolvedValueOnce({ data: { id: "p1" }, error: null })
-      .mockResolvedValueOnce({ data: { id: "d2" }, error: null })
-      .mockResolvedValueOnce({ data: { id: "u2" }, error: null })
-      .mockResolvedValueOnce({ data: { id: "p2" }, error: null });
-
-    const res = await POST(
-      mockRequest({
-        entries: [makeEntry(todayStr()), makeEntry(daysAgo(1))],
-        source: "cli",
-      })
-    );
-    const json = await res.json();
-
-    expect(res.status).toBe(200);
-    expect(json.results).toHaveLength(2);
-    expect(json.results.map((result: { date: string }) => result.date)).toEqual([
-      todayStr(),
-      daysAgo(1),
-    ]);
-  });
-
-  it("rejects duplicate dates", async () => {
-    (verifyCliToken as any).mockReturnValue("user-1");
-    mockServiceClient();
-    const date = todayStr();
-
-    const res = await POST(
-      mockRequest({
-        entries: [makeEntry(date), makeEntry(date)],
-        source: "cli",
-      })
-    );
-    const json = await res.json();
-
-    expect(res.status).toBe(400);
-    expect(json.error).toBe(`Duplicate date: ${date}`);
-  });
-
-  it("rejects more than 32 entries", async () => {
-    (verifyCliToken as any).mockReturnValue("user-1");
-    mockServiceClient();
-    const entries = Array.from({ length: 33 }, (_, index) => makeEntry(daysAgo(index % 31)));
-
-    const res = await POST(
-      mockRequest({
-        entries,
-        source: "cli",
-      })
-    );
-    const json = await res.json();
-
-    expect(res.status).toBe(400);
-    expect(json.error).toBe("Too many entries provided. Maximum is 32.");
-  });
-
-  it("rejects dates older than 30 days", async () => {
-    (verifyCliToken as any).mockReturnValue("user-1");
-    mockServiceClient();
-
-    const res = await POST(
-      mockRequest({
-        entries: [makeEntry(daysAgo(35))],
-        source: "cli",
-      })
-    );
-    const json = await res.json();
-
-    expect(res.status).toBe(400);
-    expect(json.error).toContain("outside the 30-day backfill window");
-  });
-
-  it("accepts dates up to 30 days ago", async () => {
-    (verifyCliToken as any).mockReturnValue("user-1");
-    const svc = mockServiceClient();
-    svc.single
-      .mockResolvedValueOnce({ data: { id: "dev-1" }, error: null })
-      .mockResolvedValueOnce({ data: { id: "usage-1" }, error: null })
-      .mockResolvedValueOnce({ data: { id: "post-1" }, error: null });
-
-    const res = await POST(
-      mockRequest({
-        entries: [makeEntry(daysAgo(29))],
-        source: "cli",
-      })
-    );
-    const json = await res.json();
-
-    expect(res.status).toBe(200);
-    expect(json.results).toHaveLength(1);
-  });
-
-  it("rejects negative cost", async () => {
-    (verifyCliToken as any).mockReturnValue("user-1");
-    mockServiceClient();
-
-    const res = await POST(
-      mockRequest({
-        entries: [makeEntry(todayStr(), { costUSD: -5 })],
-        source: "cli",
-      })
-    );
-    const json = await res.json();
-
-    expect(res.status).toBe(400);
-    expect(json.error).toContain("Negative cost");
-  });
-
-  it("rejects negative tokens", async () => {
-    (verifyCliToken as any).mockReturnValue("user-1");
-    mockServiceClient();
-
-    const res = await POST(
-      mockRequest({
-        entries: [makeEntry(todayStr(), { inputTokens: -100 })],
-        source: "cli",
-      })
-    );
-    const json = await res.json();
-
-    expect(res.status).toBe(400);
-    expect(json.error).toContain("Negative input tokens");
-  });
-
-  it("rejects negative reasoning output tokens", async () => {
-    (verifyCliToken as any).mockReturnValue("user-1");
-    mockServiceClient();
-
-    const res = await POST(
-      mockRequest({
-        entries: [makeEntry(todayStr(), { reasoningOutputTokens: -1 })],
-        source: "cli",
-      })
-    );
-    const json = await res.json();
-
-    expect(res.status).toBe(400);
-    expect(json.error).toContain("Negative reasoning output tokens");
-  });
-
-  it("rejects invalid empty ccusage collector agent ids", async () => {
-    (verifyCliToken as any).mockReturnValue("user-1");
-    mockServiceClient();
-
-    const res = await POST(
-      mockRequest({
-        entries: [makeEntry(todayStr())],
-        source: "cli",
-        collector: {
-          ccusage_version: "20.0.6",
-          ccusage_agents: ["claude", ""],
-          pricing_mode: "online",
-        },
-      })
-    );
-    const json = await res.json();
-
-    expect(res.status).toBe(400);
-    expect(json.error).toContain("Invalid ccusage_agents");
-  });
-
-  it("rejects unsupported ccusage pricing metadata", async () => {
-    (verifyCliToken as any).mockReturnValue("user-1");
-    mockServiceClient();
-
-    const res = await POST(
-      mockRequest({
-        entries: [makeEntry(todayStr())],
-        source: "cli",
-        collector: {
-          ccusage_version: "20.0.6",
-          ccusage_agents: ["claude"],
-          pricing_mode: "auto",
-        },
-      })
-    );
-    const json = await res.json();
-
-    expect(res.status).toBe(400);
-    expect(json.error).toContain("Unsupported pricing mode");
-  });
-
-
-  it("uses upsert on conflict for device_usage and daily_usage", async () => {
-    (verifyCliToken as any).mockReturnValue("user-1");
-    const svc = mockServiceClient();
-    svc.single
-      .mockResolvedValueOnce({ data: { id: "dev-1" }, error: null })
-      .mockResolvedValueOnce({ data: { id: "usage-1" }, error: null })
-      .mockResolvedValueOnce({ data: { id: "post-1" }, error: null });
-
-    await POST(
-      mockRequest({ entries: [makeEntry(todayStr())], source: "cli" })
-    );
-
-    // Verify upsert was called for both device_usage and daily_usage
-    expect(svc.upsert).toHaveBeenCalledTimes(2);
-    expect(svc.upsert.mock.calls[0][1]).toEqual({ onConflict: "user_id,date,device_id" });
-    expect(svc.upsert.mock.calls[1][1]).toEqual({ onConflict: "user_id,date" });
-  });
-
-  it("auto-creates post for each usage entry", async () => {
-    (verifyCliToken as any).mockReturnValue("user-1");
-    const svc = mockServiceClient();
-    svc.single
-      .mockResolvedValueOnce({ data: { id: "dev-1" }, error: null })
-      .mockResolvedValueOnce({ data: { id: "usage-1" }, error: null })
-      .mockResolvedValueOnce({ data: { id: "post-1" }, error: null });
-
-    await POST(
-      mockRequest({ entries: [makeEntry(todayStr())], source: "cli" })
-    );
-
-    // upsert called twice (device_usage + daily_usage), insert once for new post
-    expect(svc.upsert).toHaveBeenCalledTimes(2);
-    expect(svc.insert).toHaveBeenCalledTimes(1);
-    const postInsertCall = svc.insert.mock.calls[0];
-    expect(postInsertCall[0]).toMatchObject({
-      user_id: "user-1",
-      daily_usage_id: "usage-1",
-    });
-  });
-
-  it("rejects invalid JSON body", async () => {
-    (verifyCliToken as any).mockReturnValue("user-1");
-    const req = new Request("http://localhost/api/usage/submit", {
-      method: "POST",
-      body: "not json",
-    });
-
-    const res = await POST(req);
-    const json = await res.json();
-
-    expect(res.status).toBe(400);
-    expect(json.error).toBe("Invalid JSON");
-  });
-
-  it("rejects request bodies over 256KB", async () => {
-    (verifyCliToken as any).mockReturnValue("user-1");
-    const req = new Request("http://localhost/api/usage/submit", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        entries: [makeEntry(todayStr(), { models: ["claude-sonnet-4-5-20250929"], large: "x".repeat(260 * 1024) })],
-        source: "cli",
-        device_id: DEFAULT_DEVICE_ID,
-      }),
-    });
-
-    const res = await POST(req);
-    const json = await res.json();
-
-    expect(res.status).toBe(413);
-    expect(json.error).toBe("Request body too large");
-  });
-
-  it("rejects empty entries array", async () => {
-    (verifyCliToken as any).mockReturnValue("user-1");
-    const res = await POST(
-      mockRequest({ entries: [], source: "cli" })
-    );
-    const json = await res.json();
-
-    expect(res.status).toBe(400);
-    expect(json.error).toBe("No entries provided");
-  });
-
-  it("rejects invalid source", async () => {
-    (verifyCliToken as any).mockReturnValue("user-1");
-    const res = await POST(
-      mockRequest({ entries: [makeEntry(todayStr())], source: "invalid" })
-    );
-    const json = await res.json();
-
-    expect(res.status).toBe(400);
-    expect(json.error).toBe("Invalid source");
-  });
-
-  // -------------------------------------------------------------------------
-  // Codex / model_breakdown tests
-  // -------------------------------------------------------------------------
-
-  it("stores model_breakdown in upsert when provided", async () => {
-    (verifyCliToken as any).mockReturnValue("user-1");
-    const svc = mockServiceClient();
-    svc.single
-      .mockResolvedValueOnce({ data: { id: "dev-1" }, error: null })
-      .mockResolvedValueOnce({ data: { id: "usage-1" }, error: null })
-      .mockResolvedValueOnce({ data: { id: "post-1" }, error: null });
-
-    const breakdown = [
-      { model: "claude-opus-4-20250505", cost_usd: 10.0 },
-      { model: "gpt-5-codex", cost_usd: 3.0 },
-    ];
-
-    const res = await POST(
-      mockRequest({
-        entries: [
-          makeEntry(todayStr(), {
-            models: ["claude-opus-4-20250505", "gpt-5-codex"],
-            costUSD: 13.0,
-            modelBreakdown: breakdown,
-          }),
-        ],
-        source: "cli",
-      })
-    );
-    const json = await res.json();
-
-    expect(res.status).toBe(200);
-    const upsertCall = svc.upsert.mock.calls[0];
-    expect(upsertCall[0].model_breakdown).toEqual(breakdown);
-  });
-
-  it("stores null model_breakdown when not provided (backward compat)", async () => {
-    (verifyCliToken as any).mockReturnValue("user-1");
-    const svc = mockServiceClient();
-    svc.single
-      .mockResolvedValueOnce({ data: { id: "dev-1" }, error: null })
-      .mockResolvedValueOnce({ data: { id: "usage-1" }, error: null })
-      .mockResolvedValueOnce({ data: { id: "post-1" }, error: null });
-
-    const res = await POST(
-      mockRequest({
-        entries: [makeEntry(todayStr())],
-        source: "cli",
-      })
-    );
-
-    expect(res.status).toBe(200);
-    const upsertCall = svc.upsert.mock.calls[0];
-    expect(upsertCall[0].model_breakdown).toBeNull();
-  });
-
-  it("stores and aggregates reasoning output tokens", async () => {
-    (verifyCliToken as any).mockReturnValue("user-1");
-    const deviceRow = {
-      cost_usd: 3.0,
-      input_tokens: 2000,
-      output_tokens: 800,
-      reasoning_output_tokens: 250,
-      cache_creation_tokens: 0,
-      cache_read_tokens: 0,
-      total_tokens: 2800,
-      models: ["gpt-5-codex"],
-      model_breakdown: [{ model: "gpt-5-codex", cost_usd: 3.0 }],
-    };
-    const svc = mockServiceClient({ data: [deviceRow] });
-    svc.single
-      .mockResolvedValueOnce({ data: { id: "dev-1" }, error: null })
-      .mockResolvedValueOnce({ data: { id: "usage-1" }, error: null })
-      .mockResolvedValueOnce({ data: { id: "post-1" }, error: null });
-
-    const res = await POST(
-      mockRequest({
-        entries: [
-          makeEntry(todayStr(), {
-            models: ["gpt-5-codex"],
-            costUSD: 3.0,
-            inputTokens: 2000,
-            outputTokens: 800,
-            reasoningOutputTokens: 250,
-            totalTokens: 2800,
-            modelBreakdown: [{ model: "gpt-5-codex", cost_usd: 3.0 }],
-          }),
-        ],
-        source: "cli",
-      })
-    );
-
-    expect(res.status).toBe(200);
-    expect(svc.upsert.mock.calls[0][0].reasoning_output_tokens).toBe(250);
-    expect(svc.upsert.mock.calls[1][0].reasoning_output_tokens).toBe(250);
-  });
-
-  it("accepts Codex-only usage (no Claude models)", async () => {
-    (verifyCliToken as any).mockReturnValue("user-1");
-    const svc = mockServiceClient();
-    svc.single
-      .mockResolvedValueOnce({ data: { id: "dev-1" }, error: null })
-      .mockResolvedValueOnce({ data: { id: "usage-1" }, error: null })
-      .mockResolvedValueOnce({ data: { id: "post-1" }, error: null });
-
-    const res = await POST(
-      mockRequest({
-        entries: [
-          makeEntry(todayStr(), {
-            models: ["gpt-5-codex"],
-            costUSD: 3.0,
-            inputTokens: 2000,
-            outputTokens: 800,
-            totalTokens: 2800,
-            modelBreakdown: [{ model: "gpt-5-codex", cost_usd: 3.0 }],
-          }),
-        ],
-        source: "cli",
-      })
-    );
-    const json = await res.json();
-
-    expect(res.status).toBe(200);
-    expect(json.results).toHaveLength(1);
-    const upsertCall = svc.upsert.mock.calls[0];
-    expect(upsertCall[0].models).toEqual(["gpt-5-codex"]);
-    expect(upsertCall[0].cost_usd).toBe(3.0);
-    expect(upsertCall[0].model_breakdown).toEqual([
-      { model: "gpt-5-codex", cost_usd: 3.0 },
-    ]);
-  });
-
-  it("auto-title keeps full GPT Codex model version", async () => {
-    (verifyCliToken as any).mockReturnValue("user-1");
-    const deviceRow = {
-      cost_usd: 3.2,
-      input_tokens: 2100,
-      output_tokens: 900,
-      cache_creation_tokens: 0,
-      cache_read_tokens: 0,
-      total_tokens: 3000,
-      models: ["gpt-5.3-codex"],
-      model_breakdown: [{ model: "gpt-5.3-codex", cost_usd: 3.2 }],
-    };
-    const svc = mockServiceClient({ data: [deviceRow] });
-    svc.single
-      .mockResolvedValueOnce({ data: { id: "dev-1" }, error: null })
-      .mockResolvedValueOnce({ data: { id: "usage-1" }, error: null })
-      .mockResolvedValueOnce({ data: { id: "post-1" }, error: null });
-
-    const res = await POST(
-      mockRequest({
-        entries: [
-          makeEntry(todayStr(), {
-            models: ["gpt-5.3-codex"],
-            costUSD: 3.2,
-            inputTokens: 2100,
-            outputTokens: 900,
-            totalTokens: 3000,
-            modelBreakdown: [{ model: "gpt-5.3-codex", cost_usd: 3.2 }],
-          }),
-        ],
-        source: "cli",
-      })
-    );
-
-    expect(res.status).toBe(200);
-    const postInsertCall = svc.insert.mock.calls[0];
-    expect(postInsertCall[0].title).toContain("GPT-5.3-Codex");
-  });
-
-  it("auto-title treats Claude Fable as the highest Claude tier", async () => {
-    (verifyCliToken as any).mockReturnValue("user-1");
-    const deviceRow = {
-      cost_usd: 15,
-      input_tokens: 2100,
-      output_tokens: 900,
-      cache_creation_tokens: 0,
-      cache_read_tokens: 0,
-      total_tokens: 3000,
-      models: ["claude-opus-4-20250505", "claude-fable-5"],
-      model_breakdown: [
-        { model: "claude-opus-4-20250505", cost_usd: 12 },
-        { model: "claude-fable-5", cost_usd: 3 },
-      ],
-    };
-    const svc = mockServiceClient({ data: [deviceRow] });
-    svc.single
-      .mockResolvedValueOnce({ data: { id: "dev-1" }, error: null })
-      .mockResolvedValueOnce({ data: { id: "usage-1" }, error: null })
-      .mockResolvedValueOnce({ data: { id: "post-1" }, error: null });
-
-    const res = await POST(
-      mockRequest({
-        entries: [
-          makeEntry(todayStr(), {
-            models: ["claude-opus-4-20250505", "claude-fable-5"],
-            costUSD: 15,
-            inputTokens: 2100,
-            outputTokens: 900,
-            totalTokens: 3000,
-            modelBreakdown: [
-              { model: "claude-opus-4-20250505", cost_usd: 12 },
-              { model: "claude-fable-5", cost_usd: 3 },
-            ],
-          }),
-        ],
-        source: "cli",
-      })
-    );
-
-    expect(res.status).toBe(200);
-    const postInsertCall = svc.insert.mock.calls[0];
-    expect(postInsertCall[0].title).toContain("Claude Fable");
-    expect(postInsertCall[0].title).not.toContain("Claude Opus");
-  });
-
-  // -------------------------------------------------------------------------
-  // Multi-device tests
-  // -------------------------------------------------------------------------
-
-  it("multi-device: device_id triggers device_usage upsert path", async () => {
-    (verifyCliToken as any).mockReturnValue("user-1");
-
-    const deviceRows = [
-      {
-        cost_usd: 0.05,
-        input_tokens: 1000,
-        output_tokens: 500,
-        cache_creation_tokens: 0,
-        cache_read_tokens: 0,
-        total_tokens: 1500,
-        models: ["claude-sonnet-4-5-20250929"],
-        model_breakdown: null,
-      },
-    ];
-
-    // Build a per-table mock that distinguishes device_usage from daily_usage
-    const deviceGuardChain: Record<string, any> = {
-      select: vi.fn().mockReturnThis(),
-      eq: vi.fn().mockReturnThis(),
-      maybeSingle: vi.fn().mockResolvedValue({ data: null, error: null }),
-    };
-    const deviceUpsertChain: Record<string, any> = {
-      upsert: vi.fn().mockReturnThis(),
-      select: vi.fn().mockReturnThis(),
-      single: vi.fn().mockResolvedValue({ data: { id: "dev-1" }, error: null }),
-    };
-    const deviceFetchChain: Record<string, any> = {
-      select: vi.fn().mockReturnThis(),
-      eq: vi.fn().mockImplementation(() => ({
-        eq: vi.fn().mockResolvedValue({ data: deviceRows, error: null }),
-      })),
-    };
-    const dailyChain: Record<string, any> = {
-      select: vi.fn().mockReturnThis(),
-      upsert: vi.fn().mockReturnThis(),
-      eq: vi.fn().mockReturnThis(),
-      maybeSingle: vi.fn().mockResolvedValue({ data: null, error: null }),
-      single: vi.fn().mockResolvedValue({ data: { id: "usage-1" }, error: null }),
-    };
-    const postChain: Record<string, any> = {
-      select: vi.fn().mockReturnThis(),
-      insert: vi.fn().mockReturnThis(),
-      eq: vi.fn().mockReturnThis(),
-      maybeSingle: vi.fn().mockResolvedValue({ data: null, error: null }),
-      single: vi.fn().mockResolvedValue({ data: { id: "post-1" }, error: null }),
-    };
-
-    let deviceFromCallCount = 0;
-    const fromFn = vi.fn((table: string) => {
-      if (table === "device_usage") {
-        deviceFromCallCount++;
-        if (deviceFromCallCount === 1) return deviceGuardChain;
-        if (deviceFromCallCount === 2) return deviceUpsertChain;
-        return deviceFetchChain;
-      }
-      if (table === "daily_usage") return dailyChain;
-      if (table === "posts") return postChain;
-      return dailyChain;
-    });
-
-    (getServiceClient as any).mockReturnValue({ from: fromFn, rpc: mockAllowedRpc() });
-
-    const res = await POST(
-      mockRequest({
-        entries: [makeEntry(todayStr())],
-        source: "cli",
-        device_id: "aaaaaaaa-bbbb-cccc-dddd-eeeeeeeeeeee",
-        device_name: "work-laptop",
-      })
-    );
-    const json = await res.json();
-
-    expect(res.status).toBe(200);
-    expect(json.results).toHaveLength(1);
-    // Verify device_usage table was targeted
-    expect(fromFn).toHaveBeenCalledWith("device_usage");
-    // Verify device_usage upsert was called with device_id conflict
-    expect(deviceUpsertChain.upsert).toHaveBeenCalled();
-    expect(deviceUpsertChain.upsert.mock.calls[0][1]).toEqual({ onConflict: "user_id,date,device_id" });
-    // Verify daily_usage was upserted with aggregated values
-    expect(dailyChain.upsert).toHaveBeenCalled();
-    expect(dailyChain.upsert.mock.calls[0][0].cost_usd).toBe(0.05);
-    expect(dailyChain.upsert.mock.calls[0][0].session_count).toBe(1);
-    // Verify new response fields
-    expect(json.results[0].previous_cost).toBeUndefined();
-    expect(json.results[0].daily_total).toBe(0.05);
-    expect(json.results[0].device_count).toBe(1);
-  });
-
-  it("multi-device: re-push returns previous_cost and aggregated daily_total", async () => {
-    (verifyCliToken as any).mockReturnValue("user-1");
-
-    // Two device rows: existing device A ($5) + current device B ($3) = $8 total
-    const allDeviceRows = [
-      {
-        cost_usd: 5.0,
-        input_tokens: 1000,
-        output_tokens: 500,
-        cache_creation_tokens: 0,
-        cache_read_tokens: 0,
-        total_tokens: 1500,
-        models: ["claude-opus-4-20250505"],
-        model_breakdown: [{ model: "claude-opus-4-20250505", cost_usd: 5.0 }],
-      },
-      {
-        cost_usd: 3.0,
-        input_tokens: 2000,
-        output_tokens: 800,
-        cache_creation_tokens: 0,
-        cache_read_tokens: 0,
-        total_tokens: 2800,
-        models: ["claude-sonnet-4-5-20250929"],
-        model_breakdown: [{ model: "claude-sonnet-4-5-20250929", cost_usd: 3.0 }],
-      },
-    ];
-
-    // Guard: no existing device_usage for device B
-    const deviceGuardChain: Record<string, any> = {
-      select: vi.fn().mockReturnThis(),
-      eq: vi.fn().mockReturnThis(),
-      maybeSingle: vi.fn().mockResolvedValue({ data: null, error: null }),
-    };
-    const deviceUpsertChain: Record<string, any> = {
-      upsert: vi.fn().mockReturnThis(),
-      select: vi.fn().mockReturnThis(),
-      single: vi.fn().mockResolvedValue({ data: { id: "dev-2" }, error: null }),
-    };
-    // Fetch returns BOTH device rows (device A + device B)
-    const deviceFetchChain: Record<string, any> = {
-      select: vi.fn().mockReturnThis(),
-      eq: vi.fn().mockImplementation(() => ({
-        eq: vi.fn().mockResolvedValue({ data: allDeviceRows, error: null }),
-      })),
-    };
-    // daily_usage already exists with $5 (from device A's earlier push)
-    let dailySelectCount = 0;
-    const dailyChain: Record<string, any> = {
-      select: vi.fn().mockReturnThis(),
-      upsert: vi.fn().mockReturnThis(),
-      eq: vi.fn().mockReturnThis(),
-      maybeSingle: vi.fn().mockImplementation(() => {
-        dailySelectCount++;
-        // First maybeSingle: existing daily_usage check
-        if (dailySelectCount === 1) {
-          return Promise.resolve({ data: { id: "usage-1", cost_usd: 5.0, models: ["claude-opus-4-20250505"] }, error: null });
-        }
-        return Promise.resolve({ data: null, error: null });
-      }),
-      single: vi.fn().mockResolvedValue({ data: { id: "usage-1" }, error: null }),
-    };
-    const deviceCountChain: Record<string, any> = {
-      select: vi.fn().mockReturnThis(),
-      eq: vi.fn().mockImplementation(() => ({
-        eq: vi.fn().mockResolvedValue({ count: 1, data: null, error: null }),
-      })),
-      count: 1,
-    };
-    const postChain: Record<string, any> = {
-      select: vi.fn().mockReturnThis(),
-      update: vi.fn().mockReturnThis(),
-      eq: vi.fn().mockReturnThis(),
-      maybeSingle: vi.fn().mockResolvedValue({ data: { id: "post-1", title: "Mar 31" }, error: null }),
-      single: vi.fn().mockResolvedValue({ data: { id: "post-1" }, error: null }),
-    };
-
-    let deviceFromCallCount = 0;
-    const fromFn = vi.fn((table: string) => {
-      if (table === "device_usage") {
-        deviceFromCallCount++;
-        if (deviceFromCallCount === 1) return deviceGuardChain;
-        if (deviceFromCallCount === 2) return deviceCountChain;
-        if (deviceFromCallCount === 3) return deviceUpsertChain;
-        return deviceFetchChain;
-      }
-      if (table === "daily_usage") return dailyChain;
-      if (table === "posts") return postChain;
-      return dailyChain;
-    });
-
-    (getServiceClient as any).mockReturnValue({ from: fromFn, rpc: mockAllowedRpc() });
-
-    const DEVICE_B = "11111111-2222-3333-4444-555555555555";
-    const res = await POST(
-      mockRequest({
-        entries: [makeEntry(todayStr(), {
-          models: ["claude-sonnet-4-5-20250929"],
-          costUSD: 3.0,
-          inputTokens: 2000,
-          outputTokens: 800,
-          totalTokens: 2800,
-        })],
-        source: "cli",
-        device_id: DEVICE_B,
-        device_name: "home-laptop",
-      })
-    );
-    const json = await res.json();
-
-    expect(res.status).toBe(200);
-    expect(json.results).toHaveLength(1);
-    expect(json.results[0].action).toBe("updated");
-    // Previous daily total was $5 from device A
-    expect(json.results[0].previous_cost).toBe(5.0);
-    // New daily total is $8 (device A $5 + device B $3)
-    expect(json.results[0].daily_total).toBe(8.0);
-    // Two devices contributed
-    expect(json.results[0].device_count).toBe(2);
-  });
-
-  it("keeps the lower-value overwrite guard for old collectors", async () => {
-    (verifyCliToken as any).mockReturnValue("user-1");
-
-    const existingDeviceRow = {
-      cost_usd: 100,
-      input_tokens: 100000,
-      output_tokens: 1000,
-      cache_creation_tokens: 0,
-      cache_read_tokens: 0,
-      total_tokens: 101000,
-      models: ["gpt-5-codex"],
-      model_breakdown: [{ model: "gpt-5-codex", cost_usd: 100 }],
-    };
-
-    const deviceGuardChain: Record<string, any> = {
-      select: vi.fn().mockReturnThis(),
-      eq: vi.fn().mockReturnThis(),
-      maybeSingle: vi.fn().mockResolvedValue({
-        data: { cost_usd: 100, models: ["gpt-5-codex"] },
-        error: null,
-      }),
-    };
-    const deviceCountChain: Record<string, any> = {
-      select: vi.fn().mockReturnThis(),
-      eq: vi.fn().mockImplementation(() => ({
-        eq: vi.fn().mockResolvedValue({ count: 1, data: null, error: null }),
-      })),
-    };
-    const deviceFetchChain: Record<string, any> = {
-      select: vi.fn().mockReturnThis(),
-      eq: vi.fn().mockImplementation(() => ({
-        eq: vi.fn().mockResolvedValue({ data: [existingDeviceRow], error: null }),
-      })),
-    };
-    const dailyChain: Record<string, any> = {
-      select: vi.fn().mockReturnThis(),
-      upsert: vi.fn().mockReturnThis(),
-      eq: vi.fn().mockReturnThis(),
-      maybeSingle: vi.fn().mockResolvedValue({ data: { id: "usage-1", cost_usd: 100, models: ["gpt-5-codex"] }, error: null }),
-      single: vi.fn().mockResolvedValue({ data: { id: "usage-1" }, error: null }),
-    };
-    const postChain: Record<string, any> = {
-      select: vi.fn().mockReturnThis(),
-      update: vi.fn().mockReturnThis(),
-      eq: vi.fn().mockReturnThis(),
-      maybeSingle: vi.fn().mockResolvedValue({ data: { id: "post-1", title: "Apr 24" }, error: null }),
-      single: vi.fn().mockResolvedValue({ data: { id: "post-1" }, error: null }),
-    };
-
-    let deviceFromCallCount = 0;
-    const fromFn = vi.fn((table: string) => {
-      if (table === "device_usage") {
-        deviceFromCallCount++;
-        if (deviceFromCallCount === 1) return deviceGuardChain;
-        if (deviceFromCallCount === 2) return deviceCountChain;
-        return deviceFetchChain;
-      }
-      if (table === "daily_usage") return dailyChain;
-      if (table === "posts") return postChain;
-      return dailyChain;
-    });
-    (getServiceClient as any).mockReturnValue({ from: fromFn, rpc: mockAllowedRpc() });
-
-    const res = await POST(
-      mockRequest({
-        entries: [makeEntry(todayStr(), {
-          models: ["gpt-5-codex"],
-          costUSD: 10,
-          inputTokens: 10000,
-          outputTokens: 100,
-          totalTokens: 10100,
-        })],
-        source: "cli",
-      })
-    );
-    const json = await res.json();
-
-    expect(res.status).toBe(200);
-    expect(json.results[0].daily_total).toBe(100);
-    expect(dailyChain.upsert.mock.calls[0][0].cost_usd).toBe(100);
-  });
-
-  it("allows native Codex repair submissions to lower inflated device and daily rows", async () => {
-    (verifyCliToken as any).mockReturnValue("user-1");
-
-    const correctedDeviceRow = {
-      cost_usd: 10,
-      input_tokens: 10000,
-      output_tokens: 100,
-      cache_creation_tokens: 0,
-      cache_read_tokens: 0,
-      total_tokens: 10100,
-      models: ["gpt-5-codex"],
-      model_breakdown: [{ model: "gpt-5-codex", cost_usd: 10 }],
-    };
-
-    const deviceGuardChain: Record<string, any> = {
-      select: vi.fn().mockReturnThis(),
-      eq: vi.fn().mockReturnThis(),
-      maybeSingle: vi.fn().mockResolvedValue({
-        data: { cost_usd: 100, models: ["gpt-5-codex"] },
-        error: null,
-      }),
-    };
-    const deviceUpsertChain: Record<string, any> = {
-      upsert: vi.fn().mockReturnThis(),
-      select: vi.fn().mockReturnThis(),
-      single: vi.fn().mockResolvedValue({ data: { id: "dev-1" }, error: null }),
-    };
-    const deviceCountChain: Record<string, any> = {
-      select: vi.fn().mockReturnThis(),
-      eq: vi.fn().mockImplementation(() => ({
-        eq: vi.fn().mockResolvedValue({ count: 1, data: null, error: null }),
-      })),
-    };
-    const deviceDeleteChain: Record<string, any> = {
-      delete: vi.fn().mockReturnThis(),
-      eq: vi.fn().mockReturnThis(),
-    };
-    const deviceFetchChain: Record<string, any> = {
-      select: vi.fn().mockReturnThis(),
-      eq: vi.fn().mockImplementation(() => ({
-        eq: vi.fn().mockResolvedValue({ data: [correctedDeviceRow], error: null }),
-      })),
-    };
-    const dailyChain: Record<string, any> = {
-      select: vi.fn().mockReturnThis(),
-      upsert: vi.fn().mockReturnThis(),
-      eq: vi.fn().mockReturnThis(),
-      maybeSingle: vi.fn().mockResolvedValue({ data: { id: "usage-1", cost_usd: 100, models: ["gpt-5-codex"] }, error: null }),
-      single: vi.fn().mockResolvedValue({ data: { id: "usage-1" }, error: null }),
-    };
-    const postChain: Record<string, any> = {
-      select: vi.fn().mockReturnThis(),
-      update: vi.fn().mockReturnThis(),
-      eq: vi.fn().mockReturnThis(),
-      maybeSingle: vi.fn().mockResolvedValue({ data: { id: "post-1", title: "Apr 24 — GPT-5-Codex, $100.00" }, error: null }),
-      single: vi.fn().mockResolvedValue({ data: { id: "post-1" }, error: null }),
-    };
-
-    let deviceFromCallCount = 0;
-    const fromFn = vi.fn((table: string) => {
-      if (table === "device_usage") {
-        deviceFromCallCount++;
-        if (deviceFromCallCount === 1) return deviceGuardChain;
-        if (deviceFromCallCount === 2) return deviceCountChain;
-        if (deviceFromCallCount === 3) return deviceUpsertChain;
-        if (deviceFromCallCount === 4) return deviceDeleteChain;
-        return deviceFetchChain;
-      }
-      if (table === "daily_usage") return dailyChain;
-      if (table === "posts") return postChain;
-      return dailyChain;
-    });
-    (getServiceClient as any).mockReturnValue({ from: fromFn, rpc: mockAllowedRpc() });
-
-    const res = await POST(
-      mockRequest({
-        entries: [makeEntry(todayStr(), {
-          models: ["gpt-5-codex"],
-          costUSD: 10,
-          inputTokens: 10000,
-          outputTokens: 100,
-          totalTokens: 10100,
-          modelBreakdown: [{ model: "gpt-5-codex", cost_usd: 10 }],
-        })],
-        source: "cli",
-        collector: { codex: "straude-codex-native-last-token-usage" },
-      })
-    );
-    const json = await res.json();
-
-    expect(res.status).toBe(200);
-    expect(deviceUpsertChain.upsert).toHaveBeenCalled();
-    expect(deviceUpsertChain.upsert.mock.calls[0][0].collector_meta).toEqual({ codex: "straude-codex-native-last-token-usage" });
-    expect(deviceDeleteChain.delete).toHaveBeenCalled();
-    expect(dailyChain.upsert.mock.calls[0][0].cost_usd).toBe(10);
-    expect(dailyChain.upsert.mock.calls[0][0].collector_meta).toEqual({ codex: "straude-codex-native-last-token-usage" });
-    expect(json.results[0].previous_cost).toBe(100);
-    expect(json.results[0].daily_total).toBe(10);
-  });
-
-  it("does not drop mixed legacy usage on a Codex-only repair", async () => {
-    (verifyCliToken as any).mockReturnValue("user-1");
-
-    const legacyDeviceRow = {
-      cost_usd: 100,
-      input_tokens: 100000,
-      output_tokens: 1000,
-      cache_creation_tokens: 0,
-      cache_read_tokens: 0,
-      total_tokens: 101000,
-      models: ["claude-opus-4-20250505", "gpt-5-codex"],
-      model_breakdown: [
-        { model: "claude-opus-4-20250505", cost_usd: 90 },
-        { model: "gpt-5-codex", cost_usd: 10 },
-      ],
-      raw_hash: "legacy-hash",
-    };
-    const correctedDeviceRow = {
-      cost_usd: 10,
-      input_tokens: 10000,
-      output_tokens: 100,
-      cache_creation_tokens: 0,
-      cache_read_tokens: 0,
-      total_tokens: 10100,
-      models: ["gpt-5-codex"],
-      model_breakdown: [{ model: "gpt-5-codex", cost_usd: 10 }],
-    };
-
-    const deviceGuardChain: Record<string, any> = {
-      select: vi.fn().mockReturnThis(),
-      eq: vi.fn().mockReturnThis(),
-      maybeSingle: vi.fn().mockResolvedValue({ data: null, error: null }),
-    };
-    const deviceCountChain: Record<string, any> = {
-      select: vi.fn().mockReturnThis(),
-      eq: vi.fn().mockImplementation(() => ({
-        eq: vi.fn().mockResolvedValue({ count: 0, data: null, error: null }),
-      })),
-    };
-    const deviceUpsertChain: Record<string, any> = {
-      upsert: vi.fn().mockReturnThis(),
-      select: vi.fn().mockReturnThis(),
-      single: vi.fn().mockResolvedValue({ data: { id: "dev-1" }, error: null }),
-    };
-    const deviceInsertChain: Record<string, any> = {
-      insert: vi.fn().mockResolvedValue({ error: null }),
-    };
-    const deviceDeleteChain: Record<string, any> = {
-      delete: vi.fn().mockReturnThis(),
-      eq: vi.fn().mockReturnThis(),
-    };
-    const deviceFetchChain: Record<string, any> = {
-      select: vi.fn().mockReturnThis(),
-      eq: vi.fn().mockImplementation(() => ({
-        eq: vi.fn().mockResolvedValue({
-          data: [legacyDeviceRow, correctedDeviceRow],
-          error: null,
-        }),
-      })),
-    };
-    const dailyChain: Record<string, any> = {
-      select: vi.fn().mockReturnThis(),
-      upsert: vi.fn().mockReturnThis(),
-      eq: vi.fn().mockReturnThis(),
-      maybeSingle: vi.fn().mockResolvedValue({
-        data: {
-          id: "usage-1",
-          cost_usd: 100,
-          models: ["claude-opus-4-20250505", "gpt-5-codex"],
-        },
-        error: null,
-      }),
-      single: vi.fn()
-        .mockResolvedValueOnce({ data: legacyDeviceRow, error: null })
-        .mockResolvedValueOnce({ data: { id: "usage-1" }, error: null }),
-    };
-    const postChain: Record<string, any> = {
-      select: vi.fn().mockReturnThis(),
-      update: vi.fn().mockReturnThis(),
-      eq: vi.fn().mockReturnThis(),
-      maybeSingle: vi.fn().mockResolvedValue({ data: { id: "post-1", title: "Apr 24" }, error: null }),
-      single: vi.fn().mockResolvedValue({ data: { id: "post-1" }, error: null }),
-    };
-
-    let deviceFromCallCount = 0;
-    const fromFn = vi.fn((table: string) => {
-      if (table === "device_usage") {
-        deviceFromCallCount++;
-        if (deviceFromCallCount === 1) return deviceGuardChain;
-        if (deviceFromCallCount === 2) return deviceCountChain;
-        if (deviceFromCallCount === 3) return deviceUpsertChain;
-        if (deviceFromCallCount === 4) return deviceInsertChain;
-        return deviceFetchChain;
-      }
-      if (table === "daily_usage") return dailyChain;
-      if (table === "posts") return postChain;
-      return dailyChain;
-    });
-    (getServiceClient as any).mockReturnValue({ from: fromFn, rpc: mockAllowedRpc() });
-
-    const res = await POST(
-      mockRequest({
-        entries: [makeEntry(todayStr(), {
-          models: ["gpt-5-codex"],
-          costUSD: 10,
-          inputTokens: 10000,
-          outputTokens: 100,
-          totalTokens: 10100,
-          modelBreakdown: [{ model: "gpt-5-codex", cost_usd: 10 }],
-        })],
-        source: "cli",
-        collector: { codex: "straude-codex-native-last-token-usage" },
-      })
-    );
-    const json = await res.json();
-
-    expect(res.status).toBe(200);
-    expect(deviceDeleteChain.delete).not.toHaveBeenCalled();
-    expect(deviceInsertChain.insert).toHaveBeenCalledWith(
+  it("derives omitted legacy reasoning tokens from the declared total", async () => {
+    const body = legacyBody();
+    delete (body.entries[0]!.data as { reasoningOutputTokens?: number })
+      .reasoningOutputTokens;
+
+    const response = await POST(request(body));
+
+    expect(response.status).toBe(200);
+    expect(rpc).toHaveBeenCalledWith(
+      "submit_usage_day_v2",
       expect.objectContaining({
-        device_id: "00000000-0000-0000-0000-000000000000",
-        cost_usd: 100,
-      })
+        p_entry: expect.objectContaining({
+          agents: [expect.objectContaining({
+            reasoning_output_tokens: 10,
+            total_tokens: 160,
+          })],
+        }),
+      }),
     );
-    expect(dailyChain.upsert.mock.calls[0][0].cost_usd).toBe(110);
-    expect(json.results[0].daily_total).toBe(110);
   });
 
-  it("does not overwrite a mixed same-device row with a Codex-only repair", async () => {
-    (verifyCliToken as any).mockReturnValue("user-1");
+  it("rejects duplicate dates before calling the transaction RPC", async () => {
+    const response = await POST(request(legacyBody([legacyEntry(), legacyEntry()])));
 
-    const mixedDeviceRow = {
-      cost_usd: 100,
-      input_tokens: 100000,
-      output_tokens: 1000,
-      cache_creation_tokens: 0,
-      cache_read_tokens: 0,
-      total_tokens: 101000,
-      models: ["claude-opus-4-20250505", "gpt-5-codex"],
-      model_breakdown: [
-        { model: "claude-opus-4-20250505", cost_usd: 90 },
-        { model: "gpt-5-codex", cost_usd: 10 },
-      ],
-    };
-
-    const deviceGuardChain: Record<string, any> = {
-      select: vi.fn().mockReturnThis(),
-      eq: vi.fn().mockReturnThis(),
-      maybeSingle: vi.fn().mockResolvedValue({
-        data: { cost_usd: 100, models: mixedDeviceRow.models },
-        error: null,
-      }),
-    };
-    const deviceCountChain: Record<string, any> = {
-      select: vi.fn().mockReturnThis(),
-      eq: vi.fn().mockImplementation(() => ({
-        eq: vi.fn().mockResolvedValue({ count: 1, data: null, error: null }),
-      })),
-    };
-    const deviceUpsertChain: Record<string, any> = {
-      upsert: vi.fn().mockReturnThis(),
-      select: vi.fn().mockReturnThis(),
-      single: vi.fn().mockResolvedValue({ data: { id: "dev-1" }, error: null }),
-    };
-    const deviceDeleteChain: Record<string, any> = {
-      delete: vi.fn().mockReturnThis(),
-      eq: vi.fn().mockReturnThis(),
-    };
-    const deviceFetchChain: Record<string, any> = {
-      select: vi.fn().mockReturnThis(),
-      eq: vi.fn().mockImplementation(() => ({
-        eq: vi.fn().mockResolvedValue({ data: [mixedDeviceRow], error: null }),
-      })),
-    };
-    const dailyChain: Record<string, any> = {
-      select: vi.fn().mockReturnThis(),
-      upsert: vi.fn().mockReturnThis(),
-      eq: vi.fn().mockReturnThis(),
-      maybeSingle: vi.fn().mockResolvedValue({
-        data: {
-          id: "usage-1",
-          cost_usd: 100,
-          models: mixedDeviceRow.models,
-        },
-        error: null,
-      }),
-      single: vi.fn().mockResolvedValue({ data: { id: "usage-1" }, error: null }),
-    };
-    const postChain: Record<string, any> = {
-      select: vi.fn().mockReturnThis(),
-      update: vi.fn().mockReturnThis(),
-      eq: vi.fn().mockReturnThis(),
-      maybeSingle: vi.fn().mockResolvedValue({ data: { id: "post-1", title: "Apr 24" }, error: null }),
-      single: vi.fn().mockResolvedValue({ data: { id: "post-1" }, error: null }),
-    };
-
-    let deviceFromCallCount = 0;
-    const fromFn = vi.fn((table: string) => {
-      if (table === "device_usage") {
-        deviceFromCallCount++;
-        if (deviceFromCallCount === 1) return deviceGuardChain;
-        if (deviceFromCallCount === 2) return deviceCountChain;
-        return deviceFetchChain;
-      }
-      if (table === "daily_usage") return dailyChain;
-      if (table === "posts") return postChain;
-      return dailyChain;
-    });
-    (getServiceClient as any).mockReturnValue({ from: fromFn, rpc: mockAllowedRpc() });
-
-    const res = await POST(
-      mockRequest({
-        entries: [makeEntry(todayStr(), {
-          models: ["gpt-5-codex"],
-          costUSD: 10,
-          inputTokens: 10000,
-          outputTokens: 100,
-          totalTokens: 10100,
-          modelBreakdown: [{ model: "gpt-5-codex", cost_usd: 10 }],
-        })],
-        source: "cli",
-        collector: { codex: "straude-codex-native-last-token-usage" },
-      })
-    );
-    const json = await res.json();
-
-    expect(res.status).toBe(200);
-    expect(deviceUpsertChain.upsert).not.toHaveBeenCalled();
-    expect(deviceDeleteChain.delete).not.toHaveBeenCalled();
-    expect(dailyChain.upsert.mock.calls[0][0].cost_usd).toBe(100);
-    expect(json.results[0].daily_total).toBe(100);
+    expect(response.status).toBe(400);
+    expect(await response.json()).toEqual({ error: `Duplicate date: ${DATE}` });
+    expect(rpc).not.toHaveBeenCalledWith("submit_usage_day_v2", expect.anything());
   });
 
-  it("does not let a trusted Codex request lower a Claude-only device row", async () => {
-    (verifyCliToken as any).mockReturnValue("user-claude-lower");
+  it("rejects mismatched inner and outer dates", async () => {
+    const entry = legacyEntry();
+    entry.data.date = "2026-07-22";
 
-    const existingClaudeRow = {
-      cost_usd: 20,
-      input_tokens: 1000,
-      output_tokens: 500,
-      cache_creation_tokens: 0,
-      cache_read_tokens: 0,
-      total_tokens: 1500,
-      models: ["claude-opus-4-20250505"],
-      model_breakdown: [{ model: "claude-opus-4-20250505", cost_usd: 20 }],
-      collector_meta: { claude: "ccusage-v18" },
-    };
-    const deviceGuardChain: Record<string, any> = {
-      select: vi.fn().mockReturnThis(),
-      eq: vi.fn().mockReturnThis(),
-      maybeSingle: vi.fn().mockResolvedValue({ data: existingClaudeRow, error: null }),
-    };
-    const deviceCountChain: Record<string, any> = {
-      select: vi.fn().mockReturnThis(),
-      eq: vi.fn().mockImplementation(() => ({
-        eq: vi.fn().mockResolvedValue({ count: 1, data: null, error: null }),
-      })),
-    };
-    const deviceUpsertChain: Record<string, any> = {
-      upsert: vi.fn().mockReturnThis(),
-      select: vi.fn().mockReturnThis(),
-      single: vi.fn().mockResolvedValue({ data: { id: "dev-1" }, error: null }),
-    };
-    const deviceFetchChain: Record<string, any> = {
-      select: vi.fn().mockReturnThis(),
-      eq: vi.fn().mockImplementation(() => ({
-        eq: vi.fn().mockResolvedValue({ data: [existingClaudeRow], error: null }),
-      })),
-    };
-    const dailyChain: Record<string, any> = {
-      select: vi.fn().mockReturnThis(),
-      upsert: vi.fn().mockReturnThis(),
-      eq: vi.fn().mockReturnThis(),
-      maybeSingle: vi.fn().mockResolvedValue({
-        data: {
-          id: "usage-1",
-          cost_usd: 20,
-          models: existingClaudeRow.models,
-          model_breakdown: existingClaudeRow.model_breakdown,
-          collector_meta: { claude: "ccusage-v18" },
-        },
-        error: null,
-      }),
-      single: vi.fn().mockResolvedValue({ data: { id: "usage-1" }, error: null }),
-    };
-    const postChain: Record<string, any> = {
-      select: vi.fn().mockReturnThis(),
-      update: vi.fn().mockReturnThis(),
-      eq: vi.fn().mockReturnThis(),
-      maybeSingle: vi.fn().mockResolvedValue({ data: { id: "post-1", title: "Apr 24" }, error: null }),
-      single: vi.fn().mockResolvedValue({ data: { id: "post-1" }, error: null }),
-    };
+    const response = await POST(request(legacyBody([entry])));
 
-    let deviceFromCallCount = 0;
-    const fromFn = vi.fn((table: string) => {
-      if (table === "device_usage") {
-        deviceFromCallCount++;
-        if (deviceFromCallCount === 1) return deviceGuardChain;
-        if (deviceFromCallCount === 2) return deviceCountChain;
-        if (deviceFromCallCount === 3) return deviceFetchChain;
-        return deviceUpsertChain;
-      }
-      if (table === "daily_usage") return dailyChain;
-      if (table === "posts") return postChain;
-      return dailyChain;
-    });
-    (getServiceClient as any).mockReturnValue({ from: fromFn, rpc: mockAllowedRpc() });
-
-    const res = await POST(
-      mockRequest({
-        entries: [makeEntry(todayStr(), {
-          models: ["claude-opus-4-20250505"],
-          costUSD: 10,
-          inputTokens: 500,
-          outputTokens: 250,
-          totalTokens: 750,
-          modelBreakdown: [{ model: "claude-opus-4-20250505", cost_usd: 10 }],
-        })],
-        source: "cli",
-        collector: { codex: "straude-codex-native-last-token-usage", claude: "ccusage-v18" },
-      })
-    );
-    const json = await res.json();
-
-    expect(res.status).toBe(200);
-    expect(deviceUpsertChain.upsert).not.toHaveBeenCalled();
-    expect(dailyChain.upsert.mock.calls[0][0].cost_usd).toBe(20);
-    expect(dailyChain.upsert.mock.calls[0][0].collector_meta).toEqual({ claude: "ccusage-v18" });
-    expect(json.results[0].daily_total).toBe(20);
-  });
-
-  it.each([
-    ["native last-token collector", "straude-codex-native-last-token-usage"],
-    ["ccusage Codex v20 collector", "ccusage-codex-v20"],
-  ])("allows a mixed trusted Codex correction from the %s when non-Codex cost is preserved", async (_label, codexCollector) => {
-    (verifyCliToken as any).mockReturnValue("user-mixed-preserved");
-
-    const existingMixedRow = {
-      cost_usd: 120,
-      input_tokens: 100000,
-      output_tokens: 1000,
-      cache_creation_tokens: 0,
-      cache_read_tokens: 50000,
-      total_tokens: 151000,
-      models: ["claude-opus-4-20250505", "gpt-5-codex"],
-      model_breakdown: [
-        { model: "claude-opus-4-20250505", cost_usd: 90 },
-        { model: "gpt-5-codex", cost_usd: 30 },
-      ],
-    };
-    const correctedMixedRow = {
-      ...existingMixedRow,
-      cost_usd: 100,
-      input_tokens: 80000,
-      cache_read_tokens: 10000,
-      total_tokens: 91000,
-      model_breakdown: [
-        { model: "claude-opus-4-20250505", cost_usd: 90 },
-        { model: "gpt-5-codex", cost_usd: 10 },
-      ],
-      collector_meta: { claude: "ccusage-v18", codex: codexCollector },
-    };
-    const deviceGuardChain: Record<string, any> = {
-      select: vi.fn().mockReturnThis(),
-      eq: vi.fn().mockReturnThis(),
-      maybeSingle: vi.fn().mockResolvedValue({ data: existingMixedRow, error: null }),
-    };
-    const deviceCountChain: Record<string, any> = {
-      select: vi.fn().mockReturnThis(),
-      eq: vi.fn().mockImplementation(() => ({
-        eq: vi.fn().mockResolvedValue({ count: 1, data: null, error: null }),
-      })),
-    };
-    const deviceUpsertChain: Record<string, any> = {
-      upsert: vi.fn().mockReturnThis(),
-      select: vi.fn().mockReturnThis(),
-      single: vi.fn().mockResolvedValue({ data: { id: "dev-1" }, error: null }),
-    };
-    const deviceDeleteChain: Record<string, any> = {
-      delete: vi.fn().mockReturnThis(),
-      eq: vi.fn().mockReturnThis(),
-    };
-    const deviceFetchChain: Record<string, any> = {
-      select: vi.fn().mockReturnThis(),
-      eq: vi.fn().mockImplementation(() => ({
-        eq: vi.fn().mockResolvedValue({ data: [correctedMixedRow], error: null }),
-      })),
-    };
-    const dailyChain: Record<string, any> = {
-      select: vi.fn().mockReturnThis(),
-      upsert: vi.fn().mockReturnThis(),
-      eq: vi.fn().mockReturnThis(),
-      maybeSingle: vi.fn().mockResolvedValue({
-        data: {
-          id: "usage-1",
-          cost_usd: 120,
-          models: existingMixedRow.models,
-          model_breakdown: existingMixedRow.model_breakdown,
-        },
-        error: null,
-      }),
-      single: vi.fn().mockResolvedValue({ data: { id: "usage-1" }, error: null }),
-    };
-    const postChain: Record<string, any> = {
-      select: vi.fn().mockReturnThis(),
-      update: vi.fn().mockReturnThis(),
-      eq: vi.fn().mockReturnThis(),
-      maybeSingle: vi.fn().mockResolvedValue({ data: { id: "post-1", title: "Apr 24" }, error: null }),
-      single: vi.fn().mockResolvedValue({ data: { id: "post-1" }, error: null }),
-    };
-
-    let deviceFromCallCount = 0;
-    const fromFn = vi.fn((table: string) => {
-      if (table === "device_usage") {
-        deviceFromCallCount++;
-        if (deviceFromCallCount === 1) return deviceGuardChain;
-        if (deviceFromCallCount === 2) return deviceCountChain;
-        if (deviceFromCallCount === 3) return deviceUpsertChain;
-        if (deviceFromCallCount === 4) return deviceDeleteChain;
-        return deviceFetchChain;
-      }
-      if (table === "daily_usage") return dailyChain;
-      if (table === "posts") return postChain;
-      return dailyChain;
-    });
-    (getServiceClient as any).mockReturnValue({ from: fromFn, rpc: mockAllowedRpc() });
-
-    const res = await POST(
-      mockRequest({
-        entries: [makeEntry(todayStr(), {
-          models: ["claude-opus-4-20250505", "gpt-5-codex"],
-          costUSD: 100,
-          inputTokens: 80000,
-          outputTokens: 1000,
-          cacheReadTokens: 10000,
-          totalTokens: 91000,
-          modelBreakdown: correctedMixedRow.model_breakdown,
-        })],
-        source: "cli",
-        collector: { codex: codexCollector, claude: "ccusage-claude-v20" },
-      })
-    );
-
-    expect(res.status).toBe(200);
-    expect(deviceUpsertChain.upsert).toHaveBeenCalled();
-    expect(deviceDeleteChain.delete).toHaveBeenCalled();
-    expect(dailyChain.upsert.mock.calls[0][0].cost_usd).toBe(100);
-    expect(dailyChain.upsert.mock.calls[0][0].collector_meta).toEqual({
-      claude: "ccusage-claude-v20",
-      codex: codexCollector,
+    expect(response.status).toBe(400);
+    expect(await response.json()).toMatchObject({
+      error: expect.stringContaining("outside the 30-day backfill window"),
     });
   });
 
-  it("accepts every ccusage source and stores row-specific collector metadata", async () => {
-    (verifyCliToken as any).mockReturnValue("user-collector-meta");
-    const svc = mockServiceClient();
-    svc.single
-      .mockResolvedValueOnce({ data: { id: "dev-1" }, error: null })
-      .mockResolvedValueOnce({ data: { id: "usage-1" }, error: null })
-      .mockResolvedValueOnce({ data: { id: "post-1" }, error: null });
+  it("rejects accounting totals that do not match token categories", async () => {
+    const entry = legacyEntry();
+    entry.data.totalTokens = 159;
 
-    const res = await POST(
-      mockRequest({
-        entries: [makeEntry(todayStr(), {
-          agents: ["opencode"],
-          models: ["gpt-5.6"],
-          modelBreakdown: [{ model: "gpt-5.6", cost_usd: 0.05 }],
-        })],
-        source: "cli",
-        collector: {
-          claude: "ccusage-claude-v20",
-          codex: "ccusage-codex-v20",
-          ccusage_version: "20.0.16",
-          ccusage_agents: ALL_BUILT_IN_CCUSAGE_AGENTS,
-          pricing_mode: "offline",
-        },
-      })
-    );
+    const response = await POST(request(legacyBody([entry])));
 
-    const expectedMeta = {
-      ccusage_version: "20.0.16",
-      ccusage_agents: ["opencode"],
-      pricing_mode: "offline",
-    };
-    expect(res.status).toBe(200);
-    expect(svc.upsert.mock.calls[0][0].collector_meta).toEqual(expectedMeta);
-    expect(svc.upsert.mock.calls[1][0].collector_meta).toEqual(expectedMeta);
-  });
-
-  it("blocks a mixed trusted Codex correction when non-Codex cost would fall", async () => {
-    (verifyCliToken as any).mockReturnValue("user-mixed-blocked");
-
-    const existingMixedRow = {
-      cost_usd: 120,
-      input_tokens: 100000,
-      output_tokens: 1000,
-      cache_creation_tokens: 0,
-      cache_read_tokens: 50000,
-      total_tokens: 151000,
-      models: ["claude-opus-4-20250505", "gpt-5-codex"],
-      model_breakdown: [
-        { model: "claude-opus-4-20250505", cost_usd: 90 },
-        { model: "gpt-5-codex", cost_usd: 30 },
-      ],
-      collector_meta: { claude: "ccusage-v18", codex: "straude-codex-native-v1" },
-    };
-    const deviceGuardChain: Record<string, any> = {
-      select: vi.fn().mockReturnThis(),
-      eq: vi.fn().mockReturnThis(),
-      maybeSingle: vi.fn().mockResolvedValue({ data: existingMixedRow, error: null }),
-    };
-    const deviceCountChain: Record<string, any> = {
-      select: vi.fn().mockReturnThis(),
-      eq: vi.fn().mockImplementation(() => ({
-        eq: vi.fn().mockResolvedValue({ count: 1, data: null, error: null }),
-      })),
-    };
-    const deviceUpsertChain: Record<string, any> = {
-      upsert: vi.fn().mockReturnThis(),
-      select: vi.fn().mockReturnThis(),
-      single: vi.fn().mockResolvedValue({ data: { id: "dev-1" }, error: null }),
-    };
-    const deviceDeleteChain: Record<string, any> = {
-      delete: vi.fn().mockReturnThis(),
-      eq: vi.fn().mockReturnThis(),
-    };
-    const deviceFetchChain: Record<string, any> = {
-      select: vi.fn().mockReturnThis(),
-      eq: vi.fn().mockImplementation(() => ({
-        eq: vi.fn().mockResolvedValue({ data: [existingMixedRow], error: null }),
-      })),
-    };
-    const dailyChain: Record<string, any> = {
-      select: vi.fn().mockReturnThis(),
-      upsert: vi.fn().mockReturnThis(),
-      eq: vi.fn().mockReturnThis(),
-      maybeSingle: vi.fn().mockResolvedValue({
-        data: {
-          id: "usage-1",
-          cost_usd: 120,
-          models: existingMixedRow.models,
-          model_breakdown: existingMixedRow.model_breakdown,
-        },
-        error: null,
-      }),
-      single: vi.fn().mockResolvedValue({ data: { id: "usage-1" }, error: null }),
-    };
-    const postChain: Record<string, any> = {
-      select: vi.fn().mockReturnThis(),
-      update: vi.fn().mockReturnThis(),
-      eq: vi.fn().mockReturnThis(),
-      maybeSingle: vi.fn().mockResolvedValue({ data: { id: "post-1", title: "Apr 24" }, error: null }),
-      single: vi.fn().mockResolvedValue({ data: { id: "post-1" }, error: null }),
-    };
-
-    let deviceFromCallCount = 0;
-    const fromFn = vi.fn((table: string) => {
-      if (table === "device_usage") {
-        deviceFromCallCount++;
-        if (deviceFromCallCount === 1) return deviceGuardChain;
-        if (deviceFromCallCount === 2) return deviceCountChain;
-        if (deviceFromCallCount === 3) return deviceFetchChain;
-        return deviceDeleteChain;
-      }
-      if (table === "daily_usage") return dailyChain;
-      if (table === "posts") return postChain;
-      return dailyChain;
+    expect(response.status).toBe(400);
+    expect(await response.json()).toEqual({
+      error: `Token categories do not equal total tokens for ${DATE}`,
     });
-    (getServiceClient as any).mockReturnValue({ from: fromFn, rpc: mockAllowedRpc() });
-
-    const res = await POST(
-      mockRequest({
-        entries: [makeEntry(todayStr(), {
-          models: ["claude-opus-4-20250505", "gpt-5-codex"],
-          costUSD: 90,
-          inputTokens: 80000,
-          outputTokens: 1000,
-          cacheReadTokens: 10000,
-          totalTokens: 91000,
-          modelBreakdown: [
-            { model: "claude-opus-4-20250505", cost_usd: 80 },
-            { model: "gpt-5-codex", cost_usd: 10 },
-          ],
-        })],
-        source: "cli",
-        collector: { codex: "straude-codex-native-last-token-usage", claude: "ccusage-v18" },
-      })
-    );
-    const json = await res.json();
-
-    expect(res.status).toBe(200);
-    expect(deviceUpsertChain.upsert).not.toHaveBeenCalled();
-    expect(deviceDeleteChain.delete).not.toHaveBeenCalled();
-    expect(dailyChain.upsert.mock.calls[0][0].cost_usd).toBe(120);
-    expect(json.results[0].daily_total).toBe(120);
   });
 
-  it.each([
-    ["legacy repair", { repair: "codex_inflation_repair", previous_cost_usd: 100 }],
-    ["v3 codex repair", { repair_v3_codex_only: "true", cost_before_v3: 100 }],
-    ["Claude restore", { claude_restore_2026_05_07: "true", cost_before_claude_restore: 5 }],
-  ])("preserves %s metadata and blocks reinflation from the older collector", async (_label, repairMeta) => {
-    (verifyCliToken as any).mockReturnValue(`user-repair-${String(_label).replaceAll(" ", "-")}`);
+  it("rejects negative cache tokens", async () => {
+    const entry = legacyEntry();
+    entry.data.cacheReadTokens = -1;
 
-    const repairedRow = {
-      cost_usd: 10,
-      input_tokens: 10000,
-      output_tokens: 100,
-      cache_creation_tokens: 0,
-      cache_read_tokens: 0,
-      total_tokens: 10100,
-      models: ["gpt-5-codex"],
-      model_breakdown: [{ model: "gpt-5-codex", cost_usd: 10 }],
-      collector_meta: repairMeta,
-    };
-    const deviceGuardChain: Record<string, any> = {
-      select: vi.fn().mockReturnThis(),
-      eq: vi.fn().mockReturnThis(),
-      maybeSingle: vi.fn().mockResolvedValue({ data: repairedRow, error: null }),
-    };
-    const deviceCountChain: Record<string, any> = {
-      select: vi.fn().mockReturnThis(),
-      eq: vi.fn().mockImplementation(() => ({
-        eq: vi.fn().mockResolvedValue({ count: 1, data: null, error: null }),
-      })),
-    };
-    const deviceUpsertChain: Record<string, any> = {
-      upsert: vi.fn().mockReturnThis(),
-      select: vi.fn().mockReturnThis(),
-      single: vi.fn().mockResolvedValue({ data: { id: "dev-1" }, error: null }),
-    };
-    const deviceFetchChain: Record<string, any> = {
-      select: vi.fn().mockReturnThis(),
-      eq: vi.fn().mockImplementation(() => ({
-        eq: vi.fn().mockResolvedValue({ data: [repairedRow], error: null }),
-      })),
-    };
-    const dailyChain: Record<string, any> = {
-      select: vi.fn().mockReturnThis(),
-      upsert: vi.fn().mockReturnThis(),
-      eq: vi.fn().mockReturnThis(),
-      maybeSingle: vi.fn().mockResolvedValue({
-        data: {
-          id: "usage-1",
-          cost_usd: 10,
-          models: repairedRow.models,
-          model_breakdown: repairedRow.model_breakdown,
-          collector_meta: repairMeta,
-        },
-        error: null,
-      }),
-      single: vi.fn().mockResolvedValue({ data: { id: "usage-1" }, error: null }),
-    };
-    const postChain: Record<string, any> = {
-      select: vi.fn().mockReturnThis(),
-      update: vi.fn().mockReturnThis(),
-      eq: vi.fn().mockReturnThis(),
-      maybeSingle: vi.fn().mockResolvedValue({ data: { id: "post-1", title: "Apr 24" }, error: null }),
-      single: vi.fn().mockResolvedValue({ data: { id: "post-1" }, error: null }),
-    };
+    const response = await POST(request(legacyBody([entry])));
 
-    let deviceFromCallCount = 0;
-    const fromFn = vi.fn((table: string) => {
-      if (table === "device_usage") {
-        deviceFromCallCount++;
-        if (deviceFromCallCount === 1) return deviceGuardChain;
-        if (deviceFromCallCount === 2) return deviceCountChain;
-        if (deviceFromCallCount === 3) return deviceFetchChain;
-        return deviceUpsertChain;
-      }
-      if (table === "daily_usage") return dailyChain;
-      if (table === "posts") return postChain;
-      return dailyChain;
+    expect(response.status).toBe(400);
+    expect(await response.json()).toEqual({
+      error: `Invalid cache read tokens for ${DATE}`,
     });
-    (getServiceClient as any).mockReturnValue({ from: fromFn, rpc: mockAllowedRpc() });
-
-    const res = await POST(
-      mockRequest({
-        entries: [makeEntry(todayStr(), {
-          models: ["gpt-5-codex"],
-          costUSD: 100,
-          inputTokens: 100000,
-          outputTokens: 1000,
-          totalTokens: 101000,
-          modelBreakdown: [{ model: "gpt-5-codex", cost_usd: 100 }],
-        })],
-        source: "cli",
-        collector: { codex: "straude-codex-native-v1" },
-      })
-    );
-    const json = await res.json();
-
-    expect(res.status).toBe(200);
-    expect(deviceUpsertChain.upsert).not.toHaveBeenCalled();
-    expect(dailyChain.upsert.mock.calls[0][0].cost_usd).toBe(10);
-    expect(dailyChain.upsert.mock.calls[0][0].collector_meta).toMatchObject(repairMeta);
-    expect(json.results[0].daily_total).toBe(10);
   });
 
-  it("rejects requests without device_id", async () => {
-    (verifyCliToken as any).mockReturnValue("user-1");
-    mockServiceClient();
+  it("rejects invalid JSON and oversized bodies", async () => {
+    const invalid = await POST(new Request("http://localhost/api/usage/submit", {
+      method: "POST",
+      body: "{",
+    }));
+    expect(invalid.status).toBe(400);
 
-    const res = await POST(
-      mockRequestRaw({ entries: [makeEntry(todayStr())], source: "cli" })
-    );
-    const json = await res.json();
-
-    expect(res.status).toBe(400);
-    expect(json.error).toContain("device_id is required");
+    const oversized = await POST(request({
+      ...legacyBody(),
+      padding: "x".repeat(260 * 1024),
+    }));
+    expect(oversized.status).toBe(413);
   });
 
-  it("accepts merged Claude + Codex usage in a single entry", async () => {
-    (verifyCliToken as any).mockReturnValue("user-1");
-    const svc = mockServiceClient();
-    svc.single
-      .mockResolvedValueOnce({ data: { id: "dev-1" }, error: null })
-      .mockResolvedValueOnce({ data: { id: "usage-1" }, error: null })
-      .mockResolvedValueOnce({ data: { id: "post-1" }, error: null });
+  it("returns non-2xx when the transaction RPC fails", async () => {
+    rpc.mockImplementation((name: string) => name === "check_rate_limit"
+      ? Promise.resolve({ data: [{ allowed: true, retry_after_seconds: 0 }], error: null })
+      : Promise.resolve({ data: null, error: { code: "40001", message: "serialization failure" } }));
 
-    const res = await POST(
-      mockRequest({
-        entries: [
-          makeEntry(todayStr(), {
-            models: ["claude-opus-4-20250505", "gpt-5-codex"],
-            costUSD: 13.0,
-            inputTokens: 3000,
-            outputTokens: 1300,
-            totalTokens: 4300,
-            modelBreakdown: [
-              { model: "claude-opus-4-20250505", cost_usd: 10.0 },
-              { model: "gpt-5-codex", cost_usd: 3.0 },
-            ],
-          }),
-        ],
-        source: "cli",
-      })
-    );
-    const json = await res.json();
+    const response = await POST(request(legacyBody()));
 
-    expect(res.status).toBe(200);
-    expect(json.results).toHaveLength(1);
-    const upsertCall = svc.upsert.mock.calls[0];
-    expect(upsertCall[0].cost_usd).toBe(13.0);
-    expect(upsertCall[0].input_tokens).toBe(3000);
-    expect(upsertCall[0].models).toEqual(["claude-opus-4-20250505", "gpt-5-codex"]);
-    expect(upsertCall[0].model_breakdown).toEqual([
-      { model: "claude-opus-4-20250505", cost_usd: 10.0 },
-      { model: "gpt-5-codex", cost_usd: 3.0 },
-    ]);
-  });
-});
-
-// ---------------------------------------------------------------------------
-// aggregateDeviceRows
-// ---------------------------------------------------------------------------
-
-describe("aggregateDeviceRows", () => {
-  it("sums numeric fields across two device rows", () => {
-    const rows = [
-      {
-        cost_usd: 5.0,
-        input_tokens: 1000,
-        output_tokens: 500,
-        reasoning_output_tokens: 125,
-        cache_creation_tokens: 100,
-        cache_read_tokens: 50,
-        total_tokens: 1650,
-        models: ["claude-opus-4-20250505"],
-        model_breakdown: [{ model: "claude-opus-4-20250505", cost_usd: 5.0 }],
-      },
-      {
-        cost_usd: 3.0,
-        input_tokens: 2000,
-        output_tokens: 800,
-        reasoning_output_tokens: 75,
-        cache_creation_tokens: 0,
-        cache_read_tokens: 0,
-        total_tokens: 2800,
-        models: ["claude-sonnet-4-5-20250929"],
-        model_breakdown: [{ model: "claude-sonnet-4-5-20250929", cost_usd: 3.0 }],
-      },
-    ];
-
-    const agg = aggregateDeviceRows(rows);
-
-    expect(agg.cost_usd).toBe(8.0);
-    expect(agg.input_tokens).toBe(3000);
-    expect(agg.output_tokens).toBe(1300);
-    expect(agg.reasoning_output_tokens).toBe(200);
-    expect(agg.cache_creation_tokens).toBe(100);
-    expect(agg.cache_read_tokens).toBe(50);
-    expect(agg.total_tokens).toBe(4450);
-    expect(agg.session_count).toBe(2);
-  });
-
-  it("deduplicates models across devices", () => {
-    const rows = [
-      {
-        cost_usd: 5.0,
-        input_tokens: 1000, output_tokens: 500,
-        cache_creation_tokens: 0, cache_read_tokens: 0,
-        total_tokens: 1500,
-        models: ["claude-opus-4-20250505"],
-        model_breakdown: null,
-      },
-      {
-        cost_usd: 3.0,
-        input_tokens: 2000, output_tokens: 800,
-        cache_creation_tokens: 0, cache_read_tokens: 0,
-        total_tokens: 2800,
-        models: ["claude-opus-4-20250505"],
-        model_breakdown: null,
-      },
-    ];
-
-    const agg = aggregateDeviceRows(rows);
-    expect(agg.models).toEqual(["claude-opus-4-20250505"]);
-  });
-
-  it("merges model_breakdown by summing cost per model name", () => {
-    const rows = [
-      {
-        cost_usd: 5.0,
-        input_tokens: 1000, output_tokens: 500,
-        cache_creation_tokens: 0, cache_read_tokens: 0,
-        total_tokens: 1500,
-        models: ["claude-opus-4-20250505"],
-        model_breakdown: [{ model: "claude-opus-4-20250505", cost_usd: 5.0 }],
-      },
-      {
-        cost_usd: 7.0,
-        input_tokens: 2000, output_tokens: 800,
-        cache_creation_tokens: 0, cache_read_tokens: 0,
-        total_tokens: 2800,
-        models: ["claude-opus-4-20250505"],
-        model_breakdown: [{ model: "claude-opus-4-20250505", cost_usd: 7.0 }],
-      },
-    ];
-
-    const agg = aggregateDeviceRows(rows);
-    expect(agg.model_breakdown).toEqual([
-      { model: "claude-opus-4-20250505", cost_usd: 12.0 },
-    ]);
-  });
-
-  it("session_count reflects number of device rows", () => {
-    const rows = [
-      { cost_usd: 1, input_tokens: 0, output_tokens: 0, cache_creation_tokens: 0, cache_read_tokens: 0, total_tokens: 0, models: [], model_breakdown: null },
-      { cost_usd: 2, input_tokens: 0, output_tokens: 0, cache_creation_tokens: 0, cache_read_tokens: 0, total_tokens: 0, models: [], model_breakdown: null },
-      { cost_usd: 3, input_tokens: 0, output_tokens: 0, cache_creation_tokens: 0, cache_read_tokens: 0, total_tokens: 0, models: [], model_breakdown: null },
-    ];
-
-    const agg = aggregateDeviceRows(rows);
-    expect(agg.session_count).toBe(3);
-    expect(agg.cost_usd).toBe(6);
-  });
-
-  it("returns null model_breakdown when no devices have breakdowns", () => {
-    const rows = [
-      { cost_usd: 1, input_tokens: 0, output_tokens: 0, cache_creation_tokens: 0, cache_read_tokens: 0, total_tokens: 0, models: [], model_breakdown: null },
-    ];
-
-    const agg = aggregateDeviceRows(rows);
-    expect(agg.model_breakdown).toBeNull();
+    expect(response.status).toBe(503);
+    expect(response.status).not.toBe(207);
+    expect(await response.json()).toMatchObject({
+      error: "Usage transaction is temporarily unavailable",
+      results: [],
+      errors: ["Usage transaction is temporarily unavailable"],
+    });
   });
 });

@@ -47,6 +47,8 @@ Supabase can check passwords against HaveIBeenPwned to block known-compromised p
 
 ### Passed
 
+**CLI release supply chain.** CLI runtime collection is pinned to `ccusage@20.0.16`. CI installs the Bun lockfile with Bun 1.3.3 in frozen mode, builds one npm tarball, and installs that exact artifact on Linux, macOS, and Windows under Node 20 and 22. The tag workflow requests npm trusted-publishing credentials over OIDC, carries no long-lived publish token, and publishes only after the package matrix passes; npm must be configured to trust `release-cli.yml` before the first release. Source maps are excluded from npm and GitHub releases, then retained as short-lived GitHub Actions artifacts for production diagnosis.
+
 **RLS enabled on all 9 tables with appropriate policies.** Live database confirmed:
 
 | Table | Policies | Write guard |

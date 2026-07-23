@@ -1,25 +1,33 @@
 {
   "name": "straude",
-  "version": "0.1.30",
+  "version": "0.2.0",
   "description": "CLI for pushing AI coding agent usage stats to Straude",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/ohong/straude.git",
+    "directory": "packages/cli"
+  },
   "main": "dist/index.js",
   "bin": {
     "straude": "dist/index.js"
   },
   "files": [
-    "dist"
+    "dist/index.js"
   ],
   "type": "module",
   "engines": {
-    "node": ">=18"
+    "node": ">=20"
   },
   "scripts": {
-    "build": "cd ../shared && bun run build && cd ../cli && tsup",
+    "build:shared": "bun run --cwd ../shared build",
+    "build": "bun run build:shared && tsup",
     "dev": "tsup --watch",
-    "typecheck": "tsc --noEmit",
-    "prepublishOnly": "bun run build",
-    "test": "vitest run",
-    "test:packaged": "node scripts/packaged-cli-e2e.mjs"
+    "typecheck": "bun run build:shared && tsc --noEmit",
+    "prepack": "bun run build",
+    "test": "bun run build:shared && vitest run",
+    "test:packaged": "node scripts/packaged-cli-e2e.mjs",
+    "benchmark": "node scripts/benchmark-cli.mjs",
+    "benchmark:collector": "node scripts/benchmark-collector.mjs"
   },
   "devDependencies": {
     "@straude/shared": "workspace:*",
@@ -31,7 +39,7 @@
   },
   "dependencies": {
     "@pppp606/ink-chart": "^0.2.4",
-    "ccusage": "^20.0.16",
+    "ccusage": "20.0.16",
     "chalk": "^5.6.2",
     "ink": "^6.8.0",
     "posthog-node": "^5.29.1",

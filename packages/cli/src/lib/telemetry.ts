@@ -1,3 +1,4 @@
+import { createHash } from "node:crypto";
 import { performance } from "node:perf_hooks";
 import type { StraudeConfig } from "./auth.js";
 import { getDistinctId } from "./machine-id.js";
@@ -22,8 +23,18 @@ function errorName(error: unknown): string {
   return typeof error;
 }
 
-function truncate(value: string, max: number): string {
-  return value.length > max ? `${value.slice(0, max)}...` : value;
+function errorFingerprint(error: unknown): string {
+  const name = errorName(error);
+  const stack = error instanceof Error && error.stack
+    ? error.stack
+      .split("\n")
+      .slice(1, 6)
+      .map((frame) => frame
+        .replaceAll(/file:\/\/\/[^)\s]+[/\\]([^/\\)\s]+:\d+:\d+)/g, "$1")
+        .replaceAll(/(?:[A-Za-z]:)?[^()\s]+[/\\]([^/\\)\s]+:\d+:\d+)/g, "$1"))
+      .join("\n")
+    : "";
+  return createHash("sha256").update(`${name}\n${stack}`).digest("hex").slice(0, 24);
 }
 
 export function reportUsagePushFailed(
@@ -35,8 +46,8 @@ export function reportUsagePushFailed(
     distinctId: getDistinctId(config),
     event: "usage_push_failed",
     properties: {
-      error: truncate(errorMessage(error), 200),
       error_name: errorName(error),
+      error_fingerprint: errorFingerprint(error),
       ...properties,
     },
   });
@@ -47,7 +58,15 @@ export function reportCliException(
   error: unknown,
   properties: TelemetryProperties = {},
 ): void {
-  posthog.captureException(error, getDistinctId(config), properties);
+  posthog.capture({
+    distinctId: getDistinctId(config),
+    event: "cli_exception",
+    properties: {
+      error_name: errorName(error),
+      error_fingerprint: errorFingerprint(error),
+      ...properties,
+    },
+  });
 }
 
 export async function shutdownTelemetryWithTimeout(
@@ -56,13 +75,17 @@ export async function shutdownTelemetryWithTimeout(
   const startedAt = performance.now();
   let timer: NodeJS.Timeout | undefined;
   try {
-    await Promise.race([
-      posthog._shutdown(timeoutMs),
-      new Promise<void>((resolve) => {
-        timer = setTimeout(resolve, timeoutMs);
-        timer.unref?.();
-      }),
-    ]);
+    try {
+      await Promise.race([
+        posthog._shutdown(timeoutMs),
+        new Promise<void>((resolve) => {
+          timer = setTimeout(resolve, timeoutMs);
+          timer.unref?.();
+        }),
+      ]);
+    } catch {
+      // Telemetry must never change a command's result or exit code.
+    }
   } finally {
     if (timer) clearTimeout(timer);
   }

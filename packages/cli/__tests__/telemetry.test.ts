@@ -4,6 +4,7 @@ vi.mock("../src/lib/posthog.js", () => ({
   posthog: {
     capture: vi.fn(),
     captureException: vi.fn(),
+    _shutdown: vi.fn(),
   },
 }));
 
@@ -17,6 +18,7 @@ import {
   isPushInvocation,
   reportCliException,
   reportUsagePushFailed,
+  shutdownTelemetryWithTimeout,
 } from "../src/lib/telemetry.js";
 
 const mockCapture = vi.mocked(posthog.capture);
@@ -50,8 +52,8 @@ describe("telemetry", () => {
       distinctId: "alice",
       event: "usage_push_failed",
       properties: {
-        error: "submit failed",
         error_name: "Error",
+        error_fingerprint: expect.stringMatching(/^[a-f0-9]{24}$/),
         command: "push",
         stage: "submit",
       },
@@ -59,7 +61,7 @@ describe("telemetry", () => {
     expect(mockCaptureException).not.toHaveBeenCalled();
   });
 
-  it("keeps non-push command crashes in PostHog exceptions", () => {
+  it("reports non-push crashes without sending raw exception content", () => {
     const error = new Error("login broke");
     reportCliException(
       { token: "tok", username: "alice", api_url: "https://straude.com" },
@@ -67,10 +69,20 @@ describe("telemetry", () => {
       { command: "login" },
     );
 
-    expect(mockCaptureException).toHaveBeenCalledWith(
-      error,
-      "alice",
-      { command: "login" },
-    );
+    expect(mockCapture).toHaveBeenCalledWith({
+      distinctId: "alice",
+      event: "cli_exception",
+      properties: {
+        error_name: "Error",
+        error_fingerprint: expect.stringMatching(/^[a-f0-9]{24}$/),
+        command: "login",
+      },
+    });
+    expect(mockCaptureException).not.toHaveBeenCalled();
+  });
+
+  it("treats telemetry shutdown rejection as best-effort", async () => {
+    vi.mocked(posthog._shutdown).mockRejectedValueOnce(new Error("transport failed"));
+    await expect(shutdownTelemetryWithTimeout(10)).resolves.toBeGreaterThanOrEqual(0);
   });
 });

@@ -53,7 +53,7 @@ describe("resolvePushDateRange", () => {
       expect(r.error).toContain("future date");
     });
 
-    it("rejects far-future dates with the backfill-window error", () => {
+    it("rejects far-future dates as future dates", () => {
       const r = resolvePushDateRange({
         today: dateAt("2026-05-04"),
         options: { date: "2099-01-01" },
@@ -61,7 +61,7 @@ describe("resolvePushDateRange", () => {
       });
       expect(r.ok).toBe(false);
       if (r.ok) return;
-      expect(r.error).toContain("within the last 30 days");
+      expect(r.error).toContain("future date");
     });
 
     it("accepts a date exactly 30 days back (boundary)", () => {
@@ -86,7 +86,7 @@ describe("resolvePushDateRange", () => {
   });
 
   describe("ccusage migration branch", () => {
-    it("does not expand a normal sync to 30 days when the migration marker is missing", () => {
+    it("uses exactly three days when the v2 collector migration is pending", () => {
       const r = resolvePushDateRange({
         today: dateAt("2026-05-04"),
         options: {},
@@ -95,7 +95,7 @@ describe("resolvePushDateRange", () => {
       });
       expect(r.ok).toBe(true);
       if (!r.ok) return;
-      expect(isoDay(r.since)).toBe("2026-05-01");
+      expect(isoDay(r.since)).toBe("2026-05-02");
       expect(isoDay(r.until)).toBe("2026-05-04");
     });
 
@@ -124,20 +124,20 @@ describe("resolvePushDateRange", () => {
       expect(isoDay(r.until)).toBe("2026-05-04");
     });
 
-    it("caps --days at MAX_BACKFILL_DAYS even if user requests more", () => {
+    it("rejects --days above MAX_BACKFILL_DAYS", () => {
       const r = resolvePushDateRange({
         today: dateAt("2026-05-04"),
         options: { days: 90 },
         shouldRunMigrationBackfill: false,
       });
-      expect(r.ok).toBe(true);
-      if (!r.ok) return;
-      expect(isoDay(r.since)).toBe("2026-04-05"); // today - 29
+      expect(r.ok).toBe(false);
+      if (r.ok) return;
+      expect(r.error).toContain("between 1 and 30");
     });
   });
 
   describe("smart-sync from last_push_date", () => {
-    it("includes the last_push_date when it's within DEFAULT_SYNC_DAYS", () => {
+    it("starts after the committed watermark", () => {
       const r = resolvePushDateRange({
         today: dateAt("2026-05-04"),
         options: {},
@@ -146,11 +146,11 @@ describe("resolvePushDateRange", () => {
       });
       expect(r.ok).toBe(true);
       if (!r.ok) return;
-      expect(isoDay(r.since)).toBe("2026-05-01");
+      expect(isoDay(r.since)).toBe("2026-05-02");
       expect(isoDay(r.until)).toBe("2026-05-04");
     });
 
-    it("caps at DEFAULT_SYNC_DAYS when last_push_date is too far back", () => {
+    it("processes the next contiguous DEFAULT_SYNC_DAYS when behind", () => {
       const r = resolvePushDateRange({
         today: dateAt("2026-05-04"),
         options: {},
@@ -159,7 +159,8 @@ describe("resolvePushDateRange", () => {
       });
       expect(r.ok).toBe(true);
       if (!r.ok) return;
-      expect(isoDay(r.since)).toBe("2026-04-28"); // today - 6 (DEFAULT_SYNC_DAYS=7, +1)
+      expect(isoDay(r.since)).toBe("2026-04-16");
+      expect(isoDay(r.until)).toBe("2026-04-22");
     });
 
     it("re-syncs only today when last_push_date >= today", () => {

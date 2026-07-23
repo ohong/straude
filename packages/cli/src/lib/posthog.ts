@@ -77,7 +77,10 @@ export const posthog: PostHog = apiKey
       host,
       flushAt: 1,
       flushInterval: 0,
-      enableExceptionAutocapture: true,
+      // Raw exception messages and stacks can contain paths, hostnames, or
+      // collector stderr. Straude sends only allowlisted error codes and a
+      // one-way stable fingerprint through telemetry.ts.
+      enableExceptionAutocapture: false,
       before_send: beforeSend,
     })
   : noop;

@@ -15,7 +15,7 @@ import type { StraudeConfig } from "../src/lib/auth.js";
  * response body, or honor `res.headers.get`. With a real server, every byte
  * the production code writes and reads is exercised.
  *
- * We mock at one boundary: `auth.saveConfig`, because the real implementation
+ * We mock at one boundary: `auth.updateConfig`, because the real implementation
  * writes to `~/.straude/config.json` and we don't want test runs touching the
  * user's actual config. That mock is captured-and-asserted, not faked-and-
  * forgotten.
@@ -23,7 +23,7 @@ import type { StraudeConfig } from "../src/lib/auth.js";
 
 vi.mock("../src/lib/auth.js", async (importOriginal) => {
   const actual = await importOriginal<typeof import("../src/lib/auth.js")>();
-  return { ...actual, saveConfig: vi.fn() };
+  return { ...actual, updateConfig: vi.fn() };
 });
 
 vi.mock("../src/lib/prompt.js", () => ({
@@ -31,9 +31,9 @@ vi.mock("../src/lib/prompt.js", () => ({
   promptYesNo: vi.fn(),
 }));
 
-import { saveConfig } from "../src/lib/auth.js";
+import { updateConfig } from "../src/lib/auth.js";
 import { isInteractive } from "../src/lib/prompt.js";
-const mockSaveConfig = vi.mocked(saveConfig);
+const mockUpdateConfig = vi.mocked(updateConfig);
 const mockIsInteractive = vi.mocked(isInteractive);
 
 interface RequestRecord {
@@ -47,6 +47,7 @@ interface PlannedResponse {
   status: number;
   body: unknown;
   headers?: Record<string, string>;
+  delayMs?: number;
 }
 
 let server: Server;
@@ -75,12 +76,16 @@ beforeAll(async () => {
         res.end(JSON.stringify({ error: "no planned response" }));
         return;
       }
-      res.statusCode = next.status;
-      res.setHeader("content-type", "application/json");
-      for (const [k, v] of Object.entries(next.headers ?? {})) {
-        res.setHeader(k, v);
-      }
-      res.end(JSON.stringify(next.body));
+      const respond = (): void => {
+        res.statusCode = next.status;
+        res.setHeader("content-type", "application/json");
+        for (const [k, v] of Object.entries(next.headers ?? {})) {
+          res.setHeader(k, v);
+        }
+        res.end(JSON.stringify(next.body));
+      };
+      if (next.delayMs) setTimeout(respond, next.delayMs);
+      else respond();
     });
   });
   await new Promise<void>((resolve) => server.listen(0, "127.0.0.1", resolve));
@@ -98,7 +103,8 @@ afterAll(async () => {
 beforeEach(() => {
   recorded = [];
   plan = [];
-  mockSaveConfig.mockReset();
+  mockUpdateConfig.mockReset();
+  mockUpdateConfig.mockImplementation((updater) => updater(null));
   mockIsInteractive.mockReset();
   mockIsInteractive.mockReturnValue(false);
   setAuthRefreshStrategy(null);
@@ -168,12 +174,37 @@ describe("apiRequest — error handling", () => {
 
   it("surfaces the body's error string on other non-2xx", async () => {
     plan.push({ status: 500, body: { error: "boom" } });
-    await expect(apiRequest(configFor(), "/api/test")).rejects.toThrow("boom");
+    await expect(apiRequest(configFor(), "/api/test", { maxRetries: 0 })).rejects.toThrow("boom");
   });
 
   it("falls back to HTTP <status> when the body has no error key", async () => {
     plan.push({ status: 503, body: { unrelated: "field" } });
-    await expect(apiRequest(configFor(), "/api/test")).rejects.toThrow("HTTP 503");
+    await expect(apiRequest(configFor(), "/api/test", { maxRetries: 0 })).rejects.toThrow("HTTP 503");
+  });
+
+  it("returns typed protocol bodies for explicitly accepted non-2xx statuses", async () => {
+    plan.push({
+      status: 409,
+      body: {
+        request_id: "request-1",
+        outcomes: [{
+          date: "2026-03-13",
+          status: "identity_conflict",
+          error: {
+            code: "device_reconciliation_required",
+            message: "Resolve device identity",
+          },
+        }],
+      },
+    });
+    await expect(apiRequest(configFor(), "/api/usage/submit", {
+      method: "POST",
+      acceptedStatuses: [400, 409, 503],
+    })).resolves.toMatchObject({
+      request_id: "request-1",
+      outcomes: [{ status: "identity_conflict" }],
+    });
+    expect(recorded).toHaveLength(1);
   });
 });
 
@@ -187,7 +218,7 @@ describe("apiRequest — sliding token refresh", () => {
     const cfg = configFor();
     await apiRequest(cfg, "/api/test");
     expect(cfg.token).toBe("new-token-xyz");
-    expect(mockSaveConfig).toHaveBeenCalledWith(
+    expect(mockUpdateConfig.mock.results[0]!.value).toEqual(
       expect.objectContaining({ token: "new-token-xyz" }),
     );
   });
@@ -195,7 +226,7 @@ describe("apiRequest — sliding token refresh", () => {
   it("does not save when the refresh header is absent", async () => {
     plan.push({ status: 200, body: {} });
     await apiRequest(configFor(), "/api/test");
-    expect(mockSaveConfig).not.toHaveBeenCalled();
+    expect(mockUpdateConfig).not.toHaveBeenCalled();
   });
 
   it("uses the refreshed token on the very next request", async () => {
@@ -212,8 +243,8 @@ describe("apiRequest — sliding token refresh", () => {
     expect(recorded[1]!.headers.authorization).toBe("Bearer rotated-1");
   });
 
-  it("swallows read-only-fs saveConfig errors so the request still resolves", async () => {
-    mockSaveConfig.mockImplementation(() => {
+  it("swallows read-only-fs updateConfig errors so the request still resolves", async () => {
+    mockUpdateConfig.mockImplementation(() => {
       const err = new Error("read-only filesystem") as NodeJS.ErrnoException;
       err.code = "EROFS";
       throw err;
@@ -226,8 +257,8 @@ describe("apiRequest — sliding token refresh", () => {
     await expect(apiRequest(configFor(), "/api/test")).resolves.toEqual({ ok: true });
   });
 
-  it("propagates unexpected saveConfig errors instead of swallowing them", async () => {
-    mockSaveConfig.mockImplementation(() => {
+  it("propagates unexpected updateConfig errors instead of swallowing them", async () => {
+    mockUpdateConfig.mockImplementation(() => {
       const err = new Error("disk full") as NodeJS.ErrnoException;
       err.code = "ENOSPC";
       throw err;
@@ -319,5 +350,73 @@ describe("apiRequestNoAuth", () => {
     plan.push({ status: 200, body: {} });
     await apiRequestNoAuth(baseUrl, "/health");
     expect(recorded[0]!.path).toBe("/health");
+  });
+});
+
+describe("apiRequest — resilience", () => {
+  it("makes three total attempts when maxRetries is two", async () => {
+    const random = vi.spyOn(Math, "random").mockReturnValue(0);
+    plan.push({
+      status: 503,
+      body: { error: "warming up" },
+    });
+    plan.push({ status: 599, body: { error: "still warming up" } });
+    plan.push({ status: 200, body: { ok: true } });
+
+    await expect(apiRequest<{ ok: boolean }>(
+      configFor(),
+      "/api/test",
+      { maxRetries: 2 },
+    ))
+      .resolves.toEqual({ ok: true });
+    expect(recorded).toHaveLength(3);
+    expect(random).toHaveBeenCalledTimes(2);
+  });
+
+  it.each([408, 425, 429, 500, 501, 599])(
+    "retries HTTP %i",
+    async (status) => {
+    plan.push({
+      status,
+      body: { error: "temporarily unavailable" },
+      headers: { "retry-after": "0" },
+    });
+    plan.push({ status: 200, body: { ok: true } });
+    await expect(apiRequest(configFor(), "/api/test", { maxRetries: 1 }))
+      .resolves.toEqual({ ok: true });
+    },
+  );
+
+  it("retries a transient network error", async () => {
+    const fetch = vi.spyOn(globalThis, "fetch")
+      .mockRejectedValueOnce(new TypeError("connection reset"))
+      .mockResolvedValueOnce(new Response(JSON.stringify({ ok: true }), {
+        status: 200,
+        headers: { "content-type": "application/json" },
+      }));
+    vi.spyOn(Math, "random").mockReturnValue(0);
+
+    await expect(apiRequest(configFor(), "/api/test", { maxRetries: 1 }))
+      .resolves.toEqual({ ok: true });
+    expect(fetch).toHaveBeenCalledTimes(2);
+  });
+
+  it("does not shorten Retry-After to fit an internal cap", async () => {
+    plan.push({
+      status: 429,
+      body: { error: "slow down" },
+      headers: { "retry-after": "60" },
+    });
+    await expect(
+      apiRequest(configFor(), "/api/test", { timeoutMs: 20, maxRetries: 1 }),
+    ).rejects.toThrow(/timed out/i);
+    expect(recorded).toHaveLength(1);
+  });
+
+  it("aborts a response that exceeds the per-call deadline", async () => {
+    plan.push({ status: 200, body: { ok: true }, delayMs: 100 });
+    await expect(
+      apiRequest(configFor(), "/api/test", { timeoutMs: 20, maxRetries: 0 }),
+    ).rejects.toThrow(/timed out/i);
   });
 });

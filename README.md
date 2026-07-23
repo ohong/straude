@@ -20,7 +20,7 @@ npx straude@latest
 
 The CLI reads your local [ccusage](https://github.com/ccusage/ccusage) data (cost, tokens, models, sessions), uploads it to Straude, and auto-creates a post on your feed. That includes every source ccusage detects, currently Claude Code, Codex, OpenCode, Amp, Droid, Codebuff, Hermes Agent, pi-agent, Goose, OpenClaw, Kilo, Kimi, Qwen, GitHub Copilot CLI, and Gemini CLI. First run opens a browser login; after that, just run `npx straude@latest` daily. It automatically pushes new stats since your last sync.
 
-Options: `--date YYYY-MM-DD` to push a specific date, `--days N` to backfill the last N days (max 7), `--dry-run` to preview without posting. Run `npx straude@latest status` to check your streak and rank.
+The first sync reads three days. Normal smart syncs resume after the last committed date and process up to seven contiguous days per run, so repeated runs catch up without skipping dates. `--days N` can explicitly backfill up to 30 days. Use `--date YYYY-MM-DD` for one day or `--dry-run` to preview without posting. Run `npx straude@latest status` to check your streak and rank.
 
 ## Features
 
@@ -91,7 +91,7 @@ The CLI runs [ccusage](https://github.com/ccusage/ccusage) locally on your machi
 
 ### Can Straude see my code or prompts?
 
-No. The data pipeline is: local JSONL logs → ccusage (local aggregation) → daily totals sent to Straude. At no point does any conversation content, prompt text, code, or file path leave your machine. You can verify this yourself — the CLI is open source, and you can run `npx straude --dry-run` to see exactly what would be sent before it's sent.
+No. The data pipeline is: local JSONL logs → ccusage (local aggregation) → daily totals sent to Straude. Conversation content, prompt text, and code stay on your machine. Aggregate operational telemetry is documented separately in the [CLI reference](docs/CLI.md#telemetry), and you can run `npx straude --dry-run` to inspect the usage payload before it is submitted.
 
 ### Is my profile public by default?
 
@@ -105,7 +105,7 @@ Straude is an entry in [**Built with Opus 4.6: a Claude Code hackathon**](https:
 
 ### Prerequisites
 
-- [Bun](https://bun.sh/) (v1.3+)
+- [Bun](https://bun.sh/) 1.3.3
 - [Supabase CLI](https://supabase.com/docs/guides/local-development/cli/getting-started) (v2.x)
 - [Docker](https://docs.docker.com/get-docker/) (required by Supabase local)
 
@@ -113,7 +113,7 @@ Straude is an entry in [**Built with Opus 4.6: a Claude Code hackathon**](https:
 
 ```bash
 # 1. Install dependencies
-bun install
+bun install --frozen-lockfile
 
 # 2. Start local Supabase (Postgres, Auth, Storage via Docker)
 bun run local:up
@@ -138,6 +138,7 @@ The app will be available at `http://localhost:3000`.
 | Document | Description |
 |----------|-------------|
 | [Changelog](docs/CHANGELOG.md) | Release history and what changed |
+| [CLI operations](docs/CLI_OPERATIONS.md) | Protocol rollout, alerts, repair, rollback, and audit closure |
 | [Decisions](docs/DECISIONS.md) | Architecture and design decisions with rationale |
 | [Roadmap](docs/ROADMAP.md) | Planned features and future work |
 | [Security](docs/SECURITY.md) | Security audit findings and status |

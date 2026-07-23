@@ -5,7 +5,7 @@ import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
 // ---------------------------------------------------------------------------
 
 vi.mock("node:child_process", () => ({
-  execSync: vi.fn(),
+  execFileSync: vi.fn(),
 }));
 
 let fileStore: Record<string, string> = {};
@@ -14,6 +14,7 @@ let fileDeleted: string[] = [];
 vi.mock("node:fs", () => ({
   existsSync: vi.fn((path: string) => path in fileStore),
   readFileSync: vi.fn((path: string) => fileStore[path] ?? ""),
+  realpathSync: vi.fn((path: string) => path),
   writeFileSync: vi.fn((path: string, data: string) => {
     fileStore[path] = data;
   }),
@@ -29,7 +30,7 @@ vi.mock("node:fs", () => ({
 // Imports (after mocks)
 // ---------------------------------------------------------------------------
 
-import { execSync } from "node:child_process";
+import { execFileSync } from "node:child_process";
 import { writeFileSync } from "node:fs";
 import {
   detectScheduler,
@@ -42,7 +43,7 @@ import {
 } from "../src/lib/scheduler.js";
 import { AUTO_PUSH_SCRIPT_FILE, LAUNCHD_PLIST_PATH } from "../src/config.js";
 
-const mockExecSync = vi.mocked(execSync);
+const mockExecFileSync = vi.mocked(execFileSync);
 const mockWriteFileSync = vi.mocked(writeFileSync);
 
 // ---------------------------------------------------------------------------
@@ -114,9 +115,33 @@ describe("_buildWrapperScript", () => {
     const script = _buildWrapperScript();
     expect(script).toContain("#!/bin/sh");
     expect(script).toContain("Auto-push starting");
-    expect(script).toContain("command -v straude");
-    expect(script).toContain("bunx straude@latest push");
-    expect(script).toContain("npx --yes straude@latest push");
+    expect(script).toContain("exec bunx straude@0.2.0 push --non-interactive");
+    expect(script).toContain("exec npx --yes straude@0.2.0 push --non-interactive");
+    expect(script).not.toContain("straude@latest");
+    expect(script).toContain("tail -n 500");
+  });
+
+  it("passes crontab content through stdin without a shell", () => {
+    let installed = "0 8 * * * echo $(touch /tmp/should-not-run)\n";
+    mockExecFileSync.mockImplementation((command, args, options) => {
+      if (command === "crontab" && args?.[0] === "-l") {
+        return installed;
+      }
+      if (command === "crontab" && args?.[0] === "-") {
+        installed = String(options?.input ?? "");
+      }
+      return "";
+    });
+
+    installScheduler("09:00", "cron");
+
+    expect(mockExecFileSync).toHaveBeenCalledWith(
+      "crontab",
+      ["-"],
+      expect.objectContaining({
+        input: expect.stringContaining("$(touch /tmp/should-not-run)"),
+      }),
+    );
   });
 });
 
@@ -147,29 +172,54 @@ describe("installScheduler — launchd", () => {
     expect(fileStore[LAUNCHD_PLIST_PATH]).toContain("<integer>30</integer>");
 
     // launchctl load called
-    expect(mockExecSync).toHaveBeenCalledWith(
-      expect.stringContaining("launchctl load"),
+    expect(mockExecFileSync).toHaveBeenCalledWith(
+      "launchctl",
+      expect.arrayContaining(["bootstrap", LAUNCHD_PLIST_PATH]),
       expect.anything(),
     );
   });
 
-  it("is idempotent — launchctl load failure is swallowed", () => {
-    mockExecSync.mockImplementation(() => {
-      throw new Error("already loaded");
+  it("surfaces launchctl activation failures", () => {
+    mockExecFileSync.mockImplementation((_command, args) => {
+      if (args?.[0] === "bootstrap") throw new Error("permission denied");
+      return "";
     });
 
-    // Should not throw
-    installScheduler("09:00", "launchd");
-    expect(fileStore[LAUNCHD_PLIST_PATH]).toBeDefined();
+    expect(() => installScheduler("09:00", "launchd")).toThrow(/launchctl bootstrap/);
+    expect(fileStore[LAUNCHD_PLIST_PATH]).toBeUndefined();
+  });
+
+  it("restores the prior launchd files and service when replacement fails", () => {
+    fileStore[AUTO_PUSH_SCRIPT_FILE] = "old wrapper";
+    fileStore[LAUNCHD_PLIST_PATH] = "old plist";
+    let bootstrapCalls = 0;
+    mockExecFileSync.mockImplementation((_command, args) => {
+      if (args?.[0] === "print") return "loaded";
+      if (args?.[0] === "bootstrap" && bootstrapCalls++ === 0) {
+        throw new Error("new service rejected");
+      }
+      return "";
+    });
+
+    expect(() => installScheduler("09:00", "launchd")).toThrow(/launchctl bootstrap/);
+
+    expect(fileStore[AUTO_PUSH_SCRIPT_FILE]).toBe("old wrapper");
+    expect(fileStore[LAUNCHD_PLIST_PATH]).toBe("old plist");
+    expect(bootstrapCalls).toBe(2);
   });
 });
 
 describe("installScheduler — cron", () => {
   it("appends tagged entry to crontab", () => {
     // No existing crontab
-    mockExecSync.mockImplementation((cmd: string) => {
-      if (typeof cmd === "string" && cmd.includes("crontab -l")) {
-        throw new Error("no crontab");
+    let installed: string | null = null;
+    mockExecFileSync.mockImplementation((command, args, options) => {
+      if (command === "crontab" && args?.[0] === "-l") {
+        if (installed === null) throw new Error("no crontab");
+        return installed;
+      }
+      if (command === "crontab" && args?.[0] === "-") {
+        installed = String(options?.input ?? "");
       }
       return "";
     });
@@ -180,34 +230,60 @@ describe("installScheduler — cron", () => {
     expect(fileStore[AUTO_PUSH_SCRIPT_FILE]).toContain("#!/bin/sh");
 
     // Crontab set with tagged entry
-    const setCrontabCall = mockExecSync.mock.calls.find(
-      (call) => typeof call[0] === "string" && call[0].includes("| crontab -"),
+    const setCrontabCall = mockExecFileSync.mock.calls.find(
+      (call) => call[0] === "crontab" && call[1]?.[0] === "-",
     );
     expect(setCrontabCall).toBeDefined();
-    const crontabContent = setCrontabCall![0] as string;
+    const crontabContent = setCrontabCall![2]?.input as string;
     expect(crontabContent).toContain("0 9 * * *");
     expect(crontabContent).toContain("# straude-auto-push");
   });
 
   it("replaces existing straude entry", () => {
-    mockExecSync.mockImplementation((cmd: string) => {
-      if (typeof cmd === "string" && cmd.includes("crontab -l")) {
-        return "0 8 * * * some-other-job\n30 21 * * * old-straude-entry # straude-auto-push\n";
+    let installed = "0 8 * * * some-other-job\n30 21 * * * old-straude-entry # straude-auto-push\n";
+    mockExecFileSync.mockImplementation((command, args, options) => {
+      if (command === "crontab" && args?.[0] === "-l") {
+        return installed;
+      }
+      if (command === "crontab" && args?.[0] === "-") {
+        installed = String(options?.input ?? "");
       }
       return "";
     });
 
     installScheduler("14:30", "cron");
 
-    const setCrontabCall = mockExecSync.mock.calls.find(
-      (call) => typeof call[0] === "string" && call[0].includes("| crontab -"),
+    const setCrontabCall = mockExecFileSync.mock.calls.find(
+      (call) => call[0] === "crontab" && call[1]?.[0] === "-",
     );
-    const crontabContent = setCrontabCall![0] as string;
+    const crontabContent = setCrontabCall![2]?.input as string;
     // Old entry removed, new one added
     expect(crontabContent).toContain("30 14 * * *");
     expect(crontabContent).toContain("some-other-job");
     // Should only have one straude-auto-push tag
     expect(crontabContent.match(/straude-auto-push/g)?.length).toBe(1);
+  });
+
+  it("restores the prior crontab and wrapper when activation cannot be verified", () => {
+    const previousCrontab = "0 8 * * * old-job\n";
+    fileStore[AUTO_PUSH_SCRIPT_FILE] = "old wrapper";
+    let installed = previousCrontab;
+    let reads = 0;
+    mockExecFileSync.mockImplementation((command, args, options) => {
+      if (command === "crontab" && args?.[0] === "-l") {
+        reads += 1;
+        return reads === 1 ? installed : previousCrontab;
+      }
+      if (command === "crontab" && args?.[0] === "-") {
+        installed = String(options?.input ?? "");
+      }
+      return "";
+    });
+
+    expect(() => installScheduler("09:00", "cron")).toThrow(/not active/);
+
+    expect(installed).toBe(previousCrontab);
+    expect(fileStore[AUTO_PUSH_SCRIPT_FILE]).toBe("old wrapper");
   });
 });
 
@@ -218,8 +294,9 @@ describe("uninstallScheduler — launchd", () => {
 
     uninstallScheduler("launchd");
 
-    expect(mockExecSync).toHaveBeenCalledWith(
-      expect.stringContaining("launchctl unload"),
+    expect(mockExecFileSync).toHaveBeenCalledWith(
+      "launchctl",
+      expect.arrayContaining(["bootout", LAUNCHD_PLIST_PATH]),
       expect.anything(),
     );
     expect(fileDeleted).toContain(LAUNCHD_PLIST_PATH);
@@ -228,14 +305,14 @@ describe("uninstallScheduler — launchd", () => {
 
   it("is a no-op when plist does not exist", () => {
     uninstallScheduler("launchd");
-    expect(mockExecSync).not.toHaveBeenCalled();
+    expect(mockExecFileSync).not.toHaveBeenCalled();
   });
 });
 
 describe("uninstallScheduler — cron", () => {
   it("removes tagged entry from crontab", () => {
-    mockExecSync.mockImplementation((cmd: string) => {
-      if (typeof cmd === "string" && cmd.includes("crontab -l")) {
+    mockExecFileSync.mockImplementation((command, args) => {
+      if (command === "crontab" && args?.[0] === "-l") {
         return "0 8 * * * some-other-job\n0 21 * * * straude-push # straude-auto-push\n";
       }
       return "";
@@ -244,17 +321,17 @@ describe("uninstallScheduler — cron", () => {
 
     uninstallScheduler("cron");
 
-    const setCrontabCall = mockExecSync.mock.calls.find(
-      (call) => typeof call[0] === "string" && call[0].includes("| crontab -"),
+    const setCrontabCall = mockExecFileSync.mock.calls.find(
+      (call) => call[0] === "crontab" && call[1]?.[0] === "-",
     );
-    const crontabContent = setCrontabCall![0] as string;
+    const crontabContent = setCrontabCall![2]?.input as string;
     expect(crontabContent).toContain("some-other-job");
     expect(crontabContent).not.toContain("straude-auto-push");
   });
 
   it("removes crontab entirely when no entries remain", () => {
-    mockExecSync.mockImplementation((cmd: string) => {
-      if (typeof cmd === "string" && cmd.includes("crontab -l")) {
+    mockExecFileSync.mockImplementation((command, args) => {
+      if (command === "crontab" && args?.[0] === "-l") {
         return "0 21 * * * straude-push # straude-auto-push\n";
       }
       return "";
@@ -263,15 +340,16 @@ describe("uninstallScheduler — cron", () => {
 
     uninstallScheduler("cron");
 
-    expect(mockExecSync).toHaveBeenCalledWith(
-      expect.stringContaining("crontab -r"),
+    expect(mockExecFileSync).toHaveBeenCalledWith(
+      "crontab",
+      ["-r"],
       expect.anything(),
     );
   });
 
   it("is a no-op when no straude entry exists", () => {
-    mockExecSync.mockImplementation((cmd: string) => {
-      if (typeof cmd === "string" && cmd.includes("crontab -l")) {
+    mockExecFileSync.mockImplementation((command, args) => {
+      if (command === "crontab" && args?.[0] === "-l") {
         return "0 8 * * * some-other-job\n";
       }
       return "";
@@ -280,8 +358,8 @@ describe("uninstallScheduler — cron", () => {
     uninstallScheduler("cron");
 
     // Should not write a new crontab
-    const setCrontabCall = mockExecSync.mock.calls.find(
-      (call) => typeof call[0] === "string" && call[0].includes("| crontab -"),
+    const setCrontabCall = mockExecFileSync.mock.calls.find(
+      (call) => call[0] === "crontab" && call[1]?.[0] === "-",
     );
     expect(setCrontabCall).toBeUndefined();
   });
@@ -297,18 +375,26 @@ describe("isSchedulerInstalled", () => {
     expect(isSchedulerInstalled("launchd")).toBe(false);
   });
 
+  it("returns false for launchd when the plist exists but the job is not loaded", () => {
+    fileStore[LAUNCHD_PLIST_PATH] = "<plist/>";
+    mockExecFileSync.mockImplementation(() => {
+      throw new Error("service not found");
+    });
+    expect(isSchedulerInstalled("launchd")).toBe(false);
+  });
+
   it("returns true for cron when tagged entry exists", () => {
-    mockExecSync.mockReturnValue("0 21 * * * ... # straude-auto-push\n");
+    mockExecFileSync.mockReturnValue("0 21 * * * ... # straude-auto-push\n");
     expect(isSchedulerInstalled("cron")).toBe(true);
   });
 
   it("returns false for cron when no tagged entry", () => {
-    mockExecSync.mockReturnValue("0 8 * * * other-job\n");
+    mockExecFileSync.mockReturnValue("0 8 * * * other-job\n");
     expect(isSchedulerInstalled("cron")).toBe(false);
   });
 
   it("returns false for cron when crontab fails", () => {
-    mockExecSync.mockImplementation(() => {
+    mockExecFileSync.mockImplementation(() => {
       throw new Error("no crontab");
     });
     expect(isSchedulerInstalled("cron")).toBe(false);

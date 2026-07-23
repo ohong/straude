@@ -85,9 +85,25 @@ describe("Flow: CLI Push", () => {
     vi.useFakeTimers({ now: new Date('2026-03-13T12:00:00Z'), toFake: ['Date'] });
     vi.clearAllMocks();
     autoDeriveCliAuthMocks();
-    mockServiceClient.rpc.mockImplementation((fn: string) => {
+    mockServiceClient.rpc.mockImplementation((fn: string, params?: Record<string, any>) => {
       if (fn === "check_rate_limit") {
         return Promise.resolve({ data: [{ allowed: true, retry_after_seconds: 0 }], error: null });
+      }
+      if (fn === "submit_usage_day_v2") {
+        return Promise.resolve({
+          data: {
+            date: params?.p_entry.date,
+            status: "committed",
+            result: {
+              usage_id: "usage-1",
+              post_id: "post-1",
+              action: "created",
+              daily_total: 0.05,
+              device_count: 1,
+            },
+          },
+          error: null,
+        });
       }
       return Promise.resolve({ data: null, error: null });
     });
@@ -117,7 +133,7 @@ describe("Flow: CLI Push", () => {
     const res = await POST(req as any);
     const data = await res.json();
 
-    expect(res.status).toBe(200);
+    expect(res.status, JSON.stringify(data)).toBe(200);
     expect(data.code).toBeDefined();
     expect(data.code).toMatch(/^[A-Z0-9]{4}-[A-Z0-9]{4}$/);
     expect(data.verify_url).toContain("https://straude.com/cli/verify?code=");
@@ -228,22 +244,27 @@ describe("Flow: CLI Push", () => {
         ],
         hash: "abc123",
         source: "cli",
-        device_id: "aaaaaaaa-0000-0000-0000-000000000001",
+        device_id: "aaaaaaaa-0000-4000-8000-000000000001",
         device_name: "test-device",
       }),
     });
     const res = await POST(req);
     const data = await res.json();
 
-    expect(res.status).toBe(200);
+    expect(res.status, JSON.stringify(data)).toBe(200);
     expect(data.results).toHaveLength(1);
     expect(data.results[0].usage_id).toBe("usage-1");
     expect(data.results[0].post_id).toBe("post-1");
     expect(data.results[0].post_url).toBe("https://straude.com/post/post-1");
 
-    const upsertCall = (usageChain.upsert as ReturnType<typeof vi.fn>).mock.calls[0];
-    expect(upsertCall[0].is_verified).toBe(true);
-    expect(upsertCall[0].raw_hash).toBe("abc123");
+    expect(mockServiceClient.rpc).toHaveBeenCalledWith(
+      "submit_usage_day_v2",
+      expect.objectContaining({
+        p_request_id: "abc123",
+        p_is_verified: true,
+        p_entry: expect.objectContaining({ date: today }),
+      }),
+    );
   });
 
   it("pushing same date again upserts instead of duplicating", async () => {
@@ -283,14 +304,19 @@ describe("Flow: CLI Push", () => {
         "Content-Type": "application/json",
         Authorization: "Bearer mock-cli-jwt-token",
       },
-      body: JSON.stringify({ entries: [entry], hash: "def456", source: "cli", device_id: "aaaaaaaa-0000-0000-0000-000000000001", device_name: "test-device" }),
+      body: JSON.stringify({ entries: [entry], hash: "def456", source: "cli", device_id: "aaaaaaaa-0000-4000-8000-000000000001", device_name: "test-device" }),
     });
     const res = await POST(req);
     const data = await res.json();
 
     expect(res.status).toBe(200);
-    const upsertCall = (usageChain.upsert as ReturnType<typeof vi.fn>).mock.calls[0];
-    expect(upsertCall[1]).toEqual({ onConflict: "user_id,date" });
+    expect(mockServiceClient.rpc).toHaveBeenCalledWith(
+      "submit_usage_day_v2",
+      expect.objectContaining({
+        p_request_id: "def456",
+        p_entry: expect.objectContaining({ date: today }),
+      }),
+    );
   });
 
   it("CLI pushes merged Claude + Codex data with model_breakdown", async () => {
@@ -347,7 +373,7 @@ describe("Flow: CLI Push", () => {
         ],
         hash: "merged-hash-123",
         source: "cli",
-        device_id: "aaaaaaaa-0000-0000-0000-000000000001",
+        device_id: "aaaaaaaa-0000-4000-8000-000000000001",
         device_name: "test-device",
       }),
     });
@@ -358,18 +384,19 @@ describe("Flow: CLI Push", () => {
     expect(data.results).toHaveLength(1);
     expect(data.results[0].usage_id).toBe("usage-1");
 
-    // Verify the upsert payload includes merged data
-    const upsertCall = (usageChain.upsert as ReturnType<typeof vi.fn>).mock.calls[0];
-    expect(upsertCall[0].cost_usd).toBe(13.0);
-    expect(upsertCall[0].input_tokens).toBe(3000);
-    expect(upsertCall[0].output_tokens).toBe(1300);
-    expect(upsertCall[0].total_tokens).toBe(4450);
-    expect(upsertCall[0].models).toEqual(["claude-opus-4-20250505", "gpt-5-codex"]);
-    expect(upsertCall[0].model_breakdown).toEqual([
-      { model: "claude-opus-4-20250505", cost_usd: 10.0 },
-      { model: "gpt-5-codex", cost_usd: 3.0 },
-    ]);
-    expect(upsertCall[0].is_verified).toBe(true);
+    expect(mockServiceClient.rpc).toHaveBeenCalledWith(
+      "submit_usage_day_v2",
+      expect.objectContaining({
+        p_entry: expect.objectContaining({
+          agents: [expect.objectContaining({
+            agent: "legacy-unpartitioned",
+            cost_usd: 13,
+            input_tokens: 3000,
+            total_tokens: 4450,
+          })],
+        }),
+      }),
+    );
   });
 
   it("CLI pushes Codex-only data (no Claude models)", async () => {
@@ -423,7 +450,7 @@ describe("Flow: CLI Push", () => {
         ],
         hash: "codex-only-hash",
         source: "cli",
-        device_id: "aaaaaaaa-0000-0000-0000-000000000001",
+        device_id: "aaaaaaaa-0000-4000-8000-000000000001",
         device_name: "test-device",
       }),
     });
@@ -433,12 +460,18 @@ describe("Flow: CLI Push", () => {
     expect(res.status).toBe(200);
     expect(data.results).toHaveLength(1);
 
-    const upsertCall = (usageChain.upsert as ReturnType<typeof vi.fn>).mock.calls[0];
-    expect(upsertCall[0].models).toEqual(["gpt-5-codex"]);
-    expect(upsertCall[0].cost_usd).toBe(3.20);
-    expect(upsertCall[0].model_breakdown).toEqual([
-      { model: "gpt-5-codex", cost_usd: 3.20 },
-    ]);
+    expect(mockServiceClient.rpc).toHaveBeenCalledWith(
+      "submit_usage_day_v2",
+      expect.objectContaining({
+        p_entry: expect.objectContaining({
+          agents: [expect.objectContaining({
+            agent: "legacy-unpartitioned",
+            models: ["gpt-5-codex"],
+            cost_usd: 3.2,
+          })],
+        }),
+      }),
+    );
   });
 
   it("two devices push same day — daily_usage shows summed totals", async () => {
@@ -547,7 +580,7 @@ describe("Flow: CLI Push", () => {
         ],
         hash: "device-2-hash",
         source: "cli",
-        device_id: "22222222-2222-2222-2222-222222222222",
+        device_id: "22222222-2222-4222-8222-222222222222",
         device_name: "home-desktop",
       }),
     });
@@ -557,13 +590,14 @@ describe("Flow: CLI Push", () => {
     expect(res.status).toBe(200);
     expect(data.results).toHaveLength(1);
 
-    // Verify daily_usage was upserted with aggregated data (5 + 3 = 8)
-    const dailyUpsertCall = (dailyUsageChain.upsert as ReturnType<typeof vi.fn>).mock.calls[0];
-    expect(dailyUpsertCall[0].cost_usd).toBe(8.0);
-    expect(dailyUpsertCall[0].input_tokens).toBe(3000);
-    expect(dailyUpsertCall[0].output_tokens).toBe(1300);
-    expect(dailyUpsertCall[0].total_tokens).toBe(4450);
-    expect(dailyUpsertCall[0].session_count).toBe(2);
+    expect(mockServiceClient.rpc).toHaveBeenCalledWith(
+      "submit_usage_day_v2",
+      expect.objectContaining({
+        p_installation: expect.objectContaining({
+          id: "22222222-2222-4222-8222-222222222222",
+        }),
+      }),
+    );
   });
 
   it("rejects push without authentication", async () => {
@@ -575,8 +609,21 @@ describe("Flow: CLI Push", () => {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({
-        entries: [{ date: "2026-02-16", data: { costUSD: 1, inputTokens: 0, outputTokens: 0, cacheCreationTokens: 0, cacheReadTokens: 0, totalTokens: 0, models: [] } }],
+        entries: [{
+          date: "2026-03-13",
+          data: {
+            date: "2026-03-13",
+            costUSD: 1,
+            inputTokens: 0,
+            outputTokens: 0,
+            cacheCreationTokens: 0,
+            cacheReadTokens: 0,
+            totalTokens: 0,
+            models: ["gpt-5.6"],
+          },
+        }],
         source: "cli",
+        device_id: "aaaaaaaa-0000-4000-8000-000000000001",
       }),
     });
     const res = await POST(req);

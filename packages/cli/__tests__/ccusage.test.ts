@@ -36,7 +36,7 @@ const ALL_BUILT_IN_CCUSAGE_AGENTS = [
 ].sort();
 
 function row(overrides: Record<string, unknown> = {}) {
-  return {
+  const base = {
     period: "2026-05-13",
     modelsUsed: ["gpt-5.2-codex"],
     inputTokens: 750,
@@ -52,12 +52,36 @@ function row(overrides: Record<string, unknown> = {}) {
         outputTokens: 125,
         cacheCreationTokens: 0,
         cacheReadTokens: 250,
+        totalTokens: 1125,
         cost: 0.00310625,
       },
     ],
     metadata: { agents: ["codex"] },
-    ...overrides,
+    agents: [
+      {
+        agent: "codex",
+        modelsUsed: ["gpt-5.2-codex"],
+        inputTokens: 750,
+        outputTokens: 125,
+        cacheCreationTokens: 0,
+        cacheReadTokens: 250,
+        totalTokens: 1200,
+        totalCost: 0.00310625,
+        modelBreakdowns: [
+          {
+            modelName: "gpt-5.2-codex",
+            inputTokens: 750,
+            outputTokens: 125,
+            cacheCreationTokens: 0,
+            cacheReadTokens: 250,
+            totalTokens: 1125,
+            cost: 0.00310625,
+          },
+        ],
+      },
+    ],
   };
+  return { ...base, ...overrides };
 }
 
 function rawOutput(rows: unknown[] = [row()]) {
@@ -78,6 +102,27 @@ describe("parseCcusageOutput", () => {
     expect(parsed.data[0]).toEqual({
       date: "2026-05-13",
       agents: ["codex"],
+      agentBreakdown: [{
+        agent: "codex",
+        models: ["gpt-5.2-codex"],
+        inputTokens: 750,
+        outputTokens: 125,
+        reasoningOutputTokens: 75,
+        cacheCreationTokens: 0,
+        cacheReadTokens: 250,
+        totalTokens: 1200,
+        costUSD: 0.00310625,
+        modelBreakdown: [{
+          model: "gpt-5.2-codex",
+          inputTokens: 750,
+          outputTokens: 125,
+          reasoningOutputTokens: 75,
+          cacheCreationTokens: 0,
+          cacheReadTokens: 250,
+          totalTokens: 1200,
+          cost_usd: 0.00310625,
+        }],
+      }],
       models: ["gpt-5.2-codex"],
       inputTokens: 750,
       outputTokens: 125,
@@ -86,7 +131,16 @@ describe("parseCcusageOutput", () => {
       totalTokens: 1200,
       costUSD: 0.00310625,
       reasoningOutputTokens: 75,
-      modelBreakdown: [{ model: "gpt-5.2-codex", cost_usd: 0.00310625 }],
+      modelBreakdown: [{
+        model: "gpt-5.2-codex",
+        inputTokens: 750,
+        outputTokens: 125,
+        reasoningOutputTokens: 0,
+        cacheCreationTokens: 0,
+        cacheReadTokens: 250,
+        totalTokens: 1125,
+        cost_usd: 0.00310625,
+      }],
     });
     expect(parsed.summary.totalReasoningOutputTokens).toBe(75);
     expect(parsed.agents).toEqual(["codex"]);
@@ -114,6 +168,30 @@ describe("parseCcusageOutput", () => {
           { modelName: "gpt-5.2-codex", cost: 0.05 },
         ],
         metadata: { agents: ["claude", "codex"] },
+        agents: [
+          {
+            agent: "claude",
+            modelsUsed: ["claude-sonnet-4-5-20250929"],
+            inputTokens: 600,
+            outputTokens: 200,
+            cacheCreationTokens: 100,
+            cacheReadTokens: 100,
+            totalTokens: 1000,
+            totalCost: 0.2,
+            modelBreakdowns: [{ modelName: "claude-sonnet-4-5-20250929", cost: 0.2 }],
+          },
+          {
+            agent: "codex",
+            modelsUsed: ["gpt-5.2-codex"],
+            inputTokens: 600,
+            outputTokens: 200,
+            cacheCreationTokens: 0,
+            cacheReadTokens: 200,
+            totalTokens: 1100,
+            totalCost: 0.05,
+            modelBreakdowns: [{ modelName: "gpt-5.2-codex", cost: 0.05 }],
+          },
+        ],
       }),
     ]), { version: "20.0.16" });
 
@@ -139,6 +217,22 @@ describe("parseCcusageOutput", () => {
           { modelName: "gemini-3-pro", cost: 0.00110625 },
         ],
         metadata: { agents: ALL_BUILT_IN_CCUSAGE_AGENTS },
+        agents: ALL_BUILT_IN_CCUSAGE_AGENTS.map((agent, index) => ({
+          agent,
+          modelsUsed: index === 0 ? ["gpt-5.6", "gemini-3-pro"] : [],
+          inputTokens: index === 0 ? 750 : 0,
+          outputTokens: index === 0 ? 125 : 0,
+          cacheCreationTokens: 0,
+          cacheReadTokens: index === 0 ? 250 : 0,
+          totalTokens: index === 0 ? 1200 : 0,
+          totalCost: index === 0 ? 0.00310625 : 0,
+          modelBreakdowns: index === 0
+            ? [
+              { modelName: "gpt-5.6", cost: 0.002 },
+              { modelName: "gemini-3-pro", cost: 0.00110625 },
+            ]
+            : [],
+        })),
       }),
     ]), { version: "20.0.16" });
 
@@ -172,6 +266,43 @@ describe("parseCcusageOutput", () => {
     ]))).toThrow(/inputTokens must be non-negative/);
   });
 
+  it("rejects total token mismatches instead of clamping them", () => {
+    expect(() => parseCcusageOutput(rawOutput([
+      row({ totalTokens: 1 }),
+    ]))).toThrow(/below its token categories/);
+  });
+
+  it("rejects agent totals that disagree with the daily aggregate", () => {
+    expect(() => parseCcusageOutput(rawOutput([
+      row({
+        agents: [{
+          ...(row().agents as Array<Record<string, unknown>>)[0],
+          inputTokens: 749,
+        }],
+      }),
+    ]))).toThrow(/agents breakdown does not match daily totals/);
+  });
+
+  it("rejects model cost differences above half a cent", () => {
+    expect(() => parseCcusageOutput(rawOutput([
+      row({
+        totalCost: 0.02,
+      }),
+    ]))).toThrow(/cost differs from its model breakdown/);
+  });
+
+  it("rejects explicit missing pricing markers", () => {
+    expect(() => parseCcusageOutput(rawOutput([
+      row({
+        modelBreakdowns: [{
+          modelName: "gpt-5.2-codex",
+          cost: 0,
+          missingPricing: true,
+        }],
+      }),
+    ]))).toThrow(/did not produce live pricing/);
+  });
+
   it("returns empty output for an empty ccusage daily array", () => {
     const parsed = parseCcusageOutput(rawOutput([]), { version: "20.0.16" });
     expect(parsed.data).toEqual([]);
@@ -197,14 +328,30 @@ describe("version and execution", () => {
       cb(null, rawOutput(), "");
     });
 
-    const collected = await collectCcusageUsageAsync("20260513", "20260513", 10_000);
+    const collected = await collectCcusageUsageAsync("20260513", "20260513", 10_000, {
+      timezone: "UTC",
+    });
 
     expect(collected.raw).toBe(rawOutput());
     expect(execFileMock).toHaveBeenCalledTimes(1);
     expect(execFileMock).toHaveBeenCalledWith(
       "/bundled/ccusage",
-      ["daily", "--json", "--since", "20260513", "--until", "20260513", "--no-offline"],
-      expect.objectContaining({ shell: false }),
+      [
+        "daily",
+        "--json",
+        "--since",
+        "20260513",
+        "--until",
+        "20260513",
+        "--timezone",
+        "UTC",
+        "--by-agent",
+        "--no-offline",
+      ],
+      expect.objectContaining({
+        shell: false,
+        env: expect.objectContaining({ LOG_LEVEL: "4" }),
+      }),
       expect.any(Function),
     );
     expect(collected.collector.pricing_mode).toBe("online");
@@ -218,11 +365,23 @@ describe("version and execution", () => {
 
     const collected = await collectCcusageUsageAsync("20260513", "20260513", 10_000, {
       pricingMode: "offline",
+      timezone: "UTC",
     });
 
     expect(execFileMock).toHaveBeenCalledWith(
       "/bundled/ccusage",
-      ["daily", "--json", "--since", "20260513", "--until", "20260513", "--offline"],
+      [
+        "daily",
+        "--json",
+        "--since",
+        "20260513",
+        "--until",
+        "20260513",
+        "--timezone",
+        "UTC",
+        "--by-agent",
+        "--offline",
+      ],
       expect.objectContaining({ shell: false }),
       expect.any(Function),
     );
@@ -233,15 +392,19 @@ describe("version and execution", () => {
     _setCcusageCommandForTests({ cmd: "/bundled/ccusage", args: [], version: "20.0.15" });
 
     await expect(collectCcusageUsageAsync("20260513", "20260513")).rejects.toThrow(
-      /requires ccusage >=20\.0\.16/,
+      /fixture-verified ccusage 20\.0\.16/,
     );
   });
 
-  it("falls back to online pricing when offline pricing is incomplete", async () => {
+  it("retries live pricing fallback failures at most three times", async () => {
     execFileMock
       .mockImplementationOnce((...args: unknown[]) => {
         const cb = args.at(-1) as (err: Error | null, stdout: string, stderr: string) => void;
-        cb(null, rawOutput(), "Missing pricing for model gpt-5.2-codex");
+        cb(null, rawOutput(), "WARN  Failed to fetch LiteLLM pricing (timeout); using embedded pricing.");
+      })
+      .mockImplementationOnce((...args: unknown[]) => {
+        const cb = args.at(-1) as (err: Error | null, stdout: string, stderr: string) => void;
+        cb(null, rawOutput(), "WARN  Failed to fetch LiteLLM pricing (timeout); using embedded pricing.");
       })
       .mockImplementationOnce((...args: unknown[]) => {
         const cb = args.at(-1) as (err: Error | null, stdout: string, stderr: string) => void;
@@ -249,26 +412,30 @@ describe("version and execution", () => {
       });
 
     const collected = await collectCcusageUsageAsync("20260513", "20260513", undefined, {
-      pricingMode: "offline",
+      pricingMode: "online",
+      timezone: "UTC",
+      sleep: () => Promise.resolve(),
+      random: () => 0,
     });
 
-    expect(execFileMock).toHaveBeenCalledTimes(2);
-    expect(execFileMock.mock.calls[0]![1]).toContain("--offline");
-    expect(execFileMock.mock.calls[1]![1]).toContain("--no-offline");
+    expect(execFileMock).toHaveBeenCalledTimes(3);
     expect(collected.collector.pricing_mode).toBe("online");
   });
 
-  it("fails safely when the selected pricing mode remains incomplete", async () => {
-    execFileMock.mockImplementationOnce((...args: unknown[]) => {
+  it("fails safely when live pricing remains incomplete", async () => {
+    execFileMock.mockImplementation((...args: unknown[]) => {
       const cb = args.at(-1) as (err: Error | null, stdout: string, stderr: string) => void;
       cb(null, rawOutput(), "Missing pricing for model gpt-5.2-codex");
     });
 
     await expect(collectCcusageUsageAsync("20260513", "20260513", undefined, {
-      pricingMode: "offline",
-      allowOnlineFallback: false,
+      pricingMode: "online",
+      timezone: "UTC",
+      sleep: () => Promise.resolve(),
+      random: () => 0,
     })).rejects.toThrow(
-      /fully priced offline cost data/,
+      /fully priced online cost data/,
     );
+    expect(execFileMock).toHaveBeenCalledTimes(3);
   });
 });

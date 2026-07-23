@@ -15,12 +15,12 @@ bunx straude
 npm install -g straude
 ```
 
-**Requirements**: Node.js >= 18
+**Requirements**: Node.js >= 20
 
 ## Quick Start
 
 ```bash
-# First run: authenticates via browser, then runs the one-time 30-day backfill
+# First run: authenticates via browser, then syncs the last 3 days
 npx straude@latest
 
 # Subsequent runs: pushes only new data since last sync
@@ -64,6 +64,7 @@ straude push --dry-run        # Preview without posting
 | `--date YYYY-MM-DD` | Push a specific date (must be within last 30 days) |
 | `--days N` | Push last N days (max 30) |
 | `--dry-run` | Preview what would be submitted without actually posting |
+| `--non-interactive` | Never open a browser or wait for login |
 
 **Date range logic:**
 
@@ -72,8 +73,13 @@ straude push --dry-run        # Preview without posting
 | `--date` specified | That single date |
 | `--days N` specified | Last N days (capped at 30) |
 | Previously pushed today | Today only (re-sync) |
-| Previously pushed before today | Days since last push (capped at 7) |
-| First run after the ccusage v20 migration | Last 30 days |
+| Previously pushed before today | Next uncommitted date through at most 7 contiguous days |
+| No previous push | Last 3 days |
+
+The CLI does not automatically run a 30-day migration backfill. Use
+`straude push --days 30` when you deliberately want the full server window.
+When more than seven dates are pending, repeated normal runs advance the
+committed watermark in contiguous chunks instead of skipping ahead.
 
 ### `straude status`
 
@@ -94,29 +100,63 @@ Output:
 Last push: 2026-03-11 (today)
 ```
 
-**Note:** This command calls `GET /api/users/me/status` which is a CLI-specific endpoint.
+**Note:** This command calls the CLI-authenticated `GET /api/cli/dashboard` endpoint.
+
+### `straude devices`
+
+List unresolved installation-identity candidates, or resolve one explicitly:
+
+```bash
+straude devices
+straude devices merge <candidate-uuid>
+straude devices keep-separate <candidate-uuid>
+```
+
+Straude only auto-merges installations when their normalized hostnames match,
+at least two overlapping dates have identical source-level accounting, and no
+overlap diverges. Ambiguous candidates are quarantined from new accounting until
+you choose whether to merge them or keep them separate.
+
+### Automatic sync
+
+```bash
+straude --auto                 # Install a daily launchd/cron job
+straude --auto --time 14:30    # Choose a local run time
+straude --auto hooks           # Install a Claude Code SessionEnd hook
+straude --no-auto              # Disable the configured mechanism
+straude auto                   # Show current configuration
+straude auto logs              # Print scheduler logs
+```
+
+The OS scheduler uses launchd on macOS and cron on Linux. It is not available
+on Windows. Claude Code hooks are independent of the OS scheduler.
 
 ## Global Options
 
 | Flag | Description |
 |------|-------------|
 | `--api-url URL` | Override the API URL (useful for local development) |
+| `--timeout N` | Set the ccusage subprocess timeout in seconds (default 240) |
+| `--debug` | Write diagnostic detail to stderr |
 | `--help`, `-h` | Show help text |
 | `--version`, `-v` | Show CLI version |
 
 ## Data Sources
 
-Straude invokes its bundled `ccusage >=20.0.16` native binary once per sync:
+Straude invokes its installed, exact `ccusage@20.0.16` native binary once per sync:
 
 ```bash
-ccusage daily --json --since YYYYMMDD --until YYYYMMDD --no-offline
+ccusage daily --json --since YYYYMMDD --until YYYYMMDD --no-offline --by-agent --timezone IANA_TIMEZONE
 ```
 
 The unified report automatically detects and combines every source ccusage supports. As of ccusage 20.0.16, those built-in sources are Claude Code, Codex, OpenCode, Amp, Droid, Codebuff, Hermes Agent, pi-agent, Goose, OpenClaw, Kilo, Kimi, Qwen, GitHub Copilot CLI, and Gemini CLI. Configured custom pi-format stores are accepted too.
 
 ccusage owns local path discovery, source-format parsing, deduplication, token accounting, model aliases, and per-model cost calculation. Straude validates the unified daily JSON, preserves each row's `metadata.agents`, and submits the aggregate token buckets, models, and model cost breakdown. The raw local logs and paths are never uploaded.
 
-Online LiteLLM pricing is the default so new models and price corrections do not wait for Straude's lockfile or ccusage's embedded offline snapshot. ccusage retains that embedded snapshot as its fallback when a live refresh is unavailable.
+Online LiteLLM pricing is required, so model prices can change independently of
+the pinned collector code. If ccusage reports missing prices or falls back to
+its embedded snapshot, Straude retries within a bounded 60-second recovery
+budget and submits nothing unless live pricing becomes complete.
 
 A SHA-256 hash of the ccusage version, detected sources, date range, and raw unified JSON is sent for deduplication.
 
@@ -130,8 +170,7 @@ Auth tokens and sync state are stored in `~/.straude/config.json` with `0o600` p
   "username": "ohong",
   "api_url": "https://straude.com",
   "last_push_date": "2026-03-11",
-  "device_id": "a1b2c3d4-...",
-  "device_name": "MacBook-Pro.local"
+  "usage_protocol_v2_migration_completed_at": "2026-07-23T18:00:00.000Z"
 }
 ```
 
@@ -140,15 +179,25 @@ Auth tokens and sync state are stored in `~/.straude/config.json` with `0o600` p
 | `token` | CLI JWT token from login |
 | `username` | Username at time of login |
 | `api_url` | API base URL (default: `https://straude.com`) |
-| `last_push_date` | Last successfully pushed date (for smart sync) |
-| `device_id` | Auto-generated UUID on first push (for multi-device support) |
-| `device_name` | Machine hostname (informational) |
+| `last_push_date` | Last contiguous committed date (the smart-sync watermark) |
+| `usage_protocol_v2_migration_completed_at` | Marks completion of the bounded v2 migration sync |
 
 ## Multi-Device Support
 
-When `device_id` is present, usage data is stored per-device in a `device_usage` table and aggregated into `daily_usage`. This means users who code on multiple machines see summed totals rather than one device overwriting the other.
+Each installation has a durable UUID in `~/.straude/machine_id`, created with
+`0o600` permissions. Usage is reconciled per installation and aggregated into
+`daily_usage`, so multiple machines add to the same day without overwriting one
+another. Installation aliases are user-scoped, so switching Straude accounts on
+one machine does not transfer or collide with the first account's usage. Legacy
+`device_id` values in the config are sent once as
+`previous_device_id` so existing rows can be reassigned safely.
 
-The `device_id` is auto-generated on first push and stored in the config file.
+Pending v2 requests are durably stored in `~/.straude/pending-sync.json` before
+submission. A sync lock prevents overlapping writers, and dates requested by a
+second automatic run are queued for the lock holder. Committed outcomes advance
+the watermark; retryable or unresolved dates remain in the outbox with the same
+request ID and content hash. Permanently rejected dates are removed from the
+retry queue, while the contiguous watermark stays behind the failed date.
 
 ## Troubleshooting
 
@@ -172,9 +221,85 @@ npx straude@latest
 
 ccusage did not detect local activity in the selected date range. Confirm the coding agent has created local usage logs and check that source's path or environment-variable setup in the [ccusage data-source guide](https://ccusage.com/guide/).
 
-### Windows support
+## Platform support
 
-Straude resolves the platform-specific ccusage native package directly on Windows, macOS, and Linux. The Windows config path resolves to `%USERPROFILE%\.straude\config.json`.
+The packaged CLI is tested on Linux, macOS, and Windows under Node 20 and 22.
+Straude resolves ccusage's platform-specific native package directly. The
+Windows config path is `%USERPROFILE%\.straude\config.json`; macOS and Linux use
+`~/.straude/config.json`.
+
+Automatic OS scheduling is limited to launchd on macOS and cron on Linux.
+
+## Exit codes
+
+| Code | Meaning |
+|------|---------|
+| `0` | Command completed successfully, including `--help` and `--version` |
+| `1` | Permanent input, configuration, collection, or identity error |
+| `2` | A non-interactive command requires authentication |
+| `75` | Retryable network, service, pricing, lock, or unresolved partial failure |
+
+When output is piped to a reader that closes early, an `EPIPE` exits cleanly and
+preserves an error status already set by the command.
+
+## Telemetry
+
+The CLI sends operational events to Straude's PostHog project: command and CLI
+version, success/failure outcome, stage timings, collector version and detected
+source IDs, and aggregate counts such as days, tokens, and cost. It does not send
+prompts, code, conversation content, or raw ccusage rows. Before transmission,
+the configured home-directory prefix is replaced with `~` in free-form values.
+
+Disable telemetry with either environment variable:
+
+```bash
+export STRAUDE_TELEMETRY_DISABLED=1
+# or
+export DO_NOT_TRACK=1
+```
+
+## Package and release verification
+
+```bash
+bun install --frozen-lockfile
+bun run --cwd packages/cli typecheck
+bun run --cwd packages/cli test
+bun run --cwd packages/cli test:packaged
+```
+
+`test:packaged` performs a clean build through `npm pack`, installs the tarball
+in a temporary project, checks its manifest and version, runs the real pinned
+ccusage binary against the GPT-5.6 fixture, submits to a local HTTP server, and
+waits for the scorecard render. CI repeats the installed-tarball check on Linux,
+macOS, and Windows with Node 20 and 22.
+
+Tags of the form `straude@<package-version>` trigger the release workflow. It
+publishes the exact matrix-tested tarball to npm with provenance and creates a
+matching GitHub release containing the tarball and its `SHA256SUMS` digest.
+Source maps are not shipped to npm or attached to the
+release; they are retained as GitHub Actions artifacts. The workflow validates tags but never
+creates them. Before the first release, configure `ohong/straude` and
+`release-cli.yml` as the trusted publisher for the `straude` package on npm;
+the workflow intentionally has no long-lived npm publish token.
+
+## Benchmark
+
+```bash
+bun run --cwd packages/cli benchmark
+bun run --cwd packages/cli benchmark:collector
+```
+
+The first harness packs and installs the CLI in isolation, warms filesystem
+caches, then prints JSON with median and p95 `--version` process latency.
+Override its default 15 samples with `STRAUDE_BENCH_ITERATIONS`.
+
+The collector harness creates deterministic 1, 3, 7, and 30-day Codex fixture
+sets and records the first process plus warm median/p95 for the pinned ccusage
+binary. Override its default seven warm samples with
+`STRAUDE_COLLECTOR_BENCH_ITERATIONS`. It uses offline fixture pricing to isolate
+local scan cost from network availability. CI archives these measurements;
+accuracy tests gate the release, while benchmark thresholds are compared only
+between runs on the same class of machine.
 
 ## Constants
 

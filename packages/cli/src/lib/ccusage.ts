@@ -4,6 +4,7 @@ import { createRequire } from "node:module";
 import { DEFAULT_SUBPROCESS_TIMEOUT_MS } from "../config.js";
 
 export const CCUSAGE_MIN_VERSION = "20.0.16";
+export const CCUSAGE_VERIFIED_VERSION = "20.0.16";
 export const CCUSAGE_CLAUDE_COLLECTOR = "ccusage-claude-v20" as const;
 export const CCUSAGE_CODEX_COLLECTOR = "ccusage-codex-v20" as const;
 export const CCUSAGE_DEFAULT_PRICING_MODE = "online" as const;
@@ -11,7 +12,11 @@ export const CCUSAGE_DEFAULT_PRICING_MODE = "online" as const;
 export type CcusagePricingMode = "offline" | "online";
 
 const MAX_CCUSAGE_BUFFER = 20 * 1024 * 1024;
+const MODEL_COST_TOLERANCE_USD = 0.005;
+const PRICING_RECOVERY_BUDGET_MS = 60_000;
+const PRICING_RETRY_DELAYS_MS = [1_000, 3_000] as const;
 const MISSING_PRICING_RE = /(missing|unavailable|unknown|could not fetch|failed to fetch).{0,80}(pricing|price|cost)|pricing.{0,80}(missing|unavailable|unknown)|cost excludes/i;
+const EMBEDDED_PRICING_FALLBACK_RE = /failed to (?:fetch|parse) litellm pricing.*using embedded pricing/i;
 
 export type CcusageAgent = string;
 
@@ -42,13 +47,33 @@ let forcedCommandForTests: ResolvedCcusageCommand | undefined;
 /** Per-model cost entry for breakdown tracking. */
 export interface ModelBreakdownEntry {
   model: string;
+  inputTokens: number;
+  outputTokens: number;
+  reasoningOutputTokens: number;
+  cacheCreationTokens: number;
+  cacheReadTokens: number;
+  totalTokens: number;
   cost_usd: number;
+}
+
+export interface CcusageAgentEntry {
+  agent: CcusageAgent;
+  models: string[];
+  inputTokens: number;
+  outputTokens: number;
+  reasoningOutputTokens: number;
+  cacheCreationTokens: number;
+  cacheReadTokens: number;
+  totalTokens: number;
+  costUSD: number;
+  modelBreakdown: ModelBreakdownEntry[];
 }
 
 /** Normalized entry used throughout the CLI and sent to the API. */
 export interface CcusageDailyEntry {
   date: string;
   agents: CcusageAgent[];
+  agentBreakdown: CcusageAgentEntry[];
   models: string[];
   inputTokens: number;
   outputTokens: number;
@@ -84,6 +109,7 @@ export interface CcusageOutput {
   version: string;
   raw: string;
   stderr: string;
+  pricingRetryCount?: number;
 }
 
 interface ParseOptions {
@@ -94,7 +120,10 @@ interface ParseOptions {
 
 interface CollectOptions {
   pricingMode?: CcusagePricingMode;
-  allowOnlineFallback?: boolean;
+  timezone?: string;
+  sleep?: (delayMs: number) => Promise<void>;
+  random?: () => number;
+  pricingRecoveryBudgetMs?: number;
 }
 
 interface CcusageRawEntry {
@@ -110,6 +139,7 @@ interface CcusageRawEntry {
   totalCost?: unknown;
   costUSD?: unknown;
   metadata?: unknown;
+  agents?: unknown;
 }
 
 interface CcusageRawModelBreakdown {
@@ -117,6 +147,32 @@ interface CcusageRawModelBreakdown {
   model?: unknown;
   cost?: unknown;
   cost_usd?: unknown;
+  inputTokens?: unknown;
+  outputTokens?: unknown;
+  reasoningOutputTokens?: unknown;
+  cacheCreationTokens?: unknown;
+  cacheReadTokens?: unknown;
+  totalTokens?: unknown;
+  missingPricing?: unknown;
+}
+
+interface CcusageRawAgent {
+  agent?: unknown;
+  modelsUsed?: unknown;
+  modelBreakdowns?: unknown;
+  inputTokens?: unknown;
+  outputTokens?: unknown;
+  cacheCreationTokens?: unknown;
+  cacheReadTokens?: unknown;
+  totalTokens?: unknown;
+  totalCost?: unknown;
+}
+
+export class PricingUnavailableError extends Error {
+  constructor(message: string) {
+    super(message);
+    this.name = "PricingUnavailableError";
+  }
 }
 
 function packageNameForPlatform(platform = process.platform, arch = process.arch): string | undefined {
@@ -212,9 +268,9 @@ function compareSemver(a: string, b: string): number {
 }
 
 function assertSupportedVersion(version: string): void {
-  if (compareSemver(version, CCUSAGE_MIN_VERSION) < 0) {
+  if (compareSemver(version, CCUSAGE_VERIFIED_VERSION) !== 0) {
     throw new Error(
-      `ccusage ${version} is unsupported. Straude requires ccusage >=${CCUSAGE_MIN_VERSION} for accurate Codex accounting.`,
+      `ccusage ${version} is unsupported. Straude requires the fixture-verified ccusage ${CCUSAGE_VERIFIED_VERSION}. Reinstall Straude and retry.`,
     );
   }
 }
@@ -239,6 +295,10 @@ function execCcusageAsync(args: string[], timeoutMs?: number): Promise<ExecResul
       timeout: timeoutMs ?? DEFAULT_SUBPROCESS_TIMEOUT_MS,
       maxBuffer: MAX_CCUSAGE_BUFFER,
       shell: false,
+      env: {
+        ...process.env,
+        LOG_LEVEL: "4",
+      },
     }, (err, stdout, stderr) => {
       if (!err) {
         resolve({ stdout, stderr });
@@ -266,8 +326,8 @@ function hasMissingPricingWarning(stderr: string): boolean {
 }
 
 function rejectMissingPricing(stderr: string, pricingMode: CcusagePricingMode): void {
-  if (hasMissingPricingWarning(stderr)) {
-    throw new Error(
+  if (hasMissingPricingWarning(stderr) || EMBEDDED_PRICING_FALLBACK_RE.test(stderr)) {
+    throw new PricingUnavailableError(
       `ccusage did not produce fully priced ${pricingMode} cost data: ${stderr.trim()}`,
     );
   }
@@ -291,7 +351,11 @@ function asStringArray(value: unknown, field: string, date: string): string[] {
   if (!Array.isArray(value)) {
     throw new Error(`Invalid ccusage row for ${date}: ${field} must be an array.`);
   }
-  return value.filter((item): item is string => typeof item === "string" && item.length > 0);
+  const strings = value.filter((item): item is string => typeof item === "string" && item.length > 0);
+  if (strings.length !== value.length || new Set(strings).size !== strings.length) {
+    throw new Error(`Invalid ccusage row for ${date}: ${field} must contain unique non-empty strings.`);
+  }
+  return strings;
 }
 
 function parseAgents(row: CcusageRawEntry, date: string): CcusageAgent[] {
@@ -303,8 +367,11 @@ function parseAgents(row: CcusageRawEntry, date: string): CcusageAgent[] {
   if (rawAgents.length === 0 || rawAgents.some((agent) => typeof agent !== "string")) {
     throw new Error(`Invalid ccusage row for ${date}: metadata.agents must contain agent names.`);
   }
+  if (new Set(rawAgents).size !== rawAgents.length) {
+    throw new Error(`Invalid ccusage row for ${date}: metadata.agents contains duplicate agents.`);
+  }
 
-  return [...new Set(rawAgents)].sort();
+  return [...rawAgents].sort();
 }
 
 function parseModelBreakdown(value: unknown, date: string): ModelBreakdownEntry[] | undefined {
@@ -323,10 +390,222 @@ function parseModelBreakdown(value: unknown, date: string): ModelBreakdownEntry[
       throw new Error(`Invalid ccusage row for ${date}: modelBreakdowns[${index}].modelName is required.`);
     }
     const cost = asFiniteNumber(raw.cost ?? raw.cost_usd, `modelBreakdowns[${index}].cost`, date);
-    return { model, cost_usd: cost };
+    if (raw.missingPricing === true) {
+      throw new PricingUnavailableError(
+        `ccusage did not produce live pricing for ${model} on ${date}.`,
+      );
+    }
+    const inputTokens = asFiniteNumber(
+      raw.inputTokens ?? 0,
+      `modelBreakdowns[${index}].inputTokens`,
+      date,
+    );
+    const outputTokens = asFiniteNumber(
+      raw.outputTokens ?? 0,
+      `modelBreakdowns[${index}].outputTokens`,
+      date,
+    );
+    const cacheCreationTokens = asFiniteNumber(
+      raw.cacheCreationTokens ?? 0,
+      `modelBreakdowns[${index}].cacheCreationTokens`,
+      date,
+    );
+    const cacheReadTokens = asFiniteNumber(
+      raw.cacheReadTokens ?? 0,
+      `modelBreakdowns[${index}].cacheReadTokens`,
+      date,
+    );
+    const baseTokens = inputTokens + outputTokens + cacheCreationTokens + cacheReadTokens;
+    const totalTokens = asFiniteNumber(
+      raw.totalTokens ?? baseTokens,
+      `modelBreakdowns[${index}].totalTokens`,
+      date,
+    );
+    if (totalTokens < baseTokens) {
+      throw new Error(
+        `Invalid ccusage row for ${date}: modelBreakdowns[${index}].totalTokens is below its token categories.`,
+      );
+    }
+    const reasoningOutputTokens = raw.reasoningOutputTokens == null
+      ? totalTokens - baseTokens
+      : asFiniteNumber(
+        raw.reasoningOutputTokens,
+        `modelBreakdowns[${index}].reasoningOutputTokens`,
+        date,
+      );
+    if (baseTokens + reasoningOutputTokens !== totalTokens) {
+      throw new Error(
+        `Invalid ccusage row for ${date}: modelBreakdowns[${index}] token categories do not equal totalTokens.`,
+      );
+    }
+    return {
+      model,
+      inputTokens,
+      outputTokens,
+      reasoningOutputTokens,
+      cacheCreationTokens,
+      cacheReadTokens,
+      totalTokens,
+      cost_usd: cost,
+    };
   });
 
+  const models = breakdown.map((item) => item.model);
+  if (new Set(models).size !== models.length) {
+    throw new Error(`Invalid ccusage row for ${date}: modelBreakdowns contains duplicate models.`);
+  }
   return breakdown.length > 0 ? breakdown : undefined;
+}
+
+function assertTokenTotal(
+  values: {
+    inputTokens: number;
+    outputTokens: number;
+    cacheCreationTokens: number;
+    cacheReadTokens: number;
+    totalTokens: number;
+  },
+  date: string,
+  field: string,
+): number {
+  const base = values.inputTokens
+    + values.outputTokens
+    + values.cacheCreationTokens
+    + values.cacheReadTokens;
+  if (values.totalTokens < base) {
+    throw new Error(`Invalid ccusage row for ${date}: ${field}.totalTokens is below its token categories.`);
+  }
+  return values.totalTokens - base;
+}
+
+function assertCostMatches(
+  expected: number,
+  breakdown: ModelBreakdownEntry[],
+  date: string,
+  field: string,
+): void {
+  const breakdownCost = breakdown.reduce((sum, model) => sum + model.cost_usd, 0);
+  if (Math.abs(expected - breakdownCost) > MODEL_COST_TOLERANCE_USD) {
+    throw new Error(
+      `Invalid ccusage row for ${date}: ${field} cost differs from its model breakdown by more than $${MODEL_COST_TOLERANCE_USD.toFixed(3)}.`,
+    );
+  }
+}
+
+function allocateReasoningTokens(
+  breakdown: ModelBreakdownEntry[],
+  reasoningTokens: number,
+): ModelBreakdownEntry[] {
+  // ccusage v20 includes per-agent reasoning in totalTokens but omits its
+  // private per-model extra_total_tokens field from JSON. Preserve the exact
+  // agent total by apportioning that known residual by model output volume.
+  const alreadyAllocated = breakdown.reduce(
+    (sum, model) => sum + model.reasoningOutputTokens,
+    0,
+  );
+  const residual = reasoningTokens - alreadyAllocated;
+  if (residual < 0) {
+    throw new Error("Model reasoning tokens exceed the enclosing agent total.");
+  }
+  if (residual === 0 || breakdown.length === 0) return breakdown;
+
+  const weights = breakdown.map((model) => (
+    model.outputTokens > 0 ? model.outputTokens : Math.max(model.totalTokens, 1)
+  ));
+  const weightTotal = weights.reduce((sum, weight) => sum + weight, 0);
+  const allocations = weights.map((weight) => Math.floor((residual * weight) / weightTotal));
+  let remainder = residual - allocations.reduce((sum, value) => sum + value, 0);
+  const ranked = weights
+    .map((weight, index) => ({
+      index,
+      remainder: (residual * weight) % weightTotal,
+    }))
+    .sort((left, right) => (
+      right.remainder - left.remainder
+      || breakdown[left.index]!.model.localeCompare(breakdown[right.index]!.model)
+    ));
+  for (const candidate of ranked) {
+    if (remainder === 0) break;
+    allocations[candidate.index]! += 1;
+    remainder -= 1;
+  }
+
+  return breakdown.map((model, index) => {
+    const added = allocations[index]!;
+    return {
+      ...model,
+      reasoningOutputTokens: model.reasoningOutputTokens + added,
+      totalTokens: model.totalTokens + added,
+    };
+  });
+}
+
+function parseAgentBreakdown(value: unknown, date: string): CcusageAgentEntry[] {
+  if (!Array.isArray(value) || value.length === 0) {
+    throw new Error(`Invalid ccusage row for ${date}: agents breakdown is required; run ccusage with --by-agent.`);
+  }
+
+  const agents = value.map((item, index): CcusageAgentEntry => {
+    if (!isRecord(item)) {
+      throw new Error(`Invalid ccusage row for ${date}: agents[${index}] must be an object.`);
+    }
+    const raw = item as CcusageRawAgent;
+    if (typeof raw.agent !== "string" || raw.agent.length === 0) {
+      throw new Error(`Invalid ccusage row for ${date}: agents[${index}].agent is required.`);
+    }
+    const inputTokens = asFiniteNumber(raw.inputTokens, `agents[${index}].inputTokens`, date);
+    const outputTokens = asFiniteNumber(raw.outputTokens, `agents[${index}].outputTokens`, date);
+    const cacheCreationTokens = asFiniteNumber(
+      raw.cacheCreationTokens,
+      `agents[${index}].cacheCreationTokens`,
+      date,
+    );
+    const cacheReadTokens = asFiniteNumber(
+      raw.cacheReadTokens,
+      `agents[${index}].cacheReadTokens`,
+      date,
+    );
+    const totalTokens = asFiniteNumber(raw.totalTokens, `agents[${index}].totalTokens`, date);
+    const costUSD = asFiniteNumber(raw.totalCost, `agents[${index}].totalCost`, date);
+    const parsedModelBreakdown = parseModelBreakdown(raw.modelBreakdowns, date) ?? [];
+    if (costUSD > 0 && parsedModelBreakdown.length === 0) {
+      throw new Error(`Invalid ccusage row for ${date}: agents[${index}] priced usage requires modelBreakdowns.`);
+    }
+    const reasoningOutputTokens = assertTokenTotal({
+      inputTokens,
+      outputTokens,
+      cacheCreationTokens,
+      cacheReadTokens,
+      totalTokens,
+    }, date, `agents[${index}]`);
+    assertCostMatches(costUSD, parsedModelBreakdown, date, `agents[${index}]`);
+    const modelBreakdown = allocateReasoningTokens(
+      parsedModelBreakdown,
+      reasoningOutputTokens,
+    );
+
+    const models = asStringArray(raw.modelsUsed, `agents[${index}].modelsUsed`, date);
+    const allModels = new Set(models);
+    for (const model of modelBreakdown) allModels.add(model.model);
+    return {
+      agent: raw.agent,
+      models: [...allModels].sort(),
+      inputTokens,
+      outputTokens,
+      reasoningOutputTokens,
+      cacheCreationTokens,
+      cacheReadTokens,
+      totalTokens,
+      costUSD,
+      modelBreakdown,
+    };
+  });
+
+  const names = agents.map((agent) => agent.agent);
+  if (new Set(names).size !== names.length) {
+    throw new Error(`Invalid ccusage row for ${date}: agents breakdown contains duplicate agents.`);
+  }
+  return agents.sort((a, b) => a.agent.localeCompare(b.agent));
 }
 
 function normalizeRawDaily(raw: unknown): CcusageRawEntry[] {
@@ -393,6 +672,14 @@ export function parseCcusageOutput(raw: string, options: ParseOptions = {}): Ccu
 
     const rowAgents = parseAgents(row, date);
     rowAgents.forEach((agent) => seenAgents.add(agent));
+    const agentBreakdown = parseAgentBreakdown(row.agents, date);
+    const breakdownNames = agentBreakdown.map((agent) => agent.agent);
+    if (
+      rowAgents.length !== breakdownNames.length
+      || rowAgents.some((agent) => !breakdownNames.includes(agent))
+    ) {
+      throw new Error(`Invalid ccusage row for ${date}: metadata.agents does not match agents breakdown.`);
+    }
 
     const inputTokens = asFiniteNumber(row.inputTokens, "inputTokens", date);
     const outputTokens = asFiniteNumber(row.outputTokens, "outputTokens", date);
@@ -406,17 +693,50 @@ export function parseCcusageOutput(raw: string, options: ParseOptions = {}): Ccu
     if (costUSD > 0 && (!modelBreakdown || modelBreakdown.length === 0)) {
       throw new Error(`Invalid ccusage row for ${date}: priced rows must include modelBreakdowns.`);
     }
+    const reasoningOutputTokens = assertTokenTotal({
+      inputTokens,
+      outputTokens,
+      cacheCreationTokens,
+      cacheReadTokens,
+      totalTokens,
+    }, date, "daily");
+    assertCostMatches(costUSD, modelBreakdown ?? [], date, "daily");
+
+    const agentTotals = agentBreakdown.reduce((totals, agent) => ({
+      inputTokens: totals.inputTokens + agent.inputTokens,
+      outputTokens: totals.outputTokens + agent.outputTokens,
+      reasoningOutputTokens: totals.reasoningOutputTokens + agent.reasoningOutputTokens,
+      cacheCreationTokens: totals.cacheCreationTokens + agent.cacheCreationTokens,
+      cacheReadTokens: totals.cacheReadTokens + agent.cacheReadTokens,
+      totalTokens: totals.totalTokens + agent.totalTokens,
+      costUSD: totals.costUSD + agent.costUSD,
+    }), {
+      inputTokens: 0,
+      outputTokens: 0,
+      reasoningOutputTokens: 0,
+      cacheCreationTokens: 0,
+      cacheReadTokens: 0,
+      totalTokens: 0,
+      costUSD: 0,
+    });
+    if (
+      agentTotals.inputTokens !== inputTokens
+      || agentTotals.outputTokens !== outputTokens
+      || agentTotals.reasoningOutputTokens !== reasoningOutputTokens
+      || agentTotals.cacheCreationTokens !== cacheCreationTokens
+      || agentTotals.cacheReadTokens !== cacheReadTokens
+      || agentTotals.totalTokens !== totalTokens
+      || Math.abs(agentTotals.costUSD - costUSD) > MODEL_COST_TOLERANCE_USD
+    ) {
+      throw new Error(`Invalid ccusage row for ${date}: agents breakdown does not match daily totals.`);
+    }
 
     const modelNames = new Set<string>(models);
     for (const breakdown of modelBreakdown ?? []) modelNames.add(breakdown.model);
-    const reasoningOutputTokens = Math.max(
-      totalTokens - inputTokens - outputTokens - cacheCreationTokens - cacheReadTokens,
-      0,
-    );
-
     return [{
       date,
       agents: rowAgents,
+      agentBreakdown,
       models: [...modelNames],
       inputTokens,
       outputTokens,
@@ -430,6 +750,11 @@ export function parseCcusageOutput(raw: string, options: ParseOptions = {}): Ccu
   });
 
   data.sort((a, b) => a.date.localeCompare(b.date));
+  for (let index = 1; index < data.length; index += 1) {
+    if (data[index - 1]!.date === data[index]!.date) {
+      throw new Error(`Invalid ccusage output: duplicate date ${data[index]!.date}.`);
+    }
+  }
 
   const agents = [...seenAgents].sort();
   const version = options.version ?? "unknown";
@@ -450,6 +775,7 @@ function argsForPricingMode(
   sinceDate: string,
   untilDate: string,
   pricingMode: CcusagePricingMode,
+  timezone: string,
 ): string[] {
   return [
     "daily",
@@ -458,8 +784,28 @@ function argsForPricingMode(
     sinceDate,
     "--until",
     untilDate,
+    "--timezone",
+    timezone,
+    "--by-agent",
     pricingMode === "offline" ? "--offline" : "--no-offline",
   ];
+}
+
+export function resolveLocalTimezone(): string {
+  const timezone = Intl.DateTimeFormat().resolvedOptions().timeZone;
+  if (typeof timezone !== "string" || timezone.length === 0) {
+    throw new Error("Unable to resolve the local IANA timezone.");
+  }
+  try {
+    new Intl.DateTimeFormat("en-US", { timeZone: timezone }).format();
+  } catch {
+    throw new Error(`Unsupported local IANA timezone: ${timezone}`);
+  }
+  return timezone;
+}
+
+function sleep(delayMs: number): Promise<void> {
+  return new Promise((resolve) => setTimeout(resolve, delayMs));
 }
 
 export async function collectCcusageUsageAsync(
@@ -471,34 +817,51 @@ export async function collectCcusageUsageAsync(
   const { version } = resolveInstalledCcusageCommand();
   assertSupportedVersion(version);
   const pricingMode = options.pricingMode ?? CCUSAGE_DEFAULT_PRICING_MODE;
-
-  const result = await execCcusageAsync(
-    argsForPricingMode(sinceDate, untilDate, pricingMode),
-    timeoutMs,
-  );
-  if (
-    pricingMode === "offline" &&
-    options.allowOnlineFallback !== false &&
-    hasMissingPricingWarning(result.stderr)
-  ) {
-    const fallback = await execCcusageAsync(
-      argsForPricingMode(sinceDate, untilDate, "online"),
-      timeoutMs,
-    );
-    rejectMissingPricing(fallback.stderr, "online");
-
-    return parseCcusageOutput(fallback.stdout, {
-      version,
-      stderr: fallback.stderr,
-      pricingMode: "online",
-    });
+  const timezone = options.timezone ?? resolveLocalTimezone();
+  const startedAt = Date.now();
+  const recoveryBudgetMs = options.pricingRecoveryBudgetMs ?? PRICING_RECOVERY_BUDGET_MS;
+  const outerDeadline = startedAt + (timeoutMs ?? DEFAULT_SUBPROCESS_TIMEOUT_MS);
+  const wait = options.sleep ?? sleep;
+  const random = options.random ?? Math.random;
+  let pricingDeadline: number | undefined;
+  for (let attempt = 0; attempt < PRICING_RETRY_DELAYS_MS.length + 1; attempt += 1) {
+    const deadline = pricingDeadline ?? outerDeadline;
+    const remaining = deadline - Date.now();
+    if (remaining <= 0) {
+      if (pricingDeadline !== undefined) {
+        throw new PricingUnavailableError(
+          `Live pricing did not recover inside the ${Math.round(recoveryBudgetMs / 1_000)}-second budget.`,
+        );
+      }
+      throw new Error("ccusage exceeded the configured local scan deadline.");
+    }
+    try {
+      const result = await execCcusageAsync(
+        argsForPricingMode(sinceDate, untilDate, pricingMode, timezone),
+        Math.min(timeoutMs ?? DEFAULT_SUBPROCESS_TIMEOUT_MS, remaining),
+      );
+      rejectMissingPricing(result.stderr, pricingMode);
+      const parsed = parseCcusageOutput(result.stdout, {
+        version,
+        stderr: result.stderr,
+        pricingMode,
+      });
+      return { ...parsed, pricingRetryCount: attempt };
+    } catch (error) {
+      if (!(error instanceof PricingUnavailableError) || attempt >= PRICING_RETRY_DELAYS_MS.length) {
+        throw error;
+      }
+      pricingDeadline ??= Math.min(Date.now() + recoveryBudgetMs, outerDeadline);
+      const cap = PRICING_RETRY_DELAYS_MS[attempt]!;
+      const delay = Math.floor(Math.max(0, Math.min(1, random())) * cap);
+      if (Date.now() + delay >= pricingDeadline) {
+        throw new PricingUnavailableError(
+          `Live pricing did not recover inside the ${Math.round(recoveryBudgetMs / 1_000)}-second budget.`,
+        );
+      }
+      await wait(delay);
+    }
   }
 
-  rejectMissingPricing(result.stderr, pricingMode);
-
-  return parseCcusageOutput(result.stdout, {
-    version,
-    stderr: result.stderr,
-    pricingMode,
-  });
+  throw new PricingUnavailableError("Live pricing collection did not produce a result.");
 }

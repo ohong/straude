@@ -14,10 +14,10 @@ Running with no arguments performs a smart sync: logs you in if needed, then pus
 
 ## Requirements
 
-- Node 18+
+- Node 20+
 - Local session data from any source supported by ccusage.
 
-Straude invokes its installed [`ccusage`](https://github.com/ccusage/ccusage) dependency directly. The compatible `ccusage@^20.0.16` range owns source parsing, model recognition, token accounting, and LiteLLM pricing updates. Straude uses ccusage's unified report, so all detected sources are included by default: Claude Code, Codex, OpenCode, Amp, Droid, Codebuff, Hermes Agent, pi-agent, Goose, OpenClaw, Kilo, Kimi, Qwen, GitHub Copilot CLI, Gemini CLI, and compatible custom source IDs.
+Straude invokes its installed [`ccusage`](https://github.com/ccusage/ccusage) dependency directly. Version `20.0.16` is pinned so the parser, token accounting, and native binary match the release fixture tested by Straude. Live LiteLLM pricing is required; embedded-price fallback is detected, retried within a bounded recovery budget, and never submitted. Straude uses ccusage's unified per-agent report, so all detected sources are included by default: Claude Code, Codex, OpenCode, Amp, Droid, Codebuff, Hermes Agent, pi-agent, Goose, OpenClaw, Kilo, Kimi, Qwen, GitHub Copilot CLI, Gemini CLI, and compatible custom source IDs.
 
 ## Commands
 
@@ -27,9 +27,9 @@ Straude invokes its installed [`ccusage`](https://github.com/ccusage/ccusage) de
 straude
 ```
 
-- First run: opens a browser tab to authenticate, then pushes today's usage.
-- First run after the ccusage v20 migration: backfills the last 30 days once.
-- Subsequent runs: pushes all days since the last sync (up to 7 days).
+- First run: opens a browser tab to authenticate, then pushes the last 3 days.
+- Subsequent runs: resume after the last committed date and process up to 7 contiguous days per run.
+- Explicit backfill: `straude push --days 30` reads the maximum 30-day window.
 - Already synced today: prints today's stats and exits.
 
 ### `login`
@@ -53,6 +53,10 @@ Push usage data to Straude.
 | `--date YYYY-MM-DD` | Push a specific date (must be within the last 30 days) |
 | `--days N` | Push the last N days (max 30) |
 | `--dry-run` | Preview what would be submitted without posting |
+| `--timeout N` | Set the ccusage timeout in seconds (default 240) |
+| `--api-url URL` | Use a different Straude API origin |
+| `--debug` | Print diagnostic detail to stderr |
+| `--non-interactive` | Never open a browser or wait for login |
 
 ### `status`
 
@@ -61,6 +65,30 @@ straude status
 ```
 
 Show your current streak, weekly spend, token usage, and global rank.
+
+### `devices`
+
+```sh
+straude devices
+straude devices merge <candidate-uuid>
+straude devices keep-separate <candidate-uuid>
+```
+
+List or resolve ambiguous installation identities. Automatic merging requires
+matching hostnames, at least two identical source-level overlap dates, and no
+divergent overlap; ambiguous candidates remain quarantined until resolved.
+
+### Automatic sync
+
+```sh
+straude --auto                 # Daily launchd/cron job
+straude --auto --time 14:30    # Choose the local run time
+straude --auto hooks           # Claude Code SessionEnd hook
+straude --no-auto              # Disable the configured mechanism
+straude auto logs              # Inspect scheduler output
+```
+
+The OS scheduler is supported on macOS and Linux. Claude Code hooks work anywhere Claude Code supports `SessionEnd`; Windows does not support the OS scheduler.
 
 ## Examples
 
@@ -87,6 +115,20 @@ straude status
 ## Config
 
 Credentials are stored in `~/.straude/config.json` (mode `0600`, owner-only).
+The installation UUID is stored separately in `~/.straude/machine_id`, so
+deleting the config does not create a second logical device. Server aliases are
+scoped to the Straude account, so account switches on the same machine remain
+independent. Pending validated requests are stored in
+`~/.straude/pending-sync.json` until each date commits.
+
+## Exit codes
+
+| Code | Meaning |
+|---|---|
+| `0` | Complete, empty, or safely coalesced work |
+| `1` | Permanent input, configuration, collection, or identity error |
+| `2` | Non-interactive authentication required |
+| `75` | Retryable network, service, pricing, lock, or partial failure |
 
 ## Debug mode
 
@@ -106,7 +148,7 @@ normal output.
 
 ## Telemetry
 
-The CLI sends anonymous usage events (command name, CLI version, success/failure outcomes, aggregate counts like `days_pushed` and `total_cost_usd`) to Straude's PostHog project so we can prioritise features and catch regressions. We never send prompts, code, conversation content, file paths, or ccusage rows — home directory paths are scrubbed from any free-form payload before transmission.
+The CLI sends operational events (command name, CLI version, success/failure outcomes, timings, and aggregate counts such as `days_pushed` and `total_cost_usd`) to Straude's PostHog project. It does not send prompts, code, conversation content, or raw ccusage rows. The configured home-directory prefix is replaced with `~` in free-form telemetry before transmission.
 
 To opt out, set either env var:
 
