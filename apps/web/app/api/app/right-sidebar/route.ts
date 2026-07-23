@@ -1,117 +1,64 @@
 import { NextResponse } from "next/server";
+import { getAuthIdentity } from "@/lib/supabase/auth";
 import { createClient } from "@/lib/supabase/server";
-import { getServiceClient } from "@/lib/supabase/service";
+import { loadRightSidebarPublicData } from "@/lib/data/right-sidebar";
 import { loadUsageTotals } from "@/lib/data/usage-totals";
-import type {
-  RightSidebarSuggestedUser,
-  RightSidebarTopUser,
-} from "@/lib/query/right-sidebar";
-
-type ActiveUserRelation = {
-  id: string;
-  username: string;
-  avatar_url: string | null;
-  bio: string | null;
-  is_public: boolean;
-};
+import type { RightSidebarSuggestedUser } from "@/lib/query/right-sidebar";
 
 export async function GET() {
-  const supabase = await createClient();
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
+  const [supabase, identity] = await Promise.all([
+    createClient(),
+    getAuthIdentity(),
+  ]);
 
-  if (!user) {
+  if (!identity) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
 
-  const service = getServiceClient();
-
-  const [{ data: topUsers }, { data: following }, usageTotals] = await Promise.all([
-    supabase
-      .from("leaderboard_weekly")
-      .select("user_id, username, avatar_url, total_cost")
-      .order("total_cost", { ascending: false })
-      .limit(5),
+  const [{ data: following }, usageTotals, publicData] = await Promise.all([
     supabase
       .from("follows")
       .select("following_id")
-      .eq("follower_id", user.id),
-    loadUsageTotals(supabase, user.id),
+      .eq("follower_id", identity.id),
+    loadUsageTotals(supabase, identity.id),
+    loadRightSidebarPublicData(),
   ]);
 
   const followingIds = following?.map((f) => f.following_id) ?? [];
-  const excludeIds = [user.id, ...followingIds];
-  const excludeFilter = `(${excludeIds.join(",")})`;
-
-  const [{ data: pinnedUsers }, { data: recentlyActive }, { data: newSignups }] =
-    await Promise.all([
-      service
-        .from("users")
-        .select("id, username, avatar_url, bio")
-        .eq("is_pinned_suggestion", true)
-        .not("id", "in", excludeFilter),
-      service
-        .from("daily_usage")
-        .select("user_id, users!inner(id, username, avatar_url, bio, is_public)")
-        .not("users.username", "is", null)
-        .not("user_id", "in", excludeFilter)
-        .order("date", { ascending: false })
-        .limit(20),
-      service
-        .from("users")
-        .select("id, username, avatar_url, bio")
-        .eq("is_public", true)
-        .not("username", "is", null)
-        .not("id", "in", excludeFilter)
-        .order("created_at", { ascending: false })
-        .limit(10),
-    ]);
-
-  const pinnedIds = new Set((pinnedUsers ?? []).map((u) => u.id));
+  const excludedIds = new Set([identity.id, ...followingIds]);
+  const pinnedList = publicData.pinnedUsers.filter(
+    (candidate) => !excludedIds.has(candidate.id)
+  );
+  const pinnedIds = new Set(pinnedList.map((candidate) => candidate.id));
   const seenIds = new Set<string>();
   const activeUsers: RightSidebarSuggestedUser[] = [];
 
-  for (const row of recentlyActive ?? []) {
-    const candidate = row.users as unknown as ActiveUserRelation;
-    if (!seenIds.has(candidate.id) && !pinnedIds.has(candidate.id) && candidate.is_public) {
-      seenIds.add(candidate.id);
-      activeUsers.push({
-        id: candidate.id,
-        username: candidate.username,
-        avatar_url: candidate.avatar_url,
-        bio: candidate.bio,
-      });
-    }
+  for (const candidate of publicData.activeUsers) {
+    if (excludedIds.has(candidate.id) || pinnedIds.has(candidate.id)) continue;
+    seenIds.add(candidate.id);
+    activeUsers.push(candidate);
   }
 
   const merged: RightSidebarSuggestedUser[] = [...activeUsers];
 
-  for (const candidate of newSignups ?? []) {
-    if (!candidate.username) continue;
-    if (pinnedIds.has(candidate.id) || merged.some((item) => item.id === candidate.id)) continue;
-    merged.push({
-      id: candidate.id,
-      username: candidate.username,
-      avatar_url: candidate.avatar_url,
-      bio: candidate.bio,
-    });
+  for (const candidate of publicData.newSignups) {
+    if (
+      excludedIds.has(candidate.id)
+      || pinnedIds.has(candidate.id)
+      || seenIds.has(candidate.id)
+    ) {
+      continue;
+    }
+    seenIds.add(candidate.id);
+    merged.push(candidate);
   }
 
-  const pinnedList: RightSidebarSuggestedUser[] = (pinnedUsers ?? [])
-    .filter((candidate) => candidate.username)
-    .map((candidate) => ({
-      id: candidate.id,
-      username: candidate.username as string,
-      avatar_url: candidate.avatar_url,
-      bio: candidate.bio,
-    }));
   const organicLimit = Math.max(0, 5 - pinnedList.length);
   const suggested = [...merged.slice(0, organicLimit), ...pinnedList].slice(0, 5);
 
   return NextResponse.json({
     suggested,
-    topUsers: (topUsers ?? []) as RightSidebarTopUser[],
+    topUsers: publicData.topUsers,
     totalOutputTokens: usageTotals.totalTokens,
   });
 }

@@ -1,17 +1,14 @@
 import { NotificationsList } from "@/components/app/notifications/NotificationsList";
-import { createClient } from "@/lib/supabase/server";
+import { getAuthContext } from "@/lib/supabase/auth";
 import { redirect } from "next/navigation";
 import type { Metadata } from "next";
 
 export const metadata: Metadata = { title: "Notifications" };
 
 export default async function NotificationsPage() {
-  const supabase = await createClient();
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
+  const { identity } = await getAuthContext();
 
-  if (!user) {
+  if (!identity) {
     redirect("/login");
   }
 

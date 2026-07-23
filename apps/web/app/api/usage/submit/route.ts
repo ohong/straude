@@ -7,7 +7,11 @@ import { getServiceClient } from "@/lib/supabase/service";
 import { checkAndAwardAchievements } from "@/lib/achievements";
 import { rateLimit } from "@/lib/rate-limit";
 import { formatCurrency } from "@/lib/utils/format";
-import type { UsageSubmitRequest, UsageSubmitResponse, CcusageDailyEntry, ModelBreakdownEntry, UsageCollectorMeta } from "@/types";
+import {
+  aggregateDeviceRows,
+  type DeviceUsageRow,
+} from "@/lib/usage/aggregate-device-rows";
+import type { UsageSubmitRequest, UsageSubmitResponse, CcusageDailyEntry, UsageCollectorMeta } from "@/types";
 
 const MAX_BACKFILL_DAYS = 30;
 const MAX_USAGE_ENTRIES = MAX_BACKFILL_DAYS + 2;
@@ -378,73 +382,6 @@ async function resolveAuthContext(request: Request): Promise<AuthContext | null>
   } catch {
     return null;
   }
-}
-
-interface DeviceUsageRow {
-  cost_usd: number;
-  input_tokens: number;
-  output_tokens: number;
-  reasoning_output_tokens?: number;
-  cache_creation_tokens: number;
-  cache_read_tokens: number;
-  total_tokens: number;
-  models: string[];
-  model_breakdown: ModelBreakdownEntry[] | null;
-  collector_meta?: UsageCollectorMeta | null;
-}
-
-/**
- * Aggregate multiple device_usage rows into a single daily_usage summary.
- * SUMs numeric fields, unions models (deduplicated), merges model_breakdowns
- * by summing cost_usd per model name.
- */
-export function aggregateDeviceRows(rows: DeviceUsageRow[]) {
-  let cost_usd = 0;
-  let input_tokens = 0;
-  let output_tokens = 0;
-  let reasoning_output_tokens = 0;
-  let cache_creation_tokens = 0;
-  let cache_read_tokens = 0;
-  let total_tokens = 0;
-  const modelsSet = new Set<string>();
-  const breakdownMap = new Map<string, number>();
-
-  for (const row of rows) {
-    cost_usd += Number(row.cost_usd);
-    input_tokens += Number(row.input_tokens);
-    output_tokens += Number(row.output_tokens);
-    reasoning_output_tokens += Number(row.reasoning_output_tokens ?? 0);
-    cache_creation_tokens += Number(row.cache_creation_tokens ?? 0);
-    cache_read_tokens += Number(row.cache_read_tokens ?? 0);
-    total_tokens += Number(row.total_tokens);
-
-    if (Array.isArray(row.models)) {
-      for (const m of row.models) modelsSet.add(m);
-    }
-    if (Array.isArray(row.model_breakdown)) {
-      for (const entry of row.model_breakdown) {
-        breakdownMap.set(entry.model, (breakdownMap.get(entry.model) ?? 0) + entry.cost_usd);
-      }
-    }
-  }
-
-  const models = [...modelsSet];
-  const model_breakdown: ModelBreakdownEntry[] = breakdownMap.size > 0
-    ? [...breakdownMap.entries()].map(([model, cost]) => ({ model, cost_usd: cost }))
-    : [];
-
-  return {
-    cost_usd,
-    input_tokens,
-    output_tokens,
-    reasoning_output_tokens,
-    cache_creation_tokens,
-    cache_read_tokens,
-    total_tokens,
-    models,
-    model_breakdown: model_breakdown.length > 0 ? model_breakdown : null,
-    session_count: rows.length,
-  };
 }
 
 function resolveClaudeTitleLabel(models: string[] | null | undefined): string | null {

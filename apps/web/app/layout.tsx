@@ -1,7 +1,7 @@
 import type { Metadata, Viewport } from "next";
 import { Inter, JetBrains_Mono } from "next/font/google";
-import { Agentation } from "agentation";
 import Script from "next/script";
+import { DevAgentation } from "@/components/dev/DevAgentation";
 import { getThemeBootstrapScript } from "@/lib/theme";
 import "./globals.css";
 
@@ -123,7 +123,7 @@ export default function RootLayout({
           Skip to content
         </a>
         {children}
-        {process.env.NODE_ENV === "development" && <Agentation />}
+        <DevAgentation />
       </body>
     </html>
   );

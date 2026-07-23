@@ -5,6 +5,7 @@
   "scripts": {
     "dev": "next dev --turbopack",
     "build": "next build",
+    "analyze": "ANALYZE=1 next build --webpack",
     "start": "next start",
     "lint": "eslint",
     "generate:og": "bun run ./scripts/generate-og.ts",
@@ -13,7 +14,9 @@
     "typecheck": "tsc --noEmit -p tsconfig.check.json",
     "test": "vitest run",
     "test:integration": "vitest run -c vitest.integration.config.ts",
-    "test:e2e": "playwright test"
+    "test:e2e": "playwright test",
+    "perf": "bun run build && playwright test -c playwright.perf.config.ts",
+    "perf:check": "bun run build && PERF_GATE=1 playwright test -c playwright.perf.config.ts"
   },
   "dependencies": {
     "@anthropic-ai/sdk": "^0.39",
@@ -44,6 +47,7 @@
     "tailwind-merge": "^3"
   },
   "devDependencies": {
+    "@next/bundle-analyzer": "16.2.6",
     "@playwright/test": "^1.58.2",
     "@tailwindcss/postcss": "^4",
     "@testing-library/jest-dom": "^6.9.1",

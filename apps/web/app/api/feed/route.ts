@@ -97,7 +97,7 @@ export async function GET(request: NextRequest) {
     }
   }
 
-  const { data: rpcPosts, error } = await supabase.rpc("get_feed", {
+  const feedPromise = supabase.rpc("get_feed", {
     p_type: type,
     p_user_id: effectiveUserId,
     p_limit: limit,
@@ -105,20 +105,27 @@ export async function GET(request: NextRequest) {
     p_cursor_created_at: cursorCreatedAt,
   });
 
-  if (error) {
-    return NextResponse.json({ error: error.message }, { status: 500 });
-  }
-
-  const enriched = await enrichFeedPosts({
-    posts: (rpcPosts ?? []) as FeedPostRow[],
-    userId: user?.id ?? null,
-    userScopedClient: supabase,
+  const enrichedPromise = feedPromise.then(({ data: rpcPosts, error }) => {
+    if (error) throw new Error(error.message);
+    return enrichFeedPosts({
+      posts: (rpcPosts ?? []) as FeedPostRow[],
+      userId: user?.id ?? null,
+      userScopedClient: supabase,
+    });
   });
-  const next_cursor = getFeedCursor(enriched, limit);
+  const pendingPromise = user && !cursor
+    ? getPendingPosts(supabase, user.id)
+    : Promise.resolve([]);
 
-  const pending_posts = user && !cursor
-    ? await getPendingPosts(supabase, user.id)
-    : [];
+  let enriched: Awaited<typeof enrichedPromise>;
+  let pending_posts: Awaited<typeof pendingPromise>;
+  try {
+    [enriched, pending_posts] = await Promise.all([enrichedPromise, pendingPromise]);
+  } catch (error) {
+    const message = error instanceof Error ? error.message : "Unable to load feed";
+    return NextResponse.json({ error: message }, { status: 500 });
+  }
+  const next_cursor = getFeedCursor(enriched, limit);
 
   return NextResponse.json({ posts: enriched, next_cursor, pending_posts });
 }

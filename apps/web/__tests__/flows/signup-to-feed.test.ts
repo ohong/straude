@@ -1,10 +1,21 @@
 import { describe, it, expect, vi, beforeEach } from "vitest";
 
+const leaderboardMocks = vi.hoisted(() => ({
+  loadEntries: vi.fn(),
+  loadRank: vi.fn(),
+}));
+
+vi.mock("@/lib/data/leaderboard", () => ({
+  LEADERBOARD_PERIODS: ["day", "week", "month", "all_time"],
+  loadLeaderboardEntries: leaderboardMocks.loadEntries,
+  loadLeaderboardRank: leaderboardMocks.loadRank,
+}));
+
 // ---------------------------------------------------------------------------
 // Mock Supabase
 // ---------------------------------------------------------------------------
 const mockSupabase = {
-  auth: { getUser: vi.fn() },
+  auth: { getUser: vi.fn(), getClaims: vi.fn() },
   from: vi.fn(),
   rpc: vi.fn().mockResolvedValue({ data: [] }),
 };
@@ -74,6 +85,16 @@ describe("Flow: Signup to Feed", () => {
     vi.clearAllMocks();
     vi.stubEnv("NEXT_PUBLIC_APP_URL", "https://straude.com");
     mockSupabase.rpc.mockResolvedValue({ data: [] });
+    mockSupabase.auth.getClaims.mockImplementation(async () => {
+      const result = await mockSupabase.auth.getUser();
+      const subject = result?.data?.user?.id;
+      return {
+        data: typeof subject === "string" ? { claims: { sub: subject } } : null,
+        error: result?.error ?? null,
+      };
+    });
+    leaderboardMocks.loadEntries.mockResolvedValue([]);
+    leaderboardMocks.loadRank.mockResolvedValue(null);
   });
 
   it("new user lands on feed and sees empty results before following anyone", async () => {
@@ -163,6 +184,7 @@ describe("Flow: Signup to Feed", () => {
       { user_id: userId, username: "alice_dev", total_cost: 12.5, region: "north_america" },
       { user_id: "user-2", username: "bob", total_cost: 8.0, region: "europe" },
     ];
+    leaderboardMocks.loadEntries.mockResolvedValue(leaderboardEntries);
 
     const lbChain = chainBuilder();
     (lbChain.select as ReturnType<typeof vi.fn>).mockReturnValue(lbChain);

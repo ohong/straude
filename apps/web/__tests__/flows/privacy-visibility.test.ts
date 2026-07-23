@@ -1,10 +1,21 @@
 import { describe, it, expect, vi, beforeEach } from "vitest";
 
+const leaderboardMocks = vi.hoisted(() => ({
+  loadEntries: vi.fn(),
+  loadRank: vi.fn(),
+}));
+
+vi.mock("@/lib/data/leaderboard", () => ({
+  LEADERBOARD_PERIODS: ["day", "week", "month", "all_time"],
+  loadLeaderboardEntries: leaderboardMocks.loadEntries,
+  loadLeaderboardRank: leaderboardMocks.loadRank,
+}));
+
 // ---------------------------------------------------------------------------
 // Mock Supabase
 // ---------------------------------------------------------------------------
 const mockSupabase = {
-  auth: { getUser: vi.fn() },
+  auth: { getUser: vi.fn(), getClaims: vi.fn() },
   from: vi.fn(),
   rpc: vi.fn(),
 };
@@ -74,12 +85,22 @@ describe("Flow: Privacy and Visibility", () => {
     mockServiceClient.rpc.mockReset();
     mockSupabase.rpc.mockReset();
     mockSupabase.from.mockReset();
+    mockSupabase.auth.getClaims.mockImplementation(async () => {
+      const result = await mockSupabase.auth.getUser();
+      const subject = result?.data?.user?.id;
+      return {
+        data: typeof subject === "string" ? { claims: { sub: subject } } : null,
+        error: result?.error ?? null,
+      };
+    });
     // Default: return array for calculate_streaks_batch (leaderboard), number for calculate_user_streak (profile)
     mockSupabase.rpc.mockImplementation((_fn: string) => {
       if (_fn === "calculate_streaks_batch") return Promise.resolve({ data: [] });
       return Promise.resolve({ data: 0 });
     });
     mockServiceClient.rpc.mockResolvedValue({ data: 0 });
+    leaderboardMocks.loadEntries.mockResolvedValue([]);
+    leaderboardMocks.loadRank.mockResolvedValue(null);
   });
 
   it("public user appears in leaderboard", async () => {
@@ -90,6 +111,7 @@ describe("Flow: Privacy and Visibility", () => {
     const entries = [
       { user_id: PUBLIC_USER.id, username: PUBLIC_USER.username, total_cost: 50.0, region: "north_america" },
     ];
+    leaderboardMocks.loadEntries.mockResolvedValue(entries);
 
     const lbChain = chainBuilder();
     (lbChain.select as ReturnType<typeof vi.fn>).mockReturnValue(lbChain);

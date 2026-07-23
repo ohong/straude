@@ -1,5 +1,21 @@
 import { describe, it, expect, vi, beforeEach } from "vitest";
 
+const leaderboardMocks = vi.hoisted(() => ({
+  loadEntries: vi.fn(),
+  loadRank: vi.fn(),
+  getAuthIdentity: vi.fn(),
+}));
+
+vi.mock("@/lib/supabase/auth", () => ({
+  getAuthIdentity: leaderboardMocks.getAuthIdentity,
+}));
+
+vi.mock("@/lib/data/leaderboard", () => ({
+  LEADERBOARD_PERIODS: ["day", "week", "month", "all_time"],
+  loadLeaderboardEntries: leaderboardMocks.loadEntries,
+  loadLeaderboardRank: leaderboardMocks.loadRank,
+}));
+
 // ---------------------------------------------------------------------------
 // Mock Supabase
 // ---------------------------------------------------------------------------
@@ -67,12 +83,19 @@ describe("Flow: Leaderboard Ranking", () => {
     vi.resetModules();
     mockSupabase.rpc.mockResolvedValue({ data: [] });
     mockServiceClient.from.mockReset();
+    leaderboardMocks.loadEntries.mockResolvedValue([]);
+    leaderboardMocks.loadRank.mockResolvedValue(null);
+    leaderboardMocks.getAuthIdentity.mockResolvedValue(null);
   });
 
   it("returns users sorted by cost DESC with correct rank badges", async () => {
     const currentUserId = "user-3";
     mockSupabase.auth.getUser.mockResolvedValue({
       data: { user: { id: currentUserId } },
+    });
+    leaderboardMocks.getAuthIdentity.mockResolvedValue({
+      id: currentUserId,
+      email: null,
     });
 
     const entries = [
@@ -81,6 +104,7 @@ describe("Flow: Leaderboard Ranking", () => {
       { user_id: "user-3", username: "lowspender", total_cost: 25.0, region: "asia" },
       { user_id: "user-4", username: "casual", total_cost: 10.0, region: "north_america" },
     ];
+    leaderboardMocks.loadEntries.mockResolvedValue(entries);
 
     const lbChain = chainBuilder({ data: entries, error: null });
 
@@ -114,6 +138,7 @@ describe("Flow: Leaderboard Ranking", () => {
       { user_id: "user-1", username: "topspender", total_cost: 100.0, region: "north_america" },
       { user_id: "user-4", username: "casual", total_cost: 10.0, region: "north_america" },
     ];
+    leaderboardMocks.loadEntries.mockResolvedValue(naEntries);
 
     const lbChain = chainBuilder({ data: naEntries, error: null });
 
@@ -130,7 +155,12 @@ describe("Flow: Leaderboard Ranking", () => {
     expect(res.status).toBe(200);
     expect(data.entries).toHaveLength(2);
     expect(data.entries.every((entry: { region: string }) => entry.region === "north_america")).toBe(true);
-    expect(lbChain.eq).toHaveBeenCalledWith("region", "north_america");
+    expect(leaderboardMocks.loadEntries).toHaveBeenCalledWith({
+      period: "week",
+      region: "north_america",
+      cursor: null,
+      limit: 50,
+    });
   });
 
   it("filters by period: uses correct view", async () => {
@@ -146,19 +176,17 @@ describe("Flow: Leaderboard Ranking", () => {
 
     const { GET } = await import("@/app/api/leaderboard/route");
 
-    for (const [period, view] of [
-      ["day", "leaderboard_daily"],
-      ["week", "leaderboard_weekly"],
-      ["month", "leaderboard_monthly"],
-      ["all_time", "leaderboard_all_time"],
-    ] as const) {
-      mockSupabase.from.mockClear();
-      mockSupabase.from.mockImplementation(() => lbChain);
-
+    for (const period of ["day", "week", "month", "all_time"] as const) {
+      leaderboardMocks.loadEntries.mockClear();
       const req = makeRequest(`http://localhost:3000/api/leaderboard?period=${period}`);
       await GET(req);
 
-      expect(mockSupabase.from).toHaveBeenCalledWith(view);
+      expect(leaderboardMocks.loadEntries).toHaveBeenCalledWith({
+        period,
+        region: null,
+        cursor: null,
+        limit: 50,
+      });
     }
   });
 
@@ -179,31 +207,20 @@ describe("Flow: Leaderboard Ranking", () => {
     mockSupabase.auth.getUser.mockResolvedValue({
       data: { user: { id: currentUserId } },
     });
+    leaderboardMocks.getAuthIdentity.mockResolvedValue({
+      id: currentUserId,
+      email: null,
+    });
 
     // Main leaderboard does not include current user
     const topEntries = [
       { user_id: "user-1", username: "top1", total_cost: 200.0 },
       { user_id: "user-2", username: "top2", total_cost: 150.0 },
     ];
+    leaderboardMocks.loadEntries.mockResolvedValue(topEntries);
+    leaderboardMocks.loadRank.mockResolvedValue(11);
 
-    // User entry lookup
-    const userEntryResult = { data: { total_cost: 5.0 }, error: null };
-    // Count of users above
-    const countResult = { count: 10, data: null, error: null };
-
-    let callCount = 0;
-    mockSupabase.from.mockImplementation(() => {
-      callCount++;
-      if (callCount === 1) return chainBuilder({ data: topEntries, error: null });
-      if (callCount === 2) {
-        // user's entry
-        const c = chainBuilder();
-        c.maybeSingle = vi.fn(() => Promise.resolve(userEntryResult));
-        return c;
-      }
-      // count above
-      return chainBuilder(countResult);
-    });
+    mockSupabase.from.mockImplementation(() => chainBuilder({ data: [], error: null }));
     mockServiceClient.from.mockImplementation(() =>
       chainBuilder({ data: [], error: null })
     );
@@ -215,5 +232,10 @@ describe("Flow: Leaderboard Ranking", () => {
 
     expect(res.status).toBe(200);
     expect(data.user_rank).toBe(11);
+    expect(leaderboardMocks.loadRank).toHaveBeenCalledWith(
+      "week",
+      currentUserId,
+      null
+    );
   });
 });

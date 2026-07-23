@@ -8,10 +8,15 @@
 
 ### Added
 
+- **Authenticated performance harness and local performance gate.** A production-build Playwright harness measures warm TTFB, FCP, LCP, middleware auth, layout attribution, and the right-sidebar API across 10 core authenticated pages. The final 2026-07-18 local run passed all 10 pages: TTFB 33-42ms, LCP 94-466ms, and right-sidebar 52ms.
+- **Private leaderboard and profile-stat snapshots.** Service-role-only snapshot tables move global leaderboard and radar aggregation out of request paths. A `pg_cron` job refreshes them transactionally every 10 minutes, with existing leaderboard views retained as a rollout fallback and a covering usage index added for aggregation.
+- **Route loading shells and bundle analysis.** All authenticated gating routes now have accessible loading boundaries. `@next/bundle-analyzer` runs behind `ANALYZE=1`; making the development-only Agentation toolbar lazy removed about 39 KiB gzip from every authenticated route's initial JavaScript.
 - **Daily `/api/cron/refresh-open-stats` cron** (Vercel cron, 05:00 UTC) that runs the live open-stats aggregation and persists a durable snapshot. Closes the gap left by the activation performance work, where `/open` and the landing ticker were switched to snapshot-only reads but nothing refreshed the snapshot.
 
 ### Changed
 
+- **Authenticated requests now use asymmetric ES256 JWT verification.** Supabase signing was moved to asymmetric keys and middleware uses `getClaims()` for local JWKS-backed verification, eliminating the remote `getUser()` round trip from the request gate while retaining server-side authorization checks where user data is read.
+- **Core authenticated pages render useful initial data from the server.** Settings, search, card, and recap no longer fetch their initial state after mount. Shared public leaderboard/right-sidebar reads use bounded server caches, while private and user-scoped reads remain request-scoped to prevent cross-user leakage.
 - **All ccusage sources and the OpenAI GPT-5.6 family are now tracked.** The CLI dependency floor is `ccusage@20.0.16`, the first release with `gpt-5.6`, `gpt-5.6-sol`, `gpt-5.6-terra`, and `gpt-5.6-luna` plus request-level long-context pricing. Collection now uses current online LiteLLM pricing by default, avoiding stale embedded-price estimates. Unified rows are no longer filtered to Claude/Codex: Straude accepts every source ID emitted by ccusage, carries each row's source IDs through submission metadata, and retains source-aware handling for trusted Codex corrections. A real bundled-binary fixture locks the four GPT-5.6 variants to 440,000 total tokens and $1.917 in API-equivalent spend at the current LiteLLM rates.
 
 - **Activation funnel events are now captured exclusively server-side.** `trackActivationEvent` no longer double-captures via browser posthog-js for consented users; the consent-exempt, privacy-limited server path (which owns anonymous→user identity stitching) is the single source of truth for funnel math.

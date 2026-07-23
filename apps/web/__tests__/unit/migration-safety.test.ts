@@ -225,6 +225,97 @@ describe("Migration safety", () => {
     expect(/ON\s+public\.comment_reactions\s+FOR\s+INSERT[\s\S]*WITH\s+CHECK[\s\S]*public\.comments[\s\S]*comment_reactions\.comment_id/i.test(content)).toBe(true);
   });
 
+  it("leaderboard and profile snapshots are private and refreshed atomically", () => {
+    const latest = getLatestMigrationMatching(
+      migrations,
+      /CREATE\s+TABLE\s+IF\s+NOT\s+EXISTS\s+public\.leaderboard_snapshots/i
+    );
+
+    expect(latest, "Expected the M4 snapshot migration").toBeTruthy();
+    const content = latest!.content;
+
+    expect(/ALTER\s+TABLE\s+public\.leaderboard_snapshots\s+ENABLE\s+ROW\s+LEVEL\s+SECURITY/i.test(content)).toBe(true);
+    expect(/ALTER\s+TABLE\s+public\.profile_stats_snapshots\s+ENABLE\s+ROW\s+LEVEL\s+SECURITY/i.test(content)).toBe(true);
+    expect(/REVOKE\s+ALL\s+ON\s+TABLE\s+public\.leaderboard_snapshots\s+FROM\s+anon/i.test(content)).toBe(true);
+    expect(/REVOKE\s+ALL\s+ON\s+TABLE\s+public\.profile_stats_snapshots\s+FROM\s+authenticated/i.test(content)).toBe(true);
+    expect(/pg_try_advisory_xact_lock/i.test(content)).toBe(true);
+    expect(/ON\s+CONFLICT\s*\(period,\s*user_id\)\s+DO\s+UPDATE/i.test(content)).toBe(true);
+    expect(/DELETE\s+FROM\s+public\.profile_stats_snapshots[\s\S]*refreshed_at\s*<>\s*v_refreshed_at/i.test(content)).toBe(true);
+    expect(/RANK\(\)\s+OVER\s*\(ORDER\s+BY\s+output_value\)\s*-\s*1/i.test(content)).toBe(true);
+    expect(/community_distribution/i.test(content)).toBe(true);
+    expect(/SELECT\s+COUNT\(\*\)\s+FROM\s+profile_values\s+AS\s+value/i.test(content)).toBe(false);
+    expect(/SELECT\s+public\.refresh_leaderboard_snapshots\(\)/i.test(content)).toBe(true);
+    expect(/'\*\/10 \* \* \* \*'/i.test(content)).toBe(true);
+  });
+
+  it("profile stats request RPC is a service-only one-row snapshot read", () => {
+    const latest = getLatestMigrationMatching(
+      migrations,
+      /CREATE\s+OR\s+REPLACE\s+FUNCTION\s+public\.get_profile_stats/i
+    );
+
+    expect(latest, "Expected get_profile_stats migration").toBeTruthy();
+    const definition = latest!.content.slice(
+      latest!.content.search(/CREATE\s+OR\s+REPLACE\s+FUNCTION\s+public\.get_profile_stats/i)
+    );
+
+    expect(/SECURITY\s+DEFINER/i.test(definition)).toBe(true);
+    expect(/SET\s+search_path\s*=\s*''/i.test(definition)).toBe(true);
+    expect(/FROM\s+public\.profile_stats_snapshots/i.test(definition)).toBe(true);
+    expect(/FROM\s+public\.(daily_usage|follows|posts|kudos)/i.test(definition.split("$$;")[0])).toBe(false);
+    expect(/REVOKE\s+ALL\s+ON\s+FUNCTION\s+public\.get_profile_stats\(UUID\)\s+FROM\s+PUBLIC/i.test(definition)).toBe(true);
+    expect(/GRANT\s+EXECUTE\s+ON\s+FUNCTION\s+public\.get_profile_stats\(UUID\)\s+TO\s+service_role/i.test(definition)).toBe(true);
+    expect(/GRANT\s+EXECUTE[^;]+get_profile_stats[^;]+TO\s+(anon|authenticated)/i.test(definition)).toBe(false);
+  });
+
+  it("calculate_user_streak is set-based and keeps timezone and freeze semantics", () => {
+    const latest = getLatestMigrationMatching(
+      migrations,
+      /CREATE\s+OR\s+REPLACE\s+FUNCTION\s+public\.calculate_user_streak/i
+    );
+
+    expect(latest, "Expected calculate_user_streak migration").toBeTruthy();
+    const content = latest!.content;
+    expect(/ROW_NUMBER\(\)\s+OVER\s*\(ORDER\s+BY\s+date\s+DESC\)/i.test(content)).toBe(true);
+    expect(/AT\s+TIME\s+ZONE\s+v_user_timezone/i.test(content)).toBe(true);
+    expect(/v_grace\s*:=\s*1\s*\+\s*p_freeze_days/i.test(content)).toBe(true);
+    expect(/^\s*LOOP\s*;?\s*$/im.test(content.slice(0, content.indexOf("CREATE OR REPLACE FUNCTION public.get_profile_stats")))).toBe(false);
+  });
+
+  it("adds a covering date-window leaderboard index", () => {
+    const latest = getLatestMigrationMatching(
+      migrations,
+      /idx_daily_usage_leaderboard_covering/i
+    );
+
+    expect(latest).toBeTruthy();
+    expect(/ON\s+public\.daily_usage\s*\(date\s+DESC,\s*user_id\)\s*INCLUDE\s*\(cost_usd,\s*output_tokens\)/i.test(latest!.content)).toBe(true);
+  });
+
+  it("indexes the leaderboard snapshot user foreign key without removing the region index", () => {
+    const userIndex = getLatestMigrationMatching(
+      migrations,
+      /idx_leaderboard_snapshots_user_id/i
+    );
+    const regionIndex = getLatestMigrationMatching(
+      migrations,
+      /idx_leaderboard_snapshots_period_region_cost/i
+    );
+
+    expect(userIndex).toBeTruthy();
+    expect(
+      /CREATE\s+INDEX\s+IF\s+NOT\s+EXISTS\s+idx_leaderboard_snapshots_user_id\s+ON\s+public\.leaderboard_snapshots\s*\(user_id\)/i.test(
+        userIndex!.content
+      )
+    ).toBe(true);
+    expect(regionIndex).toBeTruthy();
+    expect(
+      /ON\s+public\.leaderboard_snapshots\s*\(period,\s*region,\s*total_cost\s+DESC,\s*user_id\)/i.test(
+        regionIndex!.content
+      )
+    ).toBe(true);
+  });
+
   it("does not ship heuristic SQL repairs for historical Codex usage", () => {
     const abandonedRepairMigrations = migrations.filter((m) =>
       /repair_(legacy|native).*codex_inflation|restore_claude_costs_after_codex_repair|repair_codex_only_v3/i.test(m.name)

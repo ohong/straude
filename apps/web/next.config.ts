@@ -1,4 +1,11 @@
 import type { NextConfig } from "next";
+import bundleAnalyzer from "@next/bundle-analyzer";
+
+const withBundleAnalyzer = bundleAnalyzer({
+  enabled: process.env.ANALYZE === "1",
+  analyzerMode: "json",
+  openAnalyzer: false,
+});
 
 const scriptSrc = [
   "script-src 'self' 'unsafe-inline'",
@@ -83,4 +90,4 @@ const nextConfig: NextConfig = {
   },
 };
 
-export default nextConfig;
+export default withBundleAnalyzer(nextConfig);

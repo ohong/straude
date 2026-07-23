@@ -91,3 +91,7 @@ AGENTS.md
 .waypoint/docs/code-guide.md
 .env
 .env.local
+
+# perf harness output & auth state
+perf-results/
+apps/web/e2e/perf/.auth/

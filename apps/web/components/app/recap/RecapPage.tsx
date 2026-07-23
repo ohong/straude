@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect, useCallback } from "react";
+import { useState, useEffect, useCallback, useRef } from "react";
 import { Link2, Download, Check } from "lucide-react";
 import { RecapCard } from "@/components/app/recap/RecapCard";
 import type { RecapData } from "@/lib/utils/recap";
@@ -10,11 +10,18 @@ import {
   type RecapBackgroundId,
 } from "@/lib/recap-backgrounds";
 
-export function RecapPage() {
+export function RecapPage({
+  initialData,
+  initialError = null,
+}: {
+  initialData: RecapData | null;
+  initialError?: string | null;
+}) {
   const [period, setPeriod] = useState<"week" | "month">("week");
-  const [data, setData] = useState<RecapData | null>(null);
-  const [error, setError] = useState<string | null>(null);
-  const [loading, setLoading] = useState(true);
+  const [data, setData] = useState<RecapData | null>(initialData);
+  const [error, setError] = useState<string | null>(initialError);
+  const [loading, setLoading] = useState(false);
+  const initialRender = useRef(true);
   const [copied, setCopied] = useState(false);
   const [downloading, setDownloading] = useState(false);
   const [downloadError, setDownloadError] = useState<string | null>(null);
@@ -22,6 +29,11 @@ export function RecapPage() {
     useState<RecapBackgroundId>(DEFAULT_BACKGROUND_ID);
 
   useEffect(() => {
+    if (initialRender.current) {
+      initialRender.current = false;
+      return;
+    }
+
     let cancelled = false;
 
     async function loadRecap() {

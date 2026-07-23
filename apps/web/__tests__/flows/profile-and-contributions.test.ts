@@ -4,7 +4,7 @@ import { describe, it, expect, vi, beforeEach } from "vitest";
 // Mock Supabase
 // ---------------------------------------------------------------------------
 const mockSupabase = {
-  auth: { getUser: vi.fn() },
+  auth: { getUser: vi.fn(), getClaims: vi.fn() },
   from: vi.fn(),
   rpc: vi.fn(),
 };
@@ -56,6 +56,14 @@ describe("Flow: Profile and Contributions", () => {
     vi.clearAllMocks();
     mockServiceClient.from.mockReset();
     mockServiceClient.rpc.mockReset();
+    mockSupabase.auth.getClaims.mockImplementation(async () => {
+      const result = await mockSupabase.auth.getUser();
+      const subject = result?.data?.user?.id;
+      return {
+        data: typeof subject === "string" ? { claims: { sub: subject } } : null,
+        error: result?.error ?? null,
+      };
+    });
   });
 
   it("sets profile via PATCH /api/users/me", async () => {
