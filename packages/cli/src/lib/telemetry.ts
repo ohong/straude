@@ -57,7 +57,10 @@ export async function shutdownTelemetryWithTimeout(
   let timer: NodeJS.Timeout | undefined;
   try {
     await Promise.race([
-      posthog._shutdown(timeoutMs),
+      // @posthog/core rejects _shutdown when flush exceeds the timeout. A
+      // slow/failed telemetry flush must never surface: unhandled, it gets
+      // re-captured by exception autocapture and skips the final process.exit.
+      posthog._shutdown(timeoutMs).catch(() => {}),
       new Promise<void>((resolve) => {
         timer = setTimeout(resolve, timeoutMs);
         timer.unref?.();

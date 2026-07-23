@@ -4,6 +4,8 @@
 
 ### Fixed
 
+- **CLI telemetry shutdown no longer leaks a "Timeout while shutting down PostHog" exception.** `@posthog/core` rejects `_shutdown` when the flush exceeds the timeout; the rejection could win the race in `shutdownTelemetryWithTimeout`, becoming an unhandled rejection that exception autocapture re-reported to PostHog daily and that skipped the CLI's final `process.exit`. The rejection is now swallowed — a slow telemetry flush is expected and silent.
+
 - **The CLI now waits for and renders the scorecard after a successful sync.** A healthy dashboard response taking longer than 1.5 seconds is no longer discarded with a suggestion to run `straude status` separately.
 
 ### Added
