@@ -4,6 +4,8 @@
 
 ### Fixed
 
+- **Post OG/Twitter cards no longer 500 on webp images.** Satori (next/og) can't decode webp, so a webp hero image or avatar (even one with a `.jpg` extension) crashed the whole `/post/[id]` card render in production. Images are now fetched server-side, format-sniffed via magic bytes, and passed through as data URIs only when satori supports them (PNG/JPEG/GIF); unsupported or unfetchable images fall back to the existing no-image layout.
+
 - **The CLI now waits for and renders the scorecard after a successful sync.** A healthy dashboard response taking longer than 1.5 seconds is no longer discarded with a suggestion to run `straude status` separately.
 
 ### Added
