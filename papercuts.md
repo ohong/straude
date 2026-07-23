@@ -16,3 +16,7 @@ checking the real-Supabase integration test → local Docker/OrbStack daemon is 
 
 updating a same-repository pull request through the GitHub connector → maintainer_can_modify=true returned 422 because fork collaboration only applies cross-repository; retrying without that optional field succeeded
 
+2026-07-23T19:45:47.414Z — gpt-5.6-sol — ohong
+
+inspecting PR checks with the GitHub CI-fix helper → the documented python command was unavailable on this Nix/macOS PATH; python3 ran the helper successfully
+

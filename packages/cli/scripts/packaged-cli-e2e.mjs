@@ -8,7 +8,12 @@ import { promisify } from "node:util";
 
 const execFileAsync = promisify(execFile);
 const packageDir = resolve(dirname(fileURLToPath(import.meta.url)), "..");
-const npm = process.platform === "win32" ? "npm.cmd" : "npm";
+const npmCommand = process.platform === "win32"
+  ? {
+      executable: process.execPath,
+      prefixArgs: [join(dirname(process.execPath), "node_modules", "npm", "bin", "npm-cli.js")],
+    }
+  : { executable: "npm", prefixArgs: [] };
 const expectedCcusageRange = ">=20.0.18";
 
 function isCompatibleCcusageVersion(version) {
@@ -29,9 +34,16 @@ function readOption(name) {
   return value;
 }
 
+function execNpm(args, options) {
+  return execFileAsync(
+    npmCommand.executable,
+    [...npmCommand.prefixArgs, ...args],
+    options,
+  );
+}
+
 async function createTarball(root) {
-  const { stdout } = await execFileAsync(
-    npm,
+  const { stdout } = await execNpm(
     ["pack", "--json", "--pack-destination", root],
     { cwd: packageDir, maxBuffer: 10 * 1024 * 1024 },
   );
@@ -90,7 +102,7 @@ try {
     ? await resolveTarball(suppliedTarball)
     : await createTarball(root);
 
-  await execFileAsync(npm, ["install", "--no-audit", "--no-fund", tarball], {
+  await execNpm(["install", "--no-audit", "--no-fund", tarball], {
     cwd: installDir,
     maxBuffer: 10 * 1024 * 1024,
   });
