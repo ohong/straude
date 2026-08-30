@@ -4,7 +4,7 @@ import { createClient } from "@/lib/supabase/server";
 import { ShareCardImage } from "@/lib/utils/share-image";
 import { DEFAULT_SHARE_THEME, type ShareThemeId } from "@/lib/share-themes";
 import { loadFonts } from "@/lib/og-fonts";
-import { isFirstPartyPublicStorageUrl } from "@/lib/storage";
+import { loadSafeOgAvatar, loadSafeOgPostImage } from "@/lib/og-safe-image";
 
 type RouteContext = { params: Promise<{ id: string }> };
 
@@ -51,22 +51,17 @@ export async function GET(request: NextRequest, context: RouteContext) {
     models: string[];
     is_verified: boolean;
   } | null;
-  const safeAvatarUrl =
-    typeof u?.avatar_url === "string" &&
-    (isFirstPartyPublicStorageUrl(u.avatar_url, "avatars") ||
-      isFirstPartyPublicStorageUrl(u.avatar_url, "post-images"))
-      ? u.avatar_url
-      : null;
-  const safeImages = Array.isArray(post.images)
-    ? post.images.filter(
-        (image): image is string =>
-          typeof image === "string" &&
-          isFirstPartyPublicStorageUrl(image, "post-images"),
-      )
-    : [];
+  const firstImage = Array.isArray(post.images) ? post.images[0] : null;
 
   try {
-    const fonts = await loadFonts();
+    // The loaders apply the storage allowlist and drop formats satori can't
+    // decode (webp/avif), which otherwise throw mid-render and 500 the route.
+    const [fonts, heroImage, safeAvatarUrl] = await Promise.all([
+      loadFonts(),
+      loadSafeOgPostImage(firstImage),
+      loadSafeOgAvatar(u?.avatar_url),
+    ]);
+    const safeImages = heroImage ? [heroImage] : [];
 
     const response = new ImageResponse(
       <ShareCardImage

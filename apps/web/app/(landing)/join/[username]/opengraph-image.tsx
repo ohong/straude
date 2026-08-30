@@ -1,7 +1,7 @@
 import { ImageResponse } from "next/og";
 import { getServiceClient } from "@/lib/supabase/service";
 import { loadFonts } from "@/lib/og-fonts";
-import { isAllowedAvatarUrl } from "@/lib/storage";
+import { loadSafeOgAvatar } from "@/lib/og-safe-image";
 import { formatCurrency } from "@/lib/utils/format";
 
 export const alt = "Join Straude";
@@ -26,11 +26,9 @@ export default async function Image({
   if (!referrer || !referrer.is_public) {
     return fallbackImage(fonts);
   }
-  const avatarUrl = referrer.avatar_url;
-  const safeAvatarUrl =
-    typeof avatarUrl === "string" && isAllowedAvatarUrl(avatarUrl)
-      ? avatarUrl
-      : null;
+  // Allowlisted, format-sniffed data URI: satori can't decode webp/avif and
+  // throws mid-render, which would 500 the whole card.
+  const safeAvatarUrl = await loadSafeOgAvatar(referrer.avatar_url);
 
   const now = new Date();
   const monthStart = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}-01`;
