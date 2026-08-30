@@ -74,9 +74,9 @@ export function ProductExplanation() {
           <p className="mt-3 text-pretty text-sm leading-relaxed text-landing-muted">
             Prompts, conversations, source code, project names, and file contents
             are outside Straude&apos;s collection boundary. They remain on your
-            machine. The product does not analyze code quality, reconstruct what
-            you asked an agent, or monitor employees. It receives the aggregate
-            usage totals you choose to send.
+            machine. Straude does not analyze code quality, reconstruct what you
+            asked an agent, or monitor employees. It receives the aggregate usage
+            totals you choose to send.
           </p>
           <p className="mt-3 text-pretty text-sm leading-relaxed text-landing-muted">
             Read the{" "}
