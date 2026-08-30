@@ -13,6 +13,7 @@ export { prettifyModel } from "@straude/shared/models";
 import { cn } from "@/lib/utils/cn";
 import { formatCurrency, formatTokens } from "@/lib/utils/format";
 import { mentionsToMarkdownLinks } from "@/lib/utils/mentions";
+import { modelColor } from "@/lib/constants/model-colors";
 import type { Post, ModelBreakdownEntry } from "@/types";
 import dynamic from "next/dynamic";
 import { useState } from "react";
@@ -154,29 +155,6 @@ function buildModelUsageSegments(
     pct: entry.pct,
     widthPct: (entry.cost / visibleTotal) * 100,
   }));
-}
-
-function hashString(input: string): number {
-  let hash = 0;
-  for (let i = 0; i < input.length; i++) {
-    hash = ((hash << 5) - hash) + input.charCodeAt(i);
-    hash |= 0;
-  }
-  return Math.abs(hash);
-}
-
-function modelColor(name: string): string {
-  if (/Claude Fable/.test(name)) return "#C2410C";
-  if (/Claude Opus/.test(name)) return "#DF561F";
-  if (/Claude Sonnet/.test(name)) return "#F08A5D";
-  if (/Claude Haiku/.test(name)) return "#F7B267";
-  if (/GPT-5/.test(name)) return "#2A9D8F";
-  if (/GPT-4o/.test(name)) return "#4C78A8";
-  if (/^o3/i.test(name)) return "#3B82F6";
-  if (/^o4/i.test(name)) return "#6366F1";
-
-  const palette = ["#EF4444", "#F59E0B", "#10B981", "#06B6D4", "#8B5CF6", "#EC4899"];
-  return palette[hashString(name) % palette.length]!;
 }
 
 function ModelUsageBar({ segments }: { segments: ModelUsageSegment[] }) {
