@@ -2,6 +2,15 @@
 
 ## Unreleased
 
+### Changed
+
+- **Show the first-sync command immediately after signup.** Onboarding opens with `npx straude@latest`, live usage checks, and privacy guidance. Handle and profile editing move to Settings. Users can explore the feed without marking onboarding complete; confirmed usage unlocks real stats and the completion step.
+
+### Fixed
+
+- **Recover from interrupted first-sync setup.** Clipboard failures offer manual copying, failed usage checks have a retry action, and failed completion saves can be retried without repeating the sync. The success summary describes usage totals rather than treating daily usage rows as individual coding sessions.
+- **Keep CLI authorization open through sign-in and signup.** Magic links, GitHub sign-in, and login/signup navigation preserve a validated local return destination. A new account can return to the CLI authorization page before optional profile setup.
+
 ### Fixed
 
 - **CLI telemetry shutdown no longer leaks a "Timeout while shutting down PostHog" exception.** `@posthog/core` rejects `_shutdown` when the flush exceeds the timeout; the rejection could win the race in `shutdownTelemetryWithTimeout`, becoming an unhandled rejection that exception autocapture re-reported to PostHog daily and that skipped the CLI's final `process.exit`. The rejection is now swallowed — a slow telemetry flush is expected and silent.
