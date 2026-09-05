@@ -1,4 +1,5 @@
 import { NextResponse } from "next/server";
+import { safeAuthNext } from "@/lib/supabase/redirect";
 import { after } from "@/lib/utils/after";
 import { ACTIVATION_ANONYMOUS_COOKIE, deriveActivationState, getCookieValue } from "@/lib/analytics/activation";
 import { captureServerActivationEvent, identifyServerActivationUser } from "@/lib/analytics/server";
@@ -9,10 +10,8 @@ export async function GET(request: Request) {
   const { searchParams, origin: requestOrigin } = new URL(request.url);
   const origin = requestOrigin;
   const code = searchParams.get("code");
-  const rawNext = searchParams.get("next") ?? "/feed";
-  // Prevent open redirect: only allow relative paths starting with /
-  const next =
-    rawNext.startsWith("/") && !rawNext.startsWith("//") ? rawNext : "/feed";
+  const returnTo = safeAuthNext(searchParams.get("next"));
+  const next = returnTo ?? "/feed";
 
   if (code) {
     const supabase = await createClient();
@@ -84,5 +83,7 @@ export async function GET(request: Request) {
     }
   }
 
-  return NextResponse.redirect(`${origin}/login?error=auth`);
+  const retryParams = new URLSearchParams({ error: "auth" });
+  if (returnTo) retryParams.set("next", returnTo);
+  return NextResponse.redirect(`${origin}/login?${retryParams}`);
 }

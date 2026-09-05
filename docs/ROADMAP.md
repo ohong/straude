@@ -38,6 +38,7 @@ Discovered while triaging PRs #77 and #22, both of which hand-wrote parsers for 
 - `prettifyModel` cases for Gemini, Qwen, Kimi and Copilot model IDs, so they read as product names rather than raw slugs.
 - Deliberate entries in `MODEL_COLOR_PATTERNS` for those families, so they get a chosen colour instead of a hashed one from the fallback palette.
 - Landing-page and README copy naming the supported agents. "Works with your whole toolkit" is a stronger acquisition line than "works with Claude Code", and it costs no engineering.
+- Preserve source attribution if a future UI needs to distinguish the same model name across agents. Current model-cost breakdowns aggregate by model name, while collector metadata records contributing agents for the day. Adding an optional field alone would not preserve attribution through aggregation; define that behavior before changing the storage contract. This carries forward the relevant design question from [#28](https://github.com/ohong/straude/issues/28), whose custom-parser review is superseded by bundled ccusage.
 - Mistral Vibe is the one real gap — it is not a ccusage source. Best path is upstreaming it to ccusage rather than carrying a Straude-local parser.
 
 ### Team / Org Workspaces
@@ -69,6 +70,10 @@ Requires: new server-side call in the leaderboard API route, caching strategy (r
 ---
 
 ## Activation
+
+### Measure the shorter first-sync flow
+
+The conversion follow-up to [#19](https://github.com/ohong/straude/issues/19) puts the sync command before optional profile setup, adds retry controls, and preserves CLI authorization through sign-in. After release, compare signup-to-confirmed-sync conversion and time to first sync using the existing activation events. Local functional tests cannot establish a conversion lift. A separate CLI-first signup funnel remains an experiment to consider if this shorter web flow still loses users before their first sync.
 
 ### Ship Week Countdown Banner
 
