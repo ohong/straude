@@ -106,13 +106,15 @@ Last push: 2026-03-11 (today)
 
 ## Data Sources
 
-Straude invokes its bundled `ccusage >=20.0.16` native binary once per sync:
+Straude invokes its bundled `ccusage >=20.0.20` native binary once per sync:
 
 ```bash
 ccusage daily --json --since YYYYMMDD --until YYYYMMDD --no-offline
 ```
 
-The unified report automatically detects and combines every source ccusage supports. As of ccusage 20.0.16, those built-in sources are Claude Code, Codex, OpenCode, Amp, Droid, Codebuff, Hermes Agent, pi-agent, Goose, OpenClaw, Kilo, Kimi, Qwen, GitHub Copilot CLI, and Gemini CLI. Configured custom pi-format stores are accepted too.
+The unified report automatically detects and combines every source ccusage supports. As of ccusage 20.0.20, the 16 built-in sources are Claude Code, Codex, OpenCode, Amp, Droid, Codebuff, Hermes Agent, pi-agent, Goose, OpenClaw, Kilo, Kimi, Qwen, GitHub Copilot CLI, Gemini CLI, and Grok Build CLI. Configured custom pi-format stores are accepted too.
+
+Gemini-only, Qwen-only, and Grok-only installations work without Claude Code or Codex data. Mistral Vibe is not a built-in source in ccusage 20.0.20. Antigravity and ZCode are not included in that release.
 
 ccusage owns local path discovery, source-format parsing, deduplication, token accounting, model aliases, and per-model cost calculation. Straude validates the unified daily JSON, preserves each row's `metadata.agents`, and submits the aggregate token buckets, models, and model cost breakdown. The raw local logs and paths are never uploaded.
 

@@ -17,7 +17,15 @@ Running with no arguments performs a smart sync: logs you in if needed, then pus
 - Node 18+
 - Local session data from any source supported by ccusage.
 
-Straude invokes its installed [`ccusage`](https://github.com/ccusage/ccusage) dependency directly. The compatible `ccusage@^20.0.16` range owns source parsing, model recognition, token accounting, and LiteLLM pricing updates. Straude uses ccusage's unified report, so all detected sources are included by default: Claude Code, Codex, OpenCode, Amp, Droid, Codebuff, Hermes Agent, pi-agent, Goose, OpenClaw, Kilo, Kimi, Qwen, GitHub Copilot CLI, Gemini CLI, and compatible custom source IDs.
+Straude invokes its installed [`ccusage`](https://github.com/ccusage/ccusage) dependency directly. The compatible `ccusage@^20.0.20` range owns source parsing, model recognition, token accounting, and pricing. No separate collector installation or source flag is needed.
+
+## Supported coding agents
+
+The bundled ccusage 20.0.20 release detects all 16 sources by default: **Claude Code, Codex, OpenCode, Amp, Droid, Codebuff, Hermes Agent, pi-agent, Goose, OpenClaw, Kilo, Kimi, Qwen, GitHub Copilot CLI, Gemini CLI, and Grok Build CLI**. You can sync any one source or combine several on the same day. Claude Code and Codex are optional.
+
+For example, Gemini CLI sessions under `~/.gemini/tmp`, Qwen chats under `~/.qwen/projects`, and Grok sessions under `~/.grok/sessions` are collected automatically. ccusage also respects `GEMINI_DATA_DIR`, `QWEN_DATA_DIR`, and `GROK_HOME` overrides. Run `npx straude@latest --dry-run` to inspect collected totals before submitting them.
+
+Straude preserves source IDs emitted by ccusage, including compatible custom IDs and sources added by later compatible releases. This does not add parsers for unsupported agents: **Mistral Vibe is not a built-in source in ccusage 20.0.20**. Support follows the installed collector release, not unreleased upstream documentation. See the [ccusage 20.0.20 source adapters](https://github.com/ccusage/ccusage/tree/v20.0.20/rust/adapters).
 
 ## Commands
 

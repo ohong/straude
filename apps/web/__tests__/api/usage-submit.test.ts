@@ -28,23 +28,7 @@ import { verifyCliToken, verifyCliTokenWithRefresh } from "@/lib/api/cli-auth";
 import { getServiceClient } from "@/lib/supabase/service";
 import { resetRateLimiters } from "@/lib/rate-limit";
 
-const ALL_BUILT_IN_CCUSAGE_AGENTS = [
-  "claude",
-  "codex",
-  "opencode",
-  "amp",
-  "droid",
-  "codebuff",
-  "hermes",
-  "pi",
-  "goose",
-  "openclaw",
-  "kilo",
-  "kimi",
-  "qwen",
-  "copilot",
-  "gemini",
-];
+import ALL_BUILT_IN_CCUSAGE_AGENTS from "../../../../packages/cli/__tests__/fixtures/ccusage-sources.json";
 
 function mockAllowedRpc() {
   return vi.fn((fn: string) => Promise.resolve(
@@ -1601,7 +1585,7 @@ describe("POST /api/usage/submit", () => {
     });
   });
 
-  it("accepts every ccusage source and stores row-specific collector metadata", async () => {
+  it.each([...ALL_BUILT_IN_CCUSAGE_AGENTS, "custom-agent"])("accepts source %s and stores row-specific collector metadata", async (agent) => {
     (verifyCliToken as any).mockReturnValue("user-collector-meta");
     const svc = mockServiceClient();
     svc.single
@@ -1612,7 +1596,7 @@ describe("POST /api/usage/submit", () => {
     const res = await POST(
       mockRequest({
         entries: [makeEntry(todayStr(), {
-          agents: ["opencode"],
+          agents: [agent],
           models: ["gpt-5.6"],
           modelBreakdown: [{ model: "gpt-5.6", cost_usd: 0.05 }],
         })],
@@ -1620,16 +1604,18 @@ describe("POST /api/usage/submit", () => {
         collector: {
           claude: "ccusage-claude-v20",
           codex: "ccusage-codex-v20",
-          ccusage_version: "20.0.16",
-          ccusage_agents: ALL_BUILT_IN_CCUSAGE_AGENTS,
+          ccusage_version: "20.0.20",
+          ccusage_agents: [...ALL_BUILT_IN_CCUSAGE_AGENTS, "custom-agent"],
           pricing_mode: "offline",
         },
       })
     );
 
     const expectedMeta = {
-      ccusage_version: "20.0.16",
-      ccusage_agents: ["opencode"],
+      ...(agent === "claude" ? { claude: "ccusage-claude-v20" } : {}),
+      ...(agent === "codex" ? { codex: "ccusage-codex-v20" } : {}),
+      ccusage_version: "20.0.20",
+      ccusage_agents: [agent],
       pricing_mode: "offline",
     };
     expect(res.status).toBe(200);

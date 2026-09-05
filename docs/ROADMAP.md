@@ -29,16 +29,15 @@ The GitHub README stats card shipped as a single compact PNG. Future enhancement
 - **Card customization** — Custom accent color, show/hide specific stats, border radius options via query params.
 - **Embed analytics** — Track how many times a card is fetched to measure backlink effectiveness.
 
-### Surface Multi-Agent CLI Support
+### Complete Multi-Agent Presentation and Upstream Coverage
 
-Straude already ingests usage from far more than Claude Code and Codex, and nobody knows it. The CLI shells out to `ccusage daily --json` with no source scoping (`packages/cli/src/lib/ccusage.ts:454`), and `ccusage@^20.0.16` detects Gemini CLI, Qwen, Kimi, GitHub Copilot CLI, Amp, Droid, OpenCode, Goose and others. Nothing downstream is hardcoded: `CcusageAgent` is `string`, agent names come from `metadata.agents` per row, and `/api/usage/submit` only checks that they are non-empty strings — no allowlist.
+The CLI now documents all 16 released ccusage 20.0.20 sources. Real binary fixtures cover Gemini CLI, Qwen, and Grok Build CLI, including users without Claude or Codex logs. The landing explanation and agent-readable guidance describe this broader support.
 
-Discovered while triaging PRs #77 and #22, both of which hand-wrote parsers for capability the collector already has. Work to make it real to users:
+Remaining work:
 
-- `prettifyModel` cases for Gemini, Qwen, Kimi and Copilot model IDs, so they read as product names rather than raw slugs.
-- Deliberate entries in `MODEL_COLOR_PATTERNS` for those families, so they get a chosen colour instead of a hashed one from the fallback palette.
-- Landing-page and README copy naming the supported agents. "Works with your whole toolkit" is a stronger acquisition line than "works with Claude Code", and it costs no engineering.
-- Mistral Vibe is the one real gap — it is not a ccusage source. Best path is upstreaming it to ccusage rather than carrying a Straude-local parser.
+- Add `prettifyModel` cases and deliberate model colors for Gemini, Qwen, Kimi, and other families. These affect presentation; collection already accepts their source IDs and model names.
+- Upstream Mistral Vibe parsing to ccusage, then upgrade the bundled release and add a synthetic native-binary fixture. PR #22 proposed a local adapter, but ccusage 20.0.20 has no Mistral source. Preserve token accounting and model pricing in upstream tests before advertising support.
+- Upgrade when Antigravity and ZCode ship in a published ccusage release. They are present on upstream main but absent from 20.0.20. Extend the native source inventory and add fixtures when adopted.
 
 ### Team / Org Workspaces
 

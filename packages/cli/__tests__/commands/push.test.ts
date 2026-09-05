@@ -128,11 +128,11 @@ function ccusageOutput(entries = [usageEntry()], overrides: Record<string, unkno
     collector: {
       claude: "ccusage-claude-v20",
       codex: "ccusage-codex-v20",
-      ccusage_version: "20.0.16",
+      ccusage_version: "20.0.20",
       ccusage_agents: ["claude", "codex"],
       pricing_mode: "online",
     },
-    version: "20.0.16",
+    version: "20.0.20",
     raw: JSON.stringify({ daily: entries }),
     stderr: "",
     ...overrides,
@@ -195,12 +195,41 @@ describe("pushCommand", () => {
     expect(body.collector).toEqual({
       claude: "ccusage-claude-v20",
       codex: "ccusage-codex-v20",
-      ccusage_version: "20.0.16",
+      ccusage_version: "20.0.20",
       ccusage_agents: ["claude", "codex"],
       pricing_mode: "online",
     });
     expect(body.device_id).toBe("device-1");
     expect(body.device_name).toBe("work-laptop");
+  });
+
+  it.each([
+    { agents: ["gemini"], models: ["gemini-2.5-pro"] },
+    { agents: ["qwen"], models: ["qwen3-coder-plus"] },
+    { agents: ["grok"], models: ["grok-4.5-build"] },
+    { agents: ["gemini", "grok", "qwen"], models: ["gemini-2.5-pro", "grok-4.5-build", "qwen3-coder-plus"] },
+  ])("submits $agents usage without Claude or Codex", async ({ agents, models }) => {
+    const entry = usageEntry(todayStr(), {
+      agents,
+      models,
+      costUSD: 0.05 * models.length,
+      modelBreakdown: models.map((model) => ({ model, cost_usd: 0.05 })),
+    });
+    const collector = {
+      ccusage_version: "20.0.20",
+      ccusage_agents: agents,
+      pricing_mode: "online",
+    };
+    mockCollectCcusageUsageAsync.mockResolvedValue(ccusageOutput([entry], {
+      agents, collector, version: "20.0.20",
+    }) as never);
+
+    await pushCommand({});
+
+    const submitCall = mockApiRequest.mock.calls.find(([, path]) => path === "/api/usage/submit")!;
+    const body = JSON.parse((submitCall[2] as { body: string }).body);
+    expect(body.entries).toEqual([{ date: todayStr(), data: entry }]);
+    expect(body.collector).toEqual(collector);
   });
 
   it("hashes the ccusage v20 raw payload and collector run metadata", async () => {
@@ -447,7 +476,7 @@ describe("pushCommand", () => {
     mockCollectCcusageUsageAsync.mockResolvedValue(ccusageOutput([], {
       agents: [],
       collector: {
-        ccusage_version: "20.0.16",
+        ccusage_version: "20.0.20",
         ccusage_agents: [],
         pricing_mode: "online",
       },

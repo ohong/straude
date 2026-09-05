@@ -1,6 +1,6 @@
 {
   "name": "straude",
-  "version": "0.1.30",
+  "version": "0.1.31",
   "description": "CLI for pushing AI coding agent usage stats to Straude",
   "main": "dist/index.js",
   "bin": {
@@ -31,7 +31,7 @@
   },
   "dependencies": {
     "@pppp606/ink-chart": "^0.2.4",
-    "ccusage": "^20.0.16",
+    "ccusage": "^20.0.20",
     "chalk": "^5.6.2",
     "ink": "^6.8.0",
     "posthog-node": "^5.29.1",

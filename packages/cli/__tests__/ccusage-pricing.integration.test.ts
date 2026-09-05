@@ -1,61 +1,36 @@
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { fileURLToPath } from "node:url";
+import { cpSync, mkdtempSync, rmSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
 import {
   CCUSAGE_MIN_VERSION,
-  _resetCcusageResolver,
-  collectCcusageUsageAsync,
+  parseCcusageOutput,
 } from "../src/lib/ccusage.js";
 
-const FIXTURE_ROOT = fileURLToPath(new URL("./fixtures/ccusage-gpt-5.6", import.meta.url));
-const ISOLATED_SOURCE_ENV = [
-  "CLAUDE_CONFIG_DIR",
-  "OPENCODE_DATA_DIR",
-  "AMP_DATA_DIR",
-  "DROID_SESSIONS_DIR",
-  "CODEBUFF_DATA_DIR",
-  "HERMES_HOME",
-  "PI_AGENT_DIR",
-  "GOOSE_PATH_ROOT",
-  "OPENCLAW_DIR",
-  "KILO_DATA_DIR",
-  "KIMI_DATA_DIR",
-  "QWEN_DATA_DIR",
-  "GEMINI_DATA_DIR",
-];
+import { bundledCcusageVersion, runBundledCcusage } from "./helpers/ccusage-binary.js";
 
-const originalEnvironment = new Map<string, string | undefined>();
+let fixtureHome: string;
+beforeAll(() => {
+  fixtureHome = mkdtempSync(join(tmpdir(), "straude-ccusage-pricing-"));
+  cpSync(fileURLToPath(new URL("./fixtures/ccusage-gpt-5.6", import.meta.url)), fixtureHome, { recursive: true });
+});
+afterAll(() => rmSync(fixtureHome, { recursive: true, force: true }));
 
 function comparableVersion(version: string): number {
   const [major = 0, minor = 0, patch = 0] = version.split(".").map(Number);
   return major * 1_000_000 + minor * 1_000 + patch;
 }
 
-beforeAll(() => {
-  originalEnvironment.set("HOME", process.env.HOME);
-  originalEnvironment.set("CODEX_HOME", process.env.CODEX_HOME);
-  process.env.HOME = FIXTURE_ROOT;
-  process.env.CODEX_HOME = `${FIXTURE_ROOT}/codex`;
-
-  for (const variable of ISOLATED_SOURCE_ENV) {
-    originalEnvironment.set(variable, process.env[variable]);
-    delete process.env[variable];
-  }
-  _resetCcusageResolver();
-});
-
-afterAll(() => {
-  for (const [variable, value] of originalEnvironment) {
-    if (value === undefined) delete process.env[variable];
-    else process.env[variable] = value;
-  }
-  _resetCcusageResolver();
-});
-
 describe("bundled ccusage GPT-5.6 pricing", () => {
   it("logs Codex tokens and LiteLLM API spend for the complete GPT-5.6 family", async () => {
-    const usage = await collectCcusageUsageAsync("20260709", "20260709", 10_000, {
-      pricingMode: "online",
-    });
+    const { stdout, stderr } = await runBundledCcusage(
+      ["daily", "--json", "--since", "20260709", "--until", "20260709", "--no-offline"],
+      fixtureHome,
+      { CODEX_HOME: `${fixtureHome}/codex` },
+    );
+    expect(stderr).not.toMatch(/missing.*pricing|cost excludes/i);
+    const usage = parseCcusageOutput(stdout, { version: bundledCcusageVersion, stderr, pricingMode: "online" });
 
     expect(comparableVersion(usage.version)).toBeGreaterThanOrEqual(
       comparableVersion(CCUSAGE_MIN_VERSION),
