@@ -1,106 +1,64 @@
 import { getServiceClient } from "@/lib/supabase/service";
+import { discoverFavicon } from "@/lib/favicons/discover";
+import { publicHttpUrl } from "@/lib/favicons/public-fetch";
 
-const BUCKET = "team-favicons" as const;
-const FAVICON_SIZE = 128;
-const FETCH_TIMEOUT_MS = 5000;
+const BUCKET = "team-favicons";
+const NEGATIVE_CACHE_MS = 15 * 60 * 1000;
 
 export type ResolveTeamFaviconResult =
-  | {
-      ok: true;
-      teamUrl: string;
-      teamFaviconUrl: string | null;
-    }
-  | {
-      ok: false;
-      error: "invalid_url";
-    };
+  | { ok: true; teamUrl: string; teamFaviconUrl: string | null }
+  | { ok: false; error: "invalid_url" };
 
-function parseTeamUrl(rawUrl: string): URL | null {
-  const trimmed = rawUrl.trim();
-  if (!trimmed) return null;
-  let parsed: URL;
-  try {
-    parsed = new URL(trimmed);
-  } catch {
-    return null;
-  }
-  if (parsed.protocol !== "http:" && parsed.protocol !== "https:") {
-    return null;
-  }
-  return parsed;
+export function normalizeTeamUrl(rawUrl: string): string | null {
+  return publicHttpUrl(rawUrl.trim())?.origin ?? null;
 }
 
-async function isFaviconCached(publicUrl: string): Promise<boolean> {
-  try {
-    const res = await fetch(publicUrl, { method: "HEAD" });
-    return res.ok;
-  } catch {
-    return false;
-  }
-}
-
-async function fetchFaviconBytes(domain: string): Promise<ArrayBuffer | null> {
+export async function resolveTeamFavicon(rawUrl: string): Promise<ResolveTeamFaviconResult> {
+  const teamUrl = normalizeTeamUrl(rawUrl);
+  if (!teamUrl) return { ok: false, error: "invalid_url" };
+  const fallback = { ok: true, teamUrl, teamFaviconUrl: null } satisfies ResolveTeamFaviconResult;
   const controller = new AbortController();
-  const timeout = setTimeout(() => controller.abort(), FETCH_TIMEOUT_MS);
+  const timer = setTimeout(() => controller.abort(), 10_000);
   try {
-    const res = await fetch(
-      `https://www.google.com/s2/favicons?domain=${encodeURIComponent(domain)}&sz=${FAVICON_SIZE}`,
-      { signal: controller.signal },
-    );
-    if (!res.ok) return null;
-    return await res.arrayBuffer();
-  } catch {
-    return null;
-  } finally {
-    clearTimeout(timeout);
-  }
-}
+    const domain = new URL(teamUrl).hostname.toLowerCase();
+    const db = getServiceClient(controller.signal);
+    const bucket = db.storage.from(BUCKET);
+    const { data: cached } = await db.from("team_favicon_cache")
+      .select("object_path,retry_after").eq("domain", domain).maybeSingle();
+    if (cached?.object_path && typeof cached.object_path === "string") {
+      return { ok: true, teamUrl, teamFaviconUrl: bucket.getPublicUrl(cached.object_path).data.publicUrl };
+    }
+    if (cached?.retry_after && new Date(cached.retry_after).getTime() > Date.now()) return fallback;
 
-/**
- * Validate a user-supplied team URL, ensure a favicon is cached in the
- * `team-favicons` Storage bucket (object key: `<domain>.png`), and return
- * the normalized team URL plus the public favicon URL. Server-only.
- *
- * If the favicon fetch or upload fails, the team URL is still returned with
- * `teamFaviconUrl: null` so the caller can persist the URL and render a
- * generic icon — better UX than blocking the save flow on a third-party.
- */
-export async function resolveTeamFavicon(
-  rawUrl: string,
-): Promise<ResolveTeamFaviconResult> {
-  const parsed = parseTeamUrl(rawUrl);
-  if (!parsed) {
-    return { ok: false, error: "invalid_url" };
-  }
+    // Existing PNGs remain valid without a refresh or a metadata backfill migration.
+    const legacyPath = `${domain}.png`;
+    const { data: legacyExists } = await bucket.exists(legacyPath);
+    if (legacyExists) {
+      await db.from("team_favicon_cache").upsert({ domain, object_path: legacyPath, retry_after: null });
+      return { ok: true, teamUrl, teamFaviconUrl: bucket.getPublicUrl(legacyPath).data.publicUrl };
+    }
 
-  const teamUrl = parsed.origin;
-  const domain = parsed.hostname.toLowerCase();
-  const objectPath = `${domain}.png`;
-
-  const supabase = getServiceClient();
-  const { data: publicData } = supabase.storage
-    .from(BUCKET)
-    .getPublicUrl(objectPath);
-  const publicUrl = publicData?.publicUrl ?? null;
-
-  if (publicUrl && (await isFaviconCached(publicUrl))) {
-    return { ok: true, teamUrl, teamFaviconUrl: publicUrl };
-  }
-
-  const bytes = await fetchFaviconBytes(domain);
-  if (!bytes) {
-    return { ok: true, teamUrl, teamFaviconUrl: null };
-  }
-
-  const { error: uploadError } = await supabase.storage
-    .from(BUCKET)
-    .upload(objectPath, new Uint8Array(bytes), {
-      contentType: "image/png",
+    const favicon = await discoverFavicon(new URL(teamUrl), controller.signal);
+    if (!favicon) {
+      const miss = { domain, object_path: null, retry_after: new Date(Date.now() + NEGATIVE_CACHE_MS).toISOString() };
+      // A slower failed lookup cannot overwrite a concurrent successful result.
+      await db.from("team_favicon_cache").upsert(miss, { ignoreDuplicates: true });
+      await db.from("team_favicon_cache").update({ retry_after: miss.retry_after })
+        .eq("domain", domain).is("object_path", null);
+      return fallback;
+    }
+    const objectPath = `${domain}.${favicon.format}`;
+    const { error } = await bucket.upload(objectPath, favicon.bytes, {
+      contentType: favicon.format === "svg" ? "image/svg+xml" : "image/png",
       upsert: true,
     });
-  if (uploadError || !publicUrl) {
-    return { ok: true, teamUrl, teamFaviconUrl: null };
+    if (error) return fallback;
+    await db.from("team_favicon_cache").upsert({ domain, object_path: objectPath, retry_after: null });
+    return { ok: true, teamUrl, teamFaviconUrl: bucket.getPublicUrl(objectPath).data.publicUrl };
+  } catch {
+    return fallback;
+  } finally {
+    clearTimeout(timer);
+    controller.abort();
   }
-
-  return { ok: true, teamUrl, teamFaviconUrl: publicUrl };
 }

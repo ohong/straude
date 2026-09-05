@@ -33,7 +33,7 @@ export function TeamBadge({
   size = "sm",
   className,
 }: TeamBadgeProps) {
-  const [errored, setErrored] = useState(false);
+  const [failedUrl, setFailedUrl] = useState<string | null>(null);
 
   if (!url) return null;
   const host = deriveHostname(url);
@@ -45,7 +45,7 @@ export function TeamBadge({
     "inline-flex shrink-0 items-center align-text-bottom",
     className,
   );
-  const showFavicon = faviconUrl && !errored;
+  const showFavicon = faviconUrl && faviconUrl !== failedUrl;
 
   return (
     <a
@@ -64,8 +64,9 @@ export function TeamBadge({
           alt={altText}
           width={px}
           height={px}
-          onError={() => setErrored(true)}
-          style={{ width: px, height: px, borderRadius: 3 }}
+          unoptimized
+          onError={() => setFailedUrl(faviconUrl)}
+          style={{ width: px, height: px, borderRadius: 3, objectFit: "contain" }}
         />
       ) : (
         <Building2

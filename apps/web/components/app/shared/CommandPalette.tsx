@@ -23,55 +23,59 @@ function isCommandPaletteShortcut(event: KeyboardEvent) {
 }
 
 export function CommandPalette({ username, children }: CommandPaletteProps) {
-  const [shouldLoad, setShouldLoad] = useState(false);
+  const [phase, setPhase] = useState<"deferred" | "loading" | "ready">("deferred");
   const [openOnLoad, setOpenOnLoad] = useState(false);
 
   useEffect(() => {
-    if (shouldLoad) return;
+    if (phase === "ready") return;
 
     function handleKeyDown(event: KeyboardEvent) {
       if (!isCommandPaletteShortcut(event)) return;
 
       event.preventDefault();
       setOpenOnLoad(true);
-      setShouldLoad(true);
+      setPhase("loading");
     }
 
     window.addEventListener("keydown", handleKeyDown);
     return () => window.removeEventListener("keydown", handleKeyDown);
-  }, [shouldLoad]);
+  }, [phase]);
 
   useEffect(() => {
-    if (shouldLoad) return;
+    if (phase !== "deferred") return;
 
     const idleWindow = window as WindowWithIdleCallback;
     if (idleWindow.requestIdleCallback) {
       const idleId = idleWindow.requestIdleCallback(
-        () => setShouldLoad(true),
+        () => setPhase("loading"),
         { timeout: 4_000 },
       );
       return () => idleWindow.cancelIdleCallback?.(idleId);
     }
 
-    const timeoutId = window.setTimeout(() => setShouldLoad(true), 2_500);
+    const timeoutId = window.setTimeout(() => setPhase("loading"), 2_500);
     return () => window.clearTimeout(timeoutId);
-  }, [shouldLoad]);
+  }, [phase]);
+
+  const handleReady = useCallback(() => {
+    setPhase("ready");
+  }, []);
 
   const handleOpenOnLoadConsumed = useCallback(() => {
     setOpenOnLoad(false);
   }, []);
 
-  if (!shouldLoad) {
-    return <>{children}</>;
-  }
-
   return (
-    <CommandPaletteInner
-      username={username}
-      openOnLoad={openOnLoad}
-      onOpenOnLoadConsumed={handleOpenOnLoadConsumed}
-    >
+    <>
       {children}
-    </CommandPaletteInner>
+      {phase !== "deferred" && (
+        <CommandPaletteInner
+          username={username}
+          openOnLoad={openOnLoad}
+          onOpenOnLoadConsumed={handleOpenOnLoadConsumed}
+          onReady={handleReady}
+        />
+      )}
+    </>
   );
 }

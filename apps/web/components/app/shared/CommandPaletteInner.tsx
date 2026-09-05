@@ -11,7 +11,7 @@ import {
   useMatches,
   type Action,
 } from "kbar";
-import { useEffect, useMemo, type ReactNode } from "react";
+import { useEffect, useMemo } from "react";
 import { useRouter } from "next/navigation";
 import { useTheme } from "@/components/providers/ThemeProvider";
 import { createClient } from "@/lib/supabase/client";
@@ -72,15 +72,16 @@ function OpenOnLoad({
 
 export function CommandPaletteInner({
   username,
-  children,
   openOnLoad = false,
   onOpenOnLoadConsumed = () => {},
+  onReady,
 }: {
   username?: string | null;
-  children: ReactNode;
   openOnLoad?: boolean;
   onOpenOnLoadConsumed?: () => void;
+  onReady: () => void;
 }) {
+  useEffect(onReady, [onReady]);
   const router = useRouter();
   const { setTheme } = useTheme();
   const profileHref = username ? `/u/${username}` : "/feed";
@@ -182,7 +183,6 @@ export function CommandPaletteInner({
           </KBarAnimator>
         </KBarPositioner>
       </KBarPortal>
-      {children}
     </KBarProvider>
   );
 }

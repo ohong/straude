@@ -6,7 +6,7 @@ import { getServiceClient } from "@/lib/supabase/service";
 import { COUNTRY_TO_REGION } from "@/lib/constants/regions";
 import { sendWelcomeEmail } from "@/lib/email/send-welcome-email";
 import { attributeReferral } from "@/lib/referral";
-import { resolveTeamFavicon } from "@/lib/team-favicon";
+import { normalizeTeamUrl, resolveTeamFavicon } from "@/lib/team-favicon";
 import { isAllowedAvatarUrl } from "@/lib/storage";
 import { rateLimit } from "@/lib/rate-limit";
 
@@ -258,6 +258,8 @@ export async function PATCH(request: NextRequest) {
     }
   }
 
+  const db = getServiceClient();
+
   // Team affiliation: validate URL and derive cached favicon URL via the
   // resolver. team_favicon_url is server-derived only — never accepted from
   // the client body.
@@ -269,7 +271,18 @@ export async function PATCH(request: NextRequest) {
       typeof body.team_url === "string"
       && body.team_url.length <= PROFILE_URL_MAX_LENGTH
     ) {
-      const result = await resolveTeamFavicon(body.team_url);
+      const teamUrl = normalizeTeamUrl(body.team_url);
+      if (!teamUrl) {
+        return NextResponse.json(
+          { error: "Team URL must be a valid http(s) URL" },
+          { status: 400 },
+        );
+      }
+      const { data: currentTeam } = await db.from("users")
+        .select("team_url,team_favicon_url").eq("id", user.id).maybeSingle();
+      const result = currentTeam?.team_url === teamUrl && currentTeam.team_favicon_url
+        ? { ok: true, teamUrl, teamFaviconUrl: currentTeam.team_favicon_url }
+        : await resolveTeamFavicon(teamUrl);
       if (!result.ok) {
         return NextResponse.json(
           { error: "Team URL must be a valid http(s) URL" },
@@ -308,7 +321,6 @@ export async function PATCH(request: NextRequest) {
     return NextResponse.json({ error: "No fields to update" }, { status: 400 });
   }
 
-  const db = getServiceClient();
   const isOnboardingUpdate = updates.onboarding_completed === true;
   let activationUsage: ActivationUsageRow | null = null;
 

@@ -59,13 +59,6 @@ jobs:
       - name: Typecheck web and shared
         run: bun run typecheck --filter=@straude/web
 
-      - name: Build web and shared
-        run: bun run build --filter=@straude/web
-        env:
-          NEXT_PUBLIC_SUPABASE_URL: http://localhost:54321
-          NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY: sb_publishable_placeholder
-          SUPABASE_SECRET_KEY: sb_secret_placeholder
-
       - name: Test (web)
         run: bun run test
         working-directory: apps/web
@@ -82,6 +75,12 @@ jobs:
       - name: Start local Supabase stack
         run: bunx supabase start --workdir .
 
+      - name: Configure web for local Supabase
+        run: bun run local:env
+
+      - name: Build web and shared
+        run: bun run build --filter=@straude/web
+
       - name: Test (web — integration, real Supabase)
         run: bun run test:integration
         working-directory: apps/web
@@ -95,9 +94,6 @@ jobs:
         working-directory: apps/web
         env:
           BASE_URL: http://localhost:3000
-          NEXT_PUBLIC_SUPABASE_URL: http://localhost:54321
-          NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY: sb_publishable_placeholder
-          SUPABASE_SECRET_KEY: sb_secret_placeholder
 
   cli-package:
     name: CLI package
