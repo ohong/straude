@@ -3,6 +3,10 @@ import { after } from "@/lib/utils/after";
 import { captureServerActivationEvent } from "@/lib/analytics/server";
 import { createClient } from "@/lib/supabase/server";
 import { verifyCliTokenWithRefresh } from "@/lib/api/cli-auth";
+import {
+  CliIdentityUnavailableError,
+  isActiveCliUser,
+} from "@/lib/api/active-cli-user";
 import { getServiceClient } from "@/lib/supabase/service";
 import { checkAndAwardAchievements } from "@/lib/achievements";
 import { rateLimit } from "@/lib/rate-limit";
@@ -361,6 +365,7 @@ async function resolveAuthContext(request: Request): Promise<AuthContext | null>
   const authHeader = request.headers.get("authorization");
   const cliAuth = verifyCliTokenWithRefresh(authHeader);
   if (cliAuth) {
+    if (!(await isActiveCliUser(cliAuth.userId))) return null;
     return {
       userId: cliAuth.userId,
       username: cliAuth.username,
@@ -481,7 +486,18 @@ export async function POST(request: Request) {
     return NextResponse.json({ error: collectorValidationError }, { status: 400 });
   }
 
-  const auth = await resolveAuthContext(request);
+  let auth: AuthContext | null;
+  try {
+    auth = await resolveAuthContext(request);
+  } catch (error) {
+    if (error instanceof CliIdentityUnavailableError) {
+      return NextResponse.json(
+        { error: "Identity verification unavailable" },
+        { status: 503 },
+      );
+    }
+    throw error;
+  }
   if (!auth) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }

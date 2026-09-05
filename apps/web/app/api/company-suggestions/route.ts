@@ -1,5 +1,7 @@
 import { NextResponse, type NextRequest } from "next/server";
 import { createClient } from "@/lib/supabase/server";
+import { getServiceClient } from "@/lib/supabase/service";
+import { rateLimit } from "@/lib/rate-limit";
 
 const MAX_SUBMISSIONS_PER_24H = 5;
 
@@ -77,7 +79,12 @@ export async function POST(request: NextRequest) {
     );
   }
 
-  // Rate limit
+  const limited = await rateLimit("company-suggestion", user.id, {
+    limit: MAX_SUBMISSIONS_PER_24H,
+    windowSeconds: 24 * 60 * 60,
+  });
+  if (limited) return limited;
+
   const since = new Date(Date.now() - 24 * 60 * 60 * 1000).toISOString();
   const { count, error: countError } = await supabase
     .from("company_suggestions")
@@ -96,7 +103,7 @@ export async function POST(request: NextRequest) {
     );
   }
 
-  const { data, error } = await supabase
+  const { data, error } = await getServiceClient()
     .from("company_suggestions")
     .insert({
       user_id: user.id,

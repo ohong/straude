@@ -62,7 +62,7 @@ describe("type shapes", () => {
     expect(user.is_public).toBe(false);
   });
 
-  it("DailyUsage object has expected fields", () => {
+  it("DailyUsage allows public rows without internal metadata", () => {
     const usage: DailyUsage = {
       id: "d1",
       user_id: "u1",
@@ -78,7 +78,6 @@ describe("type shapes", () => {
       model_breakdown: null,
       session_count: 3,
       is_verified: true,
-      raw_hash: "abc123",
       created_at: "2025-06-01T00:00:00Z",
       updated_at: "2025-06-01T00:00:00Z",
     };

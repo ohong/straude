@@ -23,7 +23,10 @@ export async function GET(request: NextRequest) {
   const period = (searchParams.get("period") ?? "week") as Period;
   const region = searchParams.get("region");
   const cursor = searchParams.get("cursor");
-  const limit = Math.min(Number(searchParams.get("limit") ?? 50), 100);
+  const requestedLimit = Number(searchParams.get("limit") ?? 50);
+  const limit = Number.isFinite(requestedLimit)
+    ? Math.min(Math.max(Math.trunc(requestedLimit), 1), 100)
+    : 50;
 
   if (!VALID_PERIODS.includes(period)) {
     return NextResponse.json({ error: "Invalid period" }, { status: 400 });

@@ -6,6 +6,7 @@ import {
 } from "@/lib/feed-normalization";
 import { firstRelation } from "@/lib/utils/first-relation";
 import type { CommentPreviewItem, FeedPostRow, Post, UserSummary } from "@/types";
+import { PUBLIC_DAILY_USAGE_FIELDS } from "@/lib/data/public-daily-usage";
 
 type QueryClient = {
   from: (table: string) => QueryBuilder;
@@ -128,7 +129,7 @@ export async function getPendingPosts(
 
   const { data } = await db
     .from("posts")
-    .select("*, daily_usage:daily_usage!posts_daily_usage_id_fkey!inner(*)")
+    .select(`*, daily_usage:daily_usage!posts_daily_usage_id_fkey!inner(${PUBLIC_DAILY_USAGE_FIELDS})`)
     .eq("user_id", userId)
     .is("description", null)
     .eq("images", "[]")

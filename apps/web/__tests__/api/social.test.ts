@@ -6,6 +6,7 @@ vi.mock("@/lib/supabase/server", () => ({
 
 const mockServiceClient = {
   rpc: vi.fn(),
+  from: vi.fn(),
 };
 
 vi.mock("@/lib/supabase/service", () => ({
@@ -49,6 +50,11 @@ function makeRequest(
     headers: body ? { "Content-Type": "application/json" } : undefined,
     body: body ? JSON.stringify(body) : undefined,
   });
+}
+
+function useClient(client: Record<string, any>) {
+  (createClient as any).mockResolvedValue(client);
+  mockServiceClient.from.mockImplementation(client.from);
 }
 
 beforeEach(() => {
@@ -96,7 +102,7 @@ describe("POST /api/follow/[username]", () => {
         return {};
       }),
     };
-    (createClient as any).mockResolvedValue(client);
+    useClient(client);
 
     const res = await followPOST(
       makeRequest("POST", "/api/follow/alice"),
@@ -127,7 +133,7 @@ describe("POST /api/follow/[username]", () => {
         }),
       })),
     };
-    (createClient as any).mockResolvedValue(client);
+    useClient(client);
 
     const res = await followPOST(
       makeRequest("POST", "/api/follow/myself"),
@@ -158,7 +164,7 @@ describe("POST /api/follow/[username]", () => {
         }),
       }),
     };
-    (createClient as any).mockResolvedValue(client);
+    useClient(client);
 
     const res = await followPOST(
       makeRequest("POST", "/api/follow/nobody"),
@@ -205,7 +211,7 @@ describe("DELETE /api/follow/[username]", () => {
         return {};
       }),
     };
-    (createClient as any).mockResolvedValue(client);
+    useClient(client);
 
     const res = await followDELETE(
       makeRequest("DELETE", "/api/follow/alice"),
@@ -266,7 +272,7 @@ describe("POST /api/posts/[id]/kudos", () => {
         return {};
       }),
     };
-    (createClient as any).mockResolvedValue(client);
+    useClient(client);
 
     const res = await kudosPOST(
       makeRequest("POST", "/api/posts/post-1/kudos"),
@@ -303,7 +309,7 @@ describe("POST /api/posts/[id]/kudos", () => {
         throw new Error(`Unexpected table ${table}`);
       }),
     };
-    (createClient as any).mockResolvedValue(client);
+    useClient(client);
 
     const res = await kudosPOST(
       makeRequest("POST", "/api/posts/private-post/kudos"),
@@ -341,7 +347,7 @@ describe("DELETE /api/posts/[id]/kudos", () => {
         return {};
       }),
     };
-    (createClient as any).mockResolvedValue(client);
+    useClient(client);
 
     const res = await kudosDELETE(
       makeRequest("DELETE", "/api/posts/post-1/kudos"),
@@ -385,7 +391,7 @@ describe("GET /api/posts/[id]/kudos", () => {
         }),
       }),
     };
-    (createClient as any).mockResolvedValue(client);
+    useClient(client);
 
     const res = await kudosGET(
       makeRequest("GET", "/api/posts/post-1/kudos"),
@@ -455,7 +461,7 @@ describe("POST /api/posts/[id]/comments", () => {
         return {};
       }),
     };
-    (createClient as any).mockResolvedValue(client);
+    useClient(client);
 
     const res = await commentPOST(
       makeRequest("POST", "/api/posts/post-1/comments", {
@@ -493,7 +499,7 @@ describe("POST /api/posts/[id]/comments", () => {
         throw new Error(`Unexpected table ${table}`);
       }),
     };
-    (createClient as any).mockResolvedValue(client);
+    useClient(client);
 
     const res = await commentPOST(
       makeRequest("POST", "/api/posts/private-post/comments", {
@@ -517,7 +523,7 @@ describe("POST /api/posts/[id]/comments", () => {
       },
       from: vi.fn(),
     };
-    (createClient as any).mockResolvedValue(client);
+    useClient(client);
 
     const longContent = "x".repeat(501);
     const res = await commentPOST(
@@ -542,7 +548,7 @@ describe("POST /api/posts/[id]/comments", () => {
       },
       from: vi.fn(),
     };
-    (createClient as any).mockResolvedValue(client);
+    useClient(client);
 
     const res = await commentPOST(
       makeRequest("POST", "/api/posts/post-1/comments", { content: "" }),
@@ -606,7 +612,7 @@ describe("GET /api/posts/[id]/comments", () => {
         return {};
       }),
     };
-    (createClient as any).mockResolvedValue(client);
+    useClient(client);
 
     const res = await commentGET(
       makeRequest("GET", "/api/posts/post-1/comments"),
@@ -660,7 +666,7 @@ describe("POST /api/comments/[id]/reactions", () => {
         return {};
       }),
     };
-    (createClient as any).mockResolvedValue(client);
+    useClient(client);
 
     const res = await commentReactionPOST(
       makeRequest("POST", "/api/comments/c-1/reactions"),
@@ -697,7 +703,7 @@ describe("POST /api/comments/[id]/reactions", () => {
         throw new Error(`Unexpected table ${table}`);
       }),
     };
-    (createClient as any).mockResolvedValue(client);
+    useClient(client);
 
     const res = await commentReactionPOST(
       makeRequest("POST", "/api/comments/private-comment/reactions"),
@@ -740,7 +746,7 @@ describe("DELETE /api/comments/[id]/reactions", () => {
         return {};
       }),
     };
-    (createClient as any).mockResolvedValue(client);
+    useClient(client);
 
     const res = await commentReactionDELETE(
       makeRequest("DELETE", "/api/comments/c-1/reactions"),
@@ -780,7 +786,7 @@ describe("PATCH /api/comments/[id]", () => {
         }),
       }),
     };
-    (createClient as any).mockResolvedValue(client);
+    useClient(client);
 
     const res = await commentPATCH(
       makeRequest("PATCH", "/api/comments/c-1", { content: "edited" }),
@@ -815,7 +821,7 @@ describe("PATCH /api/comments/[id]", () => {
         }),
       }),
     };
-    (createClient as any).mockResolvedValue(client);
+    useClient(client);
 
     const res = await commentPATCH(
       makeRequest("PATCH", "/api/comments/c-1", { content: "hack" }),
@@ -837,7 +843,7 @@ describe("PATCH /api/comments/[id]", () => {
       },
       from: vi.fn(),
     };
-    (createClient as any).mockResolvedValue(client);
+    useClient(client);
 
     const res = await commentPATCH(
       makeRequest("PATCH", "/api/comments/c-1", { content: "x".repeat(501) }),
@@ -867,7 +873,7 @@ describe("DELETE /api/comments/[id]", () => {
         }),
       }),
     };
-    (createClient as any).mockResolvedValue(client);
+    useClient(client);
 
     const res = await commentDELETE(
       makeRequest("DELETE", "/api/comments/c-1"),
@@ -888,7 +894,7 @@ describe("DELETE /api/comments/[id]", () => {
         }),
       },
     };
-    (createClient as any).mockResolvedValue(client);
+    useClient(client);
 
     const res = await commentDELETE(
       makeRequest("DELETE", "/api/comments/c-1"),

@@ -10,6 +10,16 @@
 
 **Evidence and limits:** Native binary fixtures cover Gemini, Qwen, Grok, and a mixed day without Claude or Codex logs. They check cache buckets, reasoning totals, source metadata, and nonzero per-model prices. Grok's recorded USD ticks are checked exactly. The source inventory test compares all 16 documented IDs with installed binary help, and API tests check each ID independently. Tests run with an isolated child environment and synthetic logs. They do not prove every upstream parser or real provider billing. No database migration or extra collector is needed.
 
+## Route sensitive mutations through the server service client (2026-08-27)
+
+**Decision:** Publishable Supabase roles retain only the reads and narrow self-service updates the browser needs. Security-sensitive writes go through authenticated API routes, which validate ownership and input before using the server service client. `SECURITY DEFINER` functions authorize their callers or restrict execution to the service role; public read RPCs expose explicit fields, enforce ownership joins, and bound batch and pagination work.
+
+**Why:** RLS remains defense in depth, but table grants and Storage policies let authenticated clients bypass route validation, rate limits, identity revalidation, and file-content checks. PostgreSQL also grants new functions to `PUBLIC` by default, so a definer-rights function is unsafe unless its execution grants and internal authorization are explicit.
+
+**Alternatives considered:** (a) Keep browser mutations and duplicate every route constraint in RLS, grants, and Storage policies. Rejected because the validation would have two owners and application-only checks such as Supabase Admin user state and image signatures cannot be expressed there. (b) Keep broad RPC grants and rely on callers to supply safe identifiers and limits. Rejected because definer-rights functions bypass RLS and public callers can choose arbitrary payloads. (c) Move every read to the service client. Rejected because publishable roles still provide useful RLS enforcement for ordinary reads; only private fields and privileged operations cross the service boundary.
+
+**Trade-offs:** Route availability now gates sensitive writes, and the service client must preserve each route's ownership predicates. Migration tests lock the grants, function signatures, public field lists, ownership joins, and work limits. Full migration behavior still requires the local Supabase integration suite or equivalent PostgreSQL validation.
+
 ## Negotiate curated Markdown through the Next.js proxy (2026-08-21)
 
 **Decision:** The agent independently chose q-value- and specificity-aware content negotiation in the existing Next.js 16 `proxy.ts`. Markdown-preferred requests for supported public informational pages rewrite to a dedicated internal route handler; ordinary HTML, API, asset, mutation, RSC, OAuth callback, and Supabase session behavior remain on their existing paths. Curated Markdown is available for `/`, `/about`, `/contact`, `/privacy`, `/cli`, and `/open`. Unknown document paths can return a recovery-oriented Markdown 404, while an explicit registry of existing static and dynamic page patterns prevents valid HTML-only routes from becoming false 404s.
@@ -171,6 +181,8 @@ Pricing the new-logic numbers at gpt-5.5 rates: $228.68 — matches what OpenAI 
 **Why not Subscriptions:** PostHog Subscriptions (scheduled email/Slack delivery of insights) are a paid-tier feature. The Side Projects org is on the free tier, so `subscriptions-create` returns 402 Payment Required. The closest no-cost equivalents are (a) bookmarking the insight URL and checking it manually, or (b) running the query weekly via the PostHog MCP from a Claude scheduled agent. We picked (a) for now because it requires no additional moving parts; if the manual check ever slips, we can either upgrade the tier (sustainable long-term) or stand up a `/schedule`-based remote agent that runs `mcp__posthog__insight-query` on a cron.
 
 ## `calculate_user_streak` runs as SECURITY DEFINER (2026-04-30)
+
+**Status:** Superseded on 2026-08-27 by "Route sensitive mutations through the server service client." The function remains `SECURITY DEFINER`, but now authorizes access to the requested user's streak and ignores caller-supplied freeze allowances.
 
 **Decision:** Promote `public.calculate_user_streak(uuid, integer)` to `SECURITY DEFINER` with a fixed `search_path = public` and grant `EXECUTE` to both `authenticated` and `anon`.
 

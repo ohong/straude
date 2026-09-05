@@ -167,7 +167,6 @@ describe("GET /api/messages", () => {
             }),
           };
         }
-
         throw new Error(`Unexpected table ${table}`);
       }),
     };
@@ -272,6 +271,25 @@ describe("POST /api/messages", () => {
                   };
                 }
                 throw new Error(`Unexpected users lookup ${field}:${value}`);
+              }),
+            }),
+          };
+        }
+        if (table === "direct_messages") {
+          return {
+            insert: vi.fn().mockReturnValue({
+              select: vi.fn().mockReturnValue({
+                single: vi.fn().mockResolvedValue({
+                  data: {
+                    id: "m-1",
+                    sender_id: "user-1",
+                    recipient_id: "user-2",
+                    content: "Hey Alice",
+                    read_at: null,
+                    created_at: "2026-03-06T12:00:00.000Z",
+                  },
+                  error: null,
+                }),
               }),
             }),
           };

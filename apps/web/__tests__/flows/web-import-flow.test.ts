@@ -82,6 +82,7 @@ describe("Flow: Web JSON Import", () => {
 
   beforeEach(() => {
     vi.clearAllMocks();
+    mockServiceClient.from.mockReset();
     mockServiceClient.rpc.mockImplementation((fn: string) => {
       if (fn === "check_rate_limit") {
         return Promise.resolve({ data: [{ allowed: true, retry_after_seconds: 0 }], error: null });
@@ -164,6 +165,7 @@ describe("Flow: Web JSON Import", () => {
     (updateChain.select as ReturnType<typeof vi.fn>).mockReturnValue(updateChain);
 
     mockSupabase.from.mockImplementation(() => updateChain);
+    mockServiceClient.from.mockImplementation(() => updateChain);
 
     const { PATCH } = await import("@/app/api/posts/[id]/route");
     const req = makeRequest("http://localhost:3000/api/posts/post-w1", {

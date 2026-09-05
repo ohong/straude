@@ -12,6 +12,13 @@ vi.mock("@/lib/supabase/server", () => ({
   createClient: vi.fn(() => mockSupabase),
 }));
 
+vi.mock("@/lib/supabase/service", () => ({
+  getServiceClient: vi.fn(() => ({
+    from: (table: string) => mockSupabase.from(table),
+    rpc: vi.fn().mockResolvedValue({ data: null, error: null }),
+  })),
+}));
+
 vi.mock("@/lib/achievements", () => ({
   checkAndAwardAchievements: vi.fn().mockResolvedValue(undefined),
 }));
@@ -52,6 +59,7 @@ describe("Flow: Post Lifecycle", () => {
   beforeEach(() => {
     vi.clearAllMocks();
     vi.stubEnv("NEXT_PUBLIC_SUPABASE_URL", "https://test.supabase.co");
+    vi.stubEnv("SUPABASE_SECRET_KEY", "test-secret");
   });
 
   afterEach(() => {

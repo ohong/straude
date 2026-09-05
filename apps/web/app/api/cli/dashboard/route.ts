@@ -1,5 +1,9 @@
 import { NextResponse } from "next/server";
 import { verifyCliTokenWithRefresh } from "@/lib/api/cli-auth";
+import {
+  CliIdentityUnavailableError,
+  isActiveCliUser,
+} from "@/lib/api/active-cli-user";
 import { getServiceClient } from "@/lib/supabase/service";
 
 export async function GET(request: Request) {
@@ -9,6 +13,21 @@ export async function GET(request: Request) {
   if (!auth) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
+
+  try {
+    if (!(await isActiveCliUser(auth.userId))) {
+      return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+    }
+  } catch (error) {
+    if (error instanceof CliIdentityUnavailableError) {
+      return NextResponse.json(
+        { error: "Identity verification unavailable" },
+        { status: 503 },
+      );
+    }
+    throw error;
+  }
+
   const userId = auth.userId;
 
   const db = getServiceClient();

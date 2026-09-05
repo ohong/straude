@@ -50,6 +50,7 @@ export async function GET() {
         .from("users")
         .select("id, username, avatar_url, bio")
         .eq("is_pinned_suggestion", true)
+        .eq("is_public", true)
         .not("id", "in", excludeFilter),
       service
         .from("daily_usage")

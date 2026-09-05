@@ -1,6 +1,7 @@
 import { NextResponse, type NextRequest } from "next/server";
 import { after } from "@/lib/utils/after";
 import { createClient } from "@/lib/supabase/server";
+import { getServiceClient } from "@/lib/supabase/service";
 import { rateLimit } from "@/lib/rate-limit";
 
 type RouteContext = { params: Promise<{ username: string }> };
@@ -36,7 +37,8 @@ export async function POST(_request: NextRequest, context: RouteContext) {
     );
   }
 
-  const { error } = await supabase.from("follows").insert({
+  const db = getServiceClient();
+  const { error } = await db.from("follows").insert({
     follower_id: user.id,
     following_id: target.id,
   });
@@ -51,7 +53,7 @@ export async function POST(_request: NextRequest, context: RouteContext) {
 
   // Insert follow notification after the response is sent
   after(async () => {
-    await supabase.from("notifications").insert({
+    await db.from("notifications").insert({
       user_id: target.id,
       actor_id: user.id,
       type: "follow",
@@ -82,7 +84,7 @@ export async function DELETE(_request: NextRequest, context: RouteContext) {
     return NextResponse.json({ error: "User not found" }, { status: 404 });
   }
 
-  await supabase
+  await getServiceClient()
     .from("follows")
     .delete()
     .eq("follower_id", user.id)

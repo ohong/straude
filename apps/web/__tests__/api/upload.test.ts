@@ -7,6 +7,7 @@ vi.mock("@/lib/supabase/server", () => ({
 
 const mockServiceClient = {
   rpc: vi.fn(),
+  storage: undefined as Record<string, any> | undefined,
 };
 
 vi.mock("@/lib/supabase/service", () => ({
@@ -50,6 +51,7 @@ function mockSupabase(opts: {
     },
   };
   (createClient as any).mockResolvedValue(client);
+  mockServiceClient.storage = client.storage;
   return client;
 }
 
@@ -61,6 +63,37 @@ function makeHeicBuffer(brand = "heic"): ArrayBuffer {
   buf.set(new TextEncoder().encode("ftyp"), 4);
   buf.set(new TextEncoder().encode(brand), 8);
   return buf.buffer;
+}
+
+function makeFileBuffer(name: string, type: string, size: number): ArrayBuffer {
+  const bytes = new Uint8Array(Math.max(size, 12));
+  const ext = name.split(".").pop()?.toLowerCase();
+  const inferredType = type && type !== "application/octet-stream"
+    ? type
+    : ext === "jpg" || ext === "jpeg"
+      ? "image/jpeg"
+      : ext === "png"
+        ? "image/png"
+        : ext === "webp"
+          ? "image/webp"
+          : ext === "gif"
+            ? "image/gif"
+            : ext === "heic" || ext === "heif"
+              ? "image/heic"
+              : type;
+
+  if (inferredType === "image/jpeg") bytes.set([0xff, 0xd8, 0xff]);
+  if (inferredType === "image/png") bytes.set([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]);
+  if (inferredType === "image/webp") {
+    bytes.set(new TextEncoder().encode("RIFF"), 0);
+    bytes.set(new TextEncoder().encode("WEBP"), 8);
+  }
+  if (inferredType === "image/gif") bytes.set(new TextEncoder().encode("GIF89a"));
+  if (inferredType === "image/heic" || inferredType === "image/heif") {
+    return makeHeicBuffer("heic");
+  }
+  if (inferredType === "application/pdf") bytes.set(new TextEncoder().encode("%PDF-"));
+  return bytes.buffer;
 }
 
 /**
@@ -77,7 +110,9 @@ function makeUploadRequest(
       name: file.name,
       type: file.type,
       size: file.size,
-      arrayBuffer: () => Promise.resolve(file.buffer ?? new ArrayBuffer(file.size)),
+      arrayBuffer: () => Promise.resolve(
+        file.buffer ?? makeFileBuffer(file.name, file.type, file.size),
+      ),
     });
   }
 
@@ -95,6 +130,7 @@ function makeUploadRequest(
 
 beforeEach(() => {
   vi.clearAllMocks();
+  mockServiceClient.storage = undefined;
   resetRateLimiters();
   mockServiceClient.rpc.mockResolvedValue({
     data: [{ allowed: true, retry_after_seconds: 0 }],
@@ -212,7 +248,7 @@ describe("POST /api/upload", () => {
     expect(json.url).toBeDefined();
   });
 
-  it("resolves MIME from uppercase .HEIC extension when browser sends octet-stream", async () => {
+  it("rejects a fake HEIC despite a matching extension", async () => {
     mockSupabase({ publicUrl: "https://cdn.example.com/user-1/abc.jpg" });
 
     const res = await POST(
@@ -220,13 +256,61 @@ describe("POST /api/upload", () => {
         name: "IMG_5678.HEIC",
         type: "application/octet-stream",
         size: 100,
-        // No magic bytes — relies on extension-based MIME resolution
+        buffer: new ArrayBuffer(100),
       })
     );
     const json = await res.json();
 
-    expect(res.status).toBe(200);
-    expect(json.url).toBeDefined();
+    expect(res.status).toBe(400);
+    expect(json.error).toContain("does not match");
+  });
+
+  it("rejects HEIC bytes declared as another image type", async () => {
+    mockSupabase({});
+
+    const res = await POST(
+      makeUploadRequest({
+        name: "spoofed.png",
+        type: "image/png",
+        size: 12,
+        buffer: makeHeicBuffer("heic"),
+      })
+    );
+    const json = await res.json();
+
+    expect(res.status).toBe(400);
+    expect(json.error).toContain("does not match");
+  });
+
+  it("rejects HEIC conversion output over the bucket limit", async () => {
+    mockSupabase({});
+    vi.mocked(convert).mockResolvedValueOnce(new ArrayBuffer(10 * 1024 * 1024 + 1));
+
+    const res = await POST(
+      makeUploadRequest({ name: "photo.heic", type: "image/heic", size: 12 })
+    );
+    const json = await res.json();
+
+    expect(res.status).toBe(400);
+    expect(json.error).toContain("10MB");
+  });
+
+  it("rejects HTML disguised as a PNG", async () => {
+    mockSupabase({});
+
+    const bytes = new TextEncoder().encode("<html><script>alert(1)</script></html>");
+    const res = await POST(
+      makeUploadRequest({
+        name: "payload.png",
+        type: "image/png",
+        size: bytes.byteLength,
+        buffer: bytes.buffer,
+      })
+    );
+    const json = await res.json();
+
+    expect(res.status).toBe(400);
+    expect(json.error).toContain("does not match");
   });
 
   it("resolves MIME from uppercase .JPG extension when browser sends empty type", async () => {
@@ -323,16 +407,16 @@ describe("POST /api/upload", () => {
     expect(res.status).toBe(200);
   });
 
-  it("rejects files over 20MB", async () => {
+  it("rejects post images over the storage bucket's 10MB limit", async () => {
     mockSupabase({});
 
     const res = await POST(
-      makeUploadRequest({ name: "huge.jpg", type: "image/jpeg", size: 21 * 1024 * 1024 })
+      makeUploadRequest({ name: "huge.jpg", type: "image/jpeg", size: 11 * 1024 * 1024 })
     );
     const json = await res.json();
 
     expect(res.status).toBe(400);
-    expect(json.error).toContain("20MB");
+    expect(json.error).toContain("10MB");
   });
 
   it("returns url on success", async () => {

@@ -1,5 +1,6 @@
 import { NextResponse, type NextRequest } from "next/server";
 import { createClient } from "@/lib/supabase/server";
+import { getServiceClient } from "@/lib/supabase/service";
 import { rateLimit } from "@/lib/rate-limit";
 
 type RouteContext = { params: Promise<{ id: string }> };
@@ -27,7 +28,7 @@ export async function PATCH(request: NextRequest, context: RouteContext) {
     );
   }
 
-  const { data: comment, error } = await supabase
+  const { data: comment, error } = await getServiceClient()
     .from("comments")
     .update({ content })
     .eq("id", id)
@@ -56,7 +57,7 @@ export async function DELETE(_request: NextRequest, context: RouteContext) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
 
-  const { error } = await supabase
+  const { error } = await getServiceClient()
     .from("comments")
     .delete()
     .eq("id", id)

@@ -1,6 +1,7 @@
 import { NextResponse, type NextRequest } from "next/server";
 import { after } from "@/lib/utils/after";
 import { createClient } from "@/lib/supabase/server";
+import { getServiceClient } from "@/lib/supabase/service";
 import { checkAndAwardAchievements } from "@/lib/achievements";
 import { rateLimit } from "@/lib/rate-limit";
 
@@ -34,7 +35,8 @@ export async function POST(_request: NextRequest, context: RouteContext) {
     return NextResponse.json({ error: "Post not found" }, { status: 404 });
   }
 
-  const { error } = await supabase.from("kudos").insert({
+  const db = getServiceClient();
+  const { error } = await db.from("kudos").insert({
     user_id: user.id,
     post_id: id,
   });
@@ -48,7 +50,7 @@ export async function POST(_request: NextRequest, context: RouteContext) {
     after(async () => {
       // Insert kudos notification (skip self-kudos)
       if (post && post.user_id !== user.id) {
-        await supabase.from("notifications").insert({
+        await db.from("notifications").insert({
           user_id: post.user_id,
           actor_id: user.id,
           type: "kudos",
@@ -83,7 +85,7 @@ export async function DELETE(_request: NextRequest, context: RouteContext) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
 
-  await supabase
+  await getServiceClient()
     .from("kudos")
     .delete()
     .eq("user_id", user.id)

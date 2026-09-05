@@ -1,5 +1,6 @@
 import { NextResponse, type NextRequest } from "next/server";
 import { createClient } from "@/lib/supabase/server";
+import { getServiceClient } from "@/lib/supabase/service";
 import { rateLimit } from "@/lib/rate-limit";
 
 type RouteContext = { params: Promise<{ id: string }> };
@@ -32,7 +33,7 @@ export async function POST(_request: NextRequest, context: RouteContext) {
     return NextResponse.json({ error: "Comment not found" }, { status: 404 });
   }
 
-  const { error } = await supabase.from("comment_reactions").insert({
+  const { error } = await getServiceClient().from("comment_reactions").insert({
     user_id: user.id,
     comment_id: id,
   });
@@ -60,7 +61,7 @@ export async function DELETE(_request: NextRequest, context: RouteContext) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
 
-  await supabase
+  await getServiceClient()
     .from("comment_reactions")
     .delete()
     .eq("user_id", user.id)

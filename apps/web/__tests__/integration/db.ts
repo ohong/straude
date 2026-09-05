@@ -1,4 +1,5 @@
 import { Client } from "pg";
+import { getServiceClient } from "@/lib/supabase/service";
 
 export async function openTestDb(): Promise<Client> {
   const dsn = process.env.TEST_DB_URL;
@@ -35,7 +36,7 @@ export async function cleanDb(client: Client): Promise<void> {
   );
 }
 
-/** Insert a real user row directly via SQL. Returns the generated UUID. */
+/** Create a real Auth user and application profile. Returns the user UUID. */
 export async function insertUser(
   client: Client,
   overrides: Partial<{
@@ -48,37 +49,19 @@ export async function insertUser(
 ): Promise<string> {
   const id = overrides.id ?? crypto.randomUUID();
   const username = overrides.username ?? `user_${id.slice(0, 8)}`;
-  const email = overrides.email ?? `${username}@example.test`;
+  const email = overrides.email ?? `${username}_${id}@example.test`;
 
-  await client.query(
-    `INSERT INTO auth.users (
-       id,
-       instance_id,
-       aud,
-       role,
-       email,
-       encrypted_password,
-       email_confirmed_at,
-       raw_app_meta_data,
-       raw_user_meta_data,
-       created_at,
-       updated_at
-     )
-     VALUES (
-       $1,
-       '00000000-0000-0000-0000-000000000000',
-       'authenticated',
-       'authenticated',
-       $2,
-       '',
-       now(),
-       '{"provider":"email","providers":["email"]}'::jsonb,
-       jsonb_build_object('user_name', $3::text),
-       now(),
-       now()
-     )`,
-    [id, email, username],
-  );
+  // GoTrue initializes Auth fields that direct SQL inserts can leave invalid.
+  // Include the UUID in default emails because cleanDb preserves Auth users.
+  const { error } = await getServiceClient().auth.admin.createUser({
+    id,
+    email,
+    email_confirm: true,
+    user_metadata: { user_name: username },
+  });
+  if (error) {
+    throw new Error(`Failed to create integration Auth user: ${error.message}`);
+  }
 
   await client.query(
     `INSERT INTO public.users (id, username, is_public, onboarding_completed, timezone)

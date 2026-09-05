@@ -35,6 +35,7 @@
 
 ### Security
 
+- **API writes and privileged RPCs now enforce their server-side security boundaries.** Authenticated PostgREST and Storage clients can no longer bypass validated mutation routes for profiles, usage, posts, social actions, messages, submissions, or uploads. Post deletion uses the same service boundary as other post mutations. Privileged RPCs authorize callers explicitly, private feed and usage data use allow-listed fields and ownership joins, and public RPC work is bounded. CLI requests reject deleted or banned users without treating temporary identity-provider failures as expired sessions. Image uploads verify file signatures; profile, search, submission, and pagination inputs have explicit limits; and search preserves literal underscores in valid usernames.
 - **Upgraded Next.js to 16.2.6** (from 16.1.6) and `eslint-config-next` to match. Next.js 16.2.6 / 15.5.18 ship fixes for multiple high/moderate/low-severity vulnerabilities and an upstream React issue (Next.js security advisory, 2026-05-07). All 578 web unit tests and the typecheck pass on the new version.
 
 ### Fixed

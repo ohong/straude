@@ -41,7 +41,7 @@ export interface DailyUsage {
   model_breakdown: ModelBreakdownEntry[] | null;
   session_count: number;
   is_verified: boolean;
-  raw_hash: string | null;
+  raw_hash?: string | null;
   collector_meta?: UsageCollectorMeta | null;
   created_at: string;
   updated_at: string;

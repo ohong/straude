@@ -11,6 +11,7 @@ const mockSupabase = {
 
 const mockServiceClient = {
   rpc: vi.fn(),
+  from: vi.fn((table: string) => mockSupabase.from(table)),
 };
 
 vi.mock("@/lib/supabase/server", () => ({

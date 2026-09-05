@@ -6,6 +6,7 @@ import { PostEditor } from "@/components/app/post/PostEditor";
 import { PostSharePanel } from "@/components/app/post/PostSharePanel";
 import { loadPostComments } from "@/lib/comments";
 import { firstRelation } from "@/lib/utils/first-relation";
+import { PUBLIC_DAILY_USAGE_FIELDS } from "@/lib/data/public-daily-usage";
 import { formatCurrency } from "@/lib/utils/format";
 import type { AggregateCount, FeedPostRow, UserSummary } from "@/types";
 import type { Metadata } from "next";
@@ -120,7 +121,7 @@ export default async function PostDetailPage({
       `
       *,
       user:users!posts_user_id_fkey(id, username, display_name, bio, avatar_url, country, region, link, github_username, is_public),
-      daily_usage:daily_usage!posts_daily_usage_id_fkey(*),
+      daily_usage:daily_usage!posts_daily_usage_id_fkey(${PUBLIC_DAILY_USAGE_FIELDS}),
       kudos_count:kudos(count),
       comment_count:comments(count)
     `

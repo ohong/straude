@@ -20,6 +20,10 @@ vi.mock("@/lib/analytics/server", () => ({
   captureServerActivationEvent: vi.fn().mockResolvedValue(true),
 }));
 
+vi.mock("@/lib/rate-limit", () => ({
+  rateLimit: vi.fn().mockResolvedValue(null),
+}));
+
 vi.mock("@/lib/constants/regions", () => ({
   COUNTRY_TO_REGION: {
     US: "north_america",
@@ -34,6 +38,7 @@ import { captureServerActivationEvent } from "@/lib/analytics/server";
 import { sendWelcomeEmail } from "@/lib/email/send-welcome-email";
 import { createClient } from "@/lib/supabase/server";
 import { getServiceClient } from "@/lib/supabase/service";
+import { rateLimit } from "@/lib/rate-limit";
 import { NextRequest } from "next/server";
 
 function makeContext(username: string) {
@@ -50,6 +55,7 @@ function makeRequest(method: string, url: string, body?: any) {
 
 beforeEach(() => {
   vi.clearAllMocks();
+  vi.mocked(rateLimit).mockResolvedValue(null);
 });
 
 describe("GET /api/users/[username]", () => {
@@ -363,6 +369,7 @@ describe("PATCH /api/users/me", () => {
 
     expect(res.status).toBe(200);
     expect(json.username).toBe("new_name");
+    expect(rateLimit).toHaveBeenCalledWith("profile-update", "u-1", { limit: 20 });
   });
 
   it("does not complete onboarding before first sync is present", async () => {
@@ -546,6 +553,82 @@ describe("PATCH /api/users/me", () => {
 
     expect(res.status).toBe(400);
     expect(json.error).toContain("160 characters");
+  });
+
+  it("rejects oversized profile identity fields", async () => {
+    const client: Record<string, any> = {
+      auth: {
+        getUser: vi.fn().mockResolvedValue({
+          data: { user: { id: "u-1" } },
+          error: null,
+        }),
+      },
+    };
+    (createClient as any).mockResolvedValue(client);
+
+    const res = await PATCH(
+      makeRequest("PATCH", "/api/users/me", { display_name: "x".repeat(101) })
+    );
+
+    expect(res.status).toBe(400);
+  });
+
+  it("rejects avatar URLs outside approved providers", async () => {
+    const client: Record<string, any> = {
+      auth: {
+        getUser: vi.fn().mockResolvedValue({
+          data: { user: { id: "u-1" } },
+          error: null,
+        }),
+      },
+    };
+    (createClient as any).mockResolvedValue(client);
+
+    const res = await PATCH(
+      makeRequest("PATCH", "/api/users/me", {
+        avatar_url: "https://attacker.example/tracking.svg",
+      })
+    );
+
+    expect(res.status).toBe(400);
+  });
+
+  it("rejects invalid booleans, countries, and timezones", async () => {
+    const client: Record<string, any> = {
+      auth: {
+        getUser: vi.fn().mockResolvedValue({
+          data: { user: { id: "u-1" } },
+          error: null,
+        }),
+      },
+    };
+    (createClient as any).mockResolvedValue(client);
+
+    for (const body of [
+      { is_public: "true" },
+      { country: "XX" },
+      { timezone: "Not/A_Timezone" },
+    ]) {
+      const res = await PATCH(makeRequest("PATCH", "/api/users/me", body));
+      expect(res.status).toBe(400);
+    }
+  });
+
+  it("normalizes an empty timezone without rejecting the profile update", async () => {
+    const { updateMock } = mockAuthenticatedProfileUpdate();
+
+    const res = await PATCH(
+      makeRequest("PATCH", "/api/users/me", {
+        display_name: "Alice",
+        timezone: "",
+      })
+    );
+
+    expect(res.status).toBe(200);
+    expect(updateMock).toHaveBeenCalledWith({
+      display_name: "Alice",
+      timezone: "UTC",
+    });
   });
 
   it("validates how you heard about Straude length (max 500)", async () => {

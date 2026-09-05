@@ -20,6 +20,13 @@ import { createClient } from "@/lib/supabase/server";
 import { getServiceClient } from "@/lib/supabase/service";
 import { isAdmin } from "@/lib/admin";
 
+function allowedRateLimitRpc() {
+  return vi.fn().mockResolvedValue({
+    data: [{ allowed: true, retry_after_seconds: 0 }],
+    error: null,
+  });
+}
+
 function makeRequest(method: string, url: string, body?: Record<string, unknown>) {
   return new NextRequest(new URL(url, "http://localhost"), {
     method,
@@ -71,6 +78,10 @@ describe("POST /api/prompts", () => {
       }),
     };
     (createClient as any).mockResolvedValue(supabase);
+    (getServiceClient as any).mockReturnValue({
+      rpc: allowedRateLimitRpc(),
+      from: vi.fn().mockReturnValue(insertChain),
+    });
 
     const res = await postPrompt(
       makeRequest("POST", "/api/prompts", {
@@ -117,6 +128,10 @@ describe("POST /api/prompts", () => {
         return call === 1 ? countChain : insertChain;
       }),
     });
+    (getServiceClient as any).mockReturnValue({
+      rpc: allowedRateLimitRpc(),
+      from: vi.fn().mockReturnValue(insertChain),
+    });
 
     const res = await postPrompt(
       makeRequest("POST", "/api/prompts", {
@@ -144,6 +159,9 @@ describe("POST /api/prompts", () => {
       from: vi.fn().mockReturnValue(countChain),
     };
     (createClient as any).mockResolvedValue(supabase);
+    (getServiceClient as any).mockReturnValue({
+      rpc: allowedRateLimitRpc(),
+    });
 
     const res = await postPrompt(
       makeRequest("POST", "/api/prompts", {

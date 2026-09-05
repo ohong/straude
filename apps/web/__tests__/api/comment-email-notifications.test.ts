@@ -100,6 +100,18 @@ function makeSessionClient(commenterId: string, postOwnerId: string) {
 }
 
 function makeServiceClient({ emailNotifications }: { emailNotifications: boolean }) {
+  const commentsChain = {
+    insert: vi.fn().mockReturnThis(),
+    select: vi.fn().mockReturnThis(),
+    single: vi.fn().mockResolvedValue({
+      data: {
+        id: "comment-1",
+        content: "Nice post",
+        user: { id: "commenter-1", username: "alexesprit" },
+      },
+      error: null,
+    }),
+  };
   const usersChain = {
     select: vi.fn().mockReturnThis(),
     eq: vi.fn().mockReturnThis(),
@@ -122,6 +134,10 @@ function makeServiceClient({ emailNotifications }: { emailNotifications: boolean
         : { data: null, error: null },
     )),
     from: vi.fn().mockImplementation((table: string) => {
+      if (table === "comments") return commentsChain;
+      if (table === "notifications") {
+        return { insert: vi.fn().mockResolvedValue({ error: null }) };
+      }
       if (table === "users") return usersChain;
       if (table === "posts") return postsChain;
       return {

@@ -6,6 +6,7 @@ import { isFirstPartyPublicStorageUrl } from "@/lib/storage";
 import { parseMentions } from "@/lib/utils/mentions";
 import { sendNotificationEmail } from "@/lib/email/send-comment-email";
 import { checkAndAwardAchievements } from "@/lib/achievements";
+import { PUBLIC_DAILY_USAGE_FIELDS } from "@/lib/data/public-daily-usage";
 
 type RouteContext = { params: Promise<{ id: string }> };
 
@@ -23,7 +24,7 @@ export async function GET(_request: NextRequest, context: RouteContext) {
       `
       *,
       user:users!posts_user_id_fkey(id, username, display_name, bio, avatar_url, country, region, link, github_username, is_public),
-      daily_usage:daily_usage!posts_daily_usage_id_fkey(*),
+      daily_usage:daily_usage!posts_daily_usage_id_fkey(${PUBLIC_DAILY_USAGE_FIELDS}),
       kudos_count:kudos(count),
       comment_count:comments(count)
     `
@@ -130,7 +131,7 @@ export async function PATCH(request: NextRequest, context: RouteContext) {
     return NextResponse.json({ error: "No fields to update" }, { status: 400 });
   }
 
-  const { data: post, error } = await supabase
+  const { data: post, error } = await getServiceClient()
     .from("posts")
     .update(updates)
     .eq("id", id)
@@ -276,7 +277,7 @@ export async function DELETE(_request: NextRequest, context: RouteContext) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
 
-  const { error } = await supabase
+  const { error } = await getServiceClient()
     .from("posts")
     .delete()
     .eq("id", id)

@@ -15,7 +15,10 @@ export async function GET(request: NextRequest) {
 
   const { searchParams } = request.nextUrl;
   const cursor = searchParams.get("cursor");
-  const limit = Math.min(Number(searchParams.get("limit") ?? 20), 50);
+  const requestedLimit = Number(searchParams.get("limit") ?? 20);
+  const limit = Number.isFinite(requestedLimit)
+    ? Math.min(Math.max(Math.trunc(requestedLimit), 1), 50)
+    : 20;
   const type = searchParams.get("type") ?? "global";
 
   // Unauthenticated users can only access global and user (profile) feeds

@@ -23,11 +23,75 @@ function getLatestMigrationMatching(
   return migrations.filter((m) => pattern.test(m.content)).at(-1);
 }
 
+function hasAuthenticatedUsersUpdateGrant(
+  migrations: { name: string; content: string }[],
+): boolean {
+  let tableUpdateGranted = false;
+  const columnUpdateGrants = new Set<string>();
+  const privilegeStatement = /\b(GRANT|REVOKE)\s+([\s\S]*?)\s+ON\s+public\.users\s+(?:TO|FROM)\s+([^;]+);/gi;
+
+  for (const migration of migrations) {
+    const sql = migration.content.replace(/^\s*--.*$/gm, "");
+    for (const match of sql.matchAll(privilegeStatement)) {
+      const [, action, privileges, roles] = match;
+      if (!/\bauthenticated\b/i.test(roles ?? "")) continue;
+
+      const privilegeList = privileges ?? "";
+      const columnUpdateMatches = privilegeList.matchAll(
+        /\b(?:UPDATE|ALL(?:\s+PRIVILEGES)?)\s*\(([^)]*)\)/gi,
+      );
+      const columns = Array.from(columnUpdateMatches).flatMap((columnMatch) =>
+        (columnMatch[1] ?? "")
+          .split(",")
+          .map((column) => column.trim().toLowerCase())
+          .filter(Boolean),
+      );
+      const tablePrivileges = privilegeList.replace(
+        /\b(?:UPDATE|ALL(?:\s+PRIVILEGES)?)\s*\([^)]*\)/gi,
+        "",
+      );
+      const appliesTableWide = /\bALL(?:\s+PRIVILEGES)?\b|\bUPDATE\b/i.test(
+        tablePrivileges,
+      );
+      if (!appliesTableWide && columns.length === 0) continue;
+
+      if (action?.toUpperCase() === "GRANT") {
+        if (appliesTableWide) tableUpdateGranted = true;
+        for (const column of columns) columnUpdateGrants.add(column);
+      } else {
+        if (appliesTableWide) tableUpdateGranted = false;
+        for (const column of columns) columnUpdateGrants.delete(column);
+      }
+    }
+  }
+
+  return tableUpdateGranted || columnUpdateGrants.size > 0;
+}
+
 describe("Migration safety", () => {
   const migrations = getAllMigrations();
 
   it("finds migration files", () => {
     expect(migrations.length).toBeGreaterThan(0);
+  });
+
+  it("tracks column-level users update grants and revokes", () => {
+    const columnGrant = {
+      name: "001_grant.sql",
+      content: "GRANT UPDATE (bio) ON public.users TO authenticated;",
+    };
+    const columnRevoke = {
+      name: "002_revoke.sql",
+      content: "REVOKE UPDATE (bio) ON public.users FROM authenticated;",
+    };
+    const tableGrant = {
+      name: "001_table_grant.sql",
+      content: "GRANT UPDATE ON public.users TO authenticated;",
+    };
+
+    expect(hasAuthenticatedUsersUpdateGrant([columnGrant])).toBe(true);
+    expect(hasAuthenticatedUsersUpdateGrant([columnGrant, columnRevoke])).toBe(false);
+    expect(hasAuthenticatedUsersUpdateGrant([tableGrant, columnRevoke])).toBe(true);
   });
 
   it("handle_new_user() must always insert into public.users", () => {
@@ -149,7 +213,7 @@ describe("Migration safety", () => {
       && (
         /REVOKE\s+ALL\s+ON\s+public\.users/i.test(m.content)
         || /GRANT\s+SELECT\s+ON\s+public\.users/i.test(m.content)
-        || /GRANT\s+SELECT\s*\(/i.test(m.content)
+        || /GRANT\s+SELECT\s*\([^;]+\)\s+ON\s+public\.users/i.test(m.content)
       )
     );
 
@@ -181,6 +245,137 @@ describe("Migration safety", () => {
 
     expect(/to_jsonb\(u\.\*\)/i.test(latest.content)).toBe(false);
     expect(/jsonb_build_object\s*\(/i.test(latest.content)).toBe(true);
+  });
+
+  it("routes sensitive writes through the server API", () => {
+    const latest = getLatestMigrationMatching(
+      migrations,
+      /REVOKE\s+UPDATE\s+ON\s+public\.users\s+FROM\s+authenticated/i,
+    );
+
+    expect(latest, "Expected an API write-privilege hardening migration").toBeTruthy();
+    const content = latest!.content;
+
+    expect(hasAuthenticatedUsersUpdateGrant(migrations)).toBe(false);
+
+    expect(content).toMatch(
+      /REVOKE\s+INSERT,\s*UPDATE\s+ON\s+public\.daily_usage\s+FROM\s+authenticated/i,
+    );
+    expect(content).toMatch(
+      /REVOKE\s+INSERT,\s*UPDATE\s+ON\s+public\.device_usage\s+FROM\s+authenticated/i,
+    );
+    expect(content).toMatch(
+      /REVOKE\s+INSERT,\s*UPDATE,\s*DELETE\s+ON\s+public\.posts\s+FROM\s+authenticated/i,
+    );
+    expect(content).not.toMatch(
+      /GRANT\s+UPDATE\s*\([^)]*\)\s+ON\s+public\.posts\s+TO\s+authenticated/i,
+    );
+    expect(content).toMatch(
+      /REVOKE\s+INSERT,\s*DELETE\s+ON\s+public\.follows\s+FROM\s+authenticated/i,
+    );
+    expect(content).toMatch(
+      /REVOKE\s+INSERT,\s*UPDATE,\s*DELETE\s+ON\s+public\.comments\s+FROM\s+authenticated/i,
+    );
+    expect(content).toMatch(
+      /REVOKE\s+INSERT,\s*UPDATE\s+ON\s+public\.notifications\s+FROM\s+authenticated/i,
+    );
+    expect(content).toMatch(
+      /GRANT\s+UPDATE\s*\(\s*read\s*\)\s+ON\s+public\.notifications\s+TO\s+authenticated/i,
+    );
+    expect(content).toMatch(
+      /DROP\s+POLICY\s+IF\s+EXISTS\s+"Authenticated users can upload avatars"\s+ON\s+storage\.objects/i,
+    );
+  });
+
+  it("does not expose internal daily usage metadata through publishable keys", () => {
+    const latest = getLatestMigrationMatching(
+      migrations,
+      /REVOKE\s+SELECT\s+ON\s+public\.daily_usage\s+FROM\s+anon,\s*authenticated/i,
+    );
+
+    expect(latest, "Expected a daily_usage column grant migration").toBeTruthy();
+    const grant = latest!.content.match(
+      /GRANT\s+SELECT\s*\(([\s\S]*?)\)\s+ON\s+public\.daily_usage\s+TO\s+anon,\s*authenticated/i,
+    )?.[1];
+
+    expect(grant).toBeTruthy();
+    expect(grant).not.toMatch(/raw_hash/i);
+    expect(grant).not.toMatch(/collector_meta/i);
+  });
+
+  it("locks privileged RPCs to their intended roles", () => {
+    const latest = getLatestMigrationMatching(
+      migrations,
+      /REVOKE\s+ALL\s+ON\s+FUNCTION\s+public\.admin_top_users\(int\)/i,
+    );
+
+    expect(latest, "Expected privileged RPC grants to be hardened").toBeTruthy();
+    const content = latest!.content;
+
+    expect(content).toMatch(
+      /REVOKE\s+ALL\s+ON\s+FUNCTION\s+public\.increment_streak_freezes\(uuid,\s*integer\)[\s\S]*FROM\s+PUBLIC,\s*anon,\s*authenticated/i,
+    );
+    expect(content).toMatch(
+      /GRANT\s+EXECUTE\s+ON\s+FUNCTION\s+public\.increment_streak_freezes\(uuid,\s*integer\)[\s\S]*TO\s+service_role/i,
+    );
+    expect(content).toMatch(
+      /REVOKE\s+ALL\s+ON\s+FUNCTION\s+public\.admin_top_users\(int\)[\s\S]*FROM\s+PUBLIC,\s*anon,\s*authenticated/i,
+    );
+    expect(content).toMatch(
+      /GRANT\s+EXECUTE\s+ON\s+FUNCTION\s+public\.admin_top_users\(int\)\s+TO\s+service_role/i,
+    );
+    expect(content).toMatch(
+      /REVOKE\s+ALL\s+ON\s+FUNCTION\s+public\.get_following_feed\(uuid,\s*int,\s*timestamptz\)[\s\S]*FROM\s+PUBLIC,\s*anon,\s*authenticated/i,
+    );
+  });
+
+  it("authorizes streak visibility and bounds public RPC work", () => {
+    const latest = getLatestMigrationMatching(
+      migrations,
+      /CREATE\s+OR\s+REPLACE\s+FUNCTION\s+public\.calculate_user_streak/i,
+    );
+
+    expect(latest, "Expected calculate_user_streak hardening").toBeTruthy();
+    const content = latest!.content;
+
+    expect(content).toMatch(/u\.is_public\s*=\s*true/i);
+    expect(content).toMatch(/f\.follower_id\s*=\s*v_auth_user_id/i);
+    expect(content).toMatch(/RAISE\s+EXCEPTION\s+'Forbidden'/i);
+    expect(content).toMatch(
+      /DROP\s+FUNCTION\s+IF\s+EXISTS\s+public\.calculate_user_streak\(uuid\)/i,
+    );
+    expect(content).toMatch(/cardinality\(p_user_ids\)\s*>\s*100/i);
+    const batchFunction = content.match(
+      /CREATE\s+OR\s+REPLACE\s+FUNCTION\s+public\.calculate_streaks_batch[\s\S]*?\$\$;/i,
+    )?.[0];
+    expect(batchFunction).toBeTruthy();
+    expect(batchFunction).toMatch(/FOREACH\s+v_user_id\s+IN\s+ARRAY\s+p_user_ids/i);
+    expect(batchFunction).toMatch(
+      /WHEN\s+SQLSTATE\s+'42501'[\s\S]*streak\s*:=\s*0[\s\S]*RETURN\s+NEXT/i,
+    );
+    expect(content).toMatch(
+      /LEAST\(GREATEST\(COALESCE\(streak_freezes,\s*0\),\s*0\),\s*7\)/i,
+    );
+    expect(content).not.toMatch(
+      /v_freeze_days\s*:=\s*[^;]*p_freeze_days/i,
+    );
+  });
+
+  it("bounds get_feed and requires usage ownership", () => {
+    const redefining = migrations.filter((m) =>
+      /CREATE\s+OR\s+REPLACE\s+FUNCTION\s+public\.get_feed/i.test(m.content)
+    );
+    const latest = redefining.at(-1);
+
+    expect(latest).toBeTruthy();
+    expect(latest!.content).toMatch(
+      /v_limit\s+integer\s*:=\s*LEAST\(GREATEST\(COALESCE\(p_limit,\s*20\),\s*1\),\s*100\)/i,
+    );
+    expect(latest!.content).toMatch(/d\.user_id\s*=\s*p\.user_id/i);
+    expect(latest!.content).toMatch(/'is_verified',\s*d\.is_verified/i);
+    expect(latest!.content).not.toMatch(/to_jsonb\(d\.\*\)/i);
+    expect(latest!.content).not.toMatch(/'raw_hash'/i);
+    expect(latest!.content).not.toMatch(/'collector_meta'/i);
   });
 
   it("latest cli_auth_codes hardening removes public grants and pending-code select policies", () => {

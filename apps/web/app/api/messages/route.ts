@@ -299,13 +299,14 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ error: "Cannot message yourself" }, { status: 400 });
   }
 
+  const db = getServiceClient();
   const [senderRes, messageRes] = await Promise.all([
     supabase
       .from("users")
       .select("id, username, avatar_url, display_name")
       .eq("id", user.id)
       .single(),
-    supabase
+    db
       .from("direct_messages")
       .insert({
         sender_id: user.id,

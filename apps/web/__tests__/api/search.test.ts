@@ -47,13 +47,57 @@ describe("GET /api/search", () => {
     mockClients();
     const res = await GET(makeRequest({ q: "a" }));
     expect(res.status).toBe(400);
-    expect((await res.json()).error).toContain("at least 2 characters");
+    expect((await res.json()).error).toContain("between 2 and 64 characters");
   });
 
   it("returns 400 for empty query", async () => {
     mockClients();
     const res = await GET(makeRequest());
     expect(res.status).toBe(400);
+  });
+
+  it("rejects wildcard-only queries instead of turning them into a full scan", async () => {
+    const { supabaseChain } = mockClients();
+
+    const res = await GET(makeRequest({ q: "%%" }));
+
+    expect(res.status).toBe(400);
+    expect(supabaseChain.or).not.toHaveBeenCalled();
+  });
+
+  it("rejects asterisks instead of passing PostgREST wildcard aliases", async () => {
+    const { supabaseChain } = mockClients();
+
+    const res = await GET(makeRequest({ q: "ab*" }));
+
+    expect(res.status).toBe(400);
+    expect(supabaseChain.or).not.toHaveBeenCalled();
+  });
+
+  it("preserves underscores in valid usernames as literal search characters", async () => {
+    const { supabaseChain } = mockClients({
+      users: [{ id: "u-1", username: "alice_dev" }],
+    });
+
+    const res = await GET(makeRequest({ q: "alice_dev" }));
+
+    expect(res.status).toBe(200);
+    expect(supabaseChain.or).toHaveBeenCalledWith(
+      'username.ilike."%alice\\\\_dev%",display_name.ilike."%alice\\\\_dev%",github_username.ilike."%alice\\\\_dev%"',
+    );
+  });
+
+  it("preserves punctuation in display-name searches", async () => {
+    const { supabaseChain } = mockClients({
+      users: [{ id: "u-1", display_name: "O'Brien" }],
+    });
+
+    const res = await GET(makeRequest({ q: "O'Brien" }));
+
+    expect(res.status).toBe(200);
+    expect(supabaseChain.or).toHaveBeenCalledWith(
+      'username.ilike."%O\'Brien%",display_name.ilike."%O\'Brien%",github_username.ilike."%O\'Brien%"',
+    );
   });
 
   it("searches by username and github_username via OR filter", async () => {
@@ -67,7 +111,7 @@ describe("GET /api/search", () => {
     expect(json.users).toHaveLength(1);
     expect(json.users[0].username).toBe("alice");
     expect(supabaseChain.or).toHaveBeenCalledWith(
-      "username.ilike.%alice%,display_name.ilike.%alice%,github_username.ilike.%alice%"
+      'username.ilike."%alice%",display_name.ilike."%alice%",github_username.ilike."%alice%"'
     );
   });
 
@@ -77,7 +121,7 @@ describe("GET /api/search", () => {
 
     await GET(makeRequest({ q: "bobgithub" }));
     expect(supabaseChain.or).toHaveBeenCalledWith(
-      "username.ilike.%bobgithub%,display_name.ilike.%bobgithub%,github_username.ilike.%bobgithub%"
+      'username.ilike."%bobgithub%",display_name.ilike."%bobgithub%",github_username.ilike."%bobgithub%"'
     );
   });
 
@@ -91,7 +135,7 @@ describe("GET /api/search", () => {
     expect(json.users).toEqual([]);
   });
 
-  it("still returns username matches that happen to contain @ in the query", async () => {
+  it("preserves at signs in the query without searching private email fields", async () => {
     const users = [{ id: "u-1", username: "user_at_sign" }];
     const { supabaseChain } = mockClients({ users });
 
@@ -100,7 +144,7 @@ describe("GET /api/search", () => {
 
     expect(res.status).toBe(200);
     expect(json.users).toHaveLength(1);
-    expect(supabaseChain.or.mock.calls[0]?.[0]).toContain("usersomething");
+    expect(supabaseChain.or.mock.calls[0]?.[0]).toContain("user@something");
   });
 
   it("respects limit parameter", async () => {

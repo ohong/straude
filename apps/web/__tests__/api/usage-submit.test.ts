@@ -9,6 +9,11 @@ vi.mock("@/lib/api/cli-auth", () => ({
   verifyCliTokenWithRefresh: vi.fn(),
 }));
 
+vi.mock("@/lib/api/active-cli-user", async (importOriginal) => {
+  const actual = await importOriginal<typeof import("@/lib/api/active-cli-user")>();
+  return { ...actual, isActiveCliUser: vi.fn().mockResolvedValue(true) };
+});
+
 vi.mock("@/lib/supabase/service", () => ({
   getServiceClient: vi.fn(),
 }));
@@ -25,6 +30,10 @@ import { POST, aggregateDeviceRows } from "@/app/api/usage/submit/route";
 import { captureServerActivationEvent } from "@/lib/analytics/server";
 import { createClient } from "@/lib/supabase/server";
 import { verifyCliToken, verifyCliTokenWithRefresh } from "@/lib/api/cli-auth";
+import {
+  CliIdentityUnavailableError,
+  isActiveCliUser,
+} from "@/lib/api/active-cli-user";
 import { getServiceClient } from "@/lib/supabase/service";
 import { resetRateLimiters } from "@/lib/rate-limit";
 
@@ -182,6 +191,25 @@ describe("POST /api/usage/submit", () => {
     expect(res.status).toBe(200);
     expect(verifyCliToken).toHaveBeenCalledWith("Bearer some-token");
     expect(json.results).toHaveLength(1);
+  });
+
+  it("returns 503 when CLI identity verification is unavailable", async () => {
+    (verifyCliToken as any).mockReturnValue("cli-user-id");
+    vi.mocked(isActiveCliUser).mockRejectedValueOnce(
+      new CliIdentityUnavailableError(),
+    );
+    mockSupabaseAuth(null);
+    const svc = mockServiceClient();
+
+    const res = await POST(
+      mockRequest(
+        { entries: [makeEntry(todayStr())], source: "cli" },
+        { authorization: "Bearer some-token" },
+      ),
+    );
+
+    expect(res.status).toBe(503);
+    expect(svc.from).not.toHaveBeenCalled();
   });
 
   it("handles Supabase session auth (cookie/web)", async () => {

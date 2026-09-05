@@ -7,6 +7,8 @@ import { COUNTRY_TO_REGION } from "@/lib/constants/regions";
 import { sendWelcomeEmail } from "@/lib/email/send-welcome-email";
 import { attributeReferral } from "@/lib/referral";
 import { resolveTeamFavicon } from "@/lib/team-favicon";
+import { isAllowedAvatarUrl } from "@/lib/storage";
+import { rateLimit } from "@/lib/rate-limit";
 
 const ALLOWED_FIELDS = [
   "username",
@@ -27,6 +29,9 @@ const ALLOWED_FIELDS = [
 
 const BIO_MAX_LENGTH = 160;
 const HEARD_ABOUT_MAX_LENGTH = 500;
+const DISPLAY_NAME_MAX_LENGTH = 100;
+const PROFILE_URL_MAX_LENGTH = 2048;
+const GITHUB_USERNAME_PATTERN = /^(?!-)[a-zA-Z0-9-]{1,39}(?<!-)$/;
 
 type ActivationUsageRow = {
   id: string;
@@ -42,6 +47,9 @@ function normalizeProfileLink(value: unknown): string | null {
 
   const link = value.trim();
   if (!link) return null;
+  if (link.length > PROFILE_URL_MAX_LENGTH) {
+    throw new Error(`Profile link must be at most ${PROFILE_URL_MAX_LENGTH} characters`);
+  }
 
   let parsed: URL;
   try {
@@ -100,7 +108,19 @@ export async function PATCH(request: NextRequest) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
 
-  const body = await request.json();
+  const limited = await rateLimit("profile-update", user.id, { limit: 20 });
+  if (limited) return limited;
+
+  let parsedBody: unknown;
+  try {
+    parsedBody = await request.json();
+  } catch {
+    return NextResponse.json({ error: "Invalid JSON" }, { status: 400 });
+  }
+  if (!parsedBody || typeof parsedBody !== "object" || Array.isArray(parsedBody)) {
+    return NextResponse.json({ error: "Invalid request body" }, { status: 400 });
+  }
+  const body = parsedBody as Record<string, unknown>;
   const updates: Record<string, unknown> = {};
 
   for (const field of ALLOWED_FIELDS) {
@@ -111,8 +131,10 @@ export async function PATCH(request: NextRequest) {
 
   // Validate username if provided
   if (updates.username !== undefined) {
-    const username = updates.username as string;
-    if (!/^[a-zA-Z0-9_]{3,20}$/.test(username)) {
+    if (
+      typeof updates.username !== "string"
+      || !/^[a-zA-Z0-9_]{3,20}$/.test(updates.username)
+    ) {
       return NextResponse.json(
         { error: "Username must be 3-20 alphanumeric characters or underscores" },
         { status: 400 }
@@ -120,16 +142,29 @@ export async function PATCH(request: NextRequest) {
     }
   }
 
-  // Validate bio length
-  if (
-    updates.bio !== undefined &&
-    typeof updates.bio === "string" &&
-    updates.bio.length > BIO_MAX_LENGTH
-  ) {
-    return NextResponse.json(
-      { error: `Bio must be at most ${BIO_MAX_LENGTH} characters` },
-      { status: 400 }
-    );
+  if (updates.display_name !== undefined) {
+    if (
+      updates.display_name !== null
+      && (typeof updates.display_name !== "string"
+        || updates.display_name.length > DISPLAY_NAME_MAX_LENGTH)
+    ) {
+      return NextResponse.json(
+        { error: `Display name must be text of at most ${DISPLAY_NAME_MAX_LENGTH} characters` },
+        { status: 400 },
+      );
+    }
+  }
+
+  if (updates.bio !== undefined) {
+    if (
+      updates.bio !== null
+      && (typeof updates.bio !== "string" || updates.bio.length > BIO_MAX_LENGTH)
+    ) {
+      return NextResponse.json(
+        { error: `Bio must be text of at most ${BIO_MAX_LENGTH} characters` },
+        { status: 400 }
+      );
+    }
   }
 
   if (updates.heard_about !== undefined) {
@@ -168,6 +203,61 @@ export async function PATCH(request: NextRequest) {
     }
   }
 
+  if (updates.avatar_url !== undefined) {
+    if (
+      updates.avatar_url !== null
+      && (typeof updates.avatar_url !== "string"
+        || updates.avatar_url.length > PROFILE_URL_MAX_LENGTH
+        || !isAllowedAvatarUrl(updates.avatar_url))
+    ) {
+      return NextResponse.json(
+        { error: "Avatar URL must use an approved image provider" },
+        { status: 400 },
+      );
+    }
+  }
+
+  if (updates.github_username !== undefined) {
+    if (
+      updates.github_username !== null
+      && (typeof updates.github_username !== "string"
+        || !GITHUB_USERNAME_PATTERN.test(updates.github_username))
+    ) {
+      return NextResponse.json(
+        { error: "GitHub username is invalid" },
+        { status: 400 },
+      );
+    }
+  }
+
+  if (updates.timezone !== undefined) {
+    if (typeof updates.timezone !== "string" || updates.timezone.length > 64) {
+      return NextResponse.json({ error: "Timezone is invalid" }, { status: 400 });
+    }
+    const timezone = updates.timezone || "UTC";
+    try {
+      new Intl.DateTimeFormat("en-US", { timeZone: timezone });
+    } catch {
+      return NextResponse.json({ error: "Timezone is invalid" }, { status: 400 });
+    }
+    updates.timezone = timezone;
+  }
+
+  for (const field of [
+    "is_public",
+    "onboarding_completed",
+    "email_notifications",
+    "email_mention_notifications",
+    "email_dm_notifications",
+  ] as const) {
+    if (updates[field] !== undefined && typeof updates[field] !== "boolean") {
+      return NextResponse.json(
+        { error: `${field} must be a boolean` },
+        { status: 400 },
+      );
+    }
+  }
+
   // Team affiliation: validate URL and derive cached favicon URL via the
   // resolver. team_favicon_url is server-derived only — never accepted from
   // the client body.
@@ -175,7 +265,10 @@ export async function PATCH(request: NextRequest) {
     if (body.team_url === null || body.team_url === "") {
       updates.team_url = null;
       updates.team_favicon_url = null;
-    } else if (typeof body.team_url === "string") {
+    } else if (
+      typeof body.team_url === "string"
+      && body.team_url.length <= PROFILE_URL_MAX_LENGTH
+    ) {
       const result = await resolveTeamFavicon(body.team_url);
       if (!result.ok) {
         return NextResponse.json(
@@ -195,7 +288,15 @@ export async function PATCH(request: NextRequest) {
 
   // Auto-derive region from country
   if (updates.country !== undefined) {
-    const country = updates.country as string | null;
+    if (
+      updates.country !== null
+      && (typeof updates.country !== "string"
+        || !(updates.country.toUpperCase() in COUNTRY_TO_REGION))
+    ) {
+      return NextResponse.json({ error: "Country is invalid" }, { status: 400 });
+    }
+    const country = updates.country ? updates.country.toUpperCase() : null;
+    updates.country = country;
     if (country) {
       updates.region = COUNTRY_TO_REGION[country.toUpperCase()] ?? null;
     } else {

@@ -168,11 +168,6 @@ Now that `device_usage` stores per-device data, future work could expose this in
 
 The CLI auth init endpoint has rate limiting (5 req/min/IP), but other write endpoints (comments, follows, kudos, upload, usage submit) do not. Consider per-user rate limiting via a shared utility or Supabase Edge Function middleware. Priority: `/api/upload` (file creation), `/api/usage/submit` (data creation), then social actions.
 
-### `calculate_user_streak` Is Callable by `anon` with Any User ID
-
-`public.calculate_user_streak(UUID, INTEGER)` is `SECURITY DEFINER` and granted `EXECUTE` to both `anon` and `authenticated` (`supabase/migrations/20260430172022_fix_calculate_user_streak_security_definer.sql:85-86`). Because the definer bypasses RLS, anyone can POST to the PostgREST RPC endpoint with an arbitrary `p_user_id` and read that user's streak — including users who set their profile to private. It also works as a presence oracle: a non-zero return means the account has recent usage.
-
-Every caller in the app is server-side and already uses the service client, so the `anon` and `authenticated` grants appear to be unnecessary surface rather than something the front end depends on. Verify that against `apps/web` call sites, then revoke both grants and keep `service_role`. Long-standing, not introduced by any open PR; found while reviewing #147.
 
 ## CSP Hardening (Nonce-Based)
 

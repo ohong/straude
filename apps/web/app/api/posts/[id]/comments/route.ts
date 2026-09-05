@@ -128,7 +128,8 @@ export async function POST(request: NextRequest, context: RouteContext) {
     }
   }
 
-  const { data: comment, error } = await supabase
+  const db = getServiceClient();
+  const { data: comment, error } = await db
     .from("comments")
     .insert({
       user_id: user.id,
@@ -147,7 +148,7 @@ export async function POST(request: NextRequest, context: RouteContext) {
   after(async () => {
     // Insert comment notification (skip self-comment)
     if (post && post.user_id !== user.id) {
-      await supabase.from("notifications").insert({
+      await db.from("notifications").insert({
         user_id: post.user_id,
         actor_id: user.id,
         type: "comment",
@@ -172,7 +173,7 @@ export async function POST(request: NextRequest, context: RouteContext) {
     // Mention notifications (de-dup: skip self and post owner)
     const mentionedUsernames = parseMentions(content);
     if (mentionedUsernames.length > 0) {
-      const { data: mentionedUsers } = await supabase
+      const { data: mentionedUsers } = await db
         .from("users")
         .select("id, username")
         .in("username", mentionedUsernames);
@@ -189,7 +190,7 @@ export async function POST(request: NextRequest, context: RouteContext) {
       }));
 
       if (mentionNotifs.length > 0) {
-        await supabase.from("notifications").insert(mentionNotifs);
+        await db.from("notifications").insert(mentionNotifs);
       }
 
       // Fire mention emails (one per mentioned user)

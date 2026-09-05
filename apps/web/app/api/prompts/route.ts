@@ -1,5 +1,7 @@
 import { NextResponse, type NextRequest } from "next/server";
 import { createClient } from "@/lib/supabase/server";
+import { getServiceClient } from "@/lib/supabase/service";
+import { rateLimit } from "@/lib/rate-limit";
 
 const MAX_PROMPT_LENGTH = 2000;
 const MIN_PROMPT_LENGTH = 10;
@@ -76,6 +78,13 @@ export async function POST(request: NextRequest) {
   if (body.anonymous !== undefined && typeof body.anonymous !== "boolean") {
     return NextResponse.json({ error: "anonymous must be a boolean" }, { status: 400 });
   }
+
+  const limited = await rateLimit("prompt-submission", user.id, {
+    limit: MAX_SUBMISSIONS_PER_24H,
+    windowSeconds: 24 * 60 * 60,
+  });
+  if (limited) return limited;
+
   const since = new Date(Date.now() - 24 * 60 * 60 * 1000).toISOString();
 
   const { count, error: countError } = await supabase
@@ -95,7 +104,7 @@ export async function POST(request: NextRequest) {
     );
   }
 
-  const { data, error } = await supabase
+  const { data, error } = await getServiceClient()
     .from("prompt_submissions")
     .insert({
       user_id: user.id,

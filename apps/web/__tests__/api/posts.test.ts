@@ -3,11 +3,17 @@ import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
 vi.mock("@/lib/supabase/server", () => ({
   createClient: vi.fn(),
 }));
-const mockServiceFrom = vi.fn().mockReturnValue({
-  select: vi.fn().mockReturnThis(),
-  eq: vi.fn().mockReturnThis(),
-  in: vi.fn().mockReturnThis(),
-  single: vi.fn().mockResolvedValue({ data: { username: "author" }, error: null }),
+let currentAuthClient: Record<string, any> | null = null;
+const mockServiceFrom = vi.fn((table: string) => {
+  if (table === "posts" && currentAuthClient) {
+    return currentAuthClient.from(table);
+  }
+  return {
+    select: vi.fn().mockReturnThis(),
+    eq: vi.fn().mockReturnThis(),
+    in: vi.fn().mockReturnThis(),
+    single: vi.fn().mockResolvedValue({ data: { username: "author" }, error: null }),
+  };
 });
 const mockServiceClient = {
   from: mockServiceFrom,
@@ -69,6 +75,7 @@ function mockSupabase(opts: {
   };
 
   (createClient as any).mockResolvedValue(client);
+  currentAuthClient = client;
   return client;
 }
 
@@ -90,6 +97,7 @@ function makeRequest(
 
 beforeEach(() => {
   vi.clearAllMocks();
+  currentAuthClient = null;
   // Reset service client to default mock between tests
   mockServiceClient.from = mockServiceFrom;
   vi.stubEnv("NEXT_PUBLIC_SUPABASE_URL", "https://test.supabase.co");
@@ -534,12 +542,14 @@ describe("DELETE /api/posts/[id]", () => {
       }),
     };
     (createClient as any).mockResolvedValue(client);
+    currentAuthClient = client;
 
     const res = await DELETE(makeRequest("DELETE"), makeContext("post-1"));
     const json = await res.json();
 
     expect(res.status).toBe(200);
     expect(json.success).toBe(true);
+    expect(mockServiceFrom).toHaveBeenCalledWith("posts");
   });
 
   it("rejects unauthenticated DELETE", async () => {
@@ -586,6 +596,7 @@ describe("DELETE /api/posts/[id]", () => {
       }),
     };
     (createClient as any).mockResolvedValue(client);
+    currentAuthClient = client;
 
     const res = await DELETE(makeRequest("DELETE"), makeContext("post-1"));
     const json = await res.json();

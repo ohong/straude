@@ -1,5 +1,6 @@
 import { NextResponse, type NextRequest } from "next/server";
 import { createClient } from "@/lib/supabase/server";
+import { getServiceClient } from "@/lib/supabase/service";
 import { rateLimit } from "@/lib/rate-limit";
 import { randomUUID } from "node:crypto";
 import convert from "heic-convert";
@@ -34,7 +35,7 @@ const BUCKET_CONFIG: Record<BucketId, { maxSize: number; allowedTypes: string[] 
     allowedTypes: IMAGE_TYPES,
   },
   "post-images": {
-    maxSize: 20 * 1024 * 1024,
+    maxSize: 10 * 1024 * 1024,
     allowedTypes: IMAGE_TYPES,
   },
   "dm-attachments": {
@@ -58,6 +59,30 @@ function isHeicByMagicBytes(buf: Buffer): boolean {
   if (ftyp !== "ftyp") return false;
   const brand = buf.toString("ascii", 8, 12).toLowerCase();
   return HEIC_BRANDS.includes(brand);
+}
+
+function detectImageMime(buf: Buffer): string | null {
+  if (buf.length >= 3 && buf[0] === 0xff && buf[1] === 0xd8 && buf[2] === 0xff) {
+    return "image/jpeg";
+  }
+  if (
+    buf.length >= 8
+    && buf.subarray(0, 8).equals(Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]))
+  ) {
+    return "image/png";
+  }
+  if (
+    buf.length >= 12
+    && buf.toString("ascii", 0, 4) === "RIFF"
+    && buf.toString("ascii", 8, 12) === "WEBP"
+  ) {
+    return "image/webp";
+  }
+  const gifHeader = buf.toString("ascii", 0, 6);
+  if (gifHeader === "GIF87a" || gifHeader === "GIF89a") {
+    return "image/gif";
+  }
+  return null;
 }
 
 function isImageType(mime: string): boolean {
@@ -131,8 +156,8 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ error: "No file provided" }, { status: 400 });
   }
 
+  const maxMB = Math.round(config.maxSize / (1024 * 1024));
   if (file.size > config.maxSize) {
-    const maxMB = Math.round(config.maxSize / (1024 * 1024));
     return NextResponse.json(
       { error: `File too large. Maximum size is ${maxMB}MB` },
       { status: 400 }
@@ -151,7 +176,8 @@ export async function POST(request: NextRequest) {
   let ext: string;
 
   // Detect HEIC by magic bytes OR MIME type — iOS sometimes mislabels HEIC files
-  const isHeic = HEIC_MIME_TYPES.includes(mimeType) || isHeicByMagicBytes(buffer);
+  const hasHeicSignature = isHeicByMagicBytes(buffer);
+  const isHeic = HEIC_MIME_TYPES.includes(mimeType) || hasHeicSignature;
 
   if (!config.allowedTypes.includes(mimeType) && !isHeic) {
     return NextResponse.json(
@@ -160,7 +186,34 @@ export async function POST(request: NextRequest) {
     );
   }
 
-  if (isHeic) {
+  if (HEIC_MIME_TYPES.includes(mimeType) && !hasHeicSignature) {
+    return NextResponse.json(
+      { error: "File content does not match the declared image type" },
+      { status: 400 },
+    );
+  }
+
+  const acceptsDetectedHeic = HEIC_MIME_TYPES.includes(mimeType)
+    || mimeType === "application/octet-stream"
+    || mimeType === "";
+  if (hasHeicSignature && !acceptsDetectedHeic) {
+    return NextResponse.json(
+      { error: "File content does not match the declared image type" },
+      { status: 400 },
+    );
+  }
+
+  if (!hasHeicSignature && mimeType.startsWith("image/")) {
+    const detectedMime = detectImageMime(buffer);
+    if (detectedMime !== mimeType) {
+      return NextResponse.json(
+        { error: "File content does not match the declared image type" },
+        { status: 400 },
+      );
+    }
+  }
+
+  if (hasHeicSignature) {
     try {
       const jpegBuf = await (convert as unknown as HeicConverter)({ buffer, format: "JPEG", quality: 0.9 });
       buffer = ArrayBuffer.isView(jpegBuf)
@@ -189,9 +242,17 @@ export async function POST(request: NextRequest) {
     ext = getExtension(mimeType, file.name);
   }
 
+  if (buffer.length > config.maxSize) {
+    return NextResponse.json(
+      { error: `File too large. Maximum size is ${maxMB}MB` },
+      { status: 400 },
+    );
+  }
+
   const fileName = `${user.id}/${randomUUID()}.${ext}`;
 
-  const { error: uploadError } = await supabase.storage
+  const storage = getServiceClient().storage;
+  const { error: uploadError } = await storage
     .from(bucket)
     .upload(fileName, buffer, {
       contentType,
@@ -207,7 +268,7 @@ export async function POST(request: NextRequest) {
 
   const {
     data: { publicUrl },
-  } = supabase.storage.from(bucket).getPublicUrl(fileName);
+  } = storage.from(bucket).getPublicUrl(fileName);
 
   if (bucket === "dm-attachments") {
     return NextResponse.json({
