@@ -1,13 +1,17 @@
 "use client";
 
 import { createClient } from "@/lib/supabase/client";
-import { useState } from "react";
+import { Suspense, useState } from "react";
+import { useSearchParams } from "next/navigation";
+import { authPathWithNext, safeAuthNext } from "@/lib/supabase/redirect";
 import Link from "next/link";
 import { BoltIcon } from "@/components/landing/icons";
 import { Button } from "@/components/ui/Button";
 import { Input } from "@/components/ui/Input";
 
-export default function LoginPage() {
+function LoginContent() {
+  const searchParams = useSearchParams();
+  const next = safeAuthNext(searchParams.get("next"));
   const [email, setEmail] = useState("");
   const [loading, setLoading] = useState(false);
   const [sent, setSent] = useState(false);
@@ -21,7 +25,7 @@ export default function LoginPage() {
     const supabase = createClient();
     const { error } = await supabase.auth.signInWithOtp({
       email,
-      options: { emailRedirectTo: `${window.location.origin}/callback` },
+      options: { emailRedirectTo: `${window.location.origin}${authPathWithNext("/callback", next)}` },
     });
 
     if (error) {
@@ -36,7 +40,7 @@ export default function LoginPage() {
     const supabase = createClient();
     await supabase.auth.signInWithOAuth({
       provider: "github",
-      options: { redirectTo: `${window.location.origin}/callback` },
+      options: { redirectTo: `${window.location.origin}${authPathWithNext("/callback", next)}` },
     });
   }
 
@@ -54,7 +58,7 @@ export default function LoginPage() {
       </h1>
       <p className="mb-6 text-sm text-muted">
         Don&apos;t have an account?{" "}
-        <Link href="/signup" className="text-foreground underline">
+        <Link href={authPathWithNext("/signup", next)} className="text-foreground underline">
           Sign up
         </Link>
       </p>
@@ -129,5 +133,13 @@ export default function LoginPage() {
         </>
       )}
     </>
+  );
+}
+
+export default function LoginPage() {
+  return (
+    <Suspense fallback={<p className="text-sm text-muted">Loading...</p>}>
+      <LoginContent />
+    </Suspense>
   );
 }

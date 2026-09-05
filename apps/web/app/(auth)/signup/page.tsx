@@ -1,14 +1,18 @@
 "use client";
 
 import { createClient } from "@/lib/supabase/client";
-import { useState } from "react";
+import { Suspense, useState } from "react";
+import { useSearchParams } from "next/navigation";
+import { authPathWithNext, safeAuthNext } from "@/lib/supabase/redirect";
 import Link from "next/link";
 import { BoltIcon } from "@/components/landing/icons";
 import { Button } from "@/components/ui/Button";
 import { Input } from "@/components/ui/Input";
 import { trackActivationEvent } from "@/lib/analytics/client";
 
-export default function SignupPage() {
+function SignupContent() {
+  const searchParams = useSearchParams();
+  const next = safeAuthNext(searchParams.get("next"));
   const [email, setEmail] = useState("");
   const [loading, setLoading] = useState(false);
   const [sent, setSent] = useState(false);
@@ -28,7 +32,7 @@ export default function SignupPage() {
     const supabase = createClient();
     const { error } = await supabase.auth.signInWithOtp({
       email,
-      options: { emailRedirectTo: `${window.location.origin}/callback` },
+      options: { emailRedirectTo: `${window.location.origin}${authPathWithNext("/callback", next)}` },
     });
 
     if (error) {
@@ -49,7 +53,7 @@ export default function SignupPage() {
     const supabase = createClient();
     await supabase.auth.signInWithOAuth({
       provider: "github",
-      options: { redirectTo: `${window.location.origin}/callback` },
+      options: { redirectTo: `${window.location.origin}${authPathWithNext("/callback", next)}` },
     });
   }
 
@@ -67,7 +71,7 @@ export default function SignupPage() {
       </h1>
       <p className="mb-6 text-sm text-muted">
         Already have an account?{" "}
-        <Link href="/login" className="text-foreground underline">
+        <Link href={authPathWithNext("/login", next)} className="text-foreground underline">
           Log in
         </Link>
       </p>
@@ -142,5 +146,13 @@ export default function SignupPage() {
         </>
       )}
     </>
+  );
+}
+
+export default function SignupPage() {
+  return (
+    <Suspense fallback={<p className="text-sm text-muted">Loading...</p>}>
+      <SignupContent />
+    </Suspense>
   );
 }

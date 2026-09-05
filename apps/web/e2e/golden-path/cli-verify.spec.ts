@@ -38,18 +38,20 @@ test.describe("CLI verify page", () => {
     expect(hasSignIn || hasAuthorize).toBeTruthy();
   });
 
-  test("sign-in link includes return URL", async ({ page }) => {
-    await page.goto(verifyUrl("TEST1234"));
-    await page.waitForLoadState("networkidle");
+  test("sign-in preserves the CLI request through signup and login", async ({ page }) => {
+    const returnTo = verifyUrl("TEST1234");
+    await page.goto(returnTo);
+    await page.getByRole("button", { name: "Sign in to authorize" }).click();
+    await expect(page).toHaveURL(/\/login\?/);
+    expect(new URL(page.url()).searchParams.get("next")).toBe(returnTo);
 
-    const signInLink = page.locator('a:has-text("Sign in to authorize")');
-    const isVisible = await signInLink.isVisible().catch(() => false);
+    await page.getByRole("link", { name: "Sign up", exact: true }).click();
+    await expect(page).toHaveURL(/\/signup\?/);
+    expect(new URL(page.url()).searchParams.get("next")).toBe(returnTo);
 
-    if (isVisible) {
-      const href = await signInLink.getAttribute("href");
-      expect(href).toContain("/login");
-      expect(href).toContain("next=");
-    }
+    await page.getByRole("link", { name: "Log in", exact: true }).click();
+    await expect(page).toHaveURL(/\/login\?/);
+    expect(new URL(page.url()).searchParams.get("next")).toBe(returnTo);
   });
 
   test("page without code param shows missing code message", async ({
