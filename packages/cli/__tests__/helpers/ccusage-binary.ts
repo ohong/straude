@@ -4,9 +4,7 @@ import { promisify } from "node:util";
 
 const require = createRequire(import.meta.url);
 const packageJson = require.resolve("ccusage/package.json");
-const ccusageRequire = createRequire(packageJson);
-const nativePackage = `@ccusage/ccusage-${process.platform}-${process.arch}`;
-const binary = ccusageRequire.resolve(`${nativePackage}/bin/ccusage${process.platform === "win32" ? ".exe" : ""}`);
+const launcher = require.resolve("ccusage/src/cli.js");
 export const bundledCcusageVersion: string = require(packageJson).version;
 
 export async function runBundledCcusage(
@@ -14,7 +12,9 @@ export async function runBundledCcusage(
   fixtureHome: string,
   sourceRoots: Record<string, string> = {},
 ) {
-  return promisify(execFile)(binary, args, {
+  // The official launcher resolves the platform binary and repairs executable
+  // permissions when a package manager extracts it without execute bits.
+  return promisify(execFile)(process.execPath, [launcher, ...args], {
     cwd: fixtureHome,
     timeout: 10_000,
     encoding: "utf8",
