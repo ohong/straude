@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useRef, useState, useSyncExternalStore } from "react";
 import { createPortal } from "react-dom";
 import { useRouter } from "next/navigation";
 import { createClient } from "@/lib/supabase/client";
@@ -52,11 +52,16 @@ export function buildProfileUpdatePayload(input: ProfileUpdatePayloadInput) {
 
 export type SettingsProfile = User & { crew_count: number };
 
+function subscribeToHydration() {
+  return () => {};
+}
+
 export default function SettingsClient({
   initialProfile,
 }: {
   initialProfile: SettingsProfile;
 }) {
+  const hydrated = useSyncExternalStore(subscribeToHydration, () => true, () => false);
   const router = useRouter();
   const posthog = usePostHog();
   const [profile, setProfile] = useState<SettingsProfile | null>(initialProfile);
@@ -356,6 +361,7 @@ export default function SettingsClient({
             </label>
             <Input
               id="settings-team-url"
+              disabled={!hydrated}
               name="team_url"
               type="url"
               autoComplete="off"

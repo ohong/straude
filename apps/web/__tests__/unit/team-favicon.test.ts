@@ -1,229 +1,102 @@
-import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
-
-vi.mock("@/lib/supabase/service", () => ({
-  getServiceClient: vi.fn(),
-}));
-
-import { resolveTeamFavicon } from "@/lib/team-favicon";
+// @vitest-environment node
+import { beforeEach, describe, expect, it, vi } from "vitest";
+import { createClient } from "@supabase/supabase-js";
 import { getServiceClient } from "@/lib/supabase/service";
+import { discoverFavicon } from "@/lib/favicons/discover";
+import { resolveTeamFavicon } from "@/lib/team-favicon";
 
-interface MockBucket {
-  getPublicUrl: ReturnType<typeof vi.fn>;
-  upload: ReturnType<typeof vi.fn>;
-}
+vi.mock("@/lib/supabase/service", () => ({ getServiceClient: vi.fn() }));
+vi.mock("@/lib/favicons/discover", () => ({ discoverFavicon: vi.fn() }));
 
-function buildMockClient(publicUrl: string | null) {
-  const bucket: MockBucket = {
-    getPublicUrl: vi.fn().mockReturnValue({
-      data: publicUrl ? { publicUrl } : null,
-    }),
-    upload: vi.fn().mockResolvedValue({ data: { path: "x" }, error: null }),
-  };
-  const client = {
-    storage: {
-      from: vi.fn().mockReturnValue(bucket),
-    },
-  };
-  return { client, bucket };
-}
-
-const STORAGE_URL = "https://example.supabase.co/storage/v1/object/public/team-favicons/anthropic.com.png";
-
-let fetchMock: ReturnType<typeof vi.fn>;
+type CacheEntry = { domain: string; object_path: string | null; retry_after: string | null };
+let cache: CacheEntry | null;
+let legacy = false;
+let storageFailure = false;
+let uploads: { url: string; type: string | null; bytes: ArrayBuffer }[];
+let requests: string[];
+const svg = Buffer.from('<svg xmlns="http://www.w3.org/2000/svg"><rect width="16" height="16"/></svg>');
 
 beforeEach(() => {
   vi.clearAllMocks();
-  fetchMock = vi.fn();
-  vi.stubGlobal("fetch", fetchMock);
+  cache = null;
+  legacy = false;
+  storageFailure = false;
+  uploads = [];
+  requests = [];
+  vi.mocked(discoverFavicon).mockResolvedValue({ format: "svg", bytes: svg, width: 0, height: 0 });
+  const client = createClient("https://storage.example.com", "test-secret", {
+    auth: { persistSession: false, autoRefreshToken: false },
+    global: { fetch: async (input, init) => {
+      const req = new Request(input, init);
+      requests.push(`${req.method} ${req.url}`);
+      if (req.url.includes("/rest/v1/team_favicon_cache")) {
+        if (req.method === "GET") return Response.json(cache ? [cache] : []);
+        const body = await req.json();
+        if (req.method === "PATCH") {
+          if (cache?.object_path === null) cache = { ...cache, ...body };
+        } else if (!cache || !req.headers.get("prefer")?.includes("ignore-duplicates")) cache = body;
+        return new Response(null, { status: 201 });
+      }
+      if (req.method === "HEAD") return new Response(null, { status: legacy ? 200 : 404 });
+      uploads.push({ url: req.url, type: req.headers.get("content-type"), bytes: await req.arrayBuffer() });
+      return storageFailure ? Response.json({ error: "unavailable" }, { status: 503 }) : Response.json({ Key: "team-favicons/example.com.svg" });
+    } },
+  });
+  vi.mocked(getServiceClient).mockReturnValue(client);
 });
 
-afterEach(() => {
-  vi.unstubAllGlobals();
-});
-
-describe("resolveTeamFavicon — invalid input", () => {
-  it("rejects empty string", async () => {
-    const { client } = buildMockClient(STORAGE_URL);
-    (getServiceClient as any).mockReturnValue(client);
-
-    const result = await resolveTeamFavicon("");
-    expect(result).toEqual({ ok: false, error: "invalid_url" });
-    expect(client.storage.from).not.toHaveBeenCalled();
+describe("team favicon cache", () => {
+  it.each(["", "example.com", "ftp://example.com", "https://user:secret@example.com", "https://example.com:1234"])("rejects invalid or unsupported URLs: %s", async (url) => {
+    expect(await resolveTeamFavicon(url)).toEqual({ ok: false, error: "invalid_url" });
+    expect(getServiceClient).not.toHaveBeenCalled();
   });
 
-  it("rejects whitespace-only", async () => {
-    const result = await resolveTeamFavicon("   ");
-    expect(result).toEqual({ ok: false, error: "invalid_url" });
+  it("normalizes the origin and stores sanitized SVG with its real format", async () => {
+    const result = await resolveTeamFavicon("  https://EXAMPLE.com/about?q=1#top  ");
+    expect(result).toEqual({ ok: true, teamUrl: "https://example.com", teamFaviconUrl: "https://storage.example.com/storage/v1/object/public/team-favicons/example.com.svg" });
+    expect(uploads).toHaveLength(1);
+    expect(uploads[0]?.type).toBe("image/svg+xml");
+    expect(Buffer.from(uploads[0]!.bytes)).toEqual(svg);
+    expect(cache).toEqual({ domain: "example.com", object_path: "example.com.svg", retry_after: null });
   });
 
-  it("rejects non-URL strings", async () => {
-    const result = await resolveTeamFavicon("not a url");
-    expect(result).toEqual({ ok: false, error: "invalid_url" });
+  it("uses persisted metadata on subsequent requests without a Storage HEAD or discovery", async () => {
+    await resolveTeamFavicon("https://example.com");
+    requests = [];
+    const result = await resolveTeamFavicon("https://EXAMPLE.com");
+    expect(result.ok && result.teamFaviconUrl).toContain("example.com.svg");
+    expect(discoverFavicon).toHaveBeenCalledOnce();
+    expect(requests).toHaveLength(1);
   });
 
-  it("rejects non-http(s) schemes", async () => {
-    const result = await resolveTeamFavicon("ftp://example.com");
-    expect(result).toEqual({ ok: false, error: "invalid_url" });
+  it("preserves legacy PNGs and backfills metadata without external discovery", async () => {
+    legacy = true;
+    const result = await resolveTeamFavicon("https://example.com");
+    expect(result.ok && result.teamFaviconUrl).toContain("example.com.png");
+    expect(cache?.object_path).toBe("example.com.png");
+    expect(discoverFavicon).not.toHaveBeenCalled();
+    expect(uploads).toEqual([]);
   });
 
-  it("rejects javascript: scheme", async () => {
-    const result = await resolveTeamFavicon("javascript:alert(1)");
-    expect(result).toEqual({ ok: false, error: "invalid_url" });
-  });
-});
-
-describe("resolveTeamFavicon — cache hit", () => {
-  it("reuses cached favicon and skips Google fetch + upload", async () => {
-    const { client, bucket } = buildMockClient(STORAGE_URL);
-    (getServiceClient as any).mockReturnValue(client);
-
-    // HEAD on the cached public URL returns 200.
-    fetchMock.mockImplementation(async (url: string, init?: RequestInit) => {
-      if (init?.method === "HEAD" && url === STORAGE_URL) {
-        return new Response(null, { status: 200 });
-      }
-      throw new Error(`unexpected fetch: ${url}`);
-    });
-
-    const result = await resolveTeamFavicon("https://anthropic.com");
-    expect(result).toEqual({
-      ok: true,
-      teamUrl: "https://anthropic.com",
-      teamFaviconUrl: STORAGE_URL,
-    });
-    expect(bucket.upload).not.toHaveBeenCalled();
-    // Only one fetch call (the HEAD), no Google fetch.
-    expect(fetchMock).toHaveBeenCalledTimes(1);
-  });
-});
-
-describe("resolveTeamFavicon — cache miss, fetch + upload", () => {
-  it("fetches favicon from Google and uploads to Storage on miss", async () => {
-    const { client, bucket } = buildMockClient(STORAGE_URL);
-    (getServiceClient as any).mockReturnValue(client);
-
-    fetchMock.mockImplementation(async (url: string, init?: RequestInit) => {
-      if (init?.method === "HEAD") {
-        return new Response(null, { status: 404 });
-      }
-      if (url.startsWith("https://www.google.com/s2/favicons")) {
-        const body = new Uint8Array([1, 2, 3, 4]);
-        return new Response(body, {
-          status: 200,
-          headers: { "Content-Type": "image/png" },
-        });
-      }
-      throw new Error(`unexpected fetch: ${url}`);
-    });
-
-    const result = await resolveTeamFavicon("https://anthropic.com");
-    expect(result).toEqual({
-      ok: true,
-      teamUrl: "https://anthropic.com",
-      teamFaviconUrl: STORAGE_URL,
-    });
-    expect(bucket.upload).toHaveBeenCalledTimes(1);
-    const [path, body, opts] = bucket.upload.mock.calls[0];
-    expect(path).toBe("anthropic.com.png");
-    expect(body).toBeInstanceOf(Uint8Array);
-    expect(opts).toMatchObject({ contentType: "image/png", upsert: true });
-  });
-});
-
-describe("resolveTeamFavicon — normalization", () => {
-  it("strips path and query from the team URL (origin only)", async () => {
-    const { client, bucket } = buildMockClient(STORAGE_URL);
-    (getServiceClient as any).mockReturnValue(client);
-    fetchMock.mockResolvedValue(new Response(null, { status: 200 }));
-
-    const result = await resolveTeamFavicon(
-      "https://anthropic.com/research?utm=foo#bar",
-    );
-    if (!result.ok) throw new Error("expected ok");
-    expect(result.teamUrl).toBe("https://anthropic.com");
-    // Cache key uses bare hostname.
-    expect(bucket.getPublicUrl).toHaveBeenCalledWith("anthropic.com.png");
+  it("persists short-lived misses and retries once they expire", async () => {
+    vi.mocked(discoverFavicon).mockResolvedValue(null);
+    await resolveTeamFavicon("https://example.com");
+    expect(Date.parse(cache!.retry_after!) - Date.now()).toBeGreaterThan(14 * 60 * 1000);
+    await resolveTeamFavicon("https://example.com");
+    expect(discoverFavicon).toHaveBeenCalledOnce();
+    cache!.retry_after = new Date(0).toISOString();
+    await resolveTeamFavicon("https://example.com");
+    expect(discoverFavicon).toHaveBeenCalledTimes(2);
   });
 
-  it("lowercases the cache-key domain", async () => {
-    const { client, bucket } = buildMockClient(STORAGE_URL);
-    (getServiceClient as any).mockReturnValue(client);
-    fetchMock.mockResolvedValue(new Response(null, { status: 200 }));
-
-    await resolveTeamFavicon("https://Anthropic.COM");
-    expect(bucket.getPublicUrl).toHaveBeenCalledWith("anthropic.com.png");
-  });
-
-  it("trims leading/trailing whitespace before parsing", async () => {
-    const { client } = buildMockClient(STORAGE_URL);
-    (getServiceClient as any).mockReturnValue(client);
-    fetchMock.mockResolvedValue(new Response(null, { status: 200 }));
-
-    const result = await resolveTeamFavicon("  https://anthropic.com  ");
-    expect(result.ok).toBe(true);
-  });
-});
-
-describe("resolveTeamFavicon — graceful degradation", () => {
-  it("returns teamFaviconUrl: null when Google fetch fails", async () => {
-    const { client, bucket } = buildMockClient(STORAGE_URL);
-    (getServiceClient as any).mockReturnValue(client);
-
-    fetchMock.mockImplementation(async (_url: string, init?: RequestInit) => {
-      if (init?.method === "HEAD") {
-        return new Response(null, { status: 404 });
-      }
-      throw new Error("network down");
-    });
-
-    const result = await resolveTeamFavicon("https://anthropic.com");
-    expect(result).toEqual({
-      ok: true,
-      teamUrl: "https://anthropic.com",
-      teamFaviconUrl: null,
-    });
-    expect(bucket.upload).not.toHaveBeenCalled();
-  });
-
-  it("returns teamFaviconUrl: null when Google returns non-2xx", async () => {
-    const { client, bucket } = buildMockClient(STORAGE_URL);
-    (getServiceClient as any).mockReturnValue(client);
-
-    fetchMock.mockImplementation(async (_url: string, init?: RequestInit) => {
-      if (init?.method === "HEAD") {
-        return new Response(null, { status: 404 });
-      }
-      return new Response(null, { status: 503 });
-    });
-
-    const result = await resolveTeamFavicon("https://anthropic.com");
-    expect(result.ok).toBe(true);
-    if (!result.ok) return;
-    expect(result.teamFaviconUrl).toBeNull();
-    expect(bucket.upload).not.toHaveBeenCalled();
-  });
-
-  it("returns teamFaviconUrl: null when Storage upload fails", async () => {
-    const { client, bucket } = buildMockClient(STORAGE_URL);
-    bucket.upload.mockResolvedValueOnce({
-      data: null,
-      error: { message: "boom" },
-    });
-    (getServiceClient as any).mockReturnValue(client);
-
-    fetchMock.mockImplementation(async (url: string, init?: RequestInit) => {
-      if (init?.method === "HEAD") {
-        return new Response(null, { status: 404 });
-      }
-      if (url.startsWith("https://www.google.com/s2/favicons")) {
-        return new Response(new Uint8Array([1, 2, 3]), { status: 200 });
-      }
-      throw new Error(`unexpected fetch: ${url}`);
-    });
-
-    const result = await resolveTeamFavicon("https://anthropic.com");
-    expect(result.ok).toBe(true);
-    if (!result.ok) return;
-    expect(result.teamFaviconUrl).toBeNull();
+  it("keeps a valid team URL when discovery, storage or client setup fails", async () => {
+    const fallback = { ok: true, teamUrl: "https://example.com", teamFaviconUrl: null };
+    storageFailure = true;
+    expect(await resolveTeamFavicon("https://example.com")).toEqual(fallback);
+    expect(cache).toBeNull();
+    vi.mocked(discoverFavicon).mockRejectedValueOnce(new Error("offline"));
+    expect(await resolveTeamFavicon("https://example.com")).toEqual(fallback);
+    vi.mocked(getServiceClient).mockImplementationOnce(() => { throw new Error("unavailable"); });
+    expect(await resolveTeamFavicon("https://example.com")).toEqual(fallback);
   });
 });

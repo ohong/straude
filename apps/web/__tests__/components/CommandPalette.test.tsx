@@ -1,10 +1,11 @@
 import { act, fireEvent, render, waitFor } from "@testing-library/react";
-import type { ReactNode } from "react";
+import { useState, type ReactNode } from "react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { ThemeProvider } from "@/components/providers/ThemeProvider";
 import { CommandPalette } from "@/components/app/shared/CommandPalette";
 import { THEME_STORAGE_KEY } from "@/lib/theme";
 
+const togglePalette = vi.fn();
 let store: Record<string, string> = {};
 let capturedActions: Array<{
   id: string;
@@ -40,7 +41,7 @@ vi.mock("kbar", () => ({
   }) => <div className={className}>{children}</div>,
   KBarSearch: ({ className }: { className?: string }) => <input className={className} />,
   KBarResults: () => null,
-  useKBar: () => ({ query: { toggle: vi.fn() } }),
+  useKBar: () => ({ query: { toggle: togglePalette } }),
   useMatches: () => ({ results: [] }),
 }));
 
@@ -61,6 +62,7 @@ describe("CommandPalette", () => {
   beforeEach(() => {
     store = {};
     capturedActions = [];
+    togglePalette.mockClear();
     document.documentElement.setAttribute("data-theme", "light");
     document.head.innerHTML = '<meta name="theme-color" content="#ffffff" />';
     vi.stubGlobal("localStorage", mockStorage);
@@ -82,6 +84,61 @@ describe("CommandPalette", () => {
   afterEach(() => {
     vi.unstubAllGlobals();
     document.head.innerHTML = "";
+  });
+
+  it("opens when the shortcut arrives while the palette module is loading", async () => {
+    let idleCallback: IdleRequestCallback | undefined;
+    vi.stubGlobal("requestIdleCallback", (callback: IdleRequestCallback) => {
+      idleCallback = callback;
+      return 1;
+    });
+    vi.stubGlobal("cancelIdleCallback", vi.fn());
+    render(
+      <ThemeProvider>
+        <CommandPalette username="alice"><div>Page</div></CommandPalette>
+      </ThemeProvider>,
+    );
+    act(() => idleCallback?.({ didTimeout: false, timeRemaining: () => 50 }));
+
+    fireEvent.keyDown(window, { key: "k", metaKey: true });
+
+    await waitFor(() => expect(togglePalette).toHaveBeenCalledOnce());
+  });
+
+  it("preserves edits and focus when the deferred palette loads", async () => {
+    let idleCallback: IdleRequestCallback | undefined;
+    vi.stubGlobal("requestIdleCallback", (callback: IdleRequestCallback) => {
+      idleCallback = callback;
+      return 1;
+    });
+    vi.stubGlobal("cancelIdleCallback", vi.fn());
+    function EditablePage() {
+      const [value, setValue] = useState("");
+      return (
+        <input
+          aria-label="Team"
+          value={value}
+          onChange={(event) => setValue(event.target.value)}
+        />
+      );
+    }
+    const view = render(
+      <ThemeProvider>
+        <CommandPalette username="alice">
+          <EditablePage />
+        </CommandPalette>
+      </ThemeProvider>,
+    );
+    const input = view.getByRole("textbox", { name: "Team" });
+    input.focus();
+    fireEvent.change(input, { target: { value: "https://example.com" } });
+
+    act(() => idleCallback?.({ didTimeout: false, timeRemaining: () => 50 }));
+    await waitFor(() => expect(capturedActions.length).toBeGreaterThan(0));
+
+    expect(view.getByRole("textbox", { name: "Team" })).toBe(input);
+    expect(input).toHaveValue("https://example.com");
+    expect(input).toHaveFocus();
   });
 
   it("registers theme actions and updates the shared theme store", async () => {
