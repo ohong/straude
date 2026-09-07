@@ -2,14 +2,33 @@
 
 ## Unreleased
 
-### Changed
-
-- **Show the first-sync command immediately after signup.** Onboarding opens with `npx straude@latest`, live usage checks, and privacy guidance. Handle and profile editing move to Settings. Users can explore the feed without marking onboarding complete; confirmed usage unlocks real stats and the completion step.
-
 ### Fixed
 
 - **Recover from interrupted first-sync setup.** Clipboard failures offer manual copying, failed usage checks have a retry action, and failed completion saves can be retried without repeating the sync. The success summary describes usage totals rather than treating daily usage rows as individual coding sessions.
 - **Keep CLI authorization open through sign-in and signup.** Magic links, GitHub sign-in, and login/signup navigation preserve a validated local return destination. A new account can return to the CLI authorization page before optional profile setup.
+
+- **Favicon integration failures report the cache query error.** Assert the Supabase response and stored path without dereferencing a possibly missing cache row.
+
+- **Deferred command palette loading preserves page state.** Mount the palette alongside the page instead of wrapping it after idle loading. Early settings edits and focus now survive palette initialization, and the command shortcut remains available while its module loads.
+
+- **CI browser tests use the running local Supabase stack.** Generate the web environment before building so the browser bundle, server and authenticated E2E fixtures share valid local credentials instead of placeholders.
+
+- **Do not delay declared SVG icons behind manifests.** Try known HTML SVG candidates first and return a usable vector without waiting for manifest downloads. Mislabeled raster results remain available while checking for a real SVG.
+
+- **Bound favicon download memory.** Direct requests share a 12 MiB body budget; the Google fallback has a separate 4 MiB allowance. Per-search deduplication stores prepared images and parsed candidates instead of keeping discarded image bodies alive.
+
+- **Bound HTML favicon parsing.** Extract links without constructing an untrusted document DOM, with token and parsing-time limits. Deeply nested pages no longer overflow the stack or prevent the Google fallback.
+
+### Changed
+
+- **Show the first-sync command immediately after signup.** Onboarding opens with `npx straude@latest`, live usage checks, and privacy guidance. Handle and profile editing move to Settings. Users can explore the feed without marking onboarding complete; confirmed usage unlocks real stats and the completion step.
+
+- **Team favicons prefer organization sites with Google as a fallback.** Discovery prefers sanitized SVG from conventional paths, HTML icon links and web manifests. If direct discovery finds no usable image, the server requests Google's favicon endpoint. ICO links and bodies are excluded, with no ICO decoder dependency. Raster images become lossless PNG output inside 128×128 without enlargement or cropping. Downloads validate public IP destinations and pin each connection to its checked address, with bounded redirects, concurrency, bytes and deadlines. Reusing a downloaded URL preserves the byte limit of each consuming resource.
+- **Team favicon caching supports SVG, PNG and temporary misses.** A service-only `team_favicon_cache` table persists object paths and 15-minute retry times across requests. Existing PNG objects remain valid. Settings saves retain an unchanged team's resolved icon. The team field waits for hydration before accepting edits, preventing early text entry from being lost. Badges use direct Storage images with `object-fit: contain` so prepared PNGs avoid optimizer recompression.
+
+### Added
+
+- **Repeatable favicon verification.** `bun run --cwd apps/web test:favicons` covers image processing, discovery, transport, cache, settings and badge behavior. The dedicated Supabase integration suite exercises real database/Storage writes; `e2e/team-favicon-save.spec.ts` verifies authenticated saves and browser rendering with temporary local fixtures. Apply `20260905120000_team_favicon_cache.sql` before deploying the resolver.
 
 ### CLI 0.2.0 hardening
 
