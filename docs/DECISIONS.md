@@ -18,6 +18,18 @@
 
 **References:** https://github.com/cure53/DOMPurify, https://github.com/csstree/csstree, https://nodejs.org/api/http.html, https://github.com/whitequark/ipaddr.js, https://sharp.pixelplumbing.com/api-resize/, https://sharp.pixelplumbing.com/api-output/#png, https://www.w3.org/TR/appmanifest/#icons-member.
 
+## Put the first sync before optional profile setup (2026-09-04)
+
+**Problem:** Issue [#19](https://github.com/ohong/straude/issues/19) identifies the gap between signup and the first successful sync. Live status checks, three-day first-run backfill, and a CLI sign-in action already exist. However, onboarding still requires two screens before showing the command. Failed checks can appear to wait indefinitely, and login/signup discard the CLI's return destination.
+
+**Decision:** Show the sync command on the first onboarding screen. Keep profile editing in Settings. Reuse `/api/usage/status` and the existing completion PATCH, with visible failure states and retry actions. Preserve safe local return destinations through both authentication methods and between login and signup. CLI authorization remains an explicit action.
+
+**Alternatives:** Keeping profile fields beside the command preserves early customization but splits attention and retains availability checks before value. A separate CLI-first signup funnel could demonstrate value earlier but changes the CLI and acquisition flow. The selected web change removes the existing obstacle with a smaller scope.
+
+**Success conditions:** A signed-in new user sees the command without editing a profile; transient failures offer a next action; real usage is required before activation; login returns a CLI user to authorization. Copying a command and browsing the feed do not count as activation. Daily usage counts are not presented as individual coding-session counts.
+
+**Measurement:** Local tests establish these behaviors, not a conversion lift. After release, compare `signup_completed` to `first_sync_confirmed` and `activation_completed`, including time to first sync. Profile setup is optional and is no longer a required funnel step.
+
 ## Preserve Live Privacy, Rank, and Auth Checks (2026-09-04)
 
 **Decision:** Deduplicate server identity, shell profiles, and leaderboards only within a request. Both middleware and the shared identity loader retain Supabase `getUser()`. Leaderboard listings and ranks read the existing live views, matching the CLI and profile readers.
@@ -72,6 +84,7 @@
 
 **Trade-offs:** Route availability now gates sensitive writes, and the service client must preserve each route's ownership predicates. Migration tests lock the grants, function signatures, public field lists, ownership joins, and work limits. Full migration behavior still requires the local Supabase integration suite or equivalent PostgreSQL validation.
 
+
 ## Negotiate curated Markdown through the Next.js proxy (2026-08-21)
 
 **Decision:** The agent independently chose q-value- and specificity-aware content negotiation in the existing Next.js 16 `proxy.ts`. Markdown-preferred requests for supported public informational pages rewrite to a dedicated internal route handler; ordinary HTML, API, asset, mutation, RSC, OAuth callback, and Supabase session behavior remain on their existing paths. Curated Markdown is available for `/`, `/about`, `/contact`, `/privacy`, `/cli`, and `/open`. Unknown document paths can return a recovery-oriented Markdown 404, while an explicit registry of existing static and dynamic page patterns prevents valid HTML-only routes from becoming false 404s.
@@ -83,6 +96,8 @@
 **Trade-offs:** The route registry must be updated when a new application page is added, and curated Markdown can drift from visual copy. Tests lock the supported paths, headers, recovery links, and important product/privacy claims. Markdown and error responses emit `Vary: Accept, Accept-Encoding`; the global Next header configuration records the same invariant for rendered pages. Next.js 16's local production server replaces the rendered HTML `Vary: Accept` token with its RSC-specific list, so the deployed response must be rechecked after release even though the negotiated Markdown response is correct locally.
 
 ## Delegate all usage accounting to bundled ccusage v20 (2026-06-09)
+
+**Reconfirmed (2026-09-04):** Keep ccusage following its speed and coding-agent support improvements, as requested during issue triage. [#99](https://github.com/ohong/straude/issues/99)'s AgentsView replacement proposal is not planned. The current native collector already accepts all sources emitted by ccusage; Straude will not revive the separate provider parsers reviewed in [#28](https://github.com/ohong/straude/issues/28). Model presentation, source attribution, and unsupported sources remain explicit roadmap items.
 
 **Decision:** All supported coding-agent ingestion runs through a single installed `ccusage` v20 dependency invoked as a native binary. The current floor is `20.0.20`; Straude's native collectors, token normalizer, source whitelist, and pricing aliases are deleted, so Straude only parses ccusage's unified daily JSON into storage rows.
 

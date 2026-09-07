@@ -5,7 +5,7 @@ import { AppProviders } from "@/components/providers/AppProviders";
 import type { Metadata } from "next";
 
 export const metadata: Metadata = {
-  title: "Set up your profile — Straude",
+  title: "Sync your first session — Straude",
 };
 
 export default async function OnboardingLayout({
@@ -37,7 +37,7 @@ export default async function OnboardingLayout({
 
   return (
     <AppProviders>
-      <div className="flex min-h-screen items-center justify-center bg-background px-4">
+      <div className="flex min-h-dvh items-center justify-center bg-background px-4 py-8">
         <div className="w-full max-w-md">{children}</div>
       </div>
     </AppProviders>

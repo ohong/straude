@@ -39,6 +39,7 @@ Remaining work:
 - Add `prettifyModel` cases and deliberate model colors for Gemini, Qwen, Kimi, and other families. These affect presentation; collection already accepts their source IDs and model names.
 - Upstream Mistral Vibe parsing to ccusage, then upgrade the bundled release and add a synthetic native-binary fixture. PR #22 proposed a local adapter, but ccusage 20.0.20 has no Mistral source. Preserve token accounting and model pricing in upstream tests before advertising support.
 - Upgrade when Antigravity and ZCode ship in a published ccusage release. They are present on upstream main but absent from 20.0.20. Extend the native source inventory and add fixtures when adopted.
+- Preserve source attribution if a future UI needs to distinguish the same model name across agents. Current model-cost breakdowns aggregate by model name, while collector metadata records contributing agents for the day. Adding an optional field alone would not preserve attribution through aggregation; define that behavior before changing the storage contract. This carries forward the relevant design question from [#28](https://github.com/ohong/straude/issues/28), whose custom-parser review is superseded by bundled ccusage.
 
 ### Team / Org Workspaces
 
@@ -69,6 +70,10 @@ Requires: new server-side call in the leaderboard API route, caching strategy (r
 ---
 
 ## Activation
+
+### Measure the shorter first-sync flow
+
+The conversion follow-up to [#19](https://github.com/ohong/straude/issues/19) puts the sync command before optional profile setup, adds retry controls, and preserves CLI authorization through sign-in. After release, compare signup-to-confirmed-sync conversion and time to first sync using the existing activation events. Local functional tests cannot establish a conversion lift. A separate CLI-first signup funnel remains an experiment to consider if this shorter web flow still loses users before their first sync.
 
 ### Ship Week Countdown Banner
 
