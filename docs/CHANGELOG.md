@@ -4,6 +4,8 @@
 
 ### Fixed
 
+- **Profile routes load when the server disables experimental `require(ESM)`.** Pin jsdom to 26.1.0, whose dependencies load under that restriction. The previous dependency graph threw `ERR_REQUIRE_ESM` before `/api/users/me` could authenticate either reads or settings saves. Every web build now checks the compiled route in a fresh Node process with `--no-experimental-require-module`; browser coverage also verifies unauthorized responses remain JSON. Direct SVG sanitization, PNG normalization and Google fallback are unchanged.
+
 - **Recover from interrupted first-sync setup.** Clipboard failures offer manual copying, failed usage checks have a retry action, and failed completion saves can be retried without repeating the sync. The success summary describes usage totals rather than treating daily usage rows as individual coding sessions.
 - **Keep CLI authorization open through sign-in and signup.** Magic links, GitHub sign-in, and login/signup navigation preserve a validated local return destination. A new account can return to the CLI authorization page before optional profile setup.
 

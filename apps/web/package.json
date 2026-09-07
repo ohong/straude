@@ -4,7 +4,7 @@
   "private": true,
   "scripts": {
     "dev": "next dev --turbopack",
-    "build": "next build",
+    "build": "next build && bun run test:server-runtime",
     "analyze": "ANALYZE=1 next build --webpack",
     "start": "next start",
     "lint": "eslint",
@@ -15,6 +15,7 @@
     "test": "vitest run",
     "test:integration": "vitest run -c vitest.integration.config.ts",
     "test:e2e": "playwright test",
+    "test:server-runtime": "node scripts/check-server-runtime.mjs",
     "perf": "bun run build && playwright test -c playwright.perf.config.ts",
     "perf:check": "bun run build && PERF_GATE=1 playwright test -c playwright.perf.config.ts",
     "test:favicons": "vitest run __tests__/unit/favicon-*.test.ts __tests__/unit/team-favicon.test.ts __tests__/unit/team-badge.test.tsx __tests__/api/team-affiliation.test.ts"
@@ -36,7 +37,7 @@
     "heic-convert": "^2.1.0",
     "heic2any": "^0.0.4",
     "ipaddr.js": "2.5.0",
-    "jsdom": "28.1.0",
+    "jsdom": "26.1.0",
     "kbar": "^0.1.0-beta.48",
     "lucide-react": "^0.474",
     "motion": "^12",
