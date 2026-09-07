@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { buildProfileUpdatePayload } from "@/app/(app)/settings/page";
+import { buildProfileUpdatePayload } from "@/components/app/settings/SettingsClient";
 
 const baseInput = {
   username: "alice",
@@ -79,4 +79,10 @@ describe("settings profile update payload", () => {
       github_username: "alice",
     });
   });
+
+  it("uses the browser timezone when the saved profile has no timezone", () => {
+    expect(buildProfileUpdatePayload({ ...baseInput, timezone: "" }).timezone)
+      .toBe(Intl.DateTimeFormat().resolvedOptions().timeZone);
+  });
+
 });

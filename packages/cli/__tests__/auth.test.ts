@@ -1,22 +1,45 @@
 import { describe, it, expect, vi, beforeEach } from "vitest";
-import { loadConfig, saveConfig, requireAuth } from "../src/lib/auth.js";
+import {
+  ConfigCorruptError,
+  loadConfig,
+  saveConfig,
+  requireAuth,
+  updateConfig,
+} from "../src/lib/auth.js";
+
+let nextFd = 10;
+const fdPaths = new Map<number, string>();
 
 vi.mock("node:fs", () => ({
+  chmodSync: vi.fn(),
   existsSync: vi.fn(),
   readFileSync: vi.fn(),
   writeFileSync: vi.fn(),
   mkdirSync: vi.fn(),
+  openSync: vi.fn((path: string) => {
+    const fd = nextFd++;
+    fdPaths.set(fd, path);
+    return fd;
+  }),
+  closeSync: vi.fn(),
+  fsyncSync: vi.fn(),
+  renameSync: vi.fn(),
+  unlinkSync: vi.fn(),
+  statSync: vi.fn(() => ({ mtimeMs: Date.now() })),
 }));
 
-import { existsSync, readFileSync, writeFileSync, mkdirSync } from "node:fs";
+import { existsSync, readFileSync, writeFileSync, mkdirSync, renameSync } from "node:fs";
 
 const mockExistsSync = vi.mocked(existsSync);
 const mockReadFileSync = vi.mocked(readFileSync);
 const mockWriteFileSync = vi.mocked(writeFileSync);
 const mockMkdirSync = vi.mocked(mkdirSync);
+const mockRenameSync = vi.mocked(renameSync);
 
 beforeEach(() => {
   vi.clearAllMocks();
+  nextFd = 10;
+  fdPaths.clear();
 });
 
 describe("loadConfig", () => {
@@ -80,16 +103,20 @@ describe("loadConfig", () => {
     expect(config!.ccusage_v20_migration_completed_at).toBe("2026-06-02T00:00:00.000Z");
   });
 
-  it("returns null when token is missing from config", () => {
+  it("throws a clear corruption error when token is missing", () => {
     mockExistsSync.mockReturnValue(true);
     mockReadFileSync.mockReturnValue(JSON.stringify({ username: "alice" }));
-    expect(loadConfig()).toBeNull();
+    expect(() => loadConfig()).toThrow(ConfigCorruptError);
   });
 
-  it("returns null on invalid JSON", () => {
+  it("throws a clear corruption error on invalid JSON", () => {
     mockExistsSync.mockReturnValue(true);
     mockReadFileSync.mockReturnValue("not json");
-    expect(loadConfig()).toBeNull();
+    expect(() => loadConfig()).toThrow(ConfigCorruptError);
+    expect(mockRenameSync).toHaveBeenCalledWith(
+      expect.stringContaining("config.json"),
+      expect.stringContaining("config.json.corrupt-"),
+    );
   });
 });
 
@@ -114,10 +141,42 @@ describe("saveConfig", () => {
     const config = { token: "tok-abc", username: "alice", api_url: "https://straude.com" };
     saveConfig(config);
     expect(mockWriteFileSync).toHaveBeenCalledWith(
-      expect.stringContaining("config.json"),
+      expect.any(Number),
       JSON.stringify(config, null, 2) + "\n",
-      { encoding: "utf-8", mode: 0o600 },
+      "utf-8",
     );
+    expect(mockRenameSync).toHaveBeenCalledWith(
+      expect.stringContaining("config.json."),
+      expect.stringContaining("config.json"),
+    );
+  });
+});
+
+describe("updateConfig", () => {
+  it("merges a targeted update with the latest config under the lock", () => {
+    mockExistsSync.mockImplementation((path) => String(path).endsWith("config.json"));
+    mockReadFileSync.mockReturnValue(JSON.stringify({
+      token: "fresh-token",
+      username: "alice",
+      api_url: "https://straude.com",
+      auto_push: {
+        enabled: true,
+        time: "21:00",
+        scheduler: "launchd",
+      },
+    }));
+
+    const result = updateConfig((current) => ({
+      ...current!,
+      last_push_date: "2026-07-23",
+    }));
+
+    expect(result).toMatchObject({
+      token: "fresh-token",
+      last_push_date: "2026-07-23",
+      auto_push: { enabled: true },
+    });
+    expect(mockRenameSync).toHaveBeenCalledTimes(1);
   });
 });
 

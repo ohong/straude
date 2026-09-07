@@ -1,4 +1,4 @@
-import { loadConfig, saveConfig } from "../lib/auth.js";
+import { loadConfig, updateConfig } from "../lib/auth.js";
 import type { StraudeConfig } from "../lib/auth.js";
 import {
   detectScheduler,
@@ -33,6 +33,44 @@ function disableExisting(config: StraudeConfig): void {
   }
 }
 
+function installConfiguredAutoPush(autoPush: NonNullable<StraudeConfig["auto_push"]>): void {
+  const mechanism = autoPush.mechanism ?? "scheduler";
+  if (mechanism === "hooks") installClaudeCodeHook();
+  else installScheduler(autoPush.time, autoPush.scheduler);
+}
+
+function uninstallConfiguredAutoPush(autoPush: NonNullable<StraudeConfig["auto_push"]>): void {
+  const mechanism = autoPush.mechanism ?? "scheduler";
+  if (mechanism === "hooks") uninstallClaudeCodeHook();
+  else uninstallScheduler(autoPush.scheduler);
+}
+
+function persistAutoPush(
+  fallback: StraudeConfig,
+  autoPush: StraudeConfig["auto_push"],
+): StraudeConfig {
+  return updateConfig((current) => {
+    const next = { ...(current ?? fallback) };
+    if (autoPush) next.auto_push = autoPush;
+    else delete next.auto_push;
+    return next;
+  });
+}
+
+function rollbackAutoPush(
+  attempted: StraudeConfig["auto_push"],
+  previous: StraudeConfig["auto_push"],
+): void {
+  if (attempted) {
+    try {
+      uninstallConfiguredAutoPush(attempted);
+    } catch {
+      // Continue restoring the previous mechanism.
+    }
+  }
+  if (previous?.enabled) installConfiguredAutoPush(previous);
+}
+
 export function enableAutoPush(
   config: StraudeConfig,
   time?: string,
@@ -41,18 +79,23 @@ export function enableAutoPush(
   const resolvedMechanism = mechanism === "hooks" ? "hooks" : "scheduler";
 
   if (resolvedMechanism === "hooks") {
-    // Disable existing (scheduler or hooks) before switching
+    const previous = config.auto_push;
     disableExisting(config);
 
-    installClaudeCodeHook();
-
-    config.auto_push = {
+    const next = {
       enabled: true,
       time: time ?? AUTO_PUSH_DEFAULT_TIME,
       scheduler: detectScheduler(), // stored but not used for hooks
       mechanism: "hooks",
-    };
-    saveConfig(config);
+    } satisfies NonNullable<StraudeConfig["auto_push"]>;
+    try {
+      installClaudeCodeHook();
+      persistAutoPush(config, next);
+      config.auto_push = next;
+    } catch (error) {
+      rollbackAutoPush(next, previous);
+      throw error;
+    }
 
     posthog.capture({
       distinctId: getDistinctId(config),
@@ -75,13 +118,23 @@ export function enableAutoPush(
 
   const scheduler = detectScheduler();
 
-  // Disable existing (scheduler or hooks) before switching
+  const previous = config.auto_push;
   disableExisting(config);
 
-  installScheduler(resolvedTime, scheduler);
-
-  config.auto_push = { enabled: true, time: resolvedTime, scheduler, mechanism: "scheduler" };
-  saveConfig(config);
+  const next = {
+    enabled: true,
+    time: resolvedTime,
+    scheduler,
+    mechanism: "scheduler",
+  } satisfies NonNullable<StraudeConfig["auto_push"]>;
+  try {
+    installScheduler(resolvedTime, scheduler);
+    persistAutoPush(config, next);
+    config.auto_push = next;
+  } catch (error) {
+    rollbackAutoPush(next, previous);
+    throw error;
+  }
 
   posthog.capture({
     distinctId: getDistinctId(config),
@@ -101,10 +154,15 @@ export function disableAutoPush(config: StraudeConfig): void {
     return;
   }
 
+  const previous = config.auto_push;
   disableExisting(config);
-
-  delete config.auto_push;
-  saveConfig(config);
+  try {
+    persistAutoPush(config, undefined);
+    delete config.auto_push;
+  } catch (error) {
+    if (previous) installConfiguredAutoPush(previous);
+    throw error;
+  }
 
   posthog.capture({
     distinctId: getDistinctId(config),

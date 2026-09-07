@@ -8,12 +8,14 @@ const externals = Object.keys(pkg.dependencies ?? {}).filter(
 export default defineConfig({
   entry: { index: "src/index.ts" },
   format: ["esm"],
-  target: "node18",
+  target: "node20",
   platform: "node",
   outDir: "dist",
   clean: true,
   splitting: false,
-  sourcemap: false,
+  // Kept out of the npm package by the package.json files allowlist. Release
+  // automation stores it as a CI artifact for stack analysis.
+  sourcemap: true,
   shims: false,
   dts: false,
   external: externals,

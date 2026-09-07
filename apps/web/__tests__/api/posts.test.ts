@@ -213,6 +213,52 @@ describe("PATCH /api/posts/[id]", () => {
     expect(json.description).toBe("Updated desc");
   });
 
+  it.each(["My edited title", "Generated title", "", null])(
+    "stops usage sync from replacing an explicitly submitted title: %s",
+    async (title) => {
+      const update = vi.fn().mockReturnThis();
+      mockSupabase({
+        tableHandlers: {
+          posts: (chain) => {
+            chain.update = update;
+            chain.single.mockResolvedValue({
+              data: { id: "post-1", title: "Generated title", description: null },
+              error: null,
+            });
+          },
+        },
+      });
+
+      const response = await PATCH(makeRequest("PATCH", { title }), makeContext("post-1"));
+
+      expect(response.status).toBe(200);
+      expect(update).toHaveBeenCalledWith({ title, usage_generated_title: false });
+    },
+  );
+
+  it("keeps title generation enabled when the title is omitted", async () => {
+    const update = vi.fn().mockReturnThis();
+    mockSupabase({
+      tableHandlers: {
+        posts: (chain) => {
+          chain.update = update;
+          chain.single.mockResolvedValue({
+            data: { id: "post-1", title: "Generated title", description: "New description" },
+            error: null,
+          });
+        },
+      },
+    });
+
+    const response = await PATCH(
+      makeRequest("PATCH", { description: "New description" }),
+      makeContext("post-1"),
+    );
+
+    expect(response.status).toBe(200);
+    expect(update).toHaveBeenCalledWith({ description: "New description" });
+  });
+
   it("rejects update from non-owner (returns 404)", async () => {
     mockSupabase({
       user: { id: "user-1" },

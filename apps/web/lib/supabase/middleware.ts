@@ -65,15 +65,32 @@ export async function updateSession(request: NextRequest) {
     }
   );
 
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
+  const authStart = Date.now();
+  const { data, error } = await supabase.auth.getUser();
+  const userId = error ? null : data?.user?.id ?? null;
+  // Surfaced to the perf harness and RUM via the Server-Timing response header
+  supabaseResponse.headers.set(
+    "Server-Timing",
+    `mw-auth;dur=${Date.now() - authStart}`
+  );
 
   // Redirect authenticated users from landing to feed
-  if (user && request.nextUrl.pathname === "/") {
+  const redirectWithSession = (pathname: string) => {
     const url = request.nextUrl.clone();
-    url.pathname = "/feed";
-    return NextResponse.redirect(url);
+    url.pathname = pathname;
+    const redirectResponse = NextResponse.redirect(url);
+    supabaseResponse.cookies.getAll().forEach((cookie) =>
+      redirectResponse.cookies.set(cookie)
+    );
+    const serverTiming = supabaseResponse.headers.get("Server-Timing");
+    if (serverTiming) {
+      redirectResponse.headers.set("Server-Timing", serverTiming);
+    }
+    return redirectResponse;
+  };
+
+  if (userId && request.nextUrl.pathname === "/") {
+    return redirectWithSession("/feed");
   }
 
   // Protect app routes
@@ -82,10 +99,8 @@ export async function updateSession(request: NextRequest) {
     request.nextUrl.pathname.startsWith(p)
   );
 
-  if (!user && isProtected) {
-    const url = request.nextUrl.clone();
-    url.pathname = "/login";
-    return NextResponse.redirect(url);
+  if (!userId && isProtected) {
+    return redirectWithSession("/login");
   }
 
   return supabaseResponse;

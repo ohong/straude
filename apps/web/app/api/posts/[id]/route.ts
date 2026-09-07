@@ -95,6 +95,8 @@ export async function PATCH(request: NextRequest, context: RouteContext) {
       );
     }
     updates.title = body.title;
+    // Explicit edits claim the title even if it matches the generated text.
+    updates.usage_generated_title = false;
   }
   if (body.description !== undefined) {
     if (body.description !== null && (typeof body.description !== "string" || body.description.length > 5000)) {

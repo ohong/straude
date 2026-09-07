@@ -12,6 +12,50 @@
 
 **Measurement:** Local tests establish these behaviors, not a conversion lift. After release, compare `signup_completed` to `first_sync_confirmed` and `activation_completed`, including time to first sync. Profile setup is optional and is no longer a required funnel step.
 
+## Preserve Live Privacy, Rank, and Auth Checks (2026-09-04)
+
+**Decision:** Deduplicate server identity, shell profiles, and leaderboards only within a request. Both middleware and the shared identity loader retain Supabase `getUser()`. Leaderboard listings and ranks read the existing live views, matching the CLI and profile readers.
+
+**Alternatives considered:** (a) Keep persistent snapshot caches and add freshness validation, live visibility filtering, and invalidation for every usage and privacy mutation. This saves aggregate reads but creates more cache ownership and can still disagree with live ranks. (b) Keep live views and request-only deduplication. Chosen: the historical SQL difference was about 2.5ms, while immediate first-sync ranks and privacy changes affect user trust.
+
+**Auth trade-off:** Local `getClaims()` verifies token signatures cheaply but does not fetch the current Auth user. The earlier version removed the server check; this revision retains main's behavior. Neither method alone promises immediate sign-out revocation for an unexpired access token. Strict revocation requires validating `session_id` against `auth.sessions`; that broader auth contract is unchanged. See [Supabase session guidance](https://supabase.com/docs/guides/auth/sessions#how-to-ensure-an-access-token-jwt-cannot-be-used-after-a-user-signs-out).
+
+## Bound Profile Snapshot Age and Keep a Live Fallback (2026-09-04)
+
+**Decision:** Read profile radar snapshots through the service client after the caller's existing live profile-access check. Accept snapshots at most 20 minutes old. Missing rows, unavailable migrations, and stale or invalid timestamps use the previous live calculation. Only request-level deduplication applies to snapshot reads.
+
+**Why:** New users and stopped refresh jobs must not lose their chart. The live fallback retains main's five-minute distribution cache and fails clearly on query errors. Snapshot tables remain private, and the already-deployed migrations remain in history. User-facing leaderboard reads no longer use the leaderboard snapshot table.
+
+**Trade-off:** Radar percentiles may lag usage by up to 20 minutes before the live fallback takes over. This is separate from rank and spend totals, which remain live. The background refresh still computes leaderboard rows; removing that already-deployed work needs a separate migration.
+
+## Server Initial Data, Route Loading, and Bundle Analysis (2026-07-18)
+
+**Decision:** Render initial settings, search, card, and recap data on the server; keep subsequent interactions client-side. Give every authenticated gating route an accessible `loading.tsx` boundary. Run `@next/bundle-analyzer` only when `ANALYZE=1`, using its required webpack build while normal production builds remain on Turbopack.
+
+**Why:** Fetch-on-mount delayed useful content and made placeholders the initial page state. Server initial data removes that waterfall, loading boundaries preserve responsive navigation, and the July analyzer run exposed a development-only Agentation import. Its historical 39 KiB gzip measurement has not been repeated for current dependencies.
+
+**Tradeoff:** The actual useful page can become the LCP candidate, so a metric may rise from a trivial loading label even when the page is more usable. Heavy dependencies that were already correctly lazy-loaded remain unchanged.
+
+**Search ownership:** Server rendering loads deep-link results with the same validated filter as the API. Later edits use one debounced API request and a native history update. Server-driven navigation was the alternative; it would require moving result and loading state ownership to the server. Keeping the existing client interaction avoids duplicate searches and preserves the current input behavior.
+
+**Current-main compatibility:** The later API authorization migration remains the effective owner of streak RPC authorization and behavior. The earlier snapshot migration does not override it on deployment. Settings saves retain the browser timezone fallback when the stored timezone is missing.
+
+## Local Performance Measurements and Post-Deploy RUM (2026-09-04)
+
+**Decision:** Keep the production-build Playwright measurement harness and optional `perf:check` thresholds. Before recording metrics, verify the target returns success, remains on the intended route, and has an authenticated application shell. Remote Supabase projects require explicit `PERF_ALLOW_REMOTE=1`; default verification uses a local fixture.
+
+**Evidence boundary:** The July scorecards describe the earlier claims-only authentication and persistent snapshot-cache implementation. They do not prove performance of this revision or a production p75 result. The current comparison in `docs/perf/PLAN.md` uses the same runtime, seed, and browser for main and this revision. It does not establish a production percentile. PostHog web vitals remain a post-deploy check.
+
+## Follow released ccusage source support through the unified collector (2026-09-04)
+
+**Decision:** Raise the bundled dependency and runtime floor to ccusage 20.0.20. Keep the existing source-agnostic daily report and metadata pipeline. Its released native binary exposes 16 coding-agent sources, including Gemini CLI, Qwen, and Grok Build CLI. Antigravity and ZCode appear on upstream main but are absent from this release; Mistral Vibe remains unsupported.
+
+**Alternatives considered:** (a) Add separate Gemini/gemistat, Qwen, and Mistral parsers as proposed in PRs #77 and #22. This could add an unsupported agent sooner, but duplicates parsing, deduplication, pricing, and maintenance. (b) Upgrade the unified collector and test its released source inventory. Chosen because Gemini and Qwen already work through this path, Grok needs only the dependency update, and the API already preserves dynamic source IDs. Mistral support should first land upstream.
+
+**Presentation:** Join-page text and share images use "AI coding" instead of inferring Claude Code or Codex from model names. Other agents can use the same models, so that inference mislabels their usage. Reading source metadata would allow specific labels but would add data queries to a copy fix; generic wording is accurate with the existing data.
+
+**Evidence and limits:** Native binary fixtures cover Gemini, Qwen, Grok, and a mixed day without Claude or Codex logs. They check cache buckets, reasoning totals, source metadata, and nonzero per-model prices. Grok's recorded USD ticks are checked exactly. The source inventory test compares all 16 documented IDs with installed binary help, and API tests check each ID independently. Tests run with an isolated child environment and synthetic logs. They do not prove every upstream parser or real provider billing. No database migration or extra collector is needed.
+
 ## Route sensitive mutations through the server service client (2026-08-27)
 
 **Decision:** Publishable Supabase roles retain only the reads and narrow self-service updates the browser needs. Security-sensitive writes go through authenticated API routes, which validate ownership and input before using the server service client. `SECURITY DEFINER` functions authorize their callers or restrict execution to the service role; public read RPCs expose explicit fields, enforce ownership joins, and bound batch and pagination work.
@@ -37,9 +81,17 @@
 
 **Reconfirmed (2026-09-04):** Keep ccusage following its speed and coding-agent support improvements, as requested during issue triage. [#99](https://github.com/ohong/straude/issues/99)'s AgentsView replacement proposal is not planned. The current native collector already accepts all sources emitted by ccusage; Straude will not revive the separate provider parsers reviewed in [#28](https://github.com/ohong/straude/issues/28). Model presentation, source attribution, and unsupported sources remain explicit roadmap items.
 
-**Decision:** All supported coding-agent ingestion runs through a single bundled `ccusage` (compatible `^20.0.16` range) invoked as a native binary, with a `>=20.0.16` accuracy floor validated against the bundled package version. Straude's native collectors, token normalizer, source whitelist, and pricing aliases are deleted; Straude only parses ccusage's unified daily JSON into storage rows.
+**Decision:** All supported coding-agent ingestion runs through a single installed `ccusage` v20 dependency invoked as a native binary. The current floor is `20.0.20`; Straude's native collectors, token normalizer, source whitelist, and pricing aliases are deleted, so Straude only parses ccusage's unified daily JSON into storage rows.
 
-**Alternatives considered:** (a) Keep the native Codex collector in parallel with ccusage Claude collection — rejected because it duplicates upstream parsing/dedupe/pricing work that ccusage now does correctly (v20 ships `metadata.agents`, archived-session dedupe, `thread_spawn` replay skipping) and was the source of two past inflation incidents. (b) Use a global `ccusage` from PATH — rejected because version skew on user machines breaks the accuracy floor; bundling pins the exact behavior we tested.
+**Alternatives considered:** (a) Keep the native Codex collector in parallel with ccusage Claude collection — rejected because it duplicates upstream parsing/dedupe/pricing work that ccusage now does correctly (v20 ships `metadata.agents`, archived-session dedupe, `thread_spawn` replay skipping) and was the source of two past inflation incidents. (b) Use a global `ccusage` from PATH — rejected because uncontrolled version skew can bypass the package dependency and accuracy floor.
+
+## Accept stable ccusage releases above the accuracy floor and fail closed on paid-model pricing (2026-07-23)
+
+**Decision:** Publish `ccusage: >=20.0.20`, accept any stable semantic version at or above that floor, and record the version actually installed. Agent and model IDs remain opaque strings. Any Claude or Codex model breakdown with nonzero tokens and zero cost is rejected with `PricingUnavailableError`; other sources may legitimately report zero-cost usage.
+
+**Why:** ccusage owns source adapters and pricing support, so a patch or major ceiling delays new models and sources until Straude republishes. The open-ended floor lets fresh installs pick up a newer stable collector when its output still passes Straude's strict parser, accounting, and pricing invariants. Existing installs do not mutate in place; they receive the newer collector only after reinstalling or upgrading Straude.
+
+**Verification:** The frozen lockfile keeps the normal CI gate on `20.0.20`. A separate scheduled/manual workflow installs `ccusage@latest` in isolation, runs the real GPT-5.6 fixture through the production collector/parser regardless of major, checks a bounded runtime, and proves unknown Codex pricing fails closed.
 
 **Trade-off accepted:** The unified all-agent ccusage report benchmarked ~9.5% slower (median +152ms on a three-day mixed fixture) than the old parallel native path. Accepted: accuracy and a single owner for token accounting outweigh sub-second CLI latency. `reasoning_output_tokens` is derived as a non-negative residual `totalTokens - (input + output + cacheCreate + cacheRead)` when a source exposes reasoning outside the other reported buckets.
 
@@ -963,7 +1015,7 @@ Pricing the new-logic numbers at gpt-5.5 rates: $228.68 — matches what OpenAI 
 
 ## ccusage Owns Sources and Current Model Pricing (2026-07-09)
 
-**Decision:** Require `ccusage >=20.0.16`, run unified reports with online LiteLLM pricing by default, and accept every non-empty source ID ccusage emits. Preserve each daily row's `metadata.agents` in the normalized entry and collector metadata. Claude and Codex retain explicit collector markers only for their existing repair semantics; other sources use the generic ccusage run metadata.
+**Decision:** Require stable `ccusage >=20.0.20`, run unified reports with online LiteLLM pricing by default, and accept every non-empty source ID ccusage emits. Preserve each daily row's `metadata.agents` in the normalized entry and collector metadata. Claude and Codex retain explicit collector markers only for their existing repair semantics; other sources use the generic ccusage run metadata.
 
 **Alternatives considered:**
 

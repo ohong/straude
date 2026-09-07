@@ -1,4 +1,6 @@
 import { createClient } from "@/lib/supabase/server";
+import { getAuthContext } from "@/lib/supabase/auth";
+import { redirect } from "next/navigation";
 import Link from "next/link";
 import type { Metadata } from "next";
 import { firstRelation } from "@/lib/utils/first-relation";
@@ -16,9 +18,11 @@ export const metadata: Metadata = { title: "Upload Activity" };
 
 export default async function NewPostPage() {
   const supabase = await createClient();
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
+  const { identity } = await getAuthContext();
+
+  if (!identity) {
+    redirect("/login");
+  }
 
   // Fetch recent unedited posts (no title, no description, no images)
   const { data: posts } = await supabase
@@ -30,7 +34,7 @@ export default async function NewPostPage() {
       daily_usage:daily_usage!posts_daily_usage_id_fkey(date, cost_usd, models)
     `
     )
-    .eq("user_id", user!.id)
+    .eq("user_id", identity.id)
     .is("title", null)
     .is("description", null)
     .or("images.is.null,images.eq.[]")

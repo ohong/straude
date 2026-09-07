@@ -5,6 +5,7 @@ import { Check, Copy } from "lucide-react";
 import { usePostHog } from "posthog-js/react";
 import { Textarea } from "@/components/ui/Textarea";
 import { Button } from "@/components/ui/Button";
+import { toLegacyUsageImportEntries } from "@/lib/usage-import";
 
 interface ImportResult {
   date: string;
@@ -51,19 +52,9 @@ export default function ImportPage() {
       return;
     }
 
-    const entries = (obj.data as Record<string, unknown>[]).map((d) => ({
-      date: d.date as string,
-      data: {
-        date: d.date as string,
-        models: (d.models as string[]) ?? [],
-        inputTokens: (d.inputTokens as number) ?? 0,
-        outputTokens: (d.outputTokens as number) ?? 0,
-        cacheCreationTokens: (d.cacheCreationTokens as number) ?? 0,
-        cacheReadTokens: (d.cacheReadTokens as number) ?? 0,
-        totalTokens: (d.totalTokens as number) ?? 0,
-        costUSD: (d.costUSD as number) ?? 0,
-      },
-    }));
+    const entries = toLegacyUsageImportEntries(
+      obj.data as Record<string, unknown>[],
+    );
 
     const res = await fetch("/api/usage/submit", {
       method: "POST",

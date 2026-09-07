@@ -334,22 +334,30 @@ straude auto logs`}</Pre>
                 Data Sources
               </h2>
               <p className="mt-2">
-                The CLI collects data from two sources in parallel:
+                The CLI uses one bundled{" "}
+                <strong>ccusage</strong> collector. It includes all 16 sources
+                supported by the current release:
               </p>
               <ul className="mt-3 list-disc pl-6 space-y-1">
                 <li>
-                  <strong>ccusage</strong> — Claude Code session data (cost,
-                  tokens, models).
-                </li>
-                <li>
-                  <strong>@ccusage/codex</strong> — Codex usage data (same
-                  schema).
+                  Claude Code, Codex, OpenCode, Amp, Droid, Codebuff, Hermes
+                  Agent, pi-agent, Goose, OpenClaw, Kilo, Kimi, Qwen Code,
+                  GitHub Copilot CLI, Gemini CLI, and Grok Build CLI.
                 </li>
               </ul>
               <p className="mt-2">
-                Entries are merged by date. If one source is unavailable, the
-                other is used alone. The server deduplicates — pushing the same
-                date twice is safe.
+                See the{" "}
+                <a
+                  href="https://ccusage.com/guide/source-support-qa#source-support-q-a"
+                  className="text-accent underline underline-offset-2"
+                  target="_blank"
+                  rel="noreferrer"
+                >
+                  ccusage source support guide
+                </a>
+                . Antigravity and ZCode support is not in the released version
+                bundled here. Mistral Vibe is not currently supported by
+                ccusage. The server deduplicates repeated dates safely.
               </p>
             </section>
 

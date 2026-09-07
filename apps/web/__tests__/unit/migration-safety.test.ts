@@ -5,6 +5,10 @@ import { join } from "path";
 const MIGRATIONS_DIR = join(__dirname, "../../../../supabase/migrations");
 const DIRECT_USAGE_REPAIR_ROLLBACK =
   "20260507000200_rollback_codex_sql_repairs.sql";
+const USAGE_SUBMISSION_RPC =
+  "20260723133731_usage_submission_v2.sql";
+const USAGE_RECONCILIATION =
+  "20260723135641_usage_reconciliation.sql";
 
 function getAllMigrations(): { name: string; content: string }[] {
   const files = readdirSync(MIGRATIONS_DIR)
@@ -420,6 +424,83 @@ describe("Migration safety", () => {
     expect(/ON\s+public\.comment_reactions\s+FOR\s+INSERT[\s\S]*WITH\s+CHECK[\s\S]*public\.comments[\s\S]*comment_reactions\.comment_id/i.test(content)).toBe(true);
   });
 
+  it("leaderboard and profile snapshots are private and refreshed atomically", () => {
+    const latest = getLatestMigrationMatching(
+      migrations,
+      /CREATE\s+TABLE\s+IF\s+NOT\s+EXISTS\s+public\.leaderboard_snapshots/i
+    );
+
+    expect(latest, "Expected the M4 snapshot migration").toBeTruthy();
+    const content = latest!.content;
+
+    expect(/ALTER\s+TABLE\s+public\.leaderboard_snapshots\s+ENABLE\s+ROW\s+LEVEL\s+SECURITY/i.test(content)).toBe(true);
+    expect(/ALTER\s+TABLE\s+public\.profile_stats_snapshots\s+ENABLE\s+ROW\s+LEVEL\s+SECURITY/i.test(content)).toBe(true);
+    expect(/REVOKE\s+ALL\s+ON\s+TABLE\s+public\.leaderboard_snapshots\s+FROM\s+anon/i.test(content)).toBe(true);
+    expect(/REVOKE\s+ALL\s+ON\s+TABLE\s+public\.profile_stats_snapshots\s+FROM\s+authenticated/i.test(content)).toBe(true);
+    expect(/pg_try_advisory_xact_lock/i.test(content)).toBe(true);
+    expect(/ON\s+CONFLICT\s*\(period,\s*user_id\)\s+DO\s+UPDATE/i.test(content)).toBe(true);
+    expect(/DELETE\s+FROM\s+public\.profile_stats_snapshots[\s\S]*refreshed_at\s*<>\s*v_refreshed_at/i.test(content)).toBe(true);
+    expect(/RANK\(\)\s+OVER\s*\(ORDER\s+BY\s+output_value\)\s*-\s*1/i.test(content)).toBe(true);
+    expect(/community_distribution/i.test(content)).toBe(true);
+    expect(/SELECT\s+COUNT\(\*\)\s+FROM\s+profile_values\s+AS\s+value/i.test(content)).toBe(false);
+    expect(/SELECT\s+public\.refresh_leaderboard_snapshots\(\)/i.test(content)).toBe(true);
+    expect(/'\*\/10 \* \* \* \*'/i.test(content)).toBe(true);
+  });
+
+  it("profile stats request RPC is a service-only one-row snapshot read", () => {
+    const latest = getLatestMigrationMatching(
+      migrations,
+      /CREATE\s+OR\s+REPLACE\s+FUNCTION\s+public\.get_profile_stats/i
+    );
+
+    expect(latest, "Expected get_profile_stats migration").toBeTruthy();
+    const definition = latest!.content.slice(
+      latest!.content.search(/CREATE\s+OR\s+REPLACE\s+FUNCTION\s+public\.get_profile_stats/i)
+    );
+
+    expect(/SECURITY\s+DEFINER/i.test(definition)).toBe(true);
+    expect(/SET\s+search_path\s*=\s*''/i.test(definition)).toBe(true);
+    expect(/FROM\s+public\.profile_stats_snapshots/i.test(definition)).toBe(true);
+    expect(/FROM\s+public\.(daily_usage|follows|posts|kudos)/i.test(definition.split("$$;")[0])).toBe(false);
+    expect(/REVOKE\s+ALL\s+ON\s+FUNCTION\s+public\.get_profile_stats\(UUID\)\s+FROM\s+PUBLIC/i.test(definition)).toBe(true);
+    expect(/GRANT\s+EXECUTE\s+ON\s+FUNCTION\s+public\.get_profile_stats\(UUID\)\s+TO\s+service_role/i.test(definition)).toBe(true);
+    expect(/GRANT\s+EXECUTE[^;]+get_profile_stats[^;]+TO\s+(anon|authenticated)/i.test(definition)).toBe(false);
+  });
+
+  it("adds a covering date-window leaderboard index", () => {
+    const latest = getLatestMigrationMatching(
+      migrations,
+      /idx_daily_usage_leaderboard_covering/i
+    );
+
+    expect(latest).toBeTruthy();
+    expect(/ON\s+public\.daily_usage\s*\(date\s+DESC,\s*user_id\)\s*INCLUDE\s*\(cost_usd,\s*output_tokens\)/i.test(latest!.content)).toBe(true);
+  });
+
+  it("indexes the leaderboard snapshot user foreign key without removing the region index", () => {
+    const userIndex = getLatestMigrationMatching(
+      migrations,
+      /idx_leaderboard_snapshots_user_id/i
+    );
+    const regionIndex = getLatestMigrationMatching(
+      migrations,
+      /idx_leaderboard_snapshots_period_region_cost/i
+    );
+
+    expect(userIndex).toBeTruthy();
+    expect(
+      /CREATE\s+INDEX\s+IF\s+NOT\s+EXISTS\s+idx_leaderboard_snapshots_user_id\s+ON\s+public\.leaderboard_snapshots\s*\(user_id\)/i.test(
+        userIndex!.content
+      )
+    ).toBe(true);
+    expect(regionIndex).toBeTruthy();
+    expect(
+      /ON\s+public\.leaderboard_snapshots\s*\(period,\s*region,\s*total_cost\s+DESC,\s*user_id\)/i.test(
+        regionIndex!.content
+      )
+    ).toBe(true);
+  });
+
   it("does not ship heuristic SQL repairs for historical Codex usage", () => {
     const abandonedRepairMigrations = migrations.filter((m) =>
       /repair_(legacy|native).*codex_inflation|restore_claude_costs_after_codex_repair|repair_codex_only_v3/i.test(m.name)
@@ -441,7 +522,9 @@ describe("Migration safety", () => {
     const futureMigrations = migrations.filter(
       (migration) =>
         migration.name > DIRECT_USAGE_REPAIR_ROLLBACK
-        && migration.name !== DIRECT_USAGE_REPAIR_ROLLBACK,
+        && migration.name !== DIRECT_USAGE_REPAIR_ROLLBACK
+        && migration.name !== USAGE_SUBMISSION_RPC
+        && migration.name !== USAGE_RECONCILIATION,
     );
 
     for (const migration of futureMigrations) {
@@ -452,6 +535,37 @@ describe("Migration safety", () => {
         /\b(UPDATE|INSERT\s+INTO|DELETE\s+FROM)\s+public\.(daily_usage|device_usage)\b/i,
       );
     }
+
+    const submissionMigration = migrations.find(
+      (migration) => migration.name === USAGE_SUBMISSION_RPC,
+    );
+    expect(submissionMigration, "Expected the atomic usage submission RPC migration").toBeTruthy();
+    expect(submissionMigration!.content).toMatch(
+      /CREATE\s+OR\s+REPLACE\s+FUNCTION\s+public\.submit_usage_day_v2/i,
+    );
+    expect(submissionMigration!.content).toMatch(
+      /pg_catalog\.left\(max\(usage\.device_name\),\s*255\)/i,
+    );
+
+    const reconciliationMigration = migrations.find(
+      (migration) => migration.name === USAGE_RECONCILIATION,
+    );
+    expect(reconciliationMigration, "Expected the ledgered usage reconciliation migration").toBeTruthy();
+    expect(reconciliationMigration!.content).toMatch(
+      /CREATE\s+TABLE\s+public\.usage_corrections_ledger/i,
+    );
+    expect(reconciliationMigration!.content).toMatch(
+      /CREATE\s+OR\s+REPLACE\s+FUNCTION\s+public\.rollback_usage_repair_batch/i,
+    );
+    expect(reconciliationMigration!.content).not.toMatch(
+      /SET\s+usage_generated_title\s*=\s*true/i,
+    );
+    expect(reconciliationMigration!.content).toMatch(
+      /canonical\.model_breakdown\s+IS\s+NOT\s+DISTINCT\s+FROM\s+duplicate\.model_breakdown/i,
+    );
+    expect(reconciliationMigration!.content).toMatch(
+      /UPDATE\s+public\.usage_agent_daily\s+AS\s+rows[\s\S]*?AND\s+NOT\s+EXISTS/i,
+    );
   });
 
   it("rollback migration does not undo rows already healed by the fixed CLI collector", () => {

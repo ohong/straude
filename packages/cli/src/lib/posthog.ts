@@ -77,7 +77,10 @@ export const posthog: PostHog = apiKey
       host,
       flushAt: 1,
       flushInterval: 0,
-      enableExceptionAutocapture: true,
+      // Raw exception messages and stacks can contain paths, hostnames, or
+      // collector stderr. telemetry.ts sends allowlisted diagnostics and a
+      // fresh sanitized Error for Error Tracking, plus a one-way fingerprint.
+      enableExceptionAutocapture: false,
       before_send: beforeSend,
     })
   : noop;

@@ -1,6 +1,6 @@
 import Link from "next/link";
 import { createClient } from "@/lib/supabase/server";
-import { getAuthUser } from "@/lib/supabase/auth";
+import { getAuthIdentity } from "@/lib/supabase/auth";
 import { FeedList } from "@/components/app/feed/FeedList";
 import { enrichFeedPosts, getFeedCursor, getPendingPosts } from "@/lib/feed-enrichment";
 import type { FeedPostRow } from "@/types";
@@ -45,7 +45,7 @@ export default async function FeedPage({
   searchParams: Promise<{ tab?: string }>;
 }) {
   const params = await searchParams;
-  const user = await getAuthUser();
+  const user = await getAuthIdentity();
   const supabase = await createClient();
 
   // Unauthenticated visitors can only see the global feed
@@ -54,20 +54,24 @@ export default async function FeedPage({
       ? params.tab
       : "global";
 
-  // Feed + pending posts in parallel (independent queries)
-  const [{ data: feedData }, pendingPosts] = await Promise.all([
-    supabase.rpc("get_feed", {
-      p_type: feedType,
-      p_user_id: user?.id ?? null,
-      p_limit: 20,
+  const feedPromise = supabase.rpc("get_feed", {
+    p_type: feedType,
+    p_user_id: user?.id ?? null,
+    p_limit: 20,
+  });
+  // Start enrichment as soon as get_feed resolves instead of waiting for the
+  // independent pending-post query to finish.
+  const postsPromise = feedPromise.then(({ data: feedData }) =>
+    enrichFeedPosts({
+      posts: (feedData ?? []) as FeedPostRow[],
+      userId: user?.id ?? null,
+      userScopedClient: supabase,
     }),
+  );
+  const [posts, pendingPosts] = await Promise.all([
+    postsPromise,
     getPendingPosts(supabase, user?.id ?? null),
   ]);
-  const posts = await enrichFeedPosts({
-    posts: (feedData ?? []) as FeedPostRow[],
-    userId: user?.id ?? null,
-    userScopedClient: supabase,
-  });
   const nextCursor = getFeedCursor(posts, 20);
 
   const faqJsonLd = {

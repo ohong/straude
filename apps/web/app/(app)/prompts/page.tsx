@@ -2,6 +2,7 @@ import Link from "next/link";
 import { redirect } from "next/navigation";
 import type { Metadata } from "next";
 import { createClient } from "@/lib/supabase/server";
+import { getAuthContext } from "@/lib/supabase/auth";
 import { firstRelation } from "@/lib/utils/first-relation";
 import { timeAgo } from "@/lib/utils/format";
 import type { PromptSubmission } from "@/types";
@@ -14,11 +15,9 @@ export const metadata: Metadata = { title: "Prompts" };
 
 export default async function PromptsPage() {
   const supabase = await createClient();
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
+  const { identity } = await getAuthContext();
 
-  if (!user) {
+  if (!identity) {
     redirect("/login");
   }
 

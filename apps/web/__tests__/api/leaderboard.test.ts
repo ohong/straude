@@ -1,5 +1,21 @@
 import { describe, it, expect, vi, beforeEach } from "vitest";
 
+const leaderboardMocks = vi.hoisted(() => ({
+  loadEntries: vi.fn(),
+  loadRank: vi.fn(),
+  getAuthIdentity: vi.fn(),
+}));
+
+vi.mock("@/lib/supabase/auth", () => ({
+  getAuthIdentity: leaderboardMocks.getAuthIdentity,
+}));
+
+vi.mock("@/lib/data/leaderboard", () => ({
+  LEADERBOARD_PERIODS: ["day", "week", "month", "all_time"],
+  loadLeaderboardEntries: leaderboardMocks.loadEntries,
+  loadLeaderboardRank: leaderboardMocks.loadRank,
+}));
+
 vi.mock("@/lib/supabase/server", () => ({
   createClient: vi.fn(),
 }));
@@ -106,6 +122,9 @@ function mockSupabase(opts: {
 
 beforeEach(() => {
   vi.clearAllMocks();
+  leaderboardMocks.loadEntries.mockResolvedValue([]);
+  leaderboardMocks.loadRank.mockResolvedValue(null);
+  leaderboardMocks.getAuthIdentity.mockResolvedValue(null);
 });
 
 describe("GET /api/leaderboard", () => {
@@ -114,6 +133,7 @@ describe("GET /api/leaderboard", () => {
       { user_id: "u1", total_cost: 100, username: "alice" },
       { user_id: "u2", total_cost: 50, username: "bob" },
     ];
+    leaderboardMocks.loadEntries.mockResolvedValue(entries);
 
     // Use a simple mock where the main query returns entries
     const client: Record<string, any> = {
@@ -175,8 +195,12 @@ describe("GET /api/leaderboard", () => {
 
     await GET(makeRequest());
 
-    // The from() call should use leaderboard_weekly view
-    expect(client.from).toHaveBeenCalledWith("leaderboard_weekly");
+    expect(leaderboardMocks.loadEntries).toHaveBeenCalledWith({
+      period: "week",
+      region: null,
+      cursor: null,
+      limit: 50,
+    });
   });
 
   it("filters by period", async () => {
@@ -200,7 +224,12 @@ describe("GET /api/leaderboard", () => {
     (getServiceClient as any).mockReturnValue(client);
 
     await GET(makeRequest({ period: "month" }));
-    expect(client.from).toHaveBeenCalledWith("leaderboard_monthly");
+    expect(leaderboardMocks.loadEntries).toHaveBeenCalledWith({
+      period: "month",
+      region: null,
+      cursor: null,
+      limit: 50,
+    });
   });
 
   it("rejects invalid period", async () => {
@@ -256,6 +285,12 @@ describe("GET /api/leaderboard", () => {
     const json = await res.json();
 
     expect(res.status).toBe(200);
+    expect(leaderboardMocks.loadEntries).toHaveBeenCalledWith({
+      period: "week",
+      region: "north_america",
+      cursor: null,
+      limit: 50,
+    });
   });
 
   it("includes user_rank for current user in page", async () => {
@@ -263,6 +298,11 @@ describe("GET /api/leaderboard", () => {
       { user_id: "u1", total_cost: 100 },
       { user_id: "current-user", total_cost: 50 },
     ];
+    leaderboardMocks.loadEntries.mockResolvedValue(entries);
+    leaderboardMocks.getAuthIdentity.mockResolvedValue({
+      id: "current-user",
+      email: null,
+    });
 
     const client: Record<string, any> = {
       auth: {
@@ -298,6 +338,7 @@ describe("GET /api/leaderboard", () => {
       user_id: `u${i}`,
       total_cost: 100 - i,
     }));
+    leaderboardMocks.loadEntries.mockResolvedValue(entries);
 
     const client: Record<string, any> = {
       auth: {

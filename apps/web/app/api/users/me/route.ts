@@ -443,6 +443,12 @@ export async function DELETE(request: NextRequest) {
     db.from("user_achievements").delete().eq("user_id", user.id),
     db.from("user_levels").delete().eq("user_id", user.id),
     db.from("device_usage").delete().eq("user_id", user.id),
+    db.from("usage_installation_aliases").delete().eq("user_id", user.id),
+    db.from("usage_agent_daily").delete().eq("user_id", user.id),
+    db.from("usage_submission_outcomes").delete().eq("user_id", user.id),
+    db.from("usage_device_reconciliation_decisions").delete().eq("user_id", user.id),
+    // Ledger before-images contain private usage data; repair batches can span users.
+    db.from("usage_corrections_ledger").delete().eq("user_id", user.id),
     db.from("prompt_submissions").delete().eq("user_id", user.id),
     db.from("cli_auth_codes").delete().eq("user_id", user.id),
   ];
@@ -450,6 +456,18 @@ export async function DELETE(request: NextRequest) {
   const results = await Promise.all(deletions);
   const deletionError = results.find((r) => r.error);
   if (deletionError?.error) {
+    return NextResponse.json(
+      { error: "Failed to delete account data" },
+      { status: 500 },
+    );
+  }
+
+  // Decisions restrict candidate deletion, so they must finish successfully first.
+  const { error: candidateDeletionError } = await db
+    .from("usage_device_reconciliation_candidates")
+    .delete()
+    .eq("user_id", user.id);
+  if (candidateDeletionError) {
     return NextResponse.json(
       { error: "Failed to delete account data" },
       { status: 500 },

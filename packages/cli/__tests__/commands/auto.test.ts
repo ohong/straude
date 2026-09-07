@@ -7,6 +7,7 @@ import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
 vi.mock("../../src/lib/auth.js", () => ({
   loadConfig: vi.fn(),
   saveConfig: vi.fn(),
+  updateConfig: vi.fn(),
 }));
 
 vi.mock("../../src/lib/scheduler.js", () => ({
@@ -31,7 +32,7 @@ vi.mock("../../src/lib/auto-push-logger.js", () => ({
 // ---------------------------------------------------------------------------
 
 import { enableAutoPush, disableAutoPush, autoCommand } from "../../src/commands/auto.js";
-import { loadConfig, saveConfig } from "../../src/lib/auth.js";
+import { loadConfig, updateConfig } from "../../src/lib/auth.js";
 import {
   detectScheduler,
   installScheduler,
@@ -47,7 +48,7 @@ import { readLog } from "../../src/lib/auto-push-logger.js";
 import type { StraudeConfig } from "../../src/lib/auth.js";
 
 const mockLoadConfig = vi.mocked(loadConfig);
-const mockSaveConfig = vi.mocked(saveConfig);
+const mockUpdateConfig = vi.mocked(updateConfig);
 const mockDetectScheduler = vi.mocked(detectScheduler);
 const mockInstallScheduler = vi.mocked(installScheduler);
 const mockUninstallScheduler = vi.mocked(uninstallScheduler);
@@ -81,6 +82,7 @@ function makeConfig(overrides: Partial<StraudeConfig> = {}): StraudeConfig {
 beforeEach(() => {
   vi.clearAllMocks();
   mockDetectScheduler.mockReturnValue("launchd");
+  mockUpdateConfig.mockImplementation((updater) => updater(null));
   vi.spyOn(console, "log").mockImplementation(() => {});
   vi.spyOn(console, "error").mockImplementation(() => {});
   vi.spyOn(process, "exit").mockImplementation((code) => {
@@ -102,7 +104,7 @@ describe("enableAutoPush — scheduler", () => {
     enableAutoPush(config);
 
     expect(mockInstallScheduler).toHaveBeenCalledWith("21:00", "launchd");
-    expect(mockSaveConfig).toHaveBeenCalledWith(
+    expect(mockUpdateConfig.mock.results[0]!.value).toEqual(
       expect.objectContaining({
         auto_push: expect.objectContaining({ enabled: true, time: "21:00", scheduler: "launchd", mechanism: "scheduler" }),
       }),
@@ -155,6 +157,24 @@ describe("enableAutoPush — scheduler", () => {
 
     expect(mockInstallScheduler).toHaveBeenCalledWith("21:00", "cron");
   });
+
+  it("restores the previous scheduler when config persistence fails", () => {
+    const config = makeConfig({
+      auto_push: {
+        enabled: true,
+        time: "09:00",
+        scheduler: "launchd",
+        mechanism: "scheduler",
+      },
+    });
+    mockUpdateConfig.mockImplementation(() => {
+      throw new Error("disk full");
+    });
+
+    expect(() => enableAutoPush(config, "21:00")).toThrow("disk full");
+    expect(mockInstallScheduler).toHaveBeenNthCalledWith(1, "21:00", "launchd");
+    expect(mockInstallScheduler).toHaveBeenNthCalledWith(2, "09:00", "launchd");
+  });
 });
 
 // ---------------------------------------------------------------------------
@@ -168,7 +188,7 @@ describe("enableAutoPush — hooks", () => {
 
     expect(mockInstallClaudeCodeHook).toHaveBeenCalled();
     expect(mockInstallScheduler).not.toHaveBeenCalled();
-    expect(mockSaveConfig).toHaveBeenCalledWith(
+    expect(mockUpdateConfig.mock.results[0]!.value).toEqual(
       expect.objectContaining({
         auto_push: expect.objectContaining({ enabled: true, mechanism: "hooks" }),
       }),
@@ -212,7 +232,7 @@ describe("disableAutoPush", () => {
     disableAutoPush(config);
 
     expect(mockUninstallScheduler).toHaveBeenCalledWith("launchd");
-    expect(mockSaveConfig).toHaveBeenCalledWith(
+    expect(mockUpdateConfig.mock.results[0]!.value).toEqual(
       expect.not.objectContaining({ auto_push: expect.anything() }),
     );
     expect(console.log).toHaveBeenCalledWith(expect.stringContaining("Auto-push disabled"));

@@ -39,27 +39,14 @@ export async function generateMetadata({
 
   const { data: totalRows } = await supabase
     .from("daily_usage")
-    .select("cost_usd, model_breakdown")
+    .select("cost_usd")
     .eq("user_id", user?.id ?? "");
 
   const totalSpend = totalRows?.reduce((s, r) => s + Number(r.cost_usd), 0) ?? 0;
 
-  let claudeSpend = 0;
-  let codexSpend = 0;
-  for (const row of totalRows ?? []) {
-    for (const m of (row.model_breakdown as Array<{ model: string; cost_usd: number }>) ?? []) {
-      if (/^(gpt|codex|o[1-9])/i.test(m.model)) {
-        codexSpend += m.cost_usd;
-      } else {
-        claudeSpend += m.cost_usd;
-      }
-    }
-  }
-  const primaryTool = codexSpend > claudeSpend ? "Codex" : "Claude Code";
-
   const description =
     totalSpend > 0
-      ? `@${username} has spent $${formatCurrency(totalSpend)} on ${primaryTool}. Think you can keep up?`
+      ? `@${username} has spent $${formatCurrency(totalSpend)} on AI coding. Think you can keep up?`
       : `@${username} just joined Straude. Race them to the top.`;
 
   return {
@@ -118,7 +105,7 @@ export default async function JoinPage({
         .gte("date", sevenDaysAgo),
       supabase
         .from("daily_usage")
-        .select("cost_usd, model_breakdown")
+        .select("cost_usd")
         .eq("user_id", referrer.id),
       supabase.rpc("calculate_user_streak", {
         p_user_id: referrer.id,
@@ -134,26 +121,12 @@ export default async function JoinPage({
     totalRows?.reduce((s, r) => s + Number(r.cost_usd), 0) ?? 0;
   const streak = (streakResult?.data as number) ?? 0;
 
-  // Determine primary tool by total spend across model breakdowns
-  let claudeSpend = 0;
-  let codexSpend = 0;
-  for (const row of totalRows ?? []) {
-    for (const m of (row.model_breakdown as Array<{ model: string; cost_usd: number }>) ?? []) {
-      if (/^(gpt|codex|o[1-9])/i.test(m.model)) {
-        codexSpend += m.cost_usd;
-      } else {
-        claudeSpend += m.cost_usd;
-      }
-    }
-  }
-  const primaryTool = codexSpend > claudeSpend ? "Codex" : "Claude Code";
-
   // Choose competitive headline
   let headline: string;
   let subline: string;
 
   if (totalSpend > 0) {
-    headline = `@${username} has spent $${formatCurrency(totalSpend)} on ${primaryTool}.`;
+    headline = `@${username} has spent $${formatCurrency(totalSpend)} on AI coding.`;
     subline = "Think you can keep up?";
   } else if (streak > 0) {
     headline = `@${username} has a ${streak}-day streak going.`;

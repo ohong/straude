@@ -3,7 +3,7 @@ import type { TokenRichCompany } from "@/data/token-rich";
 import { PrometheusTable } from "@/components/app/token-rich/PrometheusTable";
 import { SuggestCompanyWidget } from "@/components/app/token-rich/SuggestCompanyWidget";
 import { createClient } from "@/lib/supabase/server";
-import { getAuthUser } from "@/lib/supabase/auth";
+import { getAuthIdentity } from "@/lib/supabase/auth";
 import type { Metadata } from "next";
 
 export const revalidate = 300; // revalidate every 5 minutes
@@ -61,7 +61,7 @@ async function getCompanies(): Promise<TokenRichCompany[]> {
 
 export default async function TokenRichPage() {
   const [user, companies] = await Promise.all([
-    getAuthUser(),
+    getAuthIdentity(),
     getCompanies(),
   ]);
 

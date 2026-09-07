@@ -27,8 +27,9 @@ export function ProductExplanation() {
             Start with totals you can inspect.
           </h3>
           <p className="mt-3 text-pretty text-sm leading-relaxed text-landing-muted">
-            The open-source CLI reads supported Claude Code and Codex usage logs
-            on your machine and groups activity into daily totals. Before a
+            The open-source CLI uses ccusage to read supported coding-agent logs
+            on your machine, including Claude Code, Codex, Gemini CLI, and Qwen.
+            It groups activity into daily totals. Before a
             sync, you can run a dry run to collect usage without submitting it.
             Straude is designed to measure the shape of your practice without
             needing the substance of the work that produced it.

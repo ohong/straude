@@ -21,7 +21,7 @@ import { GuestSignupCta } from "@/components/app/activation/GuestSignupCta";
 import { formatCurrency, formatTokens } from "@/lib/utils/format";
 import { enrichFeedPosts, getFeedCursor } from "@/lib/feed-enrichment";
 import { firstRelation } from "@/lib/utils/first-relation";
-import type { FeedPostRow, Post } from "@/types";
+import type { FeedPostRow } from "@/types";
 import type { Metadata } from "next";
 
 type PostDateRow = {
@@ -112,6 +112,29 @@ export default async function ProfilePage({
   const currentYear = new Date().getFullYear();
   const yearStart = `${currentYear}-01-01`;
   const yearEnd = `${currentYear}-12-31`;
+  const feedPromise = supabase.rpc("get_feed", {
+    p_type: "user",
+    p_user_id: profile.id,
+    p_limit: 20,
+  });
+  const enrichedPostsPromise = feedPromise.then(({ data: posts }) => {
+    if (!posts || posts.length === 0) return [];
+
+    const feedPosts = (posts as Record<string, unknown>[]).map((row) => ({
+      ...row,
+      user: Array.isArray(row.user) ? row.user[0] : row.user,
+      daily_usage: Array.isArray(row.daily_usage) ? row.daily_usage[0] : row.daily_usage,
+      kudos_count: (row.kudos_count as number) ?? 0,
+      comment_count: (row.comment_count as number) ?? 0,
+    })) as FeedPostRow[];
+
+    return enrichFeedPosts({
+      posts: feedPosts,
+      userId: authUserId,
+      userScopedClient: supabase,
+      publicReadClient: db,
+    });
+  });
 
   const [
     { count: followersCount },
@@ -126,7 +149,7 @@ export default async function ProfilePage({
     { data: contributions },
     { data: postDates },
     radarResponse,
-    postsResponse,
+    normalizedPosts,
   ] = await Promise.all([
     db
       .from("follows")
@@ -178,11 +201,7 @@ export default async function ProfilePage({
       .select("daily_usage:daily_usage!posts_daily_usage_id_fkey(date)")
       .eq("user_id", profile.id),
     computeRadarScores(profile.id).catch(() => null),
-    supabase.rpc("get_feed", {
-      p_type: "user",
-      p_user_id: profile.id,
-      p_limit: 20,
-    }),
+    enrichedPostsPromise,
   ]);
 
   const totalSpend = totalSpendRows?.reduce((s, r) => s + Number(r.cost_usd), 0) ?? 0;
@@ -201,25 +220,6 @@ export default async function ProfilePage({
     has_post: postDateSet.has(c.date),
   }));
 
-  let normalizedPosts: Post[] = [];
-  const posts = postsResponse.data;
-  if (posts && posts.length > 0) {
-    // get_feed returns user/daily_usage as jsonb objects; direct query returns
-    // them as single-element arrays. Flatten to a consistent FeedPostRow shape.
-    const feedPosts = (posts as Record<string, unknown>[]).map((row) => ({
-      ...row,
-      user: Array.isArray(row.user) ? row.user[0] : row.user,
-      daily_usage: Array.isArray(row.daily_usage) ? row.daily_usage[0] : row.daily_usage,
-      kudos_count: (row.kudos_count as number) ?? 0,
-      comment_count: (row.comment_count as number) ?? 0,
-    })) as FeedPostRow[];
-    normalizedPosts = await enrichFeedPosts({
-      posts: feedPosts,
-      userId: authUserId,
-      userScopedClient: supabase,
-      publicReadClient: db,
-    });
-  }
   const nextCursor = getFeedCursor(normalizedPosts, 20);
 
   return (

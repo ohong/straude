@@ -17,6 +17,12 @@ vi.mock("node:fs", () => ({
     size: fileSizes[path] ?? Buffer.byteLength(fileStore[path] ?? "", "utf-8"),
   })),
   mkdirSync: vi.fn(),
+  openSync: vi.fn(() => 10),
+  readSync: vi.fn((_fd: number, buffer: Buffer, offset: number, length: number, position: number) => {
+    const content = Buffer.from(fileStore[AUTO_PUSH_LOG_FILE] ?? "", "utf-8");
+    return content.copy(buffer, offset, position, position + length);
+  }),
+  closeSync: vi.fn(),
 }));
 
 // ---------------------------------------------------------------------------
@@ -25,6 +31,7 @@ vi.mock("node:fs", () => ({
 
 import { readLog, rotateLog } from "../src/lib/auto-push-logger.js";
 import { AUTO_PUSH_LOG_FILE, AUTO_PUSH_LOG_MAX_BYTES } from "../src/config.js";
+import { readSync } from "node:fs";
 
 // ---------------------------------------------------------------------------
 // Setup
@@ -72,6 +79,18 @@ describe("readLog", () => {
   it("filters out empty lines", () => {
     fileStore[AUTO_PUSH_LOG_FILE] = "line1\n\nline2\n\n";
     expect(readLog()).toEqual(["line1", "line2"]);
+  });
+
+  it("bounds the bytes read from a very large log", () => {
+    fileStore[AUTO_PUSH_LOG_FILE] = `${"x".repeat(300_000)}\nlast line\n`;
+    readLog(1);
+    expect(readSync).toHaveBeenCalledWith(
+      expect.any(Number),
+      expect.any(Buffer),
+      0,
+      256 * 1024,
+      expect.any(Number),
+    );
   });
 });
 

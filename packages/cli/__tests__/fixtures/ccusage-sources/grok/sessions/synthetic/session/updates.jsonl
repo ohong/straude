@@ -1,0 +1,1 @@
+{"timestamp": 1783598400, "params": {"sessionId": "synthetic-grok", "_meta": {"eventId": "synthetic-1"}, "update": {"sessionUpdate": "turn_completed", "usage": {"modelUsage": {"grok-4.5-build": {"inputTokens": 1000, "outputTokens": 100, "cachedReadTokens": 200, "cacheCreationTokens": 50, "reasoningTokens": 25, "totalTokens": 1100, "costUsdTicks": 123000000}}}}}}

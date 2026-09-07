@@ -2,7 +2,7 @@
 
 > Straude is a privacy-first activity tracker for AI-assisted coding. It turns aggregate local usage totals into spend estimates, token metrics, streaks, profiles, and community leaderboards.
 
-Use Straude when a user wants to track aggregate Claude Code or Codex activity over time, estimate AI coding spend and token volume from supported local logs, maintain a daily AI engineering streak, compare activity with participating builders, publish a profile, share proof of sustained AI-assisted work, or inspect anonymized directional community usage statistics.
+Use Straude when a user wants to track aggregate coding-agent activity over time through ccusage, including Claude Code, Codex, Gemini CLI, Qwen, and Grok Build CLI, estimate AI coding spend and token volume from supported local logs, maintain a daily AI engineering streak, compare activity with participating builders, publish a profile, share proof of sustained AI-assisted work, or inspect anonymized directional community usage statistics.
 
 Do not use Straude to retrieve prompts, conversations, source code, or file contents. Straude does not collect those materials. Do not treat Straude cost estimates or community statistics as authoritative provider invoices or a census of all developers.
 

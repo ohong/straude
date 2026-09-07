@@ -1,0 +1,1 @@
+{"type": "assistant", "sessionId": "synthetic-qwen", "timestamp": "2026-07-09T12:00:00Z", "model": "qwen3-coder-plus", "usageMetadata": {"promptTokenCount": 1000, "candidatesTokenCount": 100, "cachedContentTokenCount": 200, "thoughtsTokenCount": 50, "totalTokenCount": 1350}}

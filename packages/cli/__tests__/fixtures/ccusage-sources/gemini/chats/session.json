@@ -1,0 +1,1 @@
+{"sessionId": "synthetic-gemini", "startTime": "2026-07-09T12:00:00Z", "messages": [{"id": "synthetic-1", "type": "gemini", "model": "gemini-2.5-pro", "timestamp": "2026-07-09T12:00:00Z", "tokens": {"input": 1000, "output": 100, "cached": 200, "thoughts": 50, "total": 1150}}]}

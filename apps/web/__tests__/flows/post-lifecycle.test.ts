@@ -119,6 +119,7 @@ describe("Flow: Post Lifecycle", () => {
       id: "post-1",
       user_id: OWNER_ID,
       title: "Productive morning",
+      usage_generated_title: false,
       description: "Shipped the new dashboard",
       images: ["https://test.supabase.co/storage/v1/object/public/post-images/user-owner/ss1.png"],
     };
@@ -153,6 +154,7 @@ describe("Flow: Post Lifecycle", () => {
     const updateCall = (updateChain.update as ReturnType<typeof vi.fn>).mock.calls[0][0];
     expect(updateCall).toEqual({
       title: "Productive morning",
+      usage_generated_title: false,
       description: "Shipped the new dashboard",
       images: ["https://test.supabase.co/storage/v1/object/public/post-images/user-owner/ss1.png"],
     });
