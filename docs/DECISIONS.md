@@ -1,14 +1,14 @@
 # Architecture & Design Decisions
 
-## Check profile route imports under Lambda's module restrictions (2026-09-07)
+## Use jsdom compatible with Lambda's module restrictions (2026-09-07)
 
-**Decision:** Pin jsdom to 26.1.0 and check the compiled `/api/users/me` route in a fresh Node process with `--no-experimental-require-module` after every web build. Keep DOMPurify, the existing SVG safety checks and direct SVG/PNG discovery with Google fallback.
+**Decision:** Pin jsdom to 26.1.0 so profile routes load when the runtime disables experimental `require(ESM)`. Keep DOMPurify, the existing SVG safety checks and direct SVG/PNG discovery with Google fallback.
 
 **Evidence:** Production returned HTTP 500 HTML for both unauthenticated GET and PATCH requests to `/api/users/me`, while `/api/notifications` returned the expected 401 JSON. The same commit built and ran successfully locally under normal Node settings. Disabling `require(ESM)` reproduced a route-loading `ERR_REQUIRE_ESM` from jsdom 28.1.0's `html-encoding-sniffer` dependency importing `@exodus/bytes`. Production runtime logs were unavailable, so matching that exception to this deployment remains unverified. AWS documents the disabled feature at https://docs.aws.amazon.com/lambda/latest/dg/lambda-nodejs.html#nodejs-experimental-features.
 
-**Alternatives:** Bundling jsdom through `transpilePackages` failed during page-data collection because Turbopack rewrote its default stylesheet path to `/ROOT/...`. jsdom 27.0.0 also failed with the feature disabled through its CSS dependencies. Pinning 26.1.0 avoids a custom bundling pipeline or requiring an experimental runtime feature. The pin trades newer DOM features for runtime compatibility; future upgrades must pass the compiled-route check and favicon behavior tests.
+**Alternatives:** Bundling jsdom through `transpilePackages` failed during page-data collection because Turbopack rewrote its default stylesheet path to `/ROOT/...`. jsdom 27.0.0 also failed with the feature disabled through its CSS dependencies. Pinning 26.1.0 avoids a custom bundling pipeline or requiring an experimental runtime feature. The pin trades newer DOM features for runtime compatibility.
 
-**Verification:** `bun run --cwd apps/web test:server-runtime` checks the current build without contacting Supabase. Run `NODE_OPTIONS=--no-experimental-require-module CI=1 bun run --cwd apps/web test:e2e e2e/team-favicon-save.spec.ts e2e/landing.spec.ts --reporter=list` against a local Supabase build to verify HTTP authentication, settings persistence, cached SVG/PNG display and the landing smoke path under the same restriction. The favicon integration suite separately verifies discovery, sanitization and Storage with real local Supabase.
+**Verification:** Run `NODE_OPTIONS=--no-experimental-require-module CI=1 bun run --cwd apps/web test:e2e e2e/team-favicon-save.spec.ts e2e/landing.spec.ts --reporter=list` against a local Supabase build to verify HTTP authentication, settings persistence, cached SVG/PNG display and the landing smoke path under the same restriction. The favicon integration suite separately verifies discovery, sanitization and Storage with real local Supabase.
 
 ## Discover and cache team favicons directly (2026-09-05)
 
