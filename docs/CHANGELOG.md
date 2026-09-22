@@ -4,7 +4,7 @@
 
 ### Fixed
 
-- **Unpriced third-party models no longer block `straude` pushes.** Codex or Claude Code sessions on a provider model with no LiteLLM price, such as `kimi-fast-latest`, stopped every push with `ccusage did not produce live pricing`. Those tokens are now logged at $0, and the CLI names the models. Unpriced `claude-*`, `gpt-*` and o-series models still fail closed and retry, because those gaps close when LiteLLM adds the new model.
+- **Unpriced third-party models no longer block `straude` pushes.** Codex or Claude Code sessions on a provider model with no LiteLLM price, such as `kimi-fast-latest`, stopped every push with `ccusage did not produce live pricing`. Usage from those models is now left out of the push without a message, and the rest of the day still syncs. Unpriced `claude-*`, `gpt-*` and o-series models still fail closed and retry, because those gaps close when LiteLLM adds the new model.
 
 - **Recover from interrupted first-sync setup.** Clipboard failures offer manual copying, failed usage checks have a retry action, and failed completion saves can be retried without repeating the sync. The success summary describes usage totals rather than treating daily usage rows as individual coding sessions.
 - **Keep CLI authorization open through sign-in and signup.** Magic links, GitHub sign-in, and login/signup navigation preserve a validated local return destination. A new account can return to the CLI authorization page before optional profile setup.

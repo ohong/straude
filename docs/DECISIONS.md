@@ -1,14 +1,14 @@
 # Architecture & Design Decisions
 
-## Fail closed on first-party model pricing only (2026-09-22)
+## Skip unpriced third-party models; fail closed on first-party ones (2026-09-22)
 
-**Decision:** Narrow the 2026-07-23 pricing rule from "any Claude or Codex model" to "the agent's own vendor models": `claude-*` in Claude Code, and `gpt-*`, `o<digit>*` or `codex-*` in Codex. When one of those has tokens and zero cost, the push still fails with `PricingUnavailableError` and retries later. Any other model with tokens and no price, whether ccusage flags it with `missingPricing` or reports zero cost, is logged at $0. The CLI then prints `No public price for <models>; logging those tokens at $0.` The table lives in `FIRST_PARTY_MODELS` in `packages/cli/src/lib/ccusage.ts`.
+**Decision:** Narrow the 2026-07-23 pricing rule from "any Claude or Codex model" to "the agent's own vendor models": `claude-*` in Claude Code, and `gpt-*`, `o<digit>*` or `codex-*` in Codex. When one of those has tokens and zero cost, the push still fails with `PricingUnavailableError` and retries later. Any other model with tokens and zero cost, whether or not ccusage flags it with `missingPricing`, is left out of the push without a message: its tokens come off the agent and daily totals, and a day or agent with nothing else left is dropped. The first-party table lives in `FIRST_PARTY_MODELS` in `packages/cli/src/lib/ccusage.ts`.
 
 **Why:** Codex and Claude Code can call third-party providers, so the agent does not tell us the model vendor. ccusage 20.0.24 marked Codex's `kimi-fast-latest` as `missingPricing`. That one model on one day blocked six days and about $1,335 of priced usage on every run. LiteLLM will likely never price such aliases, so retries cannot help. A first-party gap is different: it usually means a new model that LiteLLM prices within days, so failing closed keeps a $0 row out of cumulative spend.
 
-**Alternatives considered:** (a) Keep failing closed for every Claude/Codex model. Rejected because it blocks all pushes until the user stops using that provider. (b) Never fail on per-model gaps and rely on the stderr fetch-failure check. Rejected because a new GPT or Claude model would then store $0 rows, and sync state would move past those dates. (c) Drop unpriced models from the push. Rejected because it loses real token counts, while $0 is only an under-estimate of cost.
+**Alternatives considered:** (a) Keep failing closed for every Claude/Codex model. Rejected because it blocks all pushes until the user stops using that provider. (b) Never fail on per-model gaps and rely on the stderr fetch-failure check. Rejected because a new GPT or Claude model would then store $0 rows, and sync state would move past those dates. (c) Log unpriced models at $0 with a stderr notice. Rejected because it stores token counts with a cost we know is wrong and prints noise on every push for a model the user cannot fix.
 
-**Limits:** The prefixes are a heuristic. A vendor model under a new prefix gets logged at $0 with the notice, not blocked. An open-weight model under a vendor prefix (for example `gpt-oss-*` on a local server) fails closed if LiteLLM has no price for that exact name.
+**Limits:** The prefixes are a heuristic. A vendor model under a new prefix is skipped, not blocked, so its spend is lost until the prefix is added. A genuinely free model is also skipped, which only drops tokens, never spend. An open-weight model under a vendor prefix (for example `gpt-oss-*` on a local server) fails closed if LiteLLM has no price for that exact name.
 
 ## Discover and cache team favicons directly (2026-09-05)
 
@@ -115,7 +115,7 @@
 
 ## Accept stable ccusage releases above the accuracy floor and fail closed on paid-model pricing (2026-07-23)
 
-**Decision:** Publish `ccusage: >=20.0.20`, accept any stable semantic version at or above that floor, and record the version actually installed. Agent and model IDs remain opaque strings. Any Claude or Codex model breakdown with nonzero tokens and zero cost is rejected with `PricingUnavailableError`; other sources may legitimately report zero-cost usage. *(Narrowed on 2026-09-22 to first-party models only; see "Fail closed on first-party model pricing only".)*
+**Decision:** Publish `ccusage: >=20.0.20`, accept any stable semantic version at or above that floor, and record the version actually installed. Agent and model IDs remain opaque strings. Any Claude or Codex model breakdown with nonzero tokens and zero cost is rejected with `PricingUnavailableError`; other sources may legitimately report zero-cost usage. *(Changed on 2026-09-22: only first-party models fail closed, and other zero-cost models are skipped; see "Skip unpriced third-party models; fail closed on first-party ones".)*
 
 **Why:** ccusage owns source adapters and pricing support, so a patch or major ceiling delays new models and sources until Straude republishes. The open-ended floor lets fresh installs pick up a newer stable collector when its output still passes Straude's strict parser, accounting, and pricing invariants. Existing installs do not mutate in place; they receive the newer collector only after reinstalling or upgrading Straude.
 
