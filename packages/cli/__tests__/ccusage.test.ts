@@ -278,16 +278,65 @@ describe("parseCcusageOutput", () => {
     ]))).toThrow(/cost differs from its model breakdown/);
   });
 
-  it("rejects explicit missing pricing markers", () => {
-    expect(() => parseCcusageOutput(rawOutput([
-      row({
-        modelBreakdowns: [{
-          modelName: "gpt-5.2-codex",
-          cost: 0,
-          missingPricing: true,
-        }],
-      }),
-    ]))).toThrow(/did not produce live pricing/);
+  function missingPricingRow(agent: string, model: string) {
+    // Shape emitted by ccusage 20.0.24 for a model absent from LiteLLM.
+    const breakdown = {
+      modelName: model,
+      inputTokens: 68922,
+      outputTokens: 12860,
+      cacheCreationTokens: 0,
+      cacheReadTokens: 1621876,
+      cost: 0,
+      missingPricing: true,
+    };
+    return row({
+      period: "2026-09-17",
+      modelsUsed: [model],
+      inputTokens: 68922,
+      outputTokens: 12860,
+      cacheCreationTokens: 0,
+      cacheReadTokens: 1621876,
+      totalTokens: 1703658,
+      totalCost: 0,
+      modelBreakdowns: [breakdown],
+      metadata: { agents: [agent] },
+      agents: [{
+        agent,
+        modelsUsed: [model],
+        inputTokens: 68922,
+        outputTokens: 12860,
+        cacheCreationTokens: 0,
+        cacheReadTokens: 1621876,
+        totalTokens: 1703658,
+        totalCost: 0,
+        modelBreakdowns: [breakdown],
+      }],
+    });
+  }
+
+  it.each([
+    ["codex", "kimi-fast-latest"],
+    ["codex", "accounts/fireworks/models/deepseek-v4p1-flash"],
+    ["claude", "glm-latest"],
+  ])("logs a third-party %s model without a catalogue price (%s) at $0", (agent, model) => {
+    const parsed = parseCcusageOutput(rawOutput([missingPricingRow(agent, model)]));
+
+    expect(parsed.data[0]!.costUSD).toBe(0);
+    expect(parsed.data[0]!.totalTokens).toBe(1703658);
+    expect(parsed.unpricedModels).toEqual([model]);
+  });
+
+  it.each([
+    ["codex", "gpt-7"],
+    ["codex", "openai/o5-mini"],
+    ["claude", "claude-fable-6"],
+  ])("fails closed when %s marks its own model %s as missing pricing", (agent, model) => {
+    expect(() => parseCcusageOutput(rawOutput([missingPricingRow(agent, model)])))
+      .toThrow(PricingUnavailableError);
+  });
+
+  it("reports no unpriced models for fully priced output", () => {
+    expect(parseCcusageOutput(rawOutput()).unpricedModels).toEqual([]);
   });
 
   it.each(["claude", "codex"])(
@@ -378,7 +427,7 @@ describe("parseCcusageOutput", () => {
   it("fails closed when reasoning allocation gives tokens to an unpriced paid model", () => {
     const modelBreakdowns = [
       {
-        modelName: "priced-model",
+        modelName: "gpt-priced",
         inputTokens: 1,
         outputTokens: 0,
         cacheCreationTokens: 0,
@@ -387,7 +436,7 @@ describe("parseCcusageOutput", () => {
         cost: 0.1,
       },
       {
-        modelName: "aaa-unpriced-model",
+        modelName: "gpt-aaa-unpriced",
         inputTokens: 0,
         outputTokens: 0,
         cacheCreationTokens: 0,
@@ -398,7 +447,7 @@ describe("parseCcusageOutput", () => {
     ];
     expect(() => parseCcusageOutput(rawOutput([
       row({
-        modelsUsed: ["priced-model", "aaa-unpriced-model"],
+        modelsUsed: ["gpt-priced", "gpt-aaa-unpriced"],
         inputTokens: 1,
         outputTokens: 0,
         cacheCreationTokens: 0,
@@ -409,7 +458,7 @@ describe("parseCcusageOutput", () => {
         metadata: { agents: ["codex"] },
         agents: [{
           agent: "codex",
-          modelsUsed: ["priced-model", "aaa-unpriced-model"],
+          modelsUsed: ["gpt-priced", "gpt-aaa-unpriced"],
           inputTokens: 1,
           outputTokens: 0,
           cacheCreationTokens: 0,

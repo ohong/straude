@@ -812,6 +812,9 @@ export async function pushCommand(
       console.error(`Collector returned dates outside the requested range: ${unexpectedDates.join(", ")}`);
       return CLI_EXIT.PERMANENT;
     }
+    if (collected.unpricedModels.length > 0) {
+      console.error(`No public price for ${collected.unpricedModels.join(", ")}; logging those tokens at $0.`);
+    }
 
     if (options.dryRun) {
       printDryRun(entries);

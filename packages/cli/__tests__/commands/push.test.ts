@@ -164,6 +164,7 @@ function collected(entries = [usageEntry()]) {
       totalCostUSD: 0.02,
     },
     agents: ["codex"],
+    unpricedModels: [] as string[],
     collector: {
       codex: "ccusage-codex-v20",
       ccusage_version: "20.0.20",
@@ -276,6 +277,18 @@ describe("pushCommand v2", () => {
     expect(removeBatchMock).toHaveBeenCalledWith(body.request_id);
     expect(updateConfigMock).toHaveBeenCalled();
     expect(releaseMock).toHaveBeenCalled();
+  });
+
+  it("submits usage and names models logged at $0 for lack of a price", async () => {
+    const output = collected();
+    output.unpricedModels = ["kimi-fast-latest"];
+    collectMock.mockResolvedValue(output);
+
+    expect(await pushCommand({})).toBe(CLI_EXIT.OK);
+    expect(console.error).toHaveBeenCalledWith(
+      "No public price for kimi-fast-latest; logging those tokens at $0.",
+    );
+    expect(apiRequestMock.mock.calls.some(([, path]) => path === "/api/usage/submit")).toBe(true);
   });
 
   it.each([
