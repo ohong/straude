@@ -14,7 +14,7 @@ export default async function SettingsPage() {
     db
       .from("users")
       .select(
-        "id, username, display_name, bio, heard_about, avatar_url, country, region, link, github_username, is_public, timezone, email_notifications, email_mention_notifications, email_dm_notifications, streak_freezes, referred_by, team_url, team_favicon_url, created_at, updated_at",
+        "id, username, display_name, bio, heard_about, heard_about_sources, avatar_url, country, region, link, github_username, is_public, timezone, email_notifications, email_mention_notifications, email_dm_notifications, streak_freezes, referred_by, team_url, team_favicon_url, created_at, updated_at",
       )
       .eq("id", identity.id)
       .single(),

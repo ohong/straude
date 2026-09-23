@@ -8,6 +8,7 @@ export interface User {
   display_name: string | null;
   bio: string | null;
   heard_about: string | null;
+  heard_about_sources: string[] | null;
   avatar_url: string | null;
   country: string | null;
   region: string | null;

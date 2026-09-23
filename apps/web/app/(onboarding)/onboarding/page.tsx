@@ -7,6 +7,7 @@ import { BoltIcon } from "@/components/landing/icons";
 import { Check, ArrowRight, Copy } from "lucide-react";
 import { Button } from "@/components/ui/Button";
 import { trackActivationEvent } from "@/lib/analytics/client";
+import { HeardAboutStep } from "@/components/app/onboarding/HeardAboutStep";
 import { formatCurrency } from "@/lib/utils/format";
 
 const SYNC_COMMAND = "npx straude@latest";
@@ -45,6 +46,7 @@ export default function OnboardingPage() {
   const [copyError, setCopyError] = useState(false);
   const [sync, setSync] = useState<SyncState>({ phase: "waiting" });
   const [attempt, setAttempt] = useState(0);
+  const [surveyDone, setSurveyDone] = useState(false);
   const commandCopiedRef = useRef(false);
   const confirmedUsageRef = useRef<UsageStatus | null>(null);
   const hasExistingUsageRef = useRef(false);
@@ -307,7 +309,11 @@ export default function OnboardingPage() {
         </div>
       )}
 
-      {sync.phase === "success" ? (
+      {sync.phase === "success" && !surveyDone && (
+        <HeardAboutStep onDone={() => setSurveyDone(true)} />
+      )}
+
+      {sync.phase === "success" && surveyDone && (
         <>
           <div className="mt-6 flex flex-wrap items-center gap-3">
             {data?.latest_post_url && (
@@ -322,7 +328,9 @@ export default function OnboardingPage() {
             Make it yours: <Link href="/settings" className="underline underline-offset-2 hover:text-foreground">add a handle and profile details</Link> (optional).
           </p>
         </>
-      ) : (
+      )}
+
+      {sync.phase !== "success" && (
         <>
           <Button type="button" onClick={() => router.push("/feed")} variant="secondary" className="mt-6 w-full py-3">Explore without syncing</Button>
           <p className="mt-4 text-center text-pretty text-xs text-muted">Your handle and profile details are optional. Add them in Settings after your first sync.</p>

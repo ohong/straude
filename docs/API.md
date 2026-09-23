@@ -254,7 +254,8 @@ Update the authenticated user's profile.
   - `username` — 3–20 chars, alphanumeric + underscores
   - `display_name` — string
   - `bio` — string (max 160 chars)
-  - `heard_about` — string (max 500 chars) or `null`
+  - `heard_about` — string (max 500 chars) or `null`; free-text detail for the survey
+  - `heard_about_sources` — array of known acquisition-source keys (at least one) or `null` to clear
   - `country` — ISO country code (auto-derives `region`)
   - `link` — string
   - `is_public` — boolean

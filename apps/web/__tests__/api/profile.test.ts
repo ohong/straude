@@ -657,6 +657,58 @@ describe("PATCH /api/users/me", () => {
     expect(json.error).toContain("500 characters");
   });
 
+  it("stores acquisition sources in catalog order", async () => {
+    const { updateMock } = mockAuthenticatedProfileUpdate();
+
+    const res = await PATCH(
+      makeRequest("PATCH", "/api/users/me", {
+        heard_about_sources: ["github", "google", "github"],
+      })
+    );
+
+    expect(res.status).toBe(200);
+    expect(updateMock).toHaveBeenCalledWith({ heard_about_sources: ["google", "github"] });
+  });
+
+  it("rejects unknown acquisition sources instead of storing them", async () => {
+    const client: Record<string, any> = {
+      auth: {
+        getUser: vi.fn().mockResolvedValue({
+          data: { user: { id: "u-1" } },
+          error: null,
+        }),
+      },
+      from: vi.fn(),
+    };
+    (createClient as any).mockResolvedValue(client);
+
+    for (const heard_about_sources of [
+      ["myspace"],
+      [],
+      "google",
+      { source: "google" },
+    ]) {
+      const res = await PATCH(
+        makeRequest("PATCH", "/api/users/me", { heard_about_sources })
+      );
+      const json = await res.json();
+
+      expect(res.status).toBe(400);
+      expect(json.error).toContain("heard_about_sources");
+    }
+  });
+
+  it("clears acquisition sources with null", async () => {
+    const { updateMock } = mockAuthenticatedProfileUpdate();
+
+    const res = await PATCH(
+      makeRequest("PATCH", "/api/users/me", { heard_about_sources: null })
+    );
+
+    expect(res.status).toBe(200);
+    expect(updateMock).toHaveBeenCalledWith({ heard_about_sources: null });
+  });
+
   it("accepts valid http and https profile links", async () => {
     const { updateMock } = mockAuthenticatedProfileUpdate();
 

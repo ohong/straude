@@ -301,16 +301,22 @@ test.describe("first-sync onboarding", () => {
       await expect(page.getByRole("heading", { name: "Your first sync is complete" })).toBeVisible({ timeout: 10_000 });
       await expect(page.getByText("$12.34")).toBeVisible();
       await expect(page.getByText("234", { exact: true })).toBeVisible();
-      await expect(page.getByRole("button", { name: "Go to your feed" })).toBeVisible();
       expect((await patchResponse).status()).toBe(200);
+
+      // The acquisition survey is the last onboarding step; its answer is stored.
+      await expect(page.getByText("How did you hear about us?")).toBeVisible();
+      await page.getByRole("checkbox", { name: "GitHub" }).click();
+      await page.getByRole("button", { name: "Submit" }).click();
+      await expect(page.getByRole("button", { name: "Go to your feed" })).toBeVisible();
 
       const { data: profile, error } = await adminClient()
         .from("users")
-        .select("onboarding_completed")
+        .select("onboarding_completed, heard_about_sources")
         .eq("id", user.id)
         .single();
       expect(error).toBeNull();
       expect(profile?.onboarding_completed).toBe(true);
+      expect(profile?.heard_about_sources).toEqual(["github"]);
       expect(statusCalls).toBeGreaterThanOrEqual(2);
     } finally {
       await deleteLocalUser(user);

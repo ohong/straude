@@ -1052,3 +1052,26 @@ Pricing the new-logic numbers at gpt-5.5 rates: $228.68 — matches what OpenAI 
 3. **Reimplement GPT-5.6 prices in Straude** — rejected because duplicate model tables create another source of drift and lose ccusage's request-level long-context handling.
 
 **Why this option:** ccusage is already the authoritative local parser and pricing adapter. Straude should validate its output shape, preserve source provenance, and test the resulting totals, not maintain a parallel catalog. A real Codex JSONL fixture exercises the installed native ccusage binary against all four GPT-5.6 variants and locks both token buckets and the LiteLLM-priced total.
+
+## Acquisition Sources Are a Separate Array Column (2026-09-20)
+
+**Decision:** Store the onboarding survey answer as `users.heard_about_sources TEXT[]` and keep `heard_about` as the optional free-text detail behind the "Other" option. Reuse the existing `HEARD_ABOUT_OPTION_KEYS` catalog values as the stored keys, and validate them in `PATCH /api/users/me`.
+
+**Alternatives considered:**
+
+1. **Encode the selection inside the existing `heard_about` text column** — rejected because it mixes a closed set with free text in one field. Every count would need parsing, and "Other" could not be stored without a second convention inside the same string.
+2. **One boolean column per option** — rejected because the option list changes, and each change would need a migration plus a code change in three places.
+3. **A join table (`user_heard_about`)** — rejected as more machinery than the data needs. There is no per-row attribute to store, and Postgres arrays aggregate with `unnest` when analysis needs counts.
+
+**Why arrays plus a catalog:** the keys are stable machine values, so labels can change without a data migration, and analytics can group by key. Unknown keys are rejected rather than coerced, so a stale client cannot write a value the catalog does not describe.
+
+## The Survey Closes Onboarding Instead of Gating It (2026-09-20)
+
+**Decision:** Show the survey as the final step of the existing `/onboarding` page, after the first sync succeeds. Keep the `onboarding_completed` save where it is, so it still fires as soon as usage arrives.
+
+**Alternatives considered:**
+
+1. **A separate `/onboarding/heard-about` route after the sync step** — rejected because `onboarding_completed` would have to move to the last step. That delays the welcome email, and it would skip the server-side `activation_completed` event for anyone who syncs and then abandons the survey, corrupting the activation funnel this project measures.
+2. **A blocking step before the sync command** — rejected because it puts a survey in front of the activation action, which the first-sync conversion work set out to shorten.
+
+**Why the inline step:** onboarding still completes on confirmed usage, so no funnel event changes meaning. The survey is the last thing a new user sees before entering the app, and Skip leaves the database untouched.

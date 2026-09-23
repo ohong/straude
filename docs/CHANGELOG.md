@@ -30,6 +30,8 @@
 
 ### Added
 
+- **Capture how new users find Straude.** First-sync onboarding now ends with a multi-select "How did you hear about us?" step that stores every selected source in `users.heard_about_sources`. Choosing "Other" reveals an optional free-text detail kept in the existing `heard_about` column. Skip closes the step without writing anything. Apply `20260920120000_add_users_heard_about_sources.sql` before deploying.
+
 - **Repeatable favicon verification.** `bun run --cwd apps/web test:favicons` covers image processing, discovery, transport, cache, settings and badge behavior. The dedicated Supabase integration suite exercises real database/Storage writes; `e2e/team-favicon-save.spec.ts` verifies authenticated saves and browser rendering with temporary local fixtures. Apply `20260905120000_team_favicon_cache.sql` before deploying the resolver.
 
 ### CLI 0.2.0 hardening

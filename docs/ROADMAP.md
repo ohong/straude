@@ -21,6 +21,15 @@ Direct favicon discovery shipped on 2026-09-05. It prefers sanitized SVG, uses d
 
 ## Acquisition
 
+### Acquisition-Source Survey Follow-Ups
+
+The onboarding survey shipped 2026-09-20 with `users.heard_about_sources` and a fixed option catalog in `apps/web/lib/onboarding/heard-about-options.ts`. Follow-ups:
+
+- **Edit the answer in Settings.** Settings still shows only the free-text `heard_about` field. Reuse the survey chips there so a user can correct an answer after onboarding, then decide whether the two fields need to stay separate.
+- **Instrument the answer.** The survey currently writes to Postgres only. Consider an analytics event, or a monthly aggregate query over `unnest(heard_about_sources)`, so the acquisition mix is visible next to the activation funnel.
+- **Report the mix.** A small admin view or saved query would show which sources actually produce users that complete a first sync, not just which sources get selected.
+
+
 ### Stats Card Enhancements
 
 The GitHub README stats card shipped as a single compact PNG. Future enhancements:

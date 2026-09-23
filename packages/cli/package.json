@@ -1,6 +1,6 @@
 {
   "name": "straude",
-  "version": "0.2.0",
+  "version": "0.2.1",
   "description": "CLI for pushing AI coding agent usage stats to Straude",
   "repository": {
     "type": "git",

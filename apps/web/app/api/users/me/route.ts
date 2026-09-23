@@ -9,12 +9,17 @@ import { attributeReferral } from "@/lib/referral";
 import { normalizeTeamUrl, resolveTeamFavicon } from "@/lib/team-favicon";
 import { isAllowedAvatarUrl } from "@/lib/storage";
 import { rateLimit } from "@/lib/rate-limit";
+import {
+  HEARD_ABOUT_OPTION_KEYS,
+  normalizeHeardAboutSources,
+} from "@/lib/onboarding/heard-about-options";
 
 const ALLOWED_FIELDS = [
   "username",
   "display_name",
   "bio",
   "heard_about",
+  "heard_about_sources",
   "country",
   "link",
   "is_public",
@@ -188,6 +193,28 @@ export async function PATCH(request: NextRequest) {
       return NextResponse.json(
         { error: "How you heard about Straude must be text" },
         { status: 400 }
+      );
+    }
+  }
+
+  // Multi-select acquisition sources. The catalog lives in the web app, so an
+  // unrecognized key is a stale client rather than user input to coerce.
+  if (updates.heard_about_sources !== undefined) {
+    if (updates.heard_about_sources === null) {
+      updates.heard_about_sources = null;
+    } else if (Array.isArray(updates.heard_about_sources)) {
+      const sources = normalizeHeardAboutSources(updates.heard_about_sources);
+      if (!sources) {
+        return NextResponse.json(
+          { error: "heard_about_sources must include at least one known option" },
+          { status: 400 },
+        );
+      }
+      updates.heard_about_sources = sources;
+    } else {
+      return NextResponse.json(
+        { error: `heard_about_sources must be an array of ${HEARD_ABOUT_OPTION_KEYS.length} known options or null` },
+        { status: 400 },
       );
     }
   }
@@ -499,6 +526,7 @@ export async function DELETE(request: NextRequest) {
       link: null,
       github_username: null,
       heard_about: null,
+      heard_about_sources: null,
       is_public: false,
       email_notifications: false,
       email_mention_notifications: false,

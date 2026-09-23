@@ -143,6 +143,7 @@ function makePost(): Post {
       display_name: "Alice",
       bio: null,
       heard_about: null,
+      heard_about_sources: null,
       avatar_url: null,
       country: "US",
       region: "north_america",

@@ -82,6 +82,15 @@ describe("first-sync onboarding", () => {
     expect(screen.getByText("gpt-5.4")).toBeInTheDocument();
     expect(screen.getByText("2026-09-03")).toBeInTheDocument();
     expect(screen.queryByText("Sessions")).not.toBeInTheDocument();
+    // The acquisition survey closes onboarding before the hand-off actions appear.
+    expect(screen.getByText("How did you hear about us?")).toBeInTheDocument();
+    expect(screen.queryByRole("link", { name: /add a handle/ })).not.toBeInTheDocument();
+    fireEvent.click(screen.getByRole("checkbox", { name: "Google" }));
+    fireEvent.click(screen.getByRole("button", { name: "Submit" }));
+    await flush();
+    expect(JSON.parse(completeSetup.mock.calls[1][0].body)).toEqual({
+      heard_about_sources: ["google"],
+    });
     expect(screen.getByRole("link", { name: /add a handle/ })).toHaveAttribute("href", "/settings");
     expect(track).toHaveBeenCalledWith("activation_completed", expect.objectContaining({
       has_existing_usage: false,
@@ -92,7 +101,12 @@ describe("first-sync onboarding", () => {
     expect(push).toHaveBeenCalledWith("/u/oscar");
     await act(async () => { await vi.advanceTimersByTimeAsync(12_000); });
     expect(getStatus).toHaveBeenCalledTimes(2);
-    expect(completeSetup).toHaveBeenCalledTimes(1);
+    // One completion save plus the survey save; continued polling adds neither.
+    expect(completeSetup).toHaveBeenCalledTimes(2);
+    expect(JSON.parse(completeSetup.mock.calls[0][0].body)).toEqual({
+      onboarding_completed: true,
+      timezone: Intl.DateTimeFormat().resolvedOptions().timeZone,
+    });
   });
 
   it.each(["network", "http"])("recovers from a %s status failure", async (failure) => {
