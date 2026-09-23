@@ -41,7 +41,7 @@ import {
   _buildWrapperScript,
   _buildPlist,
 } from "../src/lib/scheduler.js";
-import { AUTO_PUSH_SCRIPT_FILE, LAUNCHD_PLIST_PATH } from "../src/config.js";
+import { AUTO_PUSH_SCRIPT_FILE, CLI_VERSION, LAUNCHD_PLIST_PATH } from "../src/config.js";
 
 const mockExecFileSync = vi.mocked(execFileSync);
 const mockWriteFileSync = vi.mocked(writeFileSync);
@@ -115,8 +115,8 @@ describe("_buildWrapperScript", () => {
     const script = _buildWrapperScript();
     expect(script).toContain("#!/bin/sh");
     expect(script).toContain("Auto-push starting");
-    expect(script).toContain("exec bunx straude@0.2.0 push --non-interactive");
-    expect(script).toContain("exec npx --yes straude@0.2.0 push --non-interactive");
+    expect(script).toContain(`exec bunx straude@${CLI_VERSION} push --non-interactive`);
+    expect(script).toContain(`exec npx --yes straude@${CLI_VERSION} push --non-interactive`);
     expect(script).not.toContain("straude@latest");
     expect(script).toContain("tail -n 500");
   });

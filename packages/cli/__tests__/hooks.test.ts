@@ -45,6 +45,7 @@ import {
   CLAUDE_SETTINGS_PATH,
 } from "../src/lib/hooks.js";
 import { renameSync } from "node:fs";
+import { CLI_VERSION } from "../src/config.js";
 
 // ---------------------------------------------------------------------------
 // Setup
@@ -89,7 +90,7 @@ describe("installClaudeCodeHook", () => {
     expect(sessionEnd).toHaveLength(1);
     expect(sessionEnd[0]!.hooks[0]!.type).toBe("command");
     expect(sessionEnd[0]!.hooks[0]!.command).toBe(
-      "npx --yes straude@0.2.0 push --non-interactive",
+      `npx --yes straude@${CLI_VERSION} push --non-interactive`,
     );
     expect(sessionEnd[0]!.hooks[0]!.async).toBe(true);
     expect(renameSync).toHaveBeenCalledWith(
@@ -128,7 +129,7 @@ describe("installClaudeCodeHook", () => {
     expect(sessionEnd).toHaveLength(2);
     expect(sessionEnd[0]!.hooks[0]!.command).toBe("other-tool cleanup");
     expect(sessionEnd[1]!.hooks[0]!.command).toBe(
-      "npx --yes straude@0.2.0 push --non-interactive",
+      `npx --yes straude@${CLI_VERSION} push --non-interactive`,
     );
   });
 

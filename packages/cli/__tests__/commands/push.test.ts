@@ -88,6 +88,7 @@ import {
   pushCommand,
 } from "../../src/commands/push.js";
 import { PricingUnavailableError } from "../../src/lib/ccusage.js";
+import { CLI_VERSION } from "../../src/config.js";
 
 const today = "2026-03-13";
 const priorDevice = "22222222-2222-4222-8222-222222222222";
@@ -270,7 +271,7 @@ describe("pushCommand v2", () => {
     });
     expect(body.entries[0].content_hash).toMatch(/^[a-f0-9]{64}$/);
     expect(submitCall[2].headers).toEqual({
-      "X-Straude-CLI-Version": "0.2.0",
+      "X-Straude-CLI-Version": CLI_VERSION,
       "X-Straude-Retry-Attempt": "0",
     });
     expect(removeBatchMock).toHaveBeenCalledWith(body.request_id);

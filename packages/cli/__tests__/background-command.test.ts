@@ -7,6 +7,7 @@ import {
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, describe, expect, it } from "vitest";
+import { CLI_VERSION } from "../src/config.js";
 import {
   durableBackgroundInvocation,
   exactBackgroundCommand,
@@ -27,7 +28,7 @@ describe("background CLI command", () => {
     process.argv[1] = "/tmp/vitest.mjs";
     expect(durableBackgroundInvocation()).toBeNull();
     expect(exactBackgroundCommand()).toBe(
-      "npx --yes straude@0.2.0 push --non-interactive",
+      `npx --yes straude@${CLI_VERSION} push --non-interactive`,
     );
   });
 
@@ -46,6 +47,6 @@ describe("background CLI command", () => {
       args: [expect.stringMatching(/packages\/cli\/dist\/index\.js$/)],
     });
     expect(exactBackgroundCommand()).toContain("'push' '--non-interactive'");
-    expect(exactBackgroundCommand()).not.toContain("straude@0.2.0");
+    expect(exactBackgroundCommand()).not.toContain(`straude@${CLI_VERSION}`);
   });
 });
