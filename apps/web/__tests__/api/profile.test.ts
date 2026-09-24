@@ -670,6 +670,23 @@ describe("PATCH /api/users/me", () => {
     expect(updateMock).toHaveBeenCalledWith({ heard_about_sources: ["google", "github"] });
   });
 
+  it("stores the search-engine choice with its optional detail", async () => {
+    const { updateMock } = mockAuthenticatedProfileUpdate();
+
+    const res = await PATCH(
+      makeRequest("PATCH", "/api/users/me", {
+        heard_about_sources: ["search_engine"],
+        heard_about: "  AI coding usage tracker  ",
+      })
+    );
+
+    expect(res.status).toBe(200);
+    expect(updateMock).toHaveBeenCalledWith({
+      heard_about_sources: ["search_engine"],
+      heard_about: "AI coding usage tracker",
+    });
+  });
+
   it("rejects unknown acquisition sources instead of storing them", async () => {
     const client: Record<string, any> = {
       auth: {

@@ -23,6 +23,8 @@
 
 ### Changed
 
+- **Make the acquisition question quicker to answer.** First-sync onboarding now offers one source choice and an optional detail for any choice. The shorter list keeps channel answers distinct, including search engines and AI assistants. Existing saved source keys and the profile API remain compatible.
+
 - **Show the first-sync command immediately after signup.** Onboarding opens with `npx straude@latest`, live usage checks, and privacy guidance. Handle and profile editing move to Settings. Users can explore the feed without marking onboarding complete; confirmed usage unlocks real stats and the completion step.
 
 - **Team favicons prefer organization sites with Google as a fallback.** Discovery prefers sanitized SVG from conventional paths, HTML icon links and web manifests. If direct discovery finds no usable image, the server requests Google's favicon endpoint. ICO links and bodies are excluded, with no ICO decoder dependency. Raster images become lossless PNG output inside 128×128 without enlargement or cropping. Downloads validate public IP destinations and pin each connection to its checked address, with bounded redirects, concurrency, bytes and deadlines. Reusing a downloaded URL preserves the byte limit of each consuming resource.

@@ -83,13 +83,14 @@ describe("first-sync onboarding", () => {
     expect(screen.getByText("2026-09-03")).toBeInTheDocument();
     expect(screen.queryByText("Sessions")).not.toBeInTheDocument();
     // The acquisition survey closes onboarding before the hand-off actions appear.
-    expect(screen.getByText("How did you hear about us?")).toBeInTheDocument();
+    expect(screen.getByText("How did you find Straude?")).toBeInTheDocument();
     expect(screen.queryByRole("link", { name: /add a handle/ })).not.toBeInTheDocument();
-    fireEvent.click(screen.getByRole("checkbox", { name: "Google" }));
-    fireEvent.click(screen.getByRole("button", { name: "Submit" }));
+    fireEvent.click(screen.getByRole("radio", { name: "Search engine" }));
+    fireEvent.click(screen.getByRole("button", { name: "Continue" }));
     await flush();
     expect(JSON.parse(completeSetup.mock.calls[1][0].body)).toEqual({
-      heard_about_sources: ["google"],
+      heard_about_sources: ["search_engine"],
+      heard_about: null,
     });
     expect(screen.getByRole("link", { name: /add a handle/ })).toHaveAttribute("href", "/settings");
     expect(track).toHaveBeenCalledWith("activation_completed", expect.objectContaining({

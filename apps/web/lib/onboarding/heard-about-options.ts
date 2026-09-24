@@ -6,6 +6,7 @@
  */
 export const HEARD_ABOUT_OPTION_KEYS = [
   "google",
+  "search_engine",
   "friend_or_coworker",
   "newsletter",
   "hacker_news",
@@ -24,16 +25,31 @@ export const HEARD_ABOUT_OPTION_KEYS = [
 
 export type HeardAboutOptionKey = (typeof HEARD_ABOUT_OPTION_KEYS)[number];
 
-/** Key that reveals the optional free-text detail stored in `heard_about`. */
-export const HEARD_ABOUT_OTHER_KEY: HeardAboutOptionKey = "other";
+/** Keep the onboarding choice short while retaining older keys for stored answers. */
+export const HEARD_ABOUT_SURVEY_KEYS = [
+  "search_engine",
+  "friend_or_coworker",
+  "x_twitter",
+  "github",
+  "hacker_news",
+  "reddit",
+  "newsletter",
+  "podcast",
+  "youtube",
+  "ai_agent",
+  "other",
+] as const satisfies readonly HeardAboutOptionKey[];
+
+export type HeardAboutSurveyKey = (typeof HEARD_ABOUT_SURVEY_KEYS)[number];
 
 export const HEARD_ABOUT_LABELS: Record<HeardAboutOptionKey, string> = {
   google: "Google",
+  search_engine: "Search engine",
   friend_or_coworker: "Friend or coworker",
   newsletter: "Newsletter",
   hacker_news: "Hacker News",
   reddit: "Reddit",
-  x_twitter: "X.com (Twitter)",
+  x_twitter: "X / Twitter",
   linkedin: "LinkedIn",
   youtube: "YouTube",
   instagram: "Instagram",
@@ -41,7 +57,7 @@ export const HEARD_ABOUT_LABELS: Record<HeardAboutOptionKey, string> = {
   github: "GitHub",
   billboards_outside: "Billboards / Outside",
   podcast: "Podcast",
-  ai_agent: "AI agent",
+  ai_agent: "AI assistant",
   other: "Other",
 };
 

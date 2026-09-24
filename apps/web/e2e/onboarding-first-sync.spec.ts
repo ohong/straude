@@ -304,9 +304,9 @@ test.describe("first-sync onboarding", () => {
       expect((await patchResponse).status()).toBe(200);
 
       // The acquisition survey is the last onboarding step; its answer is stored.
-      await expect(page.getByText("How did you hear about us?")).toBeVisible();
-      await page.getByRole("checkbox", { name: "GitHub" }).click();
-      await page.getByRole("button", { name: "Submit" }).click();
+      await expect(page.getByText("How did you find Straude?")).toBeVisible();
+      await page.getByRole("radio", { name: "GitHub" }).click();
+      await page.getByRole("button", { name: "Continue" }).click();
       await expect(page.getByRole("button", { name: "Go to your feed" })).toBeVisible();
 
       const { data: profile, error } = await adminClient()

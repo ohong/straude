@@ -1,91 +1,58 @@
 "use client";
 
 import { useState } from "react";
-import { Checkbox } from "@base-ui-components/react/checkbox";
-import {
-  Chrome,
-  Ellipsis,
-  Facebook,
-  Github,
-  Instagram,
-  Linkedin,
-  MessagesSquare,
-  Mic,
-  MonitorPlay,
-  Newspaper,
-  Rss,
-  Sparkles,
-  Twitter,
-  UsersRound,
-  Youtube,
-  type LucideIcon,
-} from "lucide-react";
 import { Button } from "@/components/ui/Button";
 import { Input } from "@/components/ui/Input";
 import {
   HEARD_ABOUT_LABELS,
-  HEARD_ABOUT_OPTION_KEYS,
-  HEARD_ABOUT_OTHER_KEY,
-  type HeardAboutOptionKey,
+  HEARD_ABOUT_SURVEY_KEYS,
+  type HeardAboutSurveyKey,
 } from "@/lib/onboarding/heard-about-options";
 import { cn } from "@/lib/utils/cn";
 
-const OTHER_DETAIL_MAX_LENGTH = 500;
-
-const OPTION_ICONS: Record<HeardAboutOptionKey, LucideIcon> = {
-  google: Chrome,
-  friend_or_coworker: UsersRound,
-  newsletter: Newspaper,
-  hacker_news: Rss,
-  reddit: MessagesSquare,
-  x_twitter: Twitter,
-  linkedin: Linkedin,
-  youtube: Youtube,
-  instagram: Instagram,
-  facebook: Facebook,
-  github: Github,
-  billboards_outside: MonitorPlay,
-  podcast: Mic,
-  ai_agent: Sparkles,
-  other: Ellipsis,
+const DETAIL_MAX_LENGTH = 160;
+const DETAIL_PLACEHOLDERS: Record<HeardAboutSurveyKey, string> = {
+  search_engine: "What did you search for?",
+  friend_or_coworker: "Who or what group mentioned it?",
+  x_twitter: "A post or account",
+  github: "A repo or profile",
+  hacker_news: "A post title",
+  reddit: "A subreddit or post",
+  newsletter: "Which newsletter?",
+  podcast: "Which show or episode?",
+  youtube: "Which video or channel?",
+  ai_agent: "Which assistant?",
+  other: "A community, event, or site",
 };
 
 export function HeardAboutStep({ onDone }: { onDone: () => void }) {
-  const [selected, setSelected] = useState<HeardAboutOptionKey[]>([]);
-  const [otherDetail, setOtherDetail] = useState("");
+  const [selected, setSelected] = useState<HeardAboutSurveyKey | null>(null);
+  const [detail, setDetail] = useState("");
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
-  const otherSelected = selected.includes(HEARD_ABOUT_OTHER_KEY);
-
-  function setOptionSelected(key: HeardAboutOptionKey, checked: boolean) {
-    setSelected((current) =>
-      checked ? [...current, key] : current.filter((value) => value !== key),
-    );
+  function selectSource(key: HeardAboutSurveyKey) {
+    if (key !== selected) setDetail("");
+    setSelected(key);
+    setError(null);
   }
 
   async function handleSubmit(event: React.FormEvent<HTMLFormElement>) {
     event.preventDefault();
-    if (selected.length === 0 || saving) return;
+    if (!selected || saving) return;
 
     setSaving(true);
     setError(null);
-
-    // Send catalog order so the payload matches the order the API stores.
-    const body: Record<string, unknown> = {
-      heard_about_sources: HEARD_ABOUT_OPTION_KEYS.filter((key) => selected.includes(key)),
-    };
-    // "Other" is the only option with a free-text detail; keep the rest of the
-    // free-text column untouched when the option is not selected.
-    if (otherSelected) {
-      body.heard_about = otherDetail.trim() || null;
-    }
 
     try {
       const response = await fetch("/api/users/me", {
         method: "PATCH",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(body),
+        body: JSON.stringify({
+          // The column remains an array so earlier answers and consumers stay valid.
+          heard_about_sources: [selected],
+          heard_about: detail.trim() || null,
+        }),
       });
       if (!response.ok) {
         const payload = await response.json().catch(() => ({}));
@@ -97,7 +64,6 @@ export function HeardAboutStep({ onDone }: { onDone: () => void }) {
         setSaving(false);
         return;
       }
-      // The parent unmounts this step, so no state reset is needed on success.
       onDone();
     } catch {
       setError("We could not save your answer. Check your connection and try again.");
@@ -109,66 +75,69 @@ export function HeardAboutStep({ onDone }: { onDone: () => void }) {
     <form onSubmit={handleSubmit} className="mt-6">
       <fieldset className="border-0 p-0" aria-describedby="heard-about-hint">
         <legend className="text-balance text-lg font-medium">
-          How did you hear about us?
+          How did you find Straude?
         </legend>
         <p id="heard-about-hint" className="mt-1 text-pretty text-sm text-muted">
-          Select all that apply. This helps us understand where people find Straude.
+          Choose the first place you heard about us.
         </p>
 
         <div className="mt-4 flex flex-wrap gap-2">
-          {HEARD_ABOUT_OPTION_KEYS.map((key) => {
-            const Icon = OPTION_ICONS[key];
-            return (
-              <Checkbox.Root
-                key={key}
-                checked={selected.includes(key)}
-                onCheckedChange={(checked) => setOptionSelected(key, checked)}
+          {HEARD_ABOUT_SURVEY_KEYS.map((key) => (
+            <label key={key} className="cursor-pointer">
+              <input
+                type="radio"
+                name="heard_about_source"
+                value={key}
+                checked={selected === key}
+                onChange={() => selectSource(key)}
+                className="peer sr-only"
+              />
+              <span
                 className={cn(
-                  "inline-flex items-center gap-1.5 rounded-full border px-3 py-1.5 text-sm transition-colors duration-150",
-                  "focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent",
-                  "data-unchecked:border-border data-unchecked:text-muted data-unchecked:hover:bg-subtle",
-                  "data-checked:border-accent data-checked:bg-accent/10 data-checked:font-medium data-checked:text-foreground",
+                  "inline-flex min-h-10 items-center gap-2 rounded-full border border-border px-3.5 py-2 text-sm text-foreground transition-colors duration-150",
+                  "hover:bg-subtle peer-focus-visible:outline-2 peer-focus-visible:outline-offset-2 peer-focus-visible:outline-accent",
+                  "peer-checked:border-accent peer-checked:bg-accent/10 peer-checked:font-medium",
                 )}
               >
-                <Icon size={16} aria-hidden="true" />
+                <span
+                  className="grid size-4 shrink-0 place-items-center rounded-full border border-current text-muted"
+                  aria-hidden="true"
+                >
+                  {selected === key && <span className="size-2 rounded-full bg-accent" />}
+                </span>
                 {HEARD_ABOUT_LABELS[key]}
-              </Checkbox.Root>
-            );
-          })}
+              </span>
+            </label>
+          ))}
         </div>
 
-        {otherSelected && (
-          <div className="mt-4">
-            <label
-              htmlFor="heard-about-other"
-              className="mb-1 block text-xs font-semibold uppercase tracking-widest text-muted"
-            >
-              Tell us where
+        {selected && (
+          <div className="mt-5">
+            <label htmlFor="heard-about-detail" className="mb-1.5 block text-sm font-medium">
+              {selected === "other" ? "Where did you find us?" : "Anything more specific?"}{" "}
+              <span className="font-normal text-muted">(optional)</span>
             </label>
             <Input
-              id="heard-about-other"
-              value={otherDetail}
-              onChange={(event) => setOtherDetail(event.target.value)}
-              maxLength={OTHER_DETAIL_MAX_LENGTH}
-              placeholder="Conference, community, a blog post…"
-              aria-describedby="heard-about-other-hint"
+              id="heard-about-detail"
+              value={detail}
+              onChange={(event) => setDetail(event.target.value)}
+              maxLength={DETAIL_MAX_LENGTH}
+              placeholder={DETAIL_PLACEHOLDERS[selected]}
+              aria-describedby="heard-about-detail-hint"
             />
-            <p id="heard-about-other-hint" className="mt-1 text-xs text-muted">
-              Optional. {otherDetail.length}/{OTHER_DETAIL_MAX_LENGTH}
+            <p id="heard-about-detail-hint" className="mt-1 text-xs text-muted">
+              {detail.length}/{DETAIL_MAX_LENGTH} characters
             </p>
           </div>
         )}
       </fieldset>
 
-      <div className="mt-4 flex flex-wrap items-center justify-end gap-3">
-        <p role="status" className="mr-auto text-xs text-muted">
-          {selected.length > 0 ? `${selected.length} selected` : ""}
-        </p>
+      <div className="mt-5 flex items-center justify-end gap-3">
         <Button type="button" variant="secondary" onClick={onDone} disabled={saving}>
           Skip
         </Button>
-        <Button type="submit" disabled={selected.length === 0 || saving}>
-          {saving ? "Saving…" : "Submit"}
+        <Button type="submit" disabled={!selected || saving}>
+          {saving ? "Saving…" : "Continue"}
         </Button>
       </div>
 
