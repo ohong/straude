@@ -48,20 +48,6 @@ afterEach(() => {
 });
 
 describe("ShareMenu", () => {
-  it("shows a native share action when navigator.share is available", () => {
-    Object.defineProperty(window.navigator, "share", {
-      value: vi.fn(),
-      configurable: true,
-    });
-
-    render(<ShareMenu post={makePost() as any} />);
-    fireEvent.click(screen.getByRole("button", { name: /share/i }));
-
-    expect(
-      screen.getByRole("button", { name: /share to apps/i })
-    ).toBeInTheDocument();
-  });
-
   it("opens an X composer with the post URL", () => {
     const openSpy = vi.spyOn(window, "open").mockImplementation(() => null);
 

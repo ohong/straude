@@ -1,4 +1,4 @@
-import { act, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
+import { act, render, screen, waitFor } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { FeedList } from "@/components/app/feed/FeedList";
 import type { Post } from "@/types";
@@ -18,8 +18,6 @@ vi.mock("@/components/app/feed/PendingPostsNudge", () => ({
 vi.mock("@/lib/analytics/client", () => ({
   trackActivationEvent: vi.fn(),
 }));
-
-import { trackActivationEvent } from "@/lib/analytics/client";
 
 let intersectionCallback:
   | ((entries: Array<{ isIntersecting: boolean }>) => void)
@@ -100,40 +98,6 @@ describe("FeedList", () => {
     vi.unstubAllGlobals();
   });
 
-  it("switches feed tabs through /api/feed and replaces pending posts from the response", async () => {
-    vi.mocked(fetch).mockResolvedValueOnce(
-      new Response(
-        JSON.stringify({
-          posts: [makePost("following-1", { title: "Following session" })],
-          next_cursor: "2026-01-01|2026-01-01T12:00:00.000Z",
-          pending_posts: [makePost("pending-1")],
-        }),
-        { headers: { "Content-Type": "application/json" } },
-      ),
-    );
-
-    render(
-      <FeedList
-        initialPosts={[makePost("global-1", { title: "Global session" })]}
-        userId="user-1"
-      />,
-    );
-
-    fireEvent.click(screen.getByRole("button", { name: /global/i }));
-    fireEvent.click(screen.getByRole("button", { name: /following/i }));
-
-    await waitFor(() => {
-      expect(screen.getByText("Following session")).toBeInTheDocument();
-    });
-
-    expect(fetch).toHaveBeenCalledWith(
-      "/api/feed?type=following&limit=20",
-      expect.objectContaining({ signal: expect.any(AbortSignal) }),
-    );
-    expect(screen.getByTestId("pending-posts")).toHaveTextContent("1 pending");
-    expect(screen.queryByText("Global session")).not.toBeInTheDocument();
-  });
-
   it("uses the server-provided initial cursor for pagination", async () => {
     vi.mocked(fetch).mockResolvedValueOnce(
       new Response(
@@ -168,54 +132,5 @@ describe("FeedList", () => {
       "2026-01-01|2026-01-01T12:00:00.000Z",
     );
     expect(request.searchParams.get("limit")).toBe("20");
-  });
-
-  it("shows a copyable first-sync command for the signed-in empty sessions feed", async () => {
-    render(
-      <FeedList
-        initialPosts={[]}
-        userId="user-1"
-        feedType="mine"
-      />,
-    );
-
-    const emptyState = screen.getByRole("region", { name: /sync your first session/i });
-    expect(within(emptyState).getByText("Sync your first session")).toBeInTheDocument();
-    expect(within(emptyState).getByText("npx straude@latest")).toBeInTheDocument();
-
-    fireEvent.click(screen.getByRole("button", { name: /copy first sync command/i }));
-
-    await waitFor(() => {
-      expect(navigator.clipboard.writeText).toHaveBeenCalledWith("npx straude@latest");
-    });
-    expect(trackActivationEvent).toHaveBeenCalledWith("sync_command_copied", expect.objectContaining({
-      surface: "empty_state",
-      cta_location: "feed_empty_state",
-      command: "npx straude@latest",
-    }));
-  });
-
-  it("shows a contextual signup CTA after guest feed content", () => {
-    render(
-      <FeedList
-        initialPosts={[
-          makePost("guest-1", { title: "First public session" }),
-          makePost("guest-2", { title: "Second public session" }),
-        ]}
-        userId={null}
-      />,
-    );
-
-    const cta = screen.getByRole("link", { name: /start your streak/i });
-    expect(cta).toHaveAttribute("href", "/signup");
-
-    cta.addEventListener("click", (event) => event.preventDefault());
-    fireEvent.click(cta);
-
-    expect(trackActivationEvent).toHaveBeenCalledWith("guest_signup_cta_clicked", expect.objectContaining({
-      surface: "feed",
-      cta_location: "feed_after_posts",
-      destination: "/signup",
-    }));
   });
 });

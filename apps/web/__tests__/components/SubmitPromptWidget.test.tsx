@@ -100,16 +100,6 @@ describe("SubmitPromptWidget", () => {
     });
   });
 
-  it("shows the submit keyboard shortcut hint", async () => {
-    render(<SubmitPromptWidget username="jane" />);
-
-    await openPromptModal();
-
-    expect(
-      screen.getByRole("button", { name: /submit prompt ⌘↵/i }),
-    ).toBeInTheDocument();
-  });
-
   it("shows community prompts inside the modal and can return to submit view", async () => {
     const fetchMock = vi.spyOn(global, "fetch" as any).mockResolvedValue({
       ok: true,

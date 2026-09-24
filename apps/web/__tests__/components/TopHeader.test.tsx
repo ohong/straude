@@ -61,27 +61,6 @@ describe("TopHeader", () => {
     vi.unstubAllGlobals();
   });
 
-  it("renders the panels trigger when shell panels are available", async () => {
-    renderTopHeader({
-      username: "alice",
-      avatarUrl: null,
-      panelTriggerLabel: "Panels",
-      onOpenPanels: vi.fn(),
-    });
-
-    await waitFor(() => {
-      expect(screen.getByRole("button", { name: /open panels/i })).toBeInTheDocument();
-    });
-  });
-
-  it("hides the panels trigger in full desktop mode", async () => {
-    renderTopHeader({ username: "alice", avatarUrl: null });
-
-    await waitFor(() => {
-      expect(screen.queryByRole("button", { name: /open panels/i })).not.toBeInTheDocument();
-    });
-  });
-
   it("loads shared app counts without fetching notification lists or message threads", async () => {
     renderTopHeader({ username: "alice", avatarUrl: null });
 

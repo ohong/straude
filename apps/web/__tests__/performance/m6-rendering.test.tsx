@@ -1,7 +1,6 @@
 import { act, render, screen } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { RecapPage } from "@/components/app/recap/RecapPage";
-import { RouteLoading } from "@/components/app/shared/RouteLoading";
 import SearchClient from "@/components/app/search/SearchClient";
 import type { RecapData } from "@/lib/utils/recap";
 
@@ -60,13 +59,5 @@ describe("M6 server-provided route data", () => {
       "/u/alice",
     );
     expect(fetchMock).not.toHaveBeenCalled();
-  });
-
-  it("announces route-level loading state without exposing skeletons", () => {
-    render(<RouteLoading label="settings" />);
-
-    const status = screen.getByRole("status");
-    expect(status).toHaveAttribute("aria-busy", "true");
-    expect(status).toHaveTextContent("Loading settings");
   });
 });

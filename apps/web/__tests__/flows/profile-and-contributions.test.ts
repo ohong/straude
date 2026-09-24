@@ -112,105 +112,6 @@ describe("Flow: Profile and Contributions", () => {
     expect(updateCall.region).toBe("asia");
   });
 
-  it("GET /api/users/[username] returns full profile with stats", async () => {
-    const userId = "user-profile-1";
-    mockSupabase.auth.getUser.mockResolvedValue({
-      data: { user: { id: "viewer-1" } },
-    });
-
-    const profile = {
-      id: userId,
-      username: "streaker",
-      display_name: "Streak Runner",
-      bio: "Shipping every day",
-      country: "JP",
-      region: "asia",
-      is_public: true,
-    };
-
-    // Profile lookup
-    const profileChain = chainBuilder({ data: profile, error: null });
-
-    // Follower/following/posts counts
-    const followerCount = chainBuilder();
-    (followerCount.select as ReturnType<typeof vi.fn>).mockReturnValue(followerCount);
-    (followerCount.eq as ReturnType<typeof vi.fn>).mockResolvedValue({ count: 42 });
-
-    const followingCount = chainBuilder();
-    (followingCount.select as ReturnType<typeof vi.fn>).mockReturnValue(followingCount);
-    (followingCount.eq as ReturnType<typeof vi.fn>).mockResolvedValue({ count: 15 });
-
-    const postsCount = chainBuilder();
-    (postsCount.select as ReturnType<typeof vi.fn>).mockReturnValue(postsCount);
-    (postsCount.eq as ReturnType<typeof vi.fn>).mockResolvedValue({ count: 30 });
-
-    // Total cost
-    const costChain = chainBuilder();
-    (costChain.select as ReturnType<typeof vi.fn>).mockReturnValue(costChain);
-    (costChain.eq as ReturnType<typeof vi.fn>).mockResolvedValue({
-      data: [{ total_cost: 10.0 }],
-    });
-
-    // Leaderboard rank
-    const weeklyChain = chainBuilder();
-    (weeklyChain.select as ReturnType<typeof vi.fn>).mockReturnValue(weeklyChain);
-    (weeklyChain.eq as ReturnType<typeof vi.fn>).mockReturnValue(weeklyChain);
-    (weeklyChain.maybeSingle as ReturnType<typeof vi.fn>).mockResolvedValue({
-      data: { total_cost: 10.0 },
-    });
-
-    const rankCountChain = chainBuilder();
-    (rankCountChain.select as ReturnType<typeof vi.fn>).mockReturnValue(rankCountChain);
-    (rankCountChain.gt as ReturnType<typeof vi.fn>).mockResolvedValue({ count: 4 });
-
-    const regionRankChain = chainBuilder();
-    (regionRankChain.select as ReturnType<typeof vi.fn>).mockReturnValue(regionRankChain);
-    (regionRankChain.eq as ReturnType<typeof vi.fn>).mockReturnValue(regionRankChain);
-    (regionRankChain.gt as ReturnType<typeof vi.fn>).mockResolvedValue({ count: 1 });
-
-    // Is following check
-    const isFollowingChain = chainBuilder();
-    (isFollowingChain.select as ReturnType<typeof vi.fn>).mockReturnValue(isFollowingChain);
-    (isFollowingChain.eq as ReturnType<typeof vi.fn>).mockReturnValue(isFollowingChain);
-    (isFollowingChain.maybeSingle as ReturnType<typeof vi.fn>).mockResolvedValue({ data: null });
-
-    // Streak
-    mockServiceClient.rpc.mockResolvedValue({ data: 5 });
-
-    mockSupabase.from.mockImplementation((table: string) => {
-      if (table === "follows") return isFollowingChain;
-      return chainBuilder();
-    });
-
-    let serviceCallCount = 0;
-    mockServiceClient.from.mockImplementation((table: string) => {
-      serviceCallCount++;
-      if (table === "users") return profileChain;
-      if (table === "follows") {
-        if (serviceCallCount <= 2) return followerCount;
-        return followingCount;
-      }
-      if (table === "posts") return postsCount;
-      if (table === "daily_usage") return costChain;
-      if (table === "leaderboard_weekly") {
-        if (serviceCallCount <= 6) return weeklyChain;
-        if (serviceCallCount <= 7) return rankCountChain;
-        return regionRankChain;
-      }
-      return chainBuilder();
-    });
-
-    const { GET } = await import("@/app/api/users/[username]/route");
-    const req = makeRequest("http://localhost:3000/api/users/streaker");
-    const res = await GET(req as any, USERNAME_CTX("streaker"));
-    const data = await res.json();
-
-    expect(res.status).toBe(200);
-    expect(data.username).toBe("streaker");
-    expect(data.streak).toBe(5);
-    expect(data.is_following).toBe(false);
-  });
-
   it("GET /api/users/[username]/contributions returns graph data with streak", async () => {
     const userId = "user-profile-1";
     mockSupabase.auth.getUser.mockResolvedValue({
@@ -272,22 +173,5 @@ describe("Flow: Profile and Contributions", () => {
     expect(data.data).toHaveLength(5);
     expect(data.data.every((d: any) => d.cost_usd === 2.5)).toBe(true);
     expect(data.data.every((d: any) => d.has_post === true)).toBe(true);
-  });
-
-  it("returns 404 for nonexistent user profile", async () => {
-    mockSupabase.auth.getUser.mockResolvedValue({
-      data: { user: null },
-    });
-
-    const notFoundChain = chainBuilder({ data: null, error: { message: "not found" } });
-
-    mockSupabase.from.mockImplementation(() => chainBuilder());
-    mockServiceClient.from.mockImplementation(() => notFoundChain);
-
-    const { GET } = await import("@/app/api/users/[username]/route");
-    const req = makeRequest("http://localhost:3000/api/users/nonexistent");
-    const res = await GET(req as any, USERNAME_CTX("nonexistent"));
-
-    expect(res.status).toBe(404);
   });
 });

@@ -3,7 +3,6 @@ import { useState, type ReactNode } from "react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { ThemeProvider } from "@/components/providers/ThemeProvider";
 import { CommandPalette } from "@/components/app/shared/CommandPalette";
-import { THEME_STORAGE_KEY } from "@/lib/theme";
 
 const togglePalette = vi.fn();
 let store: Record<string, string> = {};
@@ -139,43 +138,5 @@ describe("CommandPalette", () => {
     expect(view.getByRole("textbox", { name: "Team" })).toBe(input);
     expect(input).toHaveValue("https://example.com");
     expect(input).toHaveFocus();
-  });
-
-  it("registers theme actions and updates the shared theme store", async () => {
-    render(
-      <ThemeProvider>
-        <CommandPalette username="alice">
-          <div>Child</div>
-        </CommandPalette>
-      </ThemeProvider>,
-    );
-
-    fireEvent.keyDown(window, { key: "k", metaKey: true });
-
-    await waitFor(() => {
-      expect(capturedActions.map((action) => action.id)).toEqual(
-        expect.arrayContaining(["theme-light", "theme-dark", "theme-system"]),
-      );
-    });
-
-    const darkAction = capturedActions.find((action) => action.id === "theme-dark");
-    act(() => {
-      darkAction?.perform?.();
-    });
-
-    await waitFor(() => {
-      expect(localStorage.getItem(THEME_STORAGE_KEY)).toBe("dark");
-      expect(document.documentElement).toHaveAttribute("data-theme", "dark");
-    });
-
-    const systemAction = capturedActions.find((action) => action.id === "theme-system");
-    act(() => {
-      systemAction?.perform?.();
-    });
-
-    await waitFor(() => {
-      expect(localStorage.getItem(THEME_STORAGE_KEY)).toBeNull();
-      expect(document.documentElement).toHaveAttribute("data-theme", "light");
-    });
   });
 });

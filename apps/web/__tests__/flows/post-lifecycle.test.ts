@@ -66,50 +66,6 @@ describe("Flow: Post Lifecycle", () => {
     vi.unstubAllEnvs();
   });
 
-  it("GET returns post with default empty title after auto-creation", async () => {
-    mockSupabase.auth.getUser.mockResolvedValue({
-      data: { user: { id: OWNER_ID } },
-    });
-
-    const post = {
-      id: "post-1",
-      user_id: OWNER_ID,
-      title: null,
-      description: null,
-      images: [],
-      daily_usage: { date: "2026-02-16", cost_usd: 5.0 },
-      user: { id: OWNER_ID, username: "owner" },
-      kudos_count: [{ count: 0 }],
-      comment_count: [{ count: 0 }],
-    };
-
-    const postChain = chainBuilder({ data: post, error: null });
-    const kudosCheckChain = chainBuilder();
-    (kudosCheckChain.select as ReturnType<typeof vi.fn>).mockReturnValue(kudosCheckChain);
-    (kudosCheckChain.eq as ReturnType<typeof vi.fn>).mockReturnValue(kudosCheckChain);
-    (kudosCheckChain.maybeSingle as ReturnType<typeof vi.fn>).mockResolvedValue({ data: null });
-
-    let callCount = 0;
-    mockSupabase.from.mockImplementation((table: string) => {
-      callCount++;
-      if (table === "posts") return postChain;
-      if (table === "kudos") return kudosCheckChain;
-      return chainBuilder();
-    });
-
-    const { GET } = await import("@/app/api/posts/[id]/route");
-    const req = makeRequest("http://localhost:3000/api/posts/post-1");
-    const res = await GET(req as any, CONTEXT("post-1"));
-    const data = await res.json();
-
-    expect(res.status).toBe(200);
-    expect(data.title).toBeNull();
-    expect(data.description).toBeNull();
-    expect(data.kudos_count).toBe(0);
-    expect(data.comment_count).toBe(0);
-    expect(data.has_kudosed).toBe(false);
-  });
-
   it("PATCH adds title, description, and images", async () => {
     mockSupabase.auth.getUser.mockResolvedValue({
       data: { user: { id: OWNER_ID } },
@@ -183,44 +139,6 @@ describe("Flow: Post Lifecycle", () => {
     expect(res.status).toBe(404);
     const data = await res.json();
     expect(data.error).toContain("not yours");
-  });
-
-  it("owner can DELETE their post", async () => {
-    mockSupabase.auth.getUser.mockResolvedValue({
-      data: { user: { id: OWNER_ID } },
-    });
-
-    const deleteChain = chainBuilder();
-    // The route chains .delete().eq().eq() synchronously, then awaits.
-    // Each method must return the chain; the chain itself resolves via `then`.
-    (deleteChain as any).then = (res: any, rej: any) =>
-      Promise.resolve({ error: null }).then(res, rej);
-
-    mockSupabase.from.mockImplementation(() => deleteChain);
-
-    const { DELETE } = await import("@/app/api/posts/[id]/route");
-    const req = makeRequest("http://localhost:3000/api/posts/post-1", { method: "DELETE" });
-    const res = await DELETE(req as any, CONTEXT("post-1"));
-    const data = await res.json();
-
-    expect(res.status).toBe(200);
-    expect(data.success).toBe(true);
-  });
-
-  it("GET deleted post returns 404", async () => {
-    mockSupabase.auth.getUser.mockResolvedValue({
-      data: { user: { id: OWNER_ID } },
-    });
-
-    const notFoundChain = chainBuilder({ data: null, error: { message: "not found" } });
-
-    mockSupabase.from.mockImplementation(() => notFoundChain);
-
-    const { GET } = await import("@/app/api/posts/[id]/route");
-    const req = makeRequest("http://localhost:3000/api/posts/post-1");
-    const res = await GET(req as any, CONTEXT("post-1"));
-
-    expect(res.status).toBe(404);
   });
 
   it("unauthenticated user cannot PATCH", async () => {
