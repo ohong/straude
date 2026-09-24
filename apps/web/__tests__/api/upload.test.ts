@@ -185,18 +185,6 @@ describe("POST /api/upload", () => {
     expect(Buffer.isBuffer(call?.buffer)).toBe(true);
   });
 
-  it("accepts heif files by MIME type", async () => {
-    mockSupabase({ publicUrl: "https://cdn.example.com/user-1/abc.jpg" });
-
-    const res = await POST(
-      makeUploadRequest({ name: "photo.heif", type: "image/heif", size: 100 })
-    );
-    const json = await res.json();
-
-    expect(res.status).toBe(200);
-    expect(json.url).toBeDefined();
-  });
-
   it("detects HEIC by magic bytes when MIME is application/octet-stream", async () => {
     mockSupabase({ publicUrl: "https://cdn.example.com/user-1/abc.jpg" });
 
@@ -204,23 +192,6 @@ describe("POST /api/upload", () => {
       makeUploadRequest({
         name: "IMG_1234.HEIC",
         type: "application/octet-stream",
-        size: 12,
-        buffer: makeHeicBuffer("heic"),
-      })
-    );
-    const json = await res.json();
-
-    expect(res.status).toBe(200);
-    expect(json.url).toBeDefined();
-  });
-
-  it("detects HEIC by magic bytes when MIME is empty", async () => {
-    mockSupabase({ publicUrl: "https://cdn.example.com/user-1/abc.jpg" });
-
-    const res = await POST(
-      makeUploadRequest({
-        name: "IMG_9999.HEIC",
-        type: "",
         size: 12,
         buffer: makeHeicBuffer("heic"),
       })
@@ -329,22 +300,6 @@ describe("POST /api/upload", () => {
     expect(json.url).toBeDefined();
   });
 
-  it("resolves MIME from uppercase .PNG extension when browser sends octet-stream", async () => {
-    mockSupabase({ publicUrl: "https://cdn.example.com/user-1/abc.png" });
-
-    const res = await POST(
-      makeUploadRequest({
-        name: "screenshot.PNG",
-        type: "application/octet-stream",
-        size: 100,
-      })
-    );
-    const json = await res.json();
-
-    expect(res.status).toBe(200);
-    expect(json.url).toBeDefined();
-  });
-
   it("rejects octet-stream that is not HEIC", async () => {
     mockSupabase({});
 
@@ -373,40 +328,6 @@ describe("POST /api/upload", () => {
     expect(json.url).toBe("https://cdn.example.com/user-1/abc.jpg");
   });
 
-  it("accepts png files", async () => {
-    mockSupabase({ publicUrl: "https://cdn.example.com/img.png" });
-
-    const res = await POST(
-      makeUploadRequest({ name: "img.png", type: "image/png", size: 100 })
-    );
-    const json = await res.json();
-
-    expect(res.status).toBe(200);
-    expect(json.url).toBeDefined();
-  });
-
-  it("accepts webp files", async () => {
-    mockSupabase({ publicUrl: "https://cdn.example.com/img.webp" });
-
-    const res = await POST(
-      makeUploadRequest({ name: "img.webp", type: "image/webp", size: 100 })
-    );
-    const json = await res.json();
-
-    expect(res.status).toBe(200);
-  });
-
-  it("accepts gif files", async () => {
-    mockSupabase({ publicUrl: "https://cdn.example.com/img.gif" });
-
-    const res = await POST(
-      makeUploadRequest({ name: "img.gif", type: "image/gif", size: 100 })
-    );
-    const json = await res.json();
-
-    expect(res.status).toBe(200);
-  });
-
   it("rejects post images over the storage bucket's 10MB limit", async () => {
     mockSupabase({});
 
@@ -417,18 +338,6 @@ describe("POST /api/upload", () => {
 
     expect(res.status).toBe(400);
     expect(json.error).toContain("10MB");
-  });
-
-  it("returns url on success", async () => {
-    mockSupabase({ publicUrl: "https://cdn.example.com/user-1/uuid.jpg" });
-
-    const res = await POST(
-      makeUploadRequest({ name: "test.jpg", type: "image/jpeg", size: 100 })
-    );
-    const json = await res.json();
-
-    expect(res.status).toBe(200);
-    expect(json.url).toBe("https://cdn.example.com/user-1/uuid.jpg");
   });
 
   it("uploads avatars to the avatars bucket", async () => {

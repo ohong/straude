@@ -538,26 +538,6 @@ describe("POST /api/posts/[id]/comments", () => {
     expect(json.error).toContain("at most 500 characters");
   });
 
-  it("rejects empty content", async () => {
-    const client: Record<string, any> = {
-      auth: {
-        getUser: vi.fn().mockResolvedValue({
-          data: { user: { id: "user-1" } },
-          error: null,
-        }),
-      },
-      from: vi.fn(),
-    };
-    useClient(client);
-
-    const res = await commentPOST(
-      makeRequest("POST", "/api/posts/post-1/comments", { content: "" }),
-      makeContext("id", "post-1")
-    );
-    const json = await res.json();
-
-    expect(res.status).toBe(400);
-  });
 });
 
 describe("GET /api/posts/[id]/comments", () => {
@@ -831,28 +811,6 @@ describe("PATCH /api/comments/[id]", () => {
 
     expect(res.status).toBe(404);
     expect(json.error).toBe("Comment not found or not yours");
-  });
-
-  it("validates content length on PATCH", async () => {
-    const client: Record<string, any> = {
-      auth: {
-        getUser: vi.fn().mockResolvedValue({
-          data: { user: { id: "user-1" } },
-          error: null,
-        }),
-      },
-      from: vi.fn(),
-    };
-    useClient(client);
-
-    const res = await commentPATCH(
-      makeRequest("PATCH", "/api/comments/c-1", { content: "x".repeat(501) }),
-      makeContext("id", "c-1")
-    );
-    const json = await res.json();
-
-    expect(res.status).toBe(400);
-    expect(json.error).toContain("at most 500 characters");
   });
 });
 

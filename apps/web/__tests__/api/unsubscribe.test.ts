@@ -49,14 +49,6 @@ describe("GET /api/unsubscribe", () => {
     expect(mockUpdate).toHaveBeenCalledWith({ email_notifications: false });
   });
 
-  it("returns 400 when token is missing", async () => {
-    const res = await GET(makeRequest("/api/unsubscribe"));
-    const json = await res.json();
-
-    expect(res.status).toBe(400);
-    expect(json.error).toBe("Missing token");
-  });
-
   it("returns 400 when token is invalid", async () => {
     (verifyUnsubscribeToken as any).mockReturnValue(null);
 

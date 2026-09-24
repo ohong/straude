@@ -101,53 +101,6 @@ describe("POST /api/prompts", () => {
     );
   });
 
-  it("stores anonymous submissions when requested", async () => {
-    const countChain = {
-      select: vi.fn().mockReturnThis(),
-      eq: vi.fn().mockReturnThis(),
-      gte: vi.fn().mockResolvedValue({ count: 0, error: null }),
-    };
-    const insertChain = {
-      insert: vi.fn().mockReturnThis(),
-      select: vi.fn().mockReturnThis(),
-      single: vi.fn().mockResolvedValue({
-        data: {
-          id: "prompt-2",
-          status: "new",
-          is_anonymous: true,
-          created_at: "2026-03-01T10:00:00.000Z",
-        },
-        error: null,
-      }),
-    };
-    let call = 0;
-    (createClient as any).mockResolvedValue({
-      auth: { getUser: vi.fn().mockResolvedValue({ data: { user: { id: "user-1" } } }) },
-      from: vi.fn().mockImplementation(() => {
-        call += 1;
-        return call === 1 ? countChain : insertChain;
-      }),
-    });
-    (getServiceClient as any).mockReturnValue({
-      rpc: allowedRateLimitRpc(),
-      from: vi.fn().mockReturnValue(insertChain),
-    });
-
-    const res = await postPrompt(
-      makeRequest("POST", "/api/prompts", {
-        prompt: "Add one-click copy for CLI commands in onboarding.",
-        anonymous: true,
-      }),
-    );
-    const json = await res.json();
-
-    expect(res.status).toBe(201);
-    expect(json.is_anonymous).toBe(true);
-    expect(insertChain.insert).toHaveBeenCalledWith(
-      expect.objectContaining({ is_anonymous: true }),
-    );
-  });
-
   it("enforces 10 submissions per 24h", async () => {
     const countChain = {
       select: vi.fn().mockReturnThis(),

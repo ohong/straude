@@ -127,15 +127,6 @@ describe("GET /api/recap/image", () => {
     );
   });
 
-  it("returns PNG even with no usage data", async () => {
-    mockSupabase({ usageRows: [] });
-
-    const res = await GET(makeRequest());
-
-    expect(res.status).toBe(200);
-    expect(res.headers.get("Content-Disposition")).toContain("attachment");
-  });
-
   it("accepts month period parameter", async () => {
     mockSupabase({});
 

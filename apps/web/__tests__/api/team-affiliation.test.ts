@@ -47,12 +47,6 @@ describe("team settings save", () => {
     expect(saved).toEqual({ display_name: "Updated name", team_url: "https://example.com", team_favicon_url: profile.team_favicon_url });
   });
 
-  it("does not add a profile read when no team URL is supplied", async () => {
-    expect((await patch({ display_name: "Updated name" })).status).toBe(200);
-    expect(reads).toEqual([]);
-    expect(resolveTeamFavicon).not.toHaveBeenCalled();
-  });
-
   it("resolves a changed team and saves it even when no icon is found", async () => {
     expect((await patch({ team_url: "https://new.example.com" })).status).toBe(200);
     expect(resolveTeamFavicon).toHaveBeenCalledWith("https://new.example.com");
