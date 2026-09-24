@@ -2,6 +2,14 @@
 
 ## Unreleased
 
+### Removed
+
+- **Low-signal unit tests.** Delete 26 unit test files and trim individual tests from 27 more (about 3,100 lines) in `apps/web/__tests__` and `packages/cli/__tests__`. The removed tests echoed mocked Supabase rows back, pinned copy, markup or call counts, or repeated trivial input validation, so they broke on refactors without catching bugs. Tests for pricing math, auth and ownership, SSRF and URL validation, idempotency, rate limits, date edges and CLI parsing stay. `test:favicons` no longer lists the deleted `team-badge` unit test.
+
+### Added
+
+- **E2E-first testing rules.** `CLAUDE.md` and a newly committed `AGENTS.md` tell agents to verify behavior with Playwright and packaged-CLI E2E tests, and not to add tautological, change-detector or after-the-fact unit tests. `AGENTS.md` is no longer in `.gitignore`.
+
 ### Fixed
 
 - **Unpriced third-party models no longer block `straude` pushes.** Codex or Claude Code sessions on a provider model with no LiteLLM price, such as `kimi-fast-latest`, stopped every push with `ccusage did not produce live pricing`. Usage from those models is now left out of the push without a message, and the rest of the day still syncs. Unpriced `claude-*`, `gpt-*` and o-series models still fail closed and retry, because those gaps close when LiteLLM adds the new model.
