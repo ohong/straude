@@ -2,7 +2,7 @@
 
 ## Catch bugs with E2E tests; keep unit tests only for gaps E2E cannot reach (2026-09-24)
 
-**Decision:** E2E tests are the default testing mechanism: Playwright in `apps/web/e2e`, and the built CLI binary in `packages/cli/__tests__/e2e` and `packages/cli/scripts/packaged-cli-e2e.mjs`. Agents must not write unit tests after writing code, and must not add tautological tests (asserting what a mock was told to return) or change-detector tests (pinning copy, markup, class names, call counts or internal structure). A bug fix gets a new test only when no E2E test can cover the behavior. The rules live in the Testing sections of `CLAUDE.md` and `AGENTS.md`.
+**Decision:** E2E tests are the default testing mechanism: Playwright in `apps/web/e2e`, and the built CLI binary in `packages/cli/__tests__/e2e` and `packages/cli/scripts/packaged-cli-e2e.mjs`. Agents must not write unit tests after writing code, and must not add tautological tests (asserting what a mock was told to return) or change-detector tests (pinning copy, markup, class names, call counts or internal structure). A bug fix gets a new test only when no E2E test can cover the behavior.
 
 **Why:** Most of the deleted unit tests mocked Supabase and then asserted the mocked rows came back, or pinned rendered copy and component structure. Those tests failed on harmless refactors and passed through real regressions, so they cost review and maintenance time without catching bugs. E2E tests run the real browser, server, database and packaged binary, so a green run says the product works.
 
