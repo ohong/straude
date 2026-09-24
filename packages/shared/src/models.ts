@@ -15,7 +15,7 @@ export function prettifyModel(model: string): string {
   if (/^o4/i.test(normalized)) return "o4";
   if (/^o3/i.test(normalized)) return "o3";
   // Legacy: broader Claude matching (preserves behavior of ActivityCard,
-  // open-stats, and CLI's prior local copies; tested via prettify-model.test.ts).
+  // open-stats, and CLI's prior local copies).
   if (normalized.includes("fable")) return "Claude Fable";
   if (normalized.includes("opus")) return "Claude Opus";
   if (normalized.includes("sonnet")) return "Claude Sonnet";

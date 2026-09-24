@@ -1,5 +1,15 @@
 # Architecture & Design Decisions
 
+## Catch bugs with E2E tests; keep unit tests only for gaps E2E cannot reach (2026-09-24)
+
+**Decision:** E2E tests are the default testing mechanism: Playwright in `apps/web/e2e`, and the built CLI binary in `packages/cli/__tests__/e2e` and `packages/cli/scripts/packaged-cli-e2e.mjs`. Agents must not write unit tests after writing code, and must not add tautological tests (asserting what a mock was told to return) or change-detector tests (pinning copy, markup, class names, call counts or internal structure). A bug fix gets a new test only when no E2E test can cover the behavior. The rules live in the Testing sections of `CLAUDE.md` and `AGENTS.md`.
+
+**Why:** Most of the deleted unit tests mocked Supabase and then asserted the mocked rows came back, or pinned rendered copy and component structure. Those tests failed on harmless refactors and passed through real regressions, so they cost review and maintenance time without catching bugs. E2E tests run the real browser, server, database and packaged binary, so a green run says the product works.
+
+**What stays:** Unit tests for failure modes E2E cannot reach cheaply: pricing and cost math, fail-closed pricing, usage submit validation and idempotency, auth and ownership checks, SSRF and URL validation, rate limits, date and timezone edges, streaks and ranking, and CLI parsing, sync state and scheduler handling. Integration tests against real Supabase and real ccusage are unchanged.
+
+**Alternatives considered:** (a) Keep the suite and only stop adding new low-signal tests. Rejected because the existing tests keep teaching agents the pattern and keep breaking on refactors. (b) Delete all unit tests. Rejected because the kept tests cover security and money paths that E2E would need many slow, fragile fixtures to reach. (c) Replace mocks with an in-memory Supabase fake. Rejected because it adds a second database implementation to maintain, and the integration suite already runs against the real one.
+
 ## Skip unpriced third-party models; fail closed on first-party ones (2026-09-22)
 
 **Decision:** Narrow the 2026-07-23 pricing rule from "any Claude or Codex model" to "the agent's own vendor models": `claude-*` in Claude Code, and `gpt-*`, `o<digit>*` or `codex-*` in Codex. When one of those has tokens and zero cost, the push still fails with `PricingUnavailableError` and retries later. Any other model with tokens and zero cost, whether or not ccusage flags it with `missingPricing`, is left out of the push without a message: its tokens come off the agent and daily totals, and a day or agent with nothing else left is dropped. The first-party table lives in `FIRST_PARTY_MODELS` in `packages/cli/src/lib/ccusage.ts`.
