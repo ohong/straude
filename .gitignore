@@ -69,7 +69,6 @@ supabase/.temp/
 og-variants/
 .firecrawl/
 
-AGENTS.md
 
 # Waypoint state
 .codex/config.toml
