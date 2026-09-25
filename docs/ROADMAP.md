@@ -163,6 +163,10 @@ No user-facing report buttons or admin moderation queue. Requires new components
 
 ## Infrastructure / Housekeeping
 
+### Consolidate the duplicate `prettifyModel`
+
+`apps/web/lib/share-assets/post-card-image.tsx` keeps a private copy of `prettifyModel` that lacks the substring fallbacks in `@straude/shared/models` (for example a model named `opus-foo` shows as `Claude Opus` in the feed but as the raw ID on the share image). Delete the local copy and import the shared one, then check a share image for a non-`claude-` model name.
+
 ### Migration Drift Guardrails
 
 The repo drifted from the remote Supabase history because several applied migrations never made it back into `supabase/migrations`, while other local files kept older timestamps for the same logical changes. Add a lightweight guardrail in CI or release tooling that runs `supabase migration list --linked` against production metadata and fails when local and remote histories diverge.

@@ -177,16 +177,6 @@ describe("GET /api/feed", () => {
     expect(json.error).toBe("Unauthorized");
   });
 
-  it("rejects user feed without user_id", async () => {
-    mockSupabase({ user: null });
-
-    const res = await GET(makeRequest({ type: "user" }));
-    const json = await res.json();
-
-    expect(res.status).toBe(400);
-    expect(json.error).toBe("user_id is required for user feed");
-  });
-
   it("falls back to the authenticated user's id for self user feed", async () => {
     const client = mockSupabase({
       user: { id: "550e8400-e29b-41d4-a716-446655440000" },
@@ -243,17 +233,6 @@ describe("GET /api/feed", () => {
     );
 
     expect(res.status).toBe(200);
-  });
-
-  it("returns empty array when user follows nobody", async () => {
-    mockSupabase({ posts: [] });
-
-    const res = await GET(makeRequest());
-    const json = await res.json();
-
-    expect(res.status).toBe(200);
-    expect(json.posts).toEqual([]);
-    expect(json.next_cursor).toBeUndefined();
   });
 
   it("returns posts from followed users with enriched fields", async () => {

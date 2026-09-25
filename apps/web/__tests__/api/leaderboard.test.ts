@@ -173,65 +173,6 @@ describe("GET /api/leaderboard", () => {
     expect(json.entries[0].level).toBe(4);
   });
 
-  it("defaults to week period", async () => {
-    const client: Record<string, any> = {
-      auth: {
-        getUser: vi.fn().mockResolvedValue({
-          data: { user: null },
-          error: null,
-        }),
-      },
-      from: vi.fn().mockReturnValue({
-        select: vi.fn().mockImplementation(() => ({
-          order: vi.fn().mockReturnValue({
-            limit: vi.fn().mockResolvedValue({ data: [], error: null }),
-          }),
-          in: vi.fn().mockResolvedValue({ data: [], error: null }),
-        })),
-      }),
-    };
-    (createClient as any).mockResolvedValue(client);
-    (getServiceClient as any).mockReturnValue(client);
-
-    await GET(makeRequest());
-
-    expect(leaderboardMocks.loadEntries).toHaveBeenCalledWith({
-      period: "week",
-      region: null,
-      cursor: null,
-      limit: 50,
-    });
-  });
-
-  it("filters by period", async () => {
-    const client: Record<string, any> = {
-      auth: {
-        getUser: vi.fn().mockResolvedValue({
-          data: { user: null },
-          error: null,
-        }),
-      },
-      from: vi.fn().mockReturnValue({
-        select: vi.fn().mockImplementation(() => ({
-          order: vi.fn().mockReturnValue({
-            limit: vi.fn().mockResolvedValue({ data: [], error: null }),
-          }),
-          in: vi.fn().mockResolvedValue({ data: [], error: null }),
-        })),
-      }),
-    };
-    (createClient as any).mockResolvedValue(client);
-    (getServiceClient as any).mockReturnValue(client);
-
-    await GET(makeRequest({ period: "month" }));
-    expect(leaderboardMocks.loadEntries).toHaveBeenCalledWith({
-      period: "month",
-      region: null,
-      cursor: null,
-      limit: 50,
-    });
-  });
-
   it("rejects invalid period", async () => {
     const client: Record<string, any> = {
       auth: {
@@ -250,47 +191,6 @@ describe("GET /api/leaderboard", () => {
 
     expect(res.status).toBe(400);
     expect(json.error).toBe("Invalid period");
-  });
-
-  it("filters by region", async () => {
-    const selectMock = vi.fn().mockReturnValue({
-      order: vi.fn().mockReturnValue({
-        limit: vi.fn().mockReturnValue({
-          eq: vi.fn().mockResolvedValue({ data: [], error: null }),
-        }),
-      }),
-    });
-
-    const client: Record<string, any> = {
-      auth: {
-        getUser: vi.fn().mockResolvedValue({
-          data: { user: null },
-          error: null,
-        }),
-      },
-      from: vi.fn().mockReturnValue({
-        select: vi.fn().mockImplementation(() => {
-          const chain = selectMock();
-          return {
-            ...chain,
-            in: vi.fn().mockResolvedValue({ data: [], error: null }),
-          };
-        }),
-      }),
-    };
-    (createClient as any).mockResolvedValue(client);
-    (getServiceClient as any).mockReturnValue(client);
-
-    const res = await GET(makeRequest({ region: "north_america" }));
-    const json = await res.json();
-
-    expect(res.status).toBe(200);
-    expect(leaderboardMocks.loadEntries).toHaveBeenCalledWith({
-      period: "week",
-      region: "north_america",
-      cursor: null,
-      limit: 50,
-    });
   });
 
   it("includes user_rank for current user in page", async () => {

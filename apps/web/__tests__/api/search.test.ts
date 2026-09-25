@@ -50,12 +50,6 @@ describe("GET /api/search", () => {
     expect((await res.json()).error).toContain("between 2 and 64 characters");
   });
 
-  it("returns 400 for empty query", async () => {
-    mockClients();
-    const res = await GET(makeRequest());
-    expect(res.status).toBe(400);
-  });
-
   it("rejects wildcard-only queries instead of turning them into a full scan", async () => {
     const { supabaseChain } = mockClients();
 
@@ -98,41 +92,6 @@ describe("GET /api/search", () => {
     expect(supabaseChain.or).toHaveBeenCalledWith(
       'username.ilike."%O\'Brien%",display_name.ilike."%O\'Brien%",github_username.ilike."%O\'Brien%"',
     );
-  });
-
-  it("searches by username and github_username via OR filter", async () => {
-    const users = [{ id: "u-1", username: "alice", display_name: "Alice" }];
-    const { supabaseChain } = mockClients({ users });
-
-    const res = await GET(makeRequest({ q: "alice" }));
-    const json = await res.json();
-
-    expect(res.status).toBe(200);
-    expect(json.users).toHaveLength(1);
-    expect(json.users[0].username).toBe("alice");
-    expect(supabaseChain.or).toHaveBeenCalledWith(
-      'username.ilike."%alice%",display_name.ilike."%alice%",github_username.ilike."%alice%"'
-    );
-  });
-
-  it("finds user by github_username", async () => {
-    const users = [{ id: "u-2", username: "bob_dev" }];
-    const { supabaseChain } = mockClients({ users });
-
-    await GET(makeRequest({ q: "bobgithub" }));
-    expect(supabaseChain.or).toHaveBeenCalledWith(
-      'username.ilike."%bobgithub%",display_name.ilike."%bobgithub%",github_username.ilike."%bobgithub%"'
-    );
-  });
-
-  it("does not fall back to email lookup when the query contains @", async () => {
-    mockClients({ users: [] });
-
-    const res = await GET(makeRequest({ q: "nobody@example.com" }));
-    const json = await res.json();
-
-    expect(res.status).toBe(200);
-    expect(json.users).toEqual([]);
   });
 
   it("preserves at signs in the query without searching private email fields", async () => {

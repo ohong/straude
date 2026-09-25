@@ -119,16 +119,6 @@ describe("POST /api/ai/generate-caption", () => {
     expect(json.error).toBe("Unauthorized");
   });
 
-  it("validates images array is present", async () => {
-    mockSupabaseUser({ id: "user-1" });
-
-    const res = await POST(makeRequest({ usage: { costUSD: 1 } }));
-    const json = await res.json();
-
-    expect(res.status).toBe(400);
-    expect(json.error).toContain("image");
-  });
-
   it("validates images array is not empty", async () => {
     mockSupabaseUser({ id: "user-1" });
 

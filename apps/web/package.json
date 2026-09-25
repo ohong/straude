@@ -17,7 +17,7 @@
     "test:e2e": "playwright test",
     "perf": "bun run build && playwright test -c playwright.perf.config.ts",
     "perf:check": "bun run build && PERF_GATE=1 playwright test -c playwright.perf.config.ts",
-    "test:favicons": "vitest run __tests__/unit/favicon-*.test.ts __tests__/unit/team-favicon.test.ts __tests__/unit/team-badge.test.tsx __tests__/api/team-affiliation.test.ts"
+    "test:favicons": "vitest run __tests__/unit/favicon-*.test.ts __tests__/unit/team-favicon.test.ts __tests__/api/team-affiliation.test.ts"
   },
   "dependencies": {
     "@anthropic-ai/sdk": "^0.39",

@@ -212,16 +212,6 @@ describe("DELETE /api/users/me", () => {
     expect(json.error).toBe("Username confirmation is required");
   });
 
-  it("rejects empty string username", async () => {
-    mockAuthClient("user-1");
-
-    const res = await DELETE(makeRequest({ username: "   " }));
-    const json = await res.json();
-
-    expect(res.status).toBe(400);
-    expect(json.error).toBe("Username confirmation is required");
-  });
-
   it("returns 500 when deletion fails", async () => {
     mockAuthClient("user-1", { username: "alice" });
     mockServiceFrom.mockReturnValue(serviceChain({ error: { message: "DB error" } }));

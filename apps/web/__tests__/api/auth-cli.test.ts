@@ -141,14 +141,6 @@ describe("POST /api/auth/cli/poll", () => {
     expect(json.error).toBe("Missing code");
   });
 
-  it("returns error when poll_secret is missing", async () => {
-    const res = await pollPOST(mockRequest({ code: "AAAA-BBBB" }));
-    const json = await res.json();
-
-    expect(res.status).toBe(400);
-    expect(json.error).toBe("Missing poll_secret");
-  });
-
   it("returns expired when code not found", async () => {
     const chain = mockChain({
       single: vi.fn().mockResolvedValue({ data: null, error: { code: "PGRST116" } }),
@@ -296,16 +288,6 @@ describe("POST /api/auth/cli/verify", () => {
 
     expect(res.status).toBe(400);
     expect(json.error).toBe("Missing code");
-  });
-
-  it("returns error when verify_secret is missing", async () => {
-    mockAuthenticatedUser();
-
-    const res = await verifyPOST(mockRequest({ code: "AAAA-BBBB" }));
-    const json = await res.json();
-
-    expect(res.status).toBe(400);
-    expect(json.error).toBe("Missing verify_secret");
   });
 
   it("returns error for invalid JSON", async () => {

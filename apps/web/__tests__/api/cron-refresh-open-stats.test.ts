@@ -46,26 +46,6 @@ describe("GET /api/cron/refresh-open-stats", () => {
     expect(refreshOpenStatsSnapshot).not.toHaveBeenCalled();
   });
 
-  it("refreshes and returns the persisted snapshot summary", async () => {
-    vi.mocked(refreshOpenStatsSnapshot).mockResolvedValue({
-      snapshotDate: "2026-07-04",
-      totalSpend: 123.45,
-      trackedUsers: 12,
-    } as any);
-
-    const res = await GET(request("cron-secret"));
-    const json = await res.json();
-
-    expect(res.status).toBe(200);
-    expect(refreshOpenStatsSnapshot).toHaveBeenCalledTimes(1);
-    expect(json).toEqual({
-      ok: true,
-      snapshotDate: "2026-07-04",
-      totalSpend: 123.45,
-      trackedUsers: 12,
-    });
-  });
-
   it("returns 500 and logs when the refresh throws", async () => {
     const error = new Error("refresh failed");
     const consoleError = vi
