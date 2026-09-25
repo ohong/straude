@@ -305,7 +305,10 @@ test.describe("first-sync onboarding", () => {
 
       // The acquisition survey is the last onboarding step; its answer is stored.
       await expect(page.getByText("How did you find Straude?")).toBeVisible();
-      await page.getByRole("radio", { name: "GitHub" }).click();
+      // The radio input is visually hidden; users click its label.
+      const github = page.getByRole("radio", { name: "GitHub" });
+      await page.locator("label").filter({ has: github }).click();
+      await expect(github).toBeChecked();
       await page.getByRole("button", { name: "Continue" }).click();
       await expect(page.getByRole("button", { name: "Go to your feed" })).toBeVisible();
 
