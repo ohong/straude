@@ -1,5 +1,15 @@
 # Architecture & Design Decisions
 
+## Use jsdom compatible with Lambda's module restrictions (2026-09-26)
+
+**Decision:** Pin jsdom to 26.1.0 so profile routes load when the runtime disables experimental `require(ESM)`. Keep DOMPurify, the existing SVG safety checks and direct SVG/PNG discovery with Google fallback.
+
+**Evidence:** Production returned HTTP 500 HTML for both unauthenticated GET and PATCH requests to `/api/users/me`, while `/api/notifications` returned the expected 401 JSON. The same commit built and ran successfully locally under normal Node settings. Disabling `require(ESM)` reproduced a route-loading `ERR_REQUIRE_ESM` from jsdom 28.1.0's `html-encoding-sniffer` dependency importing `@exodus/bytes`. Production runtime logs confirmed the same exception on deployment `dpl_BdNAh58wzR69EjZLSiZVfsuuKwoV`. AWS documents the disabled feature at https://docs.aws.amazon.com/lambda/latest/dg/lambda-nodejs.html#nodejs-experimental-features.
+
+**Alternatives:** Bundling jsdom through `transpilePackages` failed during page-data collection because Turbopack rewrote its default stylesheet path to `/ROOT/...`. jsdom 27.0.0 also failed with the feature disabled through its CSS dependencies. Pinning 26.1.0 avoids a custom bundling pipeline or requiring an experimental runtime feature. The pin trades newer DOM features for runtime compatibility. Deferring the import would restore unauthenticated responses but leave favicon updates broken, so it does not fix the complete route.
+
+**Verification:** Run `NODE_OPTIONS=--no-experimental-require-module CI=1 bun run --cwd apps/web test:e2e e2e/team-favicon-save.spec.ts e2e/landing.spec.ts --reporter=list` against a local Supabase build to verify HTTP authentication, settings persistence, cached SVG/PNG display and the landing smoke path under the same restriction. CI now runs browser tests with the same module restriction. The signup journey uses a real email link, CLI device authorization and protocol-v2 usage submission, then verifies the acquisition source and optional detail in the database after reload. Local browser coverage passed all seven onboarding/profile/favicon checks. Production also lacked the existing `heard_about_sources` migration; apply it before hosted verification.
+
 ## Catch bugs with E2E tests; keep unit tests only for gaps E2E cannot reach (2026-09-24)
 
 **Decision:** E2E tests are the default testing mechanism: Playwright in `apps/web/e2e`, and the built CLI binary in `packages/cli/__tests__/e2e` and `packages/cli/scripts/packaged-cli-e2e.mjs`. Agents must not write unit tests after writing code, and must not add tautological tests (asserting what a mock was told to return) or change-detector tests (pinning copy, markup, class names, call counts or internal structure). A bug fix gets a new test only when no E2E test can cover the behavior.

@@ -94,6 +94,8 @@ jobs:
         working-directory: apps/web
         env:
           BASE_URL: http://localhost:3000
+          # Lambda disables require(ESM); exercise the same route-loading boundary.
+          NODE_OPTIONS: --no-experimental-require-module
 
   cli-package:
     name: CLI package

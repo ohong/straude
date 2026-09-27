@@ -4,6 +4,19 @@ import { createServerClient } from "@supabase/ssr";
 import sharp from "sharp";
 import { loadWebEnv } from "./perf/env";
 
+test("profile routes reject unauthenticated requests with JSON", async ({ request }) => {
+  for (const method of ["GET", "PATCH"]) {
+    const response = await request.fetch("/api/users/me", {
+      method,
+      ...(method === "PATCH" ? { data: { team_url: "https://example.com" } } : {}),
+    });
+
+    expect(response.status()).toBe(401);
+    expect(response.headers()["content-type"]).toContain("application/json");
+    expect(await response.json()).toEqual({ error: "Unauthorized" });
+  }
+});
+
 for (const format of ["svg", "png"]) {
   test(`saves and displays a cached rectangular ${format} through settings`, async ({ page, baseURL }, testInfo) => {
     const env = loadWebEnv();

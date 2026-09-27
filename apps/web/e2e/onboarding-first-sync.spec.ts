@@ -255,6 +255,123 @@ test.describe("first-sync onboarding", () => {
     test.skip(Boolean(env.skipReason), env.skipReason);
   });
 
+  test("signs up by email, syncs through CLI auth, and retains the acquisition answer", async ({ page, request }, testInfo) => {
+    test.setTimeout(60_000);
+    const email = `onboarding-e2e-${randomUUID()}@local.test`;
+    const admin = adminClient();
+    const mailpit = new URL(env.supabaseUrl);
+    // The default Supabase mail API is three ports above its API gateway.
+    mailpit.port = String(Number(mailpit.port) + 3);
+    let userId: string | undefined;
+
+    try {
+      await page.goto("/signup");
+      await page.getByLabel("Email", { exact: true }).fill(email);
+      await page.getByRole("button", { name: "Send magic link" }).click();
+      await expect(page.getByText("Check your email", { exact: true })).toBeVisible();
+
+      let messageId = "";
+      await expect.poll(async () => {
+        const response = await request.get(new URL(`/api/v1/search?query=${encodeURIComponent(`to:${email}`)}`, mailpit).href);
+        expect(response.ok()).toBe(true);
+        const inbox = await response.json();
+        messageId = inbox.messages?.[0]?.ID ?? "";
+        return Boolean(messageId);
+      }).toBe(true);
+      const message = await (await request.get(new URL(`/api/v1/message/${messageId}`, mailpit).href)).json();
+      const link = String(message.HTML).match(/href="([^"]*\/auth\/v1\/verify[^\"]*)"/)?.[1]?.replaceAll("&amp;", "&");
+      if (!link) throw new Error("Signup email is missing its verification link");
+      await page.goto(link);
+      await expect(page).toHaveURL(/\/onboarding$/);
+      await expect(page.locator("#sync-command")).toBeVisible();
+
+      const profileResponse = await page.request.get("/api/users/me");
+      expect(profileResponse.status()).toBe(200);
+      const initialProfile = await profileResponse.json();
+      userId = initialProfile.id;
+      expect(initialProfile.onboarding_completed).toBe(false);
+      expect((await page.request.patch("/api/users/me", { data: { is_public: false } })).status()).toBe(200);
+
+      // Use the public CLI device flow and submission endpoint, not seeded usage rows.
+      const init = await request.post("/api/auth/cli/init");
+      expect(init.status()).toBe(200);
+      const { code, verify_url, poll_secret } = await init.json();
+      const verification = await page.context().newPage();
+      await verification.goto(verify_url);
+      await verification.getByRole("button", { name: "Authorize CLI", exact: true }).click();
+      await expect(verification.getByText("CLI authorized", { exact: true })).toBeVisible();
+      await verification.close();
+      const poll = await request.post("/api/auth/cli/poll", { data: { code, poll_secret } });
+      expect(poll.status()).toBe(200);
+      const authorization = await poll.json();
+      expect(authorization.status).toBe("completed");
+
+      const metrics = {
+        input_tokens: 100, output_tokens: 20, reasoning_output_tokens: 10,
+        cache_creation_tokens: 0, cache_read_tokens: 30, total_tokens: 160, cost_usd: 0.25,
+      };
+      const sync = await request.post("/api/usage/submit", {
+        headers: { Authorization: `Bearer ${authorization.token}` },
+        data: {
+          protocol_version: 2, request_id: randomUUID(), source: "cli", timezone: "UTC",
+          installation: { id: randomUUID(), name: "onboarding-e2e" },
+          collector: { name: "ccusage", version: "20.0.18", pricing_mode: "online" },
+          entries: [{
+            date: new Date().toISOString().slice(0, 10), content_hash: "a".repeat(64),
+            agents: [{ agent: "codex", models: ["gpt-5.6"], ...metrics,
+              model_breakdown: [{ model: "gpt-5.6", ...metrics }] }],
+          }],
+        },
+      });
+      const syncResult = await sync.json();
+      expect(sync.status(), JSON.stringify(syncResult)).toBe(200);
+      expect(syncResult.outcomes[0].status).toBe("committed");
+      await expect(page.getByRole("heading", { name: "Your first sync is complete" })).toBeVisible({ timeout: 15_000 });
+
+      const github = page.getByRole("radio", { name: "GitHub", exact: true });
+      await page.locator("label").filter({ has: github }).click();
+      expect(await page.getByRole("radio", { checked: true }).count()).toBe(1);
+      await page.getByLabel("Anything more specific?", { exact: false }).fill("  A contributor's profile API fix  ");
+      const saved = page.waitForResponse((response) => response.url().endsWith("/api/users/me") && response.request().method() === "PATCH");
+      await page.getByRole("button", { name: "Continue", exact: true }).click();
+      expect((await saved).status()).toBe(200);
+      await expect(page.getByRole("button", { name: "Go to your feed" })).toBeVisible();
+      await page.screenshot({ path: testInfo.outputPath("signup-first-sync.png"), fullPage: true });
+      await page.reload();
+
+      const reloadedResponse = await page.request.get("/api/users/me");
+      expect(reloadedResponse.status()).toBe(200);
+      const reloaded = await reloadedResponse.json();
+      const expected = { onboarding_completed: true, heard_about_sources: ["github"], heard_about: "A contributor's profile API fix" };
+      expect(reloaded).toMatchObject(expected);
+      const stored = await admin.from("users").select("onboarding_completed,heard_about_sources,heard_about").eq("id", userId!).single();
+      expect(stored.error).toBeNull();
+      expect(stored.data).toEqual(expected);
+      const usage = await admin.from("daily_usage").select("total_tokens,cost_usd").eq("user_id", userId!);
+      expect(usage.error).toBeNull();
+      expect(usage.data).toEqual([{ total_tokens: 160, cost_usd: 0.25 }]);
+      await testInfo.attach("stored-onboarding-result", {
+        body: JSON.stringify({ profile: stored.data, usage: usage.data, sync: syncResult.outcomes }, null, 2),
+        contentType: "application/json",
+      });
+    } finally {
+      // Find only this test's unique address if signup failed before returning its profile.
+      if (!userId) {
+        const { data, error } = await admin.auth.admin.listUsers({ perPage: 1000 });
+        if (error) throw error;
+        userId = data.users.find((user) => user.email === email)?.id;
+      }
+      if (userId) {
+        const { data, error } = await admin.auth.admin.getUserById(userId);
+        expect(error).toBeNull();
+        expect(data.user?.email).toBe(email);
+        expect((await admin.auth.admin.deleteUser(userId)).error).toBeNull();
+        expect((await admin.from("users").select("id").eq("id", userId)).data).toEqual([]);
+        expect((await admin.from("daily_usage").select("id").eq("user_id", userId)).data).toEqual([]);
+      }
+    }
+  });
+
   test("shows the command immediately and skip keeps activation incomplete", async ({ page }, testInfo) => {
     const user = await createLocalUser();
     try {
