@@ -43,19 +43,33 @@ export async function GET(request: Request) {
     return NextResponse.json({ error: "User not found" }, { status: 404 });
   }
 
-  const { data: levelRow } = await db
-    .from("user_levels")
-    .select("level")
-    .eq("user_id", userId)
-    .maybeSingle();
-
   // 2. Daily usage (last 28 days)
   const today = new Date();
   const startDate = new Date(today);
   startDate.setDate(startDate.getDate() - 27); // 28 days including today
   const startStr = startDate.toISOString().split("T")[0];
+  const todayStr = today.toISOString().split("T")[0];
+  const d7 = new Date(today);
+  d7.setDate(d7.getDate() - 6);
+  const d7Str = d7.toISOString().split("T")[0];
+  const d14 = new Date(today);
+  d14.setDate(d14.getDate() - 13);
+  const d14Str = d14.toISOString().split("T")[0];
 
-  const [{ data: usage }, { data: lifetimeTokenRows }] = await Promise.all([
+  // These reads are independent; serial round trips can exhaust the CLI's request budget.
+  const [
+    { data: levelRow },
+    { data: usage },
+    { data: lifetimeTokenRows },
+    { data: breakdownRows },
+    { data: streakData },
+    { data: userEntry },
+  ] = await Promise.all([
+    db
+      .from("user_levels")
+      .select("level")
+      .eq("user_id", userId)
+      .maybeSingle(),
     db
       .from("daily_usage")
       .select("date, cost_usd")
@@ -66,6 +80,21 @@ export async function GET(request: Request) {
       .from("daily_usage")
       .select("output_tokens")
       .eq("user_id", userId),
+    db
+      .from("daily_usage")
+      .select("model_breakdown")
+      .eq("user_id", userId)
+      .gte("date", d7Str)
+      .not("model_breakdown", "is", null),
+    db.rpc("calculate_user_streak", {
+      p_user_id: userId,
+      p_freeze_days: profile.streak_freezes ?? 0,
+    }),
+    db
+      .from("leaderboard_weekly")
+      .select("total_cost")
+      .eq("user_id", userId)
+      .maybeSingle(),
   ]);
 
   const daily = (usage ?? []).map((d) => ({
@@ -78,23 +107,7 @@ export async function GET(request: Request) {
     0,
   );
 
-  // 3. Week costs: compute from daily array
-  const todayStr = today.toISOString().split("T")[0];
-  const d7 = new Date(today);
-  d7.setDate(d7.getDate() - 6);
-  const d7Str = d7.toISOString().split("T")[0];
-  const d14 = new Date(today);
-  d14.setDate(d14.getDate() - 13);
-  const d14Str = d14.toISOString().split("T")[0];
-
   // 3b. Model breakdown (last 7 days aggregate, matching the scorecard window)
-  const { data: breakdownRows } = await db
-    .from("daily_usage")
-    .select("model_breakdown")
-    .eq("user_id", userId)
-    .gte("date", d7Str)
-    .not("model_breakdown", "is", null);
-
   const modelAgg = new Map<string, number>();
   for (const row of breakdownRows ?? []) {
     const entries = row.model_breakdown as Array<{ model: string; cost_usd: number }> | null;
@@ -118,10 +131,6 @@ export async function GET(request: Request) {
   }
 
   // 4. Streak
-  const { data: streakData } = await db.rpc("calculate_user_streak", {
-    p_user_id: userId,
-    p_freeze_days: profile.streak_freezes ?? 0,
-  });
   const streak = typeof streakData === "number" ? streakData : 0;
 
   // 5. Leaderboard neighbors
@@ -132,17 +141,16 @@ export async function GET(request: Request) {
     below: Array<{ username: string; cost: number; rank: number }>;
   } | null = null;
 
-  const { data: userEntry } = await db
-    .from("leaderboard_weekly")
-    .select("total_cost")
-    .eq("user_id", userId)
-    .maybeSingle();
-
   if (userEntry) {
     const userCost = Number(userEntry.total_cost);
 
     // Count users with higher cost to determine rank + total users for percentile
-    const [{ count }, { count: totalCount }] = await Promise.all([
+    const [
+      { count },
+      { count: totalCount },
+      { data: aboveRows },
+      { data: belowRows },
+    ] = await Promise.all([
       db
         .from("leaderboard_weekly")
         .select("*", { count: "exact", head: true })
@@ -150,26 +158,22 @@ export async function GET(request: Request) {
       db
         .from("leaderboard_weekly")
         .select("*", { count: "exact", head: true }),
+      db
+        .from("leaderboard_weekly")
+        .select("username, total_cost")
+        .gt("total_cost", userCost)
+        .order("total_cost", { ascending: true })
+        .limit(2),
+      db
+        .from("leaderboard_weekly")
+        .select("username, total_cost")
+        .lt("total_cost", userCost)
+        .order("total_cost", { ascending: false })
+        .limit(2),
     ]);
 
     const rank = (count ?? 0) + 1;
     const totalUsers = totalCount ?? 0;
-
-    // 2 rows with cost just above (closest higher costs)
-    const { data: aboveRows } = await db
-      .from("leaderboard_weekly")
-      .select("username, total_cost")
-      .gt("total_cost", userCost)
-      .order("total_cost", { ascending: true })
-      .limit(2);
-
-    // 2 rows with cost just below (closest lower costs)
-    const { data: belowRows } = await db
-      .from("leaderboard_weekly")
-      .select("username, total_cost")
-      .lt("total_cost", userCost)
-      .order("total_cost", { ascending: false })
-      .limit(2);
 
     const above = (aboveRows ?? []).map((r) => {
       const cost = Number(r.total_cost);

@@ -8,6 +8,8 @@
 
 ### Fixed
 
+- **Dashboard rendering after usage sync handles slow and transient responses.** Default pushes and `--days` now use the same 15-second request budget and GET retries as `straude status`, replacing the three-second, no-retry override. The dashboard endpoint runs independent database reads concurrently to reduce round-trip delay. The packaged CLI E2E covers both command paths with a 3.5-second response, plus recovery from HTTP 503, and saves an inspectable transcript.
+
 - **Profile routes load when the server disables experimental `require(ESM)`.** Pin jsdom to 26.1.0, whose dependencies load under that restriction. The previous dependency graph threw `ERR_REQUIRE_ESM` before `/api/users/me` could authenticate either reads or settings saves. CI browser coverage runs under the same module restriction and verifies unauthorized responses remain JSON. A full email-signup and CLI-sync journey checks acquisition source/detail persistence after reload against local Supabase. Direct SVG sanitization, PNG normalization and Google fallback are unchanged.
 - **Unpriced third-party models no longer block `straude` pushes.** Codex or Claude Code sessions on a provider model with no LiteLLM price, such as `kimi-fast-latest`, stopped every push with `ccusage did not produce live pricing`. Usage from those models is now left out of the push without a message, and the rest of the day still syncs. Unpriced `claude-*`, `gpt-*` and o-series models still fail closed and retry, because those gaps close when LiteLLM adds the new model.
 

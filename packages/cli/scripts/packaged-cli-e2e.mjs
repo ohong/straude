@@ -76,6 +76,12 @@ const installDir = join(root, "install");
 const homeDir = join(root, "home");
 const codexHome = join(homeDir, "codex");
 let server;
+let dashboardRequests = 0;
+let submitRequests = 0;
+let transientDashboardFailure = false;
+const dashboardDelayMs = 3_500;
+const reportPath = resolve(readOption("--report") ?? join(packageDir, "test-results", "packaged-cli-e2e.json"));
+const report = { node: process.version, dashboard_delay_ms: dashboardDelayMs, scenarios: [] };
 
 try {
   await mkdir(installDir, { recursive: true });
@@ -150,6 +156,7 @@ try {
   server = createServer(async (request, response) => {
     response.setHeader("Content-Type", "application/json");
     if (request.url === "/api/usage/submit" && request.method === "POST") {
+      submitRequests += 1;
       const chunks = [];
       for await (const chunk of request) chunks.push(chunk);
       const submission = JSON.parse(Buffer.concat(chunks).toString("utf8"));
@@ -182,7 +189,12 @@ try {
       return;
     }
 
-    await new Promise((resolveDelay) => setTimeout(resolveDelay, 1_700));
+    dashboardRequests += 1;
+    if (transientDashboardFailure && dashboardRequests === 1) {
+      response.writeHead(503).end(JSON.stringify({ error: "Temporarily unavailable" }));
+      return;
+    }
+    await new Promise((resolveDelay) => setTimeout(resolveDelay, dashboardDelayMs));
     response.end(JSON.stringify({
       username: "packaged-e2e",
       level: 7,
@@ -201,42 +213,65 @@ try {
     throw new Error("Could not determine fixture server address");
   }
 
-  await writeFile(
-    join(homeDir, ".straude", "config.json"),
-    JSON.stringify({
-      token: "e2e-token",
-      username: "packaged-e2e",
-      api_url: `http://127.0.0.1:${address.port}`,
-    }),
-  );
+  report.cli_version = packageJson.version;
+  report.ccusage_version = installedCcusage.version;
+  const scenarios = [
+    { name: "default-slow-dashboard", args: [], transientFailure: false },
+    { name: "days-slow-dashboard", args: ["--days", "1"], transientFailure: false },
+    { name: "date-slow-dashboard", args: ["push", "--date", date], transientFailure: false },
+    { name: "default-transient-dashboard", args: [], transientFailure: true },
+  ];
+  for (const scenario of scenarios) {
+    dashboardRequests = 0;
+    submitRequests = 0;
+    transientDashboardFailure = scenario.transientFailure;
+    await writeFile(
+      join(homeDir, ".straude", "config.json"),
+      JSON.stringify({
+        token: "e2e-token",
+        username: "packaged-e2e",
+        api_url: `http://127.0.0.1:${address.port}`,
+        last_push_date: date,
+        usage_protocol_v2_migration_completed_at: new Date().toISOString(),
+      }),
+    );
 
-  const startedAt = performance.now();
-  const { stdout, stderr } = await execFileAsync(
-    process.execPath,
-    [cli, "push", "--date", date, "--debug"],
-    {
-      cwd: installDir,
-      env: childEnvironment,
-      maxBuffer: 10 * 1024 * 1024,
-    },
-  );
-  const elapsedMs = Math.round(performance.now() - startedAt);
-  const output = `${stdout}\n${stderr}`;
-
-  if (
-    !output.includes("Synced 1 day")
-    || !output.includes("@packaged-e2e")
-    || !output.includes("$12.50 this week")
-  ) {
-    throw new Error(`Packaged CLI did not render the scorecard:\n${output}`);
+    const startedAt = performance.now();
+    const { stdout, stderr } = await execFileAsync(
+      process.execPath,
+      [cli, ...scenario.args, "--debug"],
+      {
+        cwd: installDir,
+        env: childEnvironment,
+        maxBuffer: 10 * 1024 * 1024,
+      },
+    );
+    const elapsedMs = Math.round(performance.now() - startedAt);
+    const output = `${stdout}\n${stderr}`;
+    const passed = output.includes("Synced 1 day")
+      && output.includes("@packaged-e2e")
+      && output.includes("$12.50 this week")
+      && !output.includes("dashboard unavailable")
+      && submitRequests === 1
+      && elapsedMs >= dashboardDelayMs;
+    report.scenarios.push({
+      name: scenario.name,
+      args: scenario.args,
+      passed,
+      elapsed_ms: elapsedMs,
+      submit_requests: submitRequests,
+      dashboard_requests: dashboardRequests,
+      stdout,
+      stderr,
+    });
+    await mkdir(dirname(reportPath), { recursive: true });
+    await writeFile(reportPath, JSON.stringify(report, null, 2) + "\n");
+    if (!passed) {
+      throw new Error(`Packaged CLI failed ${scenario.name}:\n${output}\nReport: ${reportPath}`);
+    }
+    console.log(`${scenario.name} passed on Node ${process.version} (${elapsedMs}ms)`);
   }
-  if (elapsedMs < 1_500) {
-    throw new Error(`Packaged CLI returned before the delayed scorecard (${elapsedMs}ms)`);
-  }
-
-  console.log(
-    `straude v${packageJson.version} with ccusage ${installedCcusage.version} packed-install scorecard passed on Node ${process.version} (${elapsedMs}ms)`,
-  );
+  console.log(`straude v${packageJson.version} with ccusage ${installedCcusage.version}; report: ${reportPath}`);
 } finally {
   if (server) {
     await new Promise((resolveClose, reject) => {

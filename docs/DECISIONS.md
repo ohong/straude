@@ -1,5 +1,17 @@
 # Architecture & Design Decisions
 
+## Share the dashboard request budget and parallelize live reads (2026-09-28)
+
+**Problem:** A successful push could print `Usage synced; dashboard unavailable.` because it gave the dashboard only three seconds with no retries. Both the default and `--days` paths used this override. Four authenticated production requests took 1.84–2.96 seconds before the change.
+
+**Decision:** Use the existing 15-second API request budget and GET retry policy for the post-sync dashboard, matching `status`. Run independent dashboard reads together after the current identity and profile checks. Read leaderboard counts and neighbors together once the user's cost is known. Keep live data and the response shape.
+
+**Alternatives:** Raising only the CLI timeout handles slow responses but leaves serial server round trips. Optimizing only the server helps existing CLI releases but still leaves a three-second limit and no recovery from transient HTTP errors. Applying both changes reduces normal delay and gives cold or transient requests room to recover. A persistent dashboard cache would need invalidation after sync and privacy changes, so it adds unnecessary scope.
+
+**Trade-off:** A dashboard outage can delay a completed push for up to the existing 15-second request budget. The sync still exits successfully if dashboard retrieval fails. The server change can be deployed independently; the CLI request-policy change requires a new npm release.
+
+**Verification:** `node packages/cli/scripts/packaged-cli-e2e.mjs` exercises the installed tarball with default and `--days 1` commands against a 3.5-second dashboard response and a transient HTTP 503. It also preserves the existing explicit-date coverage. It records the terminal output and confirms one usage submission per scenario in `packages/cli/test-results/packaged-cli-e2e.json`. The published 0.2.1 tarball reproduced the warning against this harness. The fixed package passed. Both typechecks, 301 CLI tests, 766 web tests, route lint, and the production web build passed. Five authenticated HTTP comparisons against the production-build local server returned identical dashboard payloads using the live database; an unauthenticated request returned 401. One reference production request took 3.58 seconds, exceeding the old limit. Local timings do not establish deployed latency.
+
 ## Use jsdom compatible with Lambda's module restrictions (2026-09-26)
 
 **Decision:** Pin jsdom to 26.1.0 so profile routes load when the runtime disables experimental `require(ESM)`. Keep DOMPurify, the existing SVG safety checks and direct SVG/PNG discovery with Google fallback.

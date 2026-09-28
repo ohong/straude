@@ -56,7 +56,6 @@ import type { DashboardData as DashboardResponse } from "../components/PushSumma
 
 const FIRST_OR_MIGRATION_SYNC_DAYS = 3;
 const SUBMIT_DEADLINE_MS = 15_000;
-const DASHBOARD_DEADLINE_MS = 3_000;
 const PROTOCOL_RETRY_ATTEMPTS = 3;
 const MIGRATION_ID = "ccusage-by-agent-v2";
 
@@ -594,7 +593,6 @@ async function renderDashboard(
     const dashboard = await apiRequest<DashboardResponse>(
       config,
       "/api/cli/dashboard",
-      { timeoutMs: DASHBOARD_DEADLINE_MS, maxRetries: 0 },
     );
     const { render } = await import("ink");
     const { createElement } = await import("react");
