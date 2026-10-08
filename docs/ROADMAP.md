@@ -6,6 +6,10 @@ Grouped by the pirate metric (AARRR) each feature primarily moves.
 
 ## Activation
 
+### Backfill device candidates for existing duplicates
+
+Token-overlap detection only runs when a quarantined installation submits, so pairs that were already quarantined with empty overlap stay `ambiguous` until a new push touches them. A one-off backfill could run the same token comparison over stored rows and merge or annotate those candidates, but it changes existing user data, so it needs an explicit decision and a dry-run report first.
+
 ### Web import has no collector version
 
 The ccusage version floor (`CCUSAGE_MIN_VERSION`) is enforced for `source: "cli"` submissions only. Pasted JSON on `/settings/import` is posted as an unverified `source: "web"` v1 request with no collector version, and those rows still count toward `SUM(daily_usage.cost_usd)`, so a user can import numbers from a buggy old ccusage. Options: have the import page ask for the ccusage version and apply the floor, exclude `is_verified = false` rows from the north-star query, or retire the page in favor of the CLI.
