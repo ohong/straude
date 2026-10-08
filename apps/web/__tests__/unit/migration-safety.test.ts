@@ -9,6 +9,8 @@ const USAGE_SUBMISSION_RPC =
   "20260723133731_usage_submission_v2.sql";
 const USAGE_RECONCILIATION =
   "20260723135641_usage_reconciliation.sql";
+const USAGE_NEWER_COLLECTOR =
+  "20260921120000_usage_newer_collector_corrections.sql";
 
 function getAllMigrations(): { name: string; content: string }[] {
   const files = readdirSync(MIGRATIONS_DIR)
@@ -524,7 +526,8 @@ describe("Migration safety", () => {
         migration.name > DIRECT_USAGE_REPAIR_ROLLBACK
         && migration.name !== DIRECT_USAGE_REPAIR_ROLLBACK
         && migration.name !== USAGE_SUBMISSION_RPC
-        && migration.name !== USAGE_RECONCILIATION,
+        && migration.name !== USAGE_RECONCILIATION
+        && migration.name !== USAGE_NEWER_COLLECTOR,
     );
 
     for (const migration of futureMigrations) {
