@@ -12,6 +12,7 @@ interface UsageDeviceCandidate {
   device_id_b: string;
   normalized_hostname: string;
   overlap_dates: string[];
+  divergent_dates: string[];
   status: string;
   created_at: string;
 }
@@ -29,6 +30,8 @@ function parseCandidate(value: unknown): UsageDeviceCandidate | null {
     || typeof value.normalized_hostname !== "string"
     || !Array.isArray(value.overlap_dates)
     || !value.overlap_dates.every((date) => typeof date === "string")
+    || !Array.isArray(value.divergent_dates)
+    || !value.divergent_dates.every((date) => typeof date === "string")
     || typeof value.status !== "string"
     || typeof value.created_at !== "string"
   ) {
@@ -41,6 +44,7 @@ function parseCandidate(value: unknown): UsageDeviceCandidate | null {
     device_id_b: value.device_id_b,
     normalized_hostname: value.normalized_hostname,
     overlap_dates: value.overlap_dates,
+    divergent_dates: value.divergent_dates,
     status: value.status,
     created_at: value.created_at,
   };

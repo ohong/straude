@@ -2,8 +2,13 @@
 
 ## Unreleased
 
+### Added
+
+- **Duplicate devices are detected and merged at submit time.** When a hostname match quarantines a new installation, `submit_usage_day_v2` now compares the incoming per-agent token counts with the other device's stored rows for the same date and records `overlap_dates` (identical) and `divergent_dates` (different) on the reconciliation candidate. Once a pair has two or more identical days and no differing day, it merges through the existing resolve path and the submit continues against the merged identity, so `daily_usage` counts the day once. Otherwise the candidate stays `ambiguous` with the evidence attached. A `kept_separate` pair reopens as `ambiguous` when a later submit carries token-identical data for a date. Only future pushes are affected; nothing is backfilled.
+
 ### Changed
 
+- **Device reconciliation compares tokens, not cost or collector.** `resolve_usage_device_candidate` now treats rows as duplicates when the per-agent token counts match, instead of requiring identical cost, models and collector, which blocked merges whenever two collector versions priced the same tokens differently. The surviving canonical row keeps its own cost and collector. `GET /api/usage/devices` returns `divergent_dates`, and `straude devices` prints `N matching days, M differing days` for each candidate.
 - **Usage from ccusage older than 20.0.26 is rejected.** The minimum lives in `@straude/shared` as `CCUSAGE_MIN_VERSION` and is enforced by both the CLI and `POST /api/usage/submit`. A `source: "cli"` request (protocol v1 or v2) whose collector version is missing, unparseable, a prerelease or below the floor gets HTTP 426 with `code: "collector_outdated"` and `update_command: "npx straude@latest"`. Older releases double-counted Codex fork/subagent history and Claude requests copied across sessions. The `ccusage` dependency is now `>=20.0.26` (lockfile updated). Web JSON imports are exempt because pasted ccusage output carries no version.
 - **Claude 5.x model labels.** `claude-sonnet-*` and `claude-haiku-*` ids now label as Claude Sonnet / Claude Haiku regardless of major version (shared models, recap and post card image).
 - **Source inventory fixture** now lists the `antigravity` and `zcode` sources shipped in ccusage 20.0.26.

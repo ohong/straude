@@ -1303,3 +1303,133 @@ describe("POST /api/usage/submit (real Supabase)", () => {
     }
   });
 });
+
+describe("device dedupe at submit time (real Supabase)", () => {
+  const DEVICE_A = "aaaaaaaa-0000-4000-8000-00000000000a";
+  const DEVICE_B = "bbbbbbbb-0000-4000-8000-00000000000b";
+  const day = (offset: number) =>
+    new Date(Date.now() - offset * 86_400_000).toISOString().slice(0, 10);
+
+  // One machine, two installation ids: same display name, same ccusage tokens.
+  async function pushDay(
+    token: string,
+    device: string,
+    date: string,
+    opts: { cost: number; input?: number; collectorVersion?: string },
+  ) {
+    const input = opts.input ?? 100;
+    const total = input + 20 + 10 + 30;
+    const body = v2Body(
+      `dedupe-${device.slice(0, 4)}-${date}-${opts.cost}-${input}`,
+      crypto.randomUUID().replaceAll("-", "").repeat(2),
+      {
+        date,
+        agents: [v2Agent({
+          input_tokens: input,
+          total_tokens: total,
+          cost_usd: opts.cost,
+          model_breakdown: [{
+            model: "gpt-5.6",
+            input_tokens: input,
+            output_tokens: 20,
+            reasoning_output_tokens: 10,
+            cache_creation_tokens: 0,
+            cache_read_tokens: 30,
+            total_tokens: total,
+            cost_usd: opts.cost,
+          }],
+        })],
+      },
+      opts.collectorVersion,
+    );
+    body.installation = { id: device, name: "Same-Mac" };
+    const res = await callSubmit(body, token);
+    const json = await res.json();
+    return { status: res.status, json, outcome: json.outcomes?.[0] ?? json };
+  }
+
+  async function candidate(userId: string) {
+    const rows = await db.query(
+      `SELECT status, overlap_dates::text[] AS overlap, divergent_dates::text[] AS divergent,
+              resolved_at
+       FROM public.usage_device_reconciliation_candidates WHERE user_id = $1`,
+      [userId],
+    );
+    return rows.rows[0];
+  }
+
+  it("auto-merges token-identical devices even when costs differ", async () => {
+    const userId = await insertUser(db, { username: "dedupe_merge" });
+    const token = await mintCliToken(userId, "dedupe_merge");
+    const [d1, d2] = [day(1), day(2)];
+
+    await pushDay(token, DEVICE_A, d1, { cost: 0.25 });
+    await pushDay(token, DEVICE_A, d2, { cost: 0.25 });
+    const first = await pushDay(token, DEVICE_B, d1, { cost: 0.31 });
+    expect(first.outcome.error?.code, JSON.stringify(first.json)).toBe("device_reconciliation_required");
+    expect((await candidate(userId)).overlap).toEqual([d1]);
+    const second = await pushDay(token, DEVICE_B, d2, { cost: 0.31 });
+    expect(second.outcome.status, JSON.stringify(second.json)).not.toBe("identity_conflict");
+
+    expect((await candidate(userId)).status).toBe("merged");
+    const totals = await db.query(
+      `SELECT (SELECT count(DISTINCT device_id)::int FROM public.device_usage WHERE user_id = $1) AS devices,
+              (SELECT count(*)::int FROM public.daily_usage WHERE user_id = $1) AS days,
+              (SELECT max(total_tokens)::int FROM public.daily_usage WHERE user_id = $1) AS day_tokens`,
+      [userId],
+    );
+    expect(totals.rows[0]).toEqual({ devices: 1, days: 2, day_tokens: 160 });
+  });
+
+  it("stays ambiguous with overlap and divergent evidence when one day differs", async () => {
+    const userId = await insertUser(db, { username: "dedupe_divergent" });
+    const token = await mintCliToken(userId, "dedupe_divergent");
+    const [d1, d2] = [day(1), day(2)];
+
+    for (const d of [d1, d2]) await pushDay(token, DEVICE_A, d, { cost: 0.25 });
+    await pushDay(token, DEVICE_B, d1, { cost: 0.25 });
+    await pushDay(token, DEVICE_B, d2, { cost: 0.25, input: 999 });
+
+    expect(await candidate(userId)).toMatchObject({
+      status: "ambiguous",
+      overlap: [d1],
+      divergent: [d2],
+    });
+    const totals = await db.query(
+      "SELECT count(DISTINCT device_id)::int AS devices FROM public.device_usage WHERE user_id = $1",
+      [userId],
+    );
+    expect(totals.rows[0].devices).toBe(1);
+  });
+
+  it("reopens a kept-separate pair when identical data arrives later", async () => {
+    const userId = await insertUser(db, { username: "dedupe_reopen" });
+    const token = await mintCliToken(userId, "dedupe_reopen");
+    const [d1, d2] = [day(1), day(2)];
+
+    await pushDay(token, DEVICE_A, d1, { cost: 0.25 });
+    await pushDay(token, DEVICE_B, d1, { cost: 0.25, input: 500 });
+    expect(await candidate(userId)).toMatchObject({ status: "ambiguous", divergent: [d1] });
+
+    // The user decided these are two machines.
+    await db.query(
+      `UPDATE public.usage_device_reconciliation_candidates
+       SET status = 'kept_separate', resolved_at = now() WHERE user_id = $1`,
+      [userId],
+    );
+    const normal = await pushDay(token, DEVICE_B, d1, { cost: 0.25, input: 500 });
+    expect(normal.outcome.status, JSON.stringify(normal.json)).not.toBe("identity_conflict");
+    expect((await candidate(userId)).status).toBe("kept_separate");
+
+    // A later date now carries identical tokens on both devices.
+    await pushDay(token, DEVICE_A, d2, { cost: 0.25 });
+    const identical = await pushDay(token, DEVICE_B, d2, { cost: 0.4 });
+    expect(identical.outcome.error?.code, JSON.stringify(identical.json)).toBe("device_reconciliation_required");
+    expect(await candidate(userId)).toMatchObject({
+      status: "ambiguous",
+      overlap: [d2],
+      divergent: [],
+      resolved_at: null,
+    });
+  });
+});
