@@ -823,7 +823,7 @@ describe("POST /api/usage/submit (real Supabase)", () => {
     inflated.model_breakdown[0]!.input_tokens = 200;
     inflated.model_breakdown[0]!.total_tokens = 260;
     inflated.model_breakdown[0]!.cost_usd = 0.5;
-    await callSubmit(v2Body("newer-before", "a".repeat(64), { agents: [inflated] }, "20.0.18"), token);
+    await callSubmit(v2Body("newer-before", "a".repeat(64), { agents: [inflated] }, "20.0.26"), token);
 
     const lower = v2Agent();
     const readDaily = () => db.query(
@@ -833,7 +833,7 @@ describe("POST /api/usage/submit (real Supabase)", () => {
 
     // Same version, smaller numbers: the monotonic guard still applies.
     const sameVersion = await callSubmit(
-      v2Body("newer-same", "b".repeat(64), { agents: [lower] }, "20.0.18"),
+      v2Body("newer-same", "b".repeat(64), { agents: [lower] }, "20.0.26"),
       token,
     );
     expect(sameVersion.status).toBe(400);
@@ -844,7 +844,7 @@ describe("POST /api/usage/submit (real Supabase)", () => {
 
     // Strictly newer version, smaller numbers, no authoritative flag: replaces the row.
     const newer = await callSubmit(
-      v2Body("newer-after", "c".repeat(64), { agents: [lower] }, "20.0.26"),
+      v2Body("newer-after", "c".repeat(64), { agents: [lower] }, "20.0.27"),
       token,
     );
     expect(newer.status).toBe(200);
@@ -855,13 +855,13 @@ describe("POST /api/usage/submit (real Supabase)", () => {
       "SELECT collector ->> 'version' AS version FROM public.usage_agent_daily WHERE user_id = $1",
       [userId],
     );
-    expect(stored.rows).toEqual([{ version: "20.0.26" }]);
+    expect(stored.rows).toEqual([{ version: "20.0.27" }]);
 
     // An older collector cannot push the corrected row lower again.
     const older = await callSubmit(
       v2Body("newer-older", "d".repeat(64), {
         agents: [v2Agent({ total_tokens: 100, input_tokens: 40 })],
-      }, "20.0.19"),
+      }, "20.0.26"),
       token,
     );
     expect(older.status).toBe(400);
