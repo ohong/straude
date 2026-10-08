@@ -20,6 +20,16 @@
 
 **Evidence boundary:** A local HTTP receiver rejected the malformed token before normalization and accepted it afterward. Local evidence does not establish PostHog ingestion or production recovery; those require deployment and observation of a real event.
 
+## Match duplicate devices on tokens, not the full fingerprint (2026-10-08)
+
+**Problem:** One machine can register two installation ids, and both push the same ccusage data, so `daily_usage` double counts. The hostname quarantine created an `ambiguous` candidate with empty `overlap_dates`, because overlap was only computed by the manual repair path, which required an exact fingerprint including `cost_usd` and collector. Two installations on different ccusage versions never matched, and `straude devices` showed "0 matching days".
+
+**Decision:** At quarantine time, fingerprint the incoming day (per agent: input, output, cache creation, cache read, reasoning and total tokens) and compare it with the other device's stored rows. Identical days go to `overlap_dates`, differing days to `divergent_dates`. Two or more identical days with no differing day auto-merge through the existing `resolve_usage_device_candidate`, which now also compares tokens only. Everything else stays `ambiguous`. A `kept_separate` decision reopens only on new token-identical data for a date after the decision, and is never auto-merged.
+
+**Alternatives:** Keep the exact fingerprint and add cost tolerance: ccusage owns pricing, so any tolerance is a guess. Compare incoming rows after writing them: blocked submits write nothing, so there is nothing to compare. Backfill candidates from existing data: out of scope, and it would rewrite user data without a decision.
+
+**Trade-off:** Two real machines with identical token counts on two or more days and no differing day would auto-merge. Real sessions rarely match across five token fields on several days, and the cost of a wrong merge is bounded because it only occurs with the same hostname. The surviving canonical row keeps its own cost and collector, so a cost difference between versions is dropped, not summed.
+
 ## Enforce a minimum ccusage version on the server (2026-10-08)
 
 **Problem:** Token counting and API-equivalent pricing come entirely from ccusage. Releases before 20.0.19 inflated Codex usage roughly 2x through fork/subagent replay, 20.0.21 fixed out-of-window Codex history, 20.0.23 deduped Claude requests copied across sessions, and 20.0.26 scoped requestless Claude dedupe and excluded opencode fork-copied history. The minimum was enforced only in the CLI, so old CLIs and the v1 legacy adapter could still write rows from buggy collectors.
