@@ -11,6 +11,7 @@ import {
   type UsageSubmitRequestV2,
   type UsageSubmitResultV2,
 } from "@straude/shared/usage-protocol";
+import { isNewerCollectorVersion } from "../lib/collector-version.js";
 import { MAX_BACKFILL_DAYS, DEFAULT_SYNC_DAYS, CLI_VERSION } from "../config.js";
 import { apiRequest, ApiHttpError, ApiTimeoutError } from "../lib/api.js";
 import { loadConfig, updateConfig, type StraudeConfig } from "../lib/auth.js";
@@ -25,6 +26,7 @@ import {
 } from "../lib/calendar.js";
 import {
   CCUSAGE_DEFAULT_PRICING_MODE,
+  getInstalledCcusageVersion,
   PricingUnavailableError,
   collectCcusageUsageAsync,
   resolveLocalTimezone,
@@ -132,6 +134,7 @@ export function resolvePushDateRange(args: {
   options: { date?: string; days?: number };
   lastPushDate?: string;
   shouldRunMigrationBackfill: boolean;
+  shouldRunCollectorUpgrade?: boolean;
 }): DateRangeResolution {
   const { options, shouldRunMigrationBackfill } = args;
   const today = localDateToCalendarDate(args.today);
@@ -186,6 +189,17 @@ export function resolvePushDateRange(args: {
       since: dateFromInput(addCalendarDays(today, -FIRST_OR_MIGRATION_SYNC_DAYS + 1)),
       until: dateFromInput(today),
       mode: "migration",
+    };
+  }
+
+  if (args.shouldRunCollectorUpgrade) {
+    // Re-submit the whole backfill window; the server lets a newer collector
+    // replace rows from an older one.
+    return {
+      ok: true,
+      since: dateFromInput(addCalendarDays(today, -MAX_BACKFILL_DAYS + 1)),
+      until: dateFromInput(today),
+      mode: "collector_upgrade",
     };
   }
 
@@ -535,7 +549,8 @@ function advanceCompletedBatch(batch: PendingUsageBatch): StraudeConfig {
     } = current;
     const automatic = batch.range_mode === "incremental"
       || batch.range_mode === "first_sync"
-      || batch.range_mode === "migration";
+      || batch.range_mode === "migration"
+      || batch.range_mode === "collector_upgrade";
     const lastDate = batch.watermark_date;
     return {
       ...preserved,
@@ -550,6 +565,14 @@ function advanceCompletedBatch(batch: PendingUsageBatch): StraudeConfig {
         ? { previous_device_id_migrated_at: new Date().toISOString() }
         : {}),
     };
+  });
+}
+
+function recordPushedCcusageVersion(accountKey: string, version: string): void {
+  updateConfig((current) => {
+    if (!current) throw new Error("Authentication disappeared while syncing.");
+    if (syncAccountKey(current) !== accountKey) return current;
+    return { ...current, ccusage_version_pushed: version };
   });
 }
 
@@ -692,6 +715,10 @@ export async function pushCommand(
     options: { date: options.date, days: options.days },
     lastPushDate: config.last_push_date,
     shouldRunMigrationBackfill: migrationPending,
+    shouldRunCollectorUpgrade: isNewerCollectorVersion(
+      getInstalledCcusageVersion(),
+      config.ccusage_version_pushed,
+    ),
   });
   if (!resolution.ok) {
     console.error(resolution.error);
@@ -709,6 +736,7 @@ export async function pushCommand(
     resolution.mode === "incremental"
     || resolution.mode === "first_sync"
     || resolution.mode === "migration"
+    || resolution.mode === "collector_upgrade"
   )
     ? requestedDates.at(-1)
     : undefined;
@@ -844,6 +872,9 @@ export async function pushCommand(
         created_at: new Date().toISOString(),
       };
       advanceCompletedBatch(emptyBatch);
+      if (resolution.mode === "collector_upgrade" || resolution.mode === "first_sync") {
+        recordPushedCcusageVersion(emptyBatch.account_key, collected.version);
+      }
       lease.acknowledgeQueuedDates(queuedDatesToConsume);
       console.log("No usage data found for the specified period.");
       return CLI_EXIT.OK;
@@ -866,6 +897,12 @@ export async function pushCommand(
       created_at: new Date().toISOString(),
     };
     upsertPendingBatch(batch);
+    if (resolution.mode === "collector_upgrade" || resolution.mode === "first_sync") {
+      // The batch is durable in the outbox now, so it retries without
+      // recollecting. A date the server rejects for good would not change with
+      // the same collector, so don't repeat the full window on every push.
+      recordPushedCcusageVersion(batch.account_key, collected.version);
+    }
 
     const syncSpinner = new Spinner("sync");
     syncSpinner.start();

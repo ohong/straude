@@ -39,6 +39,10 @@ export interface StraudeConfig {
   // the last_token_usage accounting fix. Distinct from the older repair flag
   // because users who already ran that repair can still have inflated rows.
   codex_native_last_token_usage_repair_completed_at?: string;
+  // ccusage version that produced the last full-window push. A newer installed
+  // ccusage re-submits the whole backfill window so its corrected counts can
+  // replace rows written by an older collector (the server permits this).
+  ccusage_version_pushed?: string;
   device_id?: string;
   device_name?: string;
   auto_push?: AutoPushConfig;
@@ -87,6 +91,10 @@ function parseConfig(raw: string): StraudeConfig {
     usage_protocol_v2_migration_completed_at:
       typeof value.usage_protocol_v2_migration_completed_at === "string"
         ? value.usage_protocol_v2_migration_completed_at
+        : undefined,
+    ccusage_version_pushed:
+      typeof value.ccusage_version_pushed === "string"
+        ? value.ccusage_version_pushed
         : undefined,
     previous_device_id_migrated_at:
       typeof value.previous_device_id_migrated_at === "string"
