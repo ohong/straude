@@ -83,7 +83,7 @@ beforeEach(() => {
 
 describe("parseCcusageOutput", () => {
   it("parses ccusage v20 daily rows and derives reasoning residuals", () => {
-    const parsed = parseCcusageOutput(rawOutput(), { version: "20.0.20" });
+    const parsed = parseCcusageOutput(rawOutput(), { version: "20.0.26" });
 
     expect(parsed.data).toHaveLength(1);
     expect(parsed.data[0]).toEqual({
@@ -133,7 +133,7 @@ describe("parseCcusageOutput", () => {
     expect(parsed.agents).toEqual(["codex"]);
     expect(parsed.collector).toEqual({
       codex: CCUSAGE_CODEX_COLLECTOR,
-      ccusage_version: "20.0.20",
+      ccusage_version: "20.0.26",
       ccusage_agents: ["codex"],
       pricing_mode: "online",
     });
@@ -180,13 +180,13 @@ describe("parseCcusageOutput", () => {
           },
         ],
       }),
-    ]), { version: "20.0.20" });
+    ]), { version: "20.0.26" });
 
     expect(parsed.agents).toEqual(["claude", "codex"]);
     expect(parsed.collector).toEqual({
       claude: CCUSAGE_CLAUDE_COLLECTOR,
       codex: CCUSAGE_CODEX_COLLECTOR,
-      ccusage_version: "20.0.20",
+      ccusage_version: "20.0.26",
       ccusage_agents: ["claude", "codex"],
       pricing_mode: "online",
     });
@@ -221,7 +221,7 @@ describe("parseCcusageOutput", () => {
             : [],
         })),
       }),
-    ]), { version: "20.0.20" });
+    ]), { version: "20.0.26" });
 
     expect(parsed.data).toHaveLength(1);
     expect(parsed.data[0]!.agents).toEqual(SOURCE_IDS);
@@ -229,7 +229,7 @@ describe("parseCcusageOutput", () => {
     expect(parsed.collector).toEqual({
       claude: CCUSAGE_CLAUDE_COLLECTOR,
       codex: CCUSAGE_CODEX_COLLECTOR,
-      ccusage_version: "20.0.20",
+      ccusage_version: "20.0.26",
       ccusage_agents: SOURCE_IDS,
       pricing_mode: "online",
     });
@@ -510,11 +510,11 @@ describe("parseCcusageOutput", () => {
   });
 
   it("returns empty output for an empty ccusage daily array", () => {
-    const parsed = parseCcusageOutput(rawOutput([]), { version: "20.0.20" });
+    const parsed = parseCcusageOutput(rawOutput([]), { version: "20.0.26" });
     expect(parsed.data).toEqual([]);
     expect(parsed.agents).toEqual([]);
     expect(parsed.collector).toEqual({
-      ccusage_version: "20.0.20",
+      ccusage_version: "20.0.26",
       ccusage_agents: [],
       pricing_mode: "online",
     });
@@ -595,14 +595,14 @@ describe("version and execution", () => {
   });
 
   it.each([
-    ["minimum", "20.0.20", true],
+    ["minimum", "20.0.26", true],
     ["later v20 patch", "20.0.99", true],
     ["later v20 minor", "20.9.0", true],
-    ["build metadata", "20.0.20+straude.1", true],
-    ["below floor", "20.0.19", false],
+    ["build metadata", "20.0.26+straude.1", true],
+    ["below floor", "20.0.25", false],
     ["next major", "21.0.0", true],
     ["later major", "22.1.0", true],
-    ["prerelease", "20.0.19-beta.1", false],
+    ["prerelease", "20.0.26-beta.1", false],
     ["leading zero", "20.00.18", false],
     ["incomplete", "20.0", false],
     ["invalid", "latest", false],
@@ -610,7 +610,7 @@ describe("version and execution", () => {
     _setCcusageCommandForTests({ cmd: "/bundled/ccusage", args: [], version });
     if (!supported) {
       await expect(collectCcusageUsageAsync("20260513", "20260513")).rejects.toThrow(
-        /stable ccusage version >=20\.0\.20/,
+        /stable ccusage version >=20\.0\.26/,
       );
       return;
     }

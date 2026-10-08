@@ -40,7 +40,7 @@ if (
   )
 ) {
   throw new Error(
-    `Expected stable ccusage >=20.0.20, found ${collectorPackage.version}`,
+    `Expected stable ccusage >=20.0.26, found ${collectorPackage.version}`,
   );
 }
 if (!Number.isInteger(iterations) || iterations < 3) {

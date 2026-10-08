@@ -64,6 +64,7 @@ function legacyBody(entries = [legacyEntry()]) {
     entries,
     hash: "a".repeat(64),
     source: "cli",
+    collector: { ccusage_version: "20.0.26" },
     device_id: DEVICE_ID,
     device_name: "work-laptop",
   };
