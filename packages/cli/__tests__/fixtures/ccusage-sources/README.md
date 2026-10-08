@@ -2,7 +2,7 @@
 
 These records were written for Straude tests. They contain invented session IDs and token counts, with no prompts or real user usage.
 
-Shapes follow the [ccusage v20.0.20 adapters](https://github.com/ccusage/ccusage/tree/v20.0.20/rust/adapters):
+Shapes follow the [ccusage v20.0.26 adapters](https://github.com/ccusage/ccusage/tree/v20.0.26/rust/adapters):
 
 - Gemini: cached input is included in the input count and identified through the total; thoughts are separate output tokens.
 - Qwen: prompt, cached, candidate, and thought token counts are separate buckets in the upstream adapter.

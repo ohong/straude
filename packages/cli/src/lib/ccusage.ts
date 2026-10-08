@@ -1,9 +1,13 @@
 import { execFile as execFileCb } from "node:child_process";
 import { chmodSync, readFileSync, statSync } from "node:fs";
 import { createRequire } from "node:module";
+import {
+  CCUSAGE_MIN_VERSION,
+  isSupportedCcusageVersion,
+} from "@straude/shared/usage-protocol";
 import { DEFAULT_SUBPROCESS_TIMEOUT_MS } from "../config.js";
 
-export const CCUSAGE_MIN_VERSION = "20.0.20";
+export { CCUSAGE_MIN_VERSION };
 export const CCUSAGE_CLAUDE_COLLECTOR = "ccusage-claude-v20" as const;
 export const CCUSAGE_CODEX_COLLECTOR = "ccusage-codex-v20" as const;
 export const CCUSAGE_DEFAULT_PRICING_MODE = "online" as const;
@@ -265,44 +269,8 @@ export function _setCcusageCommandForTests(command: { cmd: string; args: string[
   resolvedCommand = undefined;
 }
 
-interface StableSemver {
-  major: number;
-  minor: number;
-  patch: number;
-}
-
-function parseStableSemver(version: string): StableSemver | undefined {
-  const match = /^(0|[1-9]\d*)\.(0|[1-9]\d*)\.(0|[1-9]\d*)(?:\+[0-9A-Za-z-]+(?:\.[0-9A-Za-z-]+)*)?$/
-    .exec(version);
-  if (!match) return undefined;
-  const [major, minor, patch] = match.slice(1, 4).map(Number);
-  if (
-    major === undefined
-    || minor === undefined
-    || patch === undefined
-    || !Number.isSafeInteger(major)
-    || !Number.isSafeInteger(minor)
-    || !Number.isSafeInteger(patch)
-  ) {
-    return undefined;
-  }
-  return { major, minor, patch };
-}
-
-function compareSemver(a: StableSemver, b: StableSemver): number {
-  if (a.major !== b.major) return a.major - b.major;
-  if (a.minor !== b.minor) return a.minor - b.minor;
-  return a.patch - b.patch;
-}
-
 export function assertSupportedCcusageVersion(version: string): void {
-  const parsed = parseStableSemver(version);
-  const minimum = parseStableSemver(CCUSAGE_MIN_VERSION);
-  if (
-    !parsed
-    || !minimum
-    || compareSemver(parsed, minimum) < 0
-  ) {
+  if (!isSupportedCcusageVersion(version)) {
     throw new Error(
       `ccusage ${version} is unsupported. Straude requires a stable ccusage version >=${CCUSAGE_MIN_VERSION}. Reinstall Straude and retry.`,
     );

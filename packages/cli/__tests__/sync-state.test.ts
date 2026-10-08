@@ -40,7 +40,7 @@ function batch(): PendingUsageBatch {
       installation: { id: randomUUID() },
       collector: {
         name: "ccusage",
-        version: "20.0.20",
+        version: "20.0.26",
         pricing_mode: "online",
       },
       entries: [{

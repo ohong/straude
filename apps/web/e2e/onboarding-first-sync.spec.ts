@@ -315,7 +315,7 @@ test.describe("first-sync onboarding", () => {
         data: {
           protocol_version: 2, request_id: randomUUID(), source: "cli", timezone: "UTC",
           installation: { id: randomUUID(), name: "onboarding-e2e" },
-          collector: { name: "ccusage", version: "20.0.18", pricing_mode: "online" },
+          collector: { name: "ccusage", version: "20.0.26", pricing_mode: "online" },
           entries: [{
             date: new Date().toISOString().slice(0, 10), content_hash: "a".repeat(64),
             agents: [{ agent: "codex", models: ["gpt-5.6"], ...metrics,
