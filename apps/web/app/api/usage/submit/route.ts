@@ -2,6 +2,8 @@ import { createHash } from "node:crypto";
 import { NextResponse } from "next/server";
 import {
   canonicalizeUsageEntryV2,
+  isSupportedCcusageVersion,
+  CCUSAGE_MIN_VERSION,
   parseUsageSubmitV2,
   parseUsageSubmitResponseV2,
   type AgentUsageComponent,
@@ -653,6 +655,19 @@ export async function POST(request: Request): Promise<NextResponse> {
       return NextResponse.json({ error: adapted.error }, { status: 400 });
     }
     usageRequest = adapted.request;
+  }
+
+  // CLI usage must come from a ccusage release at or above the floor. Web
+  // imports are pasted ccusage JSON with no version, so they are exempt.
+  if (
+    usageRequest.source === "cli"
+    && !isSupportedCcusageVersion(usageRequest.collector.version)
+  ) {
+    return NextResponse.json({
+      error: `This Straude CLI collected usage with an outdated ccusage (minimum ${CCUSAGE_MIN_VERSION}). Update with: npx straude@latest`,
+      code: "collector_outdated",
+      update_command: "npx straude@latest",
+    }, { status: 426, headers: responseHeaders(auth) });
   }
 
   if (usageRequest.source !== auth.source) {

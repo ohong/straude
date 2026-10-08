@@ -14,7 +14,7 @@ const npmCommand = process.platform === "win32"
       prefixArgs: [join(dirname(process.execPath), "node_modules", "npm", "bin", "npm-cli.js")],
     }
   : { executable: "npm", prefixArgs: [] };
-const expectedCcusageRange = ">=20.0.20";
+const expectedCcusageRange = ">=20.0.26";
 
 function isCompatibleCcusageVersion(version) {
   const match = /^(0|[1-9]\d*)\.(0|[1-9]\d*)\.(0|[1-9]\d*)(?:\+[0-9A-Za-z-]+(?:\.[0-9A-Za-z-]+)*)?$/
@@ -136,7 +136,7 @@ try {
   );
   if (!isCompatibleCcusageVersion(installedCcusage.version)) {
     throw new Error(
-      `Packed CLI installed incompatible ccusage ${installedCcusage.version}; expected a stable version >=20.0.20`,
+      `Packed CLI installed incompatible ccusage ${installedCcusage.version}; expected a stable version >=20.0.26`,
     );
   }
 

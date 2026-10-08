@@ -97,7 +97,7 @@ function v2Body(
   requestId: string,
   contentHash: string,
   overrides: Record<string, unknown> = {},
-  collectorVersion = "20.0.18",
+  collectorVersion = "20.0.26",
 ) {
   return {
     protocol_version: 2,
@@ -218,7 +218,7 @@ describe("POST /api/usage/submit (real Supabase)", () => {
           [
             userId,
             JSON.stringify({ id: DEVICE_ID, name: "concurrent-device" }),
-            JSON.stringify({ name: "ccusage", version: "20.0.18", pricing_mode: "online" }),
+            JSON.stringify({ name: "ccusage", version: "20.0.26", pricing_mode: "online" }),
             JSON.stringify(entry),
             "9".repeat(64),
           ],
@@ -327,7 +327,7 @@ describe("POST /api/usage/submit (real Supabase)", () => {
            'cache_read_tokens', 30, 'total_tokens', 160, 'cost_usd', 0.25
          )),
          repeat('a', 64),
-         '{"name":"ccusage","version":"20.0.18","pricing_mode":"online"}'::jsonb
+         '{"name":"ccusage","version":"20.0.26","pricing_mode":"online"}'::jsonb
        FROM unnest($2::date[]) AS day
        CROSS JOIN unnest($3::uuid[]) AS device`,
       [userId, dates, [deviceA, deviceB]],
@@ -344,7 +344,7 @@ describe("POST /api/usage/submit (real Supabase)", () => {
          '["gpt-5.6"]'::jsonb,
          '[{"model":"gpt-5.6","cost_usd":0.25}]'::jsonb,
          1, repeat('a', 64),
-         '{"name":"ccusage","version":"20.0.18","pricing_mode":"online"}'::jsonb
+         '{"name":"ccusage","version":"20.0.26","pricing_mode":"online"}'::jsonb
        FROM unnest($2::date[]) AS day
        CROSS JOIN unnest($3::uuid[]) AS device`,
       [userId, dates, [deviceA, deviceB]],
@@ -547,7 +547,7 @@ describe("POST /api/usage/submit (real Supabase)", () => {
             cost_usd: 0.5,
           }],
         }).model_breakdown),
-        JSON.stringify({ name: "ccusage", version: "20.0.18", pricing_mode: "online" }),
+        JSON.stringify({ name: "ccusage", version: "20.0.26", pricing_mode: "online" }),
       ],
     );
     await db.query(
@@ -568,7 +568,7 @@ describe("POST /api/usage/submit (real Supabase)", () => {
         today,
         deviceA,
         deviceB,
-        JSON.stringify({ name: "ccusage", version: "20.0.18", pricing_mode: "online" }),
+        JSON.stringify({ name: "ccusage", version: "20.0.26", pricing_mode: "online" }),
       ],
     );
     await db.query(
@@ -706,7 +706,7 @@ describe("POST /api/usage/submit (real Supabase)", () => {
       [
         userId,
         JSON.stringify({ id: DEVICE_ID, name: "rollback-device" }),
-        JSON.stringify({ name: "ccusage", version: "20.0.18", pricing_mode: "online" }),
+        JSON.stringify({ name: "ccusage", version: "20.0.26", pricing_mode: "online" }),
         JSON.stringify(invalidEntry),
         "f".repeat(64),
       ],
@@ -768,7 +768,7 @@ describe("POST /api/usage/submit (real Supabase)", () => {
     await callSubmit(v2Body("v2-below-floor-low", "3".repeat(64), {
       authoritative_correction: true,
       migration_id: "ccusage-by-agent-v2",
-    }, "20.0.17"), token);
+    }, "20.0.26"), token);
     await callSubmit(v2Body("v2-invalid-version-low", "4".repeat(64), {
       authoritative_correction: true,
       migration_id: "ccusage-by-agent-v2",
