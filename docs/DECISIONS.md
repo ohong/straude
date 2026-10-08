@@ -1117,3 +1117,15 @@ Pricing the new-logic numbers at gpt-5.5 rates: $228.68 — matches what OpenAI 
 2. **A blocking step before the sync command** — rejected because it puts a survey in front of the activation action, which the first-sync conversion work set out to shorten.
 
 **Why the inline step:** onboarding still completes on confirmed usage, so no funnel event changes meaning. The survey is the last thing a new user sees before entering the app, and Skip leaves the database untouched.
+
+## A Newer Collector Version Is the Source of Truth for Stored Rows (2026-10-08)
+
+**Decision:** `submit_usage_day_v2` lets a trusted partitioned snapshot replace an existing `usage_agent_daily` row, in either direction, when the snapshot's `collector.version` is strictly newer (semver) than the stored row's `collector.version`. Same-version and older snapshots keep the monotonic guard. A stored row with a missing or unparseable version counts as older. The CLI persists `ccusage_version_pushed` and re-submits the existing 30-day backfill window when the installed ccusage is newer.
+
+**Alternatives considered:**
+
+1. **Send `authoritative_correction` on every upgrade** — rejected because the flag is a per-migration server switch (`ccusage-by-agent-v2`) that also deletes agent rows missing from the snapshot. Reusing it for each ccusage release would make that broad override routine.
+2. **Repair stored rows with SQL** — rejected because direct rewrites of usage totals are banned by the migration-safety test and cannot recompute from source logs. Only the user's machine has the logs.
+3. **Drop the regression guard for trusted snapshots** — rejected because a machine that lost its local logs would then silently overwrite good history with smaller numbers.
+
+**Why a version comparison:** it states the actual reason a decrease is safe, which is that a newer collector computes the numbers, not that the numbers are bigger. The guard keeps its original job for equal and older versions. Cost: a CLI that moves to a buggy newer ccusage can lower history too, so the ccusage floor and release checks are still the control for collector quality.

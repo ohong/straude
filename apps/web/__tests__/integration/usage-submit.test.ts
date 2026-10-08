@@ -816,6 +816,58 @@ describe("POST /api/usage/submit (real Supabase)", () => {
     expect(Number(row.rows[0].cost_usd)).toBeCloseTo(0.2, 6);
   });
 
+  it("lets a newer collector lower a row an older collector wrote, but not the reverse", async () => {
+    const userId = await insertUser(db, { username: "v2_newer_collector" });
+    const token = await mintCliToken(userId, "v2_newer_collector");
+    const inflated = v2Agent({ input_tokens: 200, total_tokens: 260, cost_usd: 0.5 });
+    inflated.model_breakdown[0]!.input_tokens = 200;
+    inflated.model_breakdown[0]!.total_tokens = 260;
+    inflated.model_breakdown[0]!.cost_usd = 0.5;
+    await callSubmit(v2Body("newer-before", "a".repeat(64), { agents: [inflated] }, "20.0.18"), token);
+
+    const lower = v2Agent();
+    const readDaily = () => db.query(
+      "SELECT total_tokens, cost_usd FROM public.daily_usage WHERE user_id = $1",
+      [userId],
+    );
+
+    // Same version, smaller numbers: the monotonic guard still applies.
+    const sameVersion = await callSubmit(
+      v2Body("newer-same", "b".repeat(64), { agents: [lower] }, "20.0.18"),
+      token,
+    );
+    expect(sameVersion.status).toBe(400);
+    expect(await sameVersion.json()).toMatchObject({ outcomes: [{
+      error: { code: "usage_regression_rejected" },
+    }] });
+    expect(Number((await readDaily()).rows[0].total_tokens)).toBe(260);
+
+    // Strictly newer version, smaller numbers, no authoritative flag: replaces the row.
+    const newer = await callSubmit(
+      v2Body("newer-after", "c".repeat(64), { agents: [lower] }, "20.0.26"),
+      token,
+    );
+    expect(newer.status).toBe(200);
+    const daily = (await readDaily()).rows[0];
+    expect(Number(daily.total_tokens)).toBe(160);
+    expect(Number(daily.cost_usd)).toBeCloseTo(0.25, 6);
+    const stored = await db.query(
+      "SELECT collector ->> 'version' AS version FROM public.usage_agent_daily WHERE user_id = $1",
+      [userId],
+    );
+    expect(stored.rows).toEqual([{ version: "20.0.26" }]);
+
+    // An older collector cannot push the corrected row lower again.
+    const older = await callSubmit(
+      v2Body("newer-older", "d".repeat(64), {
+        agents: [v2Agent({ total_tokens: 100, input_tokens: 40 })],
+      }, "20.0.19"),
+      token,
+    );
+    expect(older.status).toBe(400);
+    expect(Number((await readDaily()).rows[0].total_tokens)).toBe(160);
+  });
+
   it("rejects the whole date before writing any agent when one snapshot regresses", async () => {
     const userId = await insertUser(db, { username: "v2_atomic_reject" });
     const token = await mintCliToken(userId, "v2_atomic_reject");
