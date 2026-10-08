@@ -20,6 +20,16 @@
 
 **Evidence boundary:** A local HTTP receiver rejected the malformed token before normalization and accepted it afterward. Local evidence does not establish PostHog ingestion or production recovery; those require deployment and observation of a real event.
 
+## Enforce a minimum ccusage version on the server (2026-10-08)
+
+**Problem:** Token counting and API-equivalent pricing come entirely from ccusage. Releases before 20.0.19 inflated Codex usage roughly 2x through fork/subagent replay, 20.0.21 fixed out-of-window Codex history, 20.0.23 deduped Claude requests copied across sessions, and 20.0.26 scoped requestless Claude dedupe and excluded opencode fork-copied history. The minimum was enforced only in the CLI, so old CLIs and the v1 legacy adapter could still write rows from buggy collectors.
+
+**Decision:** Put `CCUSAGE_MIN_VERSION = "20.0.26"` and a stable-semver compare in `packages/shared/src/usage-protocol.ts`. The route rejects any `source: "cli"` submission, v1 or v2, whose collector version is missing, unparseable, a prerelease or below the floor with request-level HTTP 426 `{error, code: "collector_outdated", update_command: "npx straude@latest"}`. This reuses the shape of the existing `usage_protocol_upgrade_required` response, which old CLIs already surface as an error message. Web JSON imports (`source: "web"`) are exempt.
+
+**Alternatives:** A per-date `permanent_error` outcome would not be parsed by old v1 clients. Enforcing only in the RPC would need a migration and still return an opaque error. Requiring a version on web imports would force users to type one, since `ccusage daily --json` output has none.
+
+**Trade-off:** Raising the floor locks out CLIs whose bundled ccusage is older until the user runs `npx straude@latest`. Web-imported rows are unverified but still count toward `SUM(daily_usage.cost_usd)` with an unknown collector version (see ROADMAP). The RPC does not re-check the version; the route is the only gate.
+
 ## Share the dashboard request budget and parallelize live reads (2026-09-28)
 
 **Problem:** A successful push could print `Usage synced; dashboard unavailable.` because it gave the dashboard only three seconds with no retries. Both the default and `--days` paths used this override. Four authenticated production requests took 1.84–2.96 seconds before the change.

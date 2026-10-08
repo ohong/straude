@@ -6,6 +6,12 @@
 
 The release candidate combines the dashboard timeout/retry fix with account-specific sync health in `straude auto`. Credential lifetime is unchanged.
 
+### Changed
+
+- **Usage from ccusage older than 20.0.26 is rejected.** The minimum lives in `@straude/shared` as `CCUSAGE_MIN_VERSION` and is enforced by both the CLI and `POST /api/usage/submit`. A `source: "cli"` request (protocol v1 or v2) whose collector version is missing, unparseable, a prerelease or below the floor gets HTTP 426 with `code: "collector_outdated"` and `update_command: "npx straude@latest"`. Older releases double-counted Codex fork/subagent history and Claude requests copied across sessions. The `ccusage` dependency is now `>=20.0.26` (lockfile updated). Web JSON imports are exempt because pasted ccusage output carries no version.
+- **Claude 5.x model labels.** `claude-sonnet-*` and `claude-haiku-*` ids now label as Claude Sonnet / Claude Haiku regardless of major version (shared models, recap and post card image).
+- **Source inventory fixture** now lists the `antigravity` and `zcode` sources shipped in ccusage 20.0.26.
+
 ### Removed
 
 - **Low-signal unit tests.** Delete 26 unit test files and trim individual tests from 27 more (about 3,100 lines) in `apps/web/__tests__` and `packages/cli/__tests__`. The removed tests echoed mocked Supabase rows back, pinned copy, markup or call counts, or repeated trivial input validation, so they broke on refactors without catching bugs. Tests for pricing math, auth and ownership, SSRF and URL validation, idempotency, rate limits, date edges and CLI parsing stay. `test:favicons` no longer lists the deleted `team-badge` unit test.
