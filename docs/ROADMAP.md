@@ -6,6 +6,10 @@ Grouped by the pirate metric (AARRR) each feature primarily moves.
 
 ## Activation
 
+### Web import has no collector version
+
+The ccusage version floor (`CCUSAGE_MIN_VERSION`) is enforced for `source: "cli"` submissions only. Pasted JSON on `/settings/import` is posted as an unverified `source: "web"` v1 request with no collector version, and those rows still count toward `SUM(daily_usage.cost_usd)`, so a user can import numbers from a buggy old ccusage. Options: have the import page ask for the ccusage version and apply the floor, exclude `is_verified = false` rows from the north-star query, or retire the page in favor of the CLI.
+
 ### Team Affiliation Badge — v2
 
 The v1 ship (2026-05-01) covers the basic "X Premium Organizations"-style affiliation: the user enters an org URL on `/settings`, we cache the favicon to Storage by domain, and a small clickable badge renders next to their @handle on profile / feed / leaderboard / sidebar. No verification, no team name, no multi-team. Follow-ups, ordered roughly by leverage:
