@@ -765,14 +765,16 @@ describe("POST /api/usage/submit (real Supabase)", () => {
     expect(Number(row.rows[0].total_tokens)).toBe(260);
     expect(Number(row.rows[0].cost_usd)).toBeCloseTo(0.5, 6);
 
-    await callSubmit(v2Body("v2-below-floor-low", "3".repeat(64), {
+    const belowFloor = await callSubmit(v2Body("v2-below-floor-low", "3".repeat(64), {
       authoritative_correction: true,
       migration_id: "ccusage-by-agent-v2",
-    }, "20.0.26"), token);
-    await callSubmit(v2Body("v2-invalid-version-low", "4".repeat(64), {
+    }, "20.0.17"), token);
+    expect(belowFloor.status).toBe(426);
+    const invalidVersion = await callSubmit(v2Body("v2-invalid-version-low", "4".repeat(64), {
       authoritative_correction: true,
       migration_id: "ccusage-by-agent-v2",
     }, "not-semver"), token);
+    expect(invalidVersion.status).toBe(426);
     row = await db.query(
       "SELECT total_tokens, cost_usd, migration_id FROM public.usage_agent_daily WHERE user_id = $1",
       [userId],
@@ -1100,6 +1102,7 @@ describe("POST /api/usage/submit (real Supabase)", () => {
         source: "cli",
         device_id: DEVICE_ID,
         device_name: "test-device",
+        collector: { ccusage_version: "20.0.26" },
       },
       token,
     );
@@ -1234,6 +1237,7 @@ describe("POST /api/usage/submit (real Supabase)", () => {
           ],
           source: "cli",
           device_id: DEVICE_ID,
+          collector: { ccusage_version: "20.0.26" },
         },
         staleToken,
       );
