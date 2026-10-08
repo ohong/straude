@@ -33,7 +33,8 @@ export type PendingRangeMode =
   | "explicit_days"
   | "incremental"
   | "first_sync"
-  | "migration";
+  | "migration"
+  | "collector_upgrade";
 
 export interface PendingUsageBatch {
   account_key: string;
@@ -170,6 +171,7 @@ function parseOutbox(value: unknown): OutboxState | null {
       && batch.range_mode !== "incremental"
       && batch.range_mode !== "first_sync"
       && batch.range_mode !== "migration"
+      && batch.range_mode !== "collector_upgrade"
     ) {
       return null;
     }

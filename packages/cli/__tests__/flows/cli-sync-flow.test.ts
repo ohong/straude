@@ -233,6 +233,48 @@ describe("unified ccusage CLI flow", () => {
     expect(readPersistedConfig().last_push_date).toBe(todayStr());
   });
 
+  it("re-submits the full backfill window once after ccusage is upgraded", async () => {
+    _setCcusageCommandForTests({ cmd: "/bundled/ccusage", args: [], version: "20.0.26" });
+    seedConfig({ last_push_date: "2026-03-12", ccusage_version_pushed: "20.0.19" });
+    mockSuccessfulSubmit();
+
+    await pushCommand({});
+
+    const dailyCall = execFileMock.mock.calls.find(([, args]) =>
+      Array.isArray(args) && args.includes("daily"),
+    )!;
+    const args = dailyCall[1] as string[];
+    expect(args[args.indexOf("--since") + 1]).toBe("20260212");
+    const body = JSON.parse(mockFetch.mock.calls[0]![1].body);
+    expect(body.entries[0]).not.toHaveProperty("authoritative_correction");
+    expect(body.collector.version).toBe("20.0.26");
+    expect(readPersistedConfig().ccusage_version_pushed).toBe("20.0.26");
+
+    // The next push is incremental again.
+    execFileMock.mockClear();
+    mockCcusage();
+    mockSuccessfulSubmit();
+    await pushCommand({});
+    const nextCall = execFileMock.mock.calls.find(([, a]) =>
+      Array.isArray(a) && a.includes("daily"),
+    )!;
+    const nextArgs = nextCall[1] as string[];
+    expect(nextArgs[nextArgs.indexOf("--since") + 1]).toBe("20260313");
+  });
+
+  it("stays incremental when ccusage has not changed since the last push", async () => {
+    seedConfig({ last_push_date: "2026-03-12", ccusage_version_pushed: TEST_CCUSAGE_VERSION });
+    mockSuccessfulSubmit();
+
+    await pushCommand({});
+
+    const dailyCall = execFileMock.mock.calls.find(([, args]) =>
+      Array.isArray(args) && args.includes("daily"),
+    )!;
+    const args = dailyCall[1] as string[];
+    expect(args[args.indexOf("--since") + 1]).toBe("20260313");
+  });
+
   it("respects explicit --days before the migration backfill has completed", async () => {
     seedConfig({
       ccusage_v20_migration_completed_at: undefined,
