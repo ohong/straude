@@ -10,7 +10,7 @@ const USAGE_SUBMISSION_RPC =
 const USAGE_RECONCILIATION =
   "20260723135641_usage_reconciliation.sql";
 const USAGE_NEWER_COLLECTOR =
-  "20260921120000_usage_newer_collector_corrections.sql";
+  "20261008120000_usage_newer_collector_corrections.sql";
 
 function getAllMigrations(): { name: string; content: string }[] {
   const files = readdirSync(MIGRATIONS_DIR)
