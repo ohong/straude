@@ -932,3 +932,12 @@ export async function collectCcusageUsageAsync(
 
   throw new PricingUnavailableError("Live pricing collection did not produce a result.");
 }
+
+/** Installed ccusage version, or undefined when the dependency cannot be resolved. */
+export function getInstalledCcusageVersion(): string | undefined {
+  try {
+    return resolveInstalledCcusageCommand().version;
+  } catch {
+    return undefined;
+  }
+}
