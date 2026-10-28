@@ -15,7 +15,7 @@ import {
   type UsageSubmitResponseV2,
 } from "@straude/shared/usage-protocol";
 import { after } from "@/lib/utils/after";
-import { captureServerActivationEvent } from "@/lib/analytics/server";
+import { captureServerActivationEvent, hasServerAnalyticsConsent } from "@/lib/analytics/server";
 import { createClient } from "@/lib/supabase/server";
 import { verifyCliTokenWithRefresh } from "@/lib/api/cli-auth";
 import { CliIdentityUnavailableError, isActiveCliUser } from "@/lib/api/active-cli-user";
@@ -571,6 +571,7 @@ function schedulePostCommitWork(
   userId: string,
   request: UsageSubmitRequestV2,
   outcomes: UsageOutcomeV2[],
+  analyticsConsent: boolean,
 ): void {
   const successful = outcomes.filter(
     (outcome) => outcome.status === "committed" || outcome.status === "unchanged",
@@ -590,7 +591,8 @@ function schedulePostCommitWork(
       Promise.resolve(
         getServiceClient().rpc("recalculate_user_level", { p_user_id: userId }),
       ),
-      captureServerActivationEvent({
+      ...(analyticsConsent ? [captureServerActivationEvent({
+        analyticsConsent: true,
         event: "usage_submit_succeeded",
         distinctId: userId,
         properties: {
@@ -605,7 +607,7 @@ function schedulePostCommitWork(
           has_errors: successful.length !== outcomes.length,
           "$insert_id": `usage_submit_succeeded:${userId}:${request.request_id}`,
         },
-      }),
+      })] : []),
     ]);
   });
 }
@@ -723,7 +725,7 @@ export async function POST(request: Request): Promise<NextResponse> {
     http_status: status,
     submit_duration_ms: Math.round(performance.now() - requestStartedAt),
   }));
-  schedulePostCommitWork(auth.userId, usageRequest, outcomes);
+  schedulePostCommitWork(auth.userId, usageRequest, outcomes, hasServerAnalyticsConsent(request));
 
   if (v2) {
     const response: UsageSubmitResponseV2 = {
