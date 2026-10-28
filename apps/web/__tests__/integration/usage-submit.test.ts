@@ -115,6 +115,82 @@ function v2Body(
   };
 }
 
+type ExpectedSource = {
+  agent: string;
+  total_tokens: number;
+  cost_usd: number;
+  version: string;
+  device_id?: string;
+};
+
+/** Reconcile persisted source counters through each device and the public day. */
+async function expectAccounting(
+  userId: string,
+  expected: ExpectedSource[],
+  date = today,
+) {
+  const counters = [
+    "input_tokens", "output_tokens", "reasoning_output_tokens",
+    "cache_creation_tokens", "cache_read_tokens", "total_tokens",
+  ] as const;
+  const columns = [...counters, "cost_usd"].join(", ");
+  const sources = await db.query(
+    `SELECT device_id, agent, collector ->> 'version' AS version, ${columns}
+     FROM public.usage_agent_daily WHERE user_id = $1 AND date = $2
+     ORDER BY device_id, agent`,
+    [userId, date],
+  );
+  expect(sources.rows.map((row) => ({
+    device_id: row.device_id,
+    agent: row.agent,
+    total_tokens: Number(row.total_tokens),
+    cost_usd: Number(row.cost_usd),
+    version: row.version,
+  }))).toEqual(expected.map((row) => ({ device_id: DEVICE_ID, ...row })).sort(
+    (a, b) => a.device_id.localeCompare(b.device_id) || a.agent.localeCompare(b.agent),
+  ));
+
+  const devices = await db.query(
+    `SELECT device_id, ${columns} FROM public.device_usage
+     WHERE user_id = $1 AND date = $2 ORDER BY device_id`,
+    [userId, date],
+  );
+  expect(devices.rows.map((row) => row.device_id)).toEqual(
+    [...new Set(sources.rows.map((row) => row.device_id))].sort(),
+  );
+  for (const device of devices.rows) {
+    const deviceSources = sources.rows.filter((row) => row.device_id === device.device_id);
+    for (const counter of counters) {
+      expect(Number(device[counter]), `device ${device.device_id} ${counter}`).toBe(
+        deviceSources.reduce((sum, row) => sum + Number(row[counter]), 0),
+      );
+    }
+    expect(Number(device.cost_usd)).toBeCloseTo(
+      deviceSources.reduce((sum, row) => sum + Number(row.cost_usd), 0), 6,
+    );
+  }
+  const daily = await db.query(
+    `SELECT ${columns} FROM public.daily_usage WHERE user_id = $1 AND date = $2`,
+    [userId, date],
+  );
+  expect(daily.rows).toHaveLength(1);
+  for (const counter of counters) {
+    expect(Number(daily.rows[0][counter]), `daily ${counter}`).toBe(
+      devices.rows.reduce((sum, row) => sum + Number(row[counter]), 0),
+    );
+  }
+  expect(Number(daily.rows[0].cost_usd)).toBeCloseTo(
+    devices.rows.reduce((sum, row) => sum + Number(row.cost_usd), 0), 6,
+  );
+  const posts = await db.query(
+    `SELECT post.id FROM public.posts AS post
+     JOIN public.daily_usage AS daily ON daily.id = post.daily_usage_id
+     WHERE daily.user_id = $1 AND daily.date = $2`,
+    [userId, date],
+  );
+  expect(posts.rows).toHaveLength(1);
+}
+
 describe("POST /api/usage/submit (real Supabase)", () => {
   it("commits v2 per-agent rows and derives device and daily aggregates", async () => {
     const userId = await insertUser(db, { username: "v2_integration" });
@@ -816,56 +892,128 @@ describe("POST /api/usage/submit (real Supabase)", () => {
     expect(Number(row.rows[0].cost_usd)).toBeCloseTo(0.2, 6);
   });
 
-  it("lets a newer collector lower a row an older collector wrote, but not the reverse", async () => {
+  it("accepts a newer lower source correction once and rejects stale decreases and reinflation", async () => {
     const userId = await insertUser(db, { username: "v2_newer_collector" });
     const token = await mintCliToken(userId, "v2_newer_collector");
     const inflated = v2Agent({ input_tokens: 200, total_tokens: 260, cost_usd: 0.5 });
     inflated.model_breakdown[0]!.input_tokens = 200;
     inflated.model_breakdown[0]!.total_tokens = 260;
     inflated.model_breakdown[0]!.cost_usd = 0.5;
-    await callSubmit(v2Body("newer-before", "a".repeat(64), { agents: [inflated] }, "20.0.26"), token);
+    const claude = v2Agent({ agent: "claude" });
+    const initial = await callSubmit(v2Body("newer-before", "a".repeat(64), {
+      agents: [inflated, claude],
+    }, "20.0.26"), token);
+    expect(initial.status).toBe(200);
+    const initialSources = [
+      { agent: "claude", total_tokens: 160, cost_usd: 0.25, version: "20.0.26" },
+      { agent: "codex", total_tokens: 260, cost_usd: 0.5, version: "20.0.26" },
+    ];
+    await expectAccounting(userId, initialSources);
 
-    const lower = v2Agent();
-    const readDaily = () => db.query(
-      "SELECT total_tokens, cost_usd FROM public.daily_usage WHERE user_id = $1",
-      [userId],
-    );
-
-    // Same version, smaller numbers: the monotonic guard still applies.
-    const sameVersion = await callSubmit(
-      v2Body("newer-same", "b".repeat(64), { agents: [lower] }, "20.0.26"),
-      token,
-    );
+    const sameVersion = await callSubmit(v2Body("newer-same", "b".repeat(64), {
+      agents: [v2Agent()],
+    }, "20.0.26"), token);
     expect(sameVersion.status).toBe(400);
     expect(await sameVersion.json()).toMatchObject({ outcomes: [{
       error: { code: "usage_regression_rejected" },
     }] });
-    expect(Number((await readDaily()).rows[0].total_tokens)).toBe(260);
+    await expectAccounting(userId, initialSources);
 
-    // Strictly newer version, smaller numbers, no authoritative flag: replaces the row.
-    const newer = await callSubmit(
-      v2Body("newer-after", "c".repeat(64), { agents: [lower] }, "20.0.27"),
-      token,
-    );
+    // Only Codex was recollected. The omitted Claude source remains intact.
+    const correction = v2Body("newer-after", "c".repeat(64), {}, "20.0.27");
+    const newer = await callSubmit(correction, token);
     expect(newer.status).toBe(200);
-    const daily = (await readDaily()).rows[0];
-    expect(Number(daily.total_tokens)).toBe(160);
-    expect(Number(daily.cost_usd)).toBeCloseTo(0.25, 6);
-    const stored = await db.query(
-      "SELECT collector ->> 'version' AS version FROM public.usage_agent_daily WHERE user_id = $1",
+    expect(await newer.json()).toMatchObject({ outcomes: [{ status: "committed" }] });
+    const correctedSources = [initialSources[0]!, {
+      agent: "codex", total_tokens: 160, cost_usd: 0.25, version: "20.0.27",
+    }];
+    await expectAccounting(userId, correctedSources);
+    const retry = await callSubmit(correction, token);
+    expect(retry.status).toBe(200);
+    expect(await retry.json()).toMatchObject({ outcomes: [{ status: "unchanged" }] });
+    await expectAccounting(userId, correctedSources);
+
+    const smaller = v2Agent();
+    smaller.input_tokens -= 10;
+    smaller.total_tokens -= 10;
+    smaller.model_breakdown[0]!.input_tokens -= 10;
+    smaller.model_breakdown[0]!.total_tokens -= 10;
+    for (const [requestId, version, agents, errorCode] of [
+      ["corrected-same-low", "20.0.27", [smaller], "usage_regression_rejected"],
+      ["corrected-older-low", "20.0.26", [smaller], "usage_collector_outdated"],
+      // A new source first in the payload must also be rolled back atomically.
+      ["corrected-older-inflated", "20.0.26", [v2Agent({ agent: "new-source" }), inflated], "usage_collector_outdated"],
+    ] as const) {
+      const rejected = await callSubmit(v2Body(requestId, "d".repeat(64), {
+        agents,
+        ...(version === "20.0.26" ? {
+          authoritative_correction: true,
+          migration_id: "ccusage-by-agent-v2",
+        } : {}),
+      }, version), token);
+      expect(rejected.status, requestId).toBe(400);
+      expect(await rejected.json()).toMatchObject({ outcomes: [{
+        status: "permanent_error", error: { code: errorCode },
+      }] });
+      await expectAccounting(userId, correctedSources);
+    }
+    const outcomes = await db.query(
+      "SELECT request_id FROM public.usage_submission_outcomes WHERE user_id = $1 ORDER BY request_id",
       [userId],
     );
-    expect(stored.rows).toEqual([{ version: "20.0.27" }]);
+    expect(outcomes.rows).toEqual([
+      { request_id: "newer-after" }, { request_id: "newer-before" },
+    ]);
+  });
 
-    // An older collector cannot push the corrected row lower again.
-    const older = await callSubmit(
-      v2Body("newer-older", "d".repeat(64), {
-        agents: [v2Agent({ total_tokens: 100, input_tokens: 40 })],
-      }, "20.0.26"),
-      token,
+  it("preserves an omitted source and rejects incomplete source regression until its snapshot grows", async () => {
+    const userId = await insertUser(db, { username: "v2_partial_source" });
+    const token = await mintCliToken(userId, "v2_partial_source");
+    const initial = await callSubmit(v2Body("partial-before", "1".repeat(64), {
+      agents: [v2Agent(), v2Agent({ agent: "claude" })],
+    }), token);
+    expect(initial.status).toBe(200);
+    const original = [
+      { agent: "claude", total_tokens: 160, cost_usd: 0.25, version: "20.0.26" },
+      { agent: "codex", total_tokens: 160, cost_usd: 0.25, version: "20.0.26" },
+    ];
+    await expectAccounting(userId, original);
+
+    const incomplete = v2Agent();
+    incomplete.input_tokens -= 50;
+    incomplete.total_tokens -= 50;
+    incomplete.model_breakdown[0]!.input_tokens -= 50;
+    incomplete.model_breakdown[0]!.total_tokens -= 50;
+    const rejected = await callSubmit(v2Body("partial-incomplete", "2".repeat(64), {
+      agents: [incomplete],
+    }), token);
+    expect(rejected.status).toBe(400);
+    expect(await rejected.json()).toMatchObject({ outcomes: [{
+      status: "permanent_error", error: { code: "usage_regression_rejected" },
+    }] });
+    await expectAccounting(userId, original);
+
+    const grown = v2Agent();
+    grown.input_tokens += 40;
+    grown.total_tokens += 40;
+    grown.cost_usd = 0.3;
+    grown.model_breakdown[0]!.input_tokens += 40;
+    grown.model_breakdown[0]!.total_tokens += 40;
+    grown.model_breakdown[0]!.cost_usd = 0.3;
+    const accepted = await callSubmit(v2Body("partial-growth", "3".repeat(64), {
+      agents: [grown],
+    }), token);
+    expect(accepted.status).toBe(200);
+    await expectAccounting(userId, [original[0]!, {
+      agent: "codex", total_tokens: 200, cost_usd: 0.3, version: "20.0.26",
+    }]);
+    const outcomes = await db.query(
+      "SELECT request_id FROM public.usage_submission_outcomes WHERE user_id = $1 ORDER BY request_id",
+      [userId],
     );
-    expect(older.status).toBe(400);
-    expect(Number((await readDaily()).rows[0].total_tokens)).toBe(160);
+    expect(outcomes.rows).toEqual([
+      { request_id: "partial-before" }, { request_id: "partial-growth" },
+    ]);
   });
 
   it("rejects the whole date before writing any agent when one snapshot regresses", async () => {
@@ -1088,7 +1236,9 @@ describe("POST /api/usage/submit (real Supabase)", () => {
            'usage_web_installation_id', 'submit_usage_day_v2',
            'list_usage_device_candidates', 'discover_usage_device_candidates',
            'resolve_usage_device_candidate', 'start_usage_repair_batch',
-           'run_usage_repair_batch', 'rollback_usage_repair_batch'
+           'run_usage_repair_batch', 'rollback_usage_repair_batch',
+           'apply_usage_device_overlap_evidence', 'usage_device_day_token_fingerprint',
+           'usage_entry_token_fingerprint'
          )`,
     );
     const functionRoles = new Set(functionGrants.rows.map((row) => row.grantee));
@@ -1096,7 +1246,34 @@ describe("POST /api/usage/submit (real Supabase)", () => {
     expect(functionRoles).not.toContain("anon");
     expect(functionRoles).not.toContain("authenticated");
     expect(functionRoles).not.toContain("PUBLIC");
-    expect(new Set(functionGrants.rows.filter((row) => row.grantee === "service_role").map((row) => row.routine_name)).size).toBe(8);
+    expect(new Set(functionGrants.rows.filter((row) => row.grantee === "service_role").map((row) => row.routine_name)).size).toBe(11);
+
+    // Exercise PostgreSQL's permission boundary, including the new overlap helper.
+    const privateCalls = [
+      "SELECT public.list_usage_device_candidates(NULL::uuid)",
+      "SELECT public.resolve_usage_device_candidate(NULL::uuid, NULL::uuid, 'keep_separate')",
+      "SELECT public.apply_usage_device_overlap_evidence(NULL::uuid, NULL::uuid, NULL::uuid[], NULL::date, NULL::jsonb)",
+      "SELECT public.submit_usage_day_v2(NULL::uuid, NULL::text, NULL::text, NULL::text, NULL::jsonb, NULL::jsonb, NULL::jsonb, NULL::text, true)",
+    ];
+    for (const role of ["anon", "authenticated"]) {
+      for (const query of privateCalls) {
+        await db.query("BEGIN");
+        try {
+          await db.query(`SET LOCAL ROLE ${role}`);
+          await expect(db.query(query), `${role}: ${query}`).rejects.toMatchObject({ code: "42501" });
+        } finally {
+          await db.query("ROLLBACK");
+        }
+      }
+    }
+    await db.query("BEGIN");
+    try {
+      await db.query("SET LOCAL ROLE service_role");
+      const allowed = await db.query("SELECT * FROM public.list_usage_device_candidates(NULL::uuid)");
+      expect(allowed.rows).toEqual([]);
+    } finally {
+      await db.query("ROLLBACK");
+    }
   });
 
   it("rejects unauthenticated requests without writing anything", async () => {
@@ -1350,7 +1527,7 @@ describe("device dedupe at submit time (real Supabase)", () => {
 
   async function candidate(userId: string) {
     const rows = await db.query(
-      `SELECT status, overlap_dates::text[] AS overlap, divergent_dates::text[] AS divergent,
+      `SELECT id, status, overlap_dates::text[] AS overlap, divergent_dates::text[] AS divergent,
               resolved_at
        FROM public.usage_device_reconciliation_candidates WHERE user_id = $1`,
       [userId],
@@ -1402,34 +1579,73 @@ describe("device dedupe at submit time (real Supabase)", () => {
     expect(totals.rows[0].devices).toBe(1);
   });
 
-  it("reopens a kept-separate pair when identical data arrives later", async () => {
-    const userId = await insertUser(db, { username: "dedupe_reopen" });
-    const token = await mintCliToken(userId, "dedupe_reopen");
+  it("preserves keep-separate intent as evidence changes and allows an explicit proven merge", async () => {
+    const userId = await insertUser(db, { username: "dedupe_keep_separate" });
+    const token = await mintCliToken(userId, "dedupe_keep_separate");
     const [d1, d2] = [day(1), day(2)];
 
-    await pushDay(token, DEVICE_A, d1, { cost: 0.25 });
+    expect((await pushDay(token, DEVICE_A, d1, { cost: 0.25 })).status).toBe(200);
     await pushDay(token, DEVICE_B, d1, { cost: 0.25, input: 500 });
-    expect(await candidate(userId)).toMatchObject({ status: "ambiguous", divergent: [d1] });
+    const pending = await candidate(userId);
+    expect(pending).toMatchObject({ status: "ambiguous", divergent: [d1] });
 
-    // The user decided these are two machines.
     await db.query(
-      `UPDATE public.usage_device_reconciliation_candidates
-       SET status = 'kept_separate', resolved_at = now() WHERE user_id = $1`,
+      "SELECT public.resolve_usage_device_candidate($1, $2, 'keep_separate')",
+      [userId, pending.id],
+    );
+    const resolvedAt = (await candidate(userId)).resolved_at;
+    expect(resolvedAt).not.toBeNull();
+    const normal = await pushDay(token, DEVICE_B, d1, { cost: 0.25, input: 500 });
+    expect(normal.status, JSON.stringify(normal.json)).toBe(200);
+    await expectAccounting(userId, [
+      { device_id: DEVICE_A, agent: "codex", total_tokens: 160, cost_usd: 0.25, version: "20.0.26" },
+      { device_id: DEVICE_B, agent: "codex", total_tokens: 560, cost_usd: 0.25, version: "20.0.26" },
+    ], d1);
+
+    // Correct the divergent historical snapshot without clearing user intent.
+    const corrected = await pushDay(token, DEVICE_B, d1, {
+      cost: 0.4, collectorVersion: "20.0.27",
+    });
+    expect(corrected.status, JSON.stringify(corrected.json)).toBe(200);
+    await expectAccounting(userId, [
+      { device_id: DEVICE_A, agent: "codex", total_tokens: 160, cost_usd: 0.25, version: "20.0.26" },
+      { device_id: DEVICE_B, agent: "codex", total_tokens: 160, cost_usd: 0.4, version: "20.0.27" },
+    ], d1);
+
+    expect((await pushDay(token, DEVICE_A, d2, { cost: 0.25 })).status).toBe(200);
+    const identical = await pushDay(token, DEVICE_B, d2, { cost: 0.4 });
+    expect(identical.status, JSON.stringify(identical.json)).toBe(200);
+    const overlap = [d1, d2].sort();
+    expect(await candidate(userId)).toMatchObject({
+      status: "kept_separate", overlap, divergent: [], resolved_at: resolvedAt,
+    });
+    await expectAccounting(userId, [
+      { device_id: DEVICE_A, agent: "codex", total_tokens: 160, cost_usd: 0.25, version: "20.0.26" },
+      { device_id: DEVICE_B, agent: "codex", total_tokens: 160, cost_usd: 0.4, version: "20.0.26" },
+    ], d2);
+    const visible = await db.query(
+      `SELECT status, overlap_dates::text[] AS overlap, divergent_dates::text[] AS divergent
+       FROM public.list_usage_device_candidates($1)`,
       [userId],
     );
-    const normal = await pushDay(token, DEVICE_B, d1, { cost: 0.25, input: 500 });
-    expect(normal.outcome.status, JSON.stringify(normal.json)).not.toBe("identity_conflict");
-    expect((await candidate(userId)).status).toBe("kept_separate");
+    expect(visible.rows).toEqual([{ status: "kept_separate", overlap, divergent: [] }]);
 
-    // A later date now carries identical tokens on both devices.
-    await pushDay(token, DEVICE_A, d2, { cost: 0.25 });
-    const identical = await pushDay(token, DEVICE_B, d2, { cost: 0.4 });
-    expect(identical.outcome.error?.code, JSON.stringify(identical.json)).toBe("device_reconciliation_required");
-    expect(await candidate(userId)).toMatchObject({
-      status: "ambiguous",
-      overlap: [d2],
-      divergent: [],
-      resolved_at: null,
-    });
+    // Matching evidence enables an explicit reconsideration, never an automatic merge.
+    await db.query(
+      "SELECT public.resolve_usage_device_candidate($1, $2, 'merge')",
+      [userId, pending.id],
+    );
+    expect((await candidate(userId)).status).toBe("merged");
+    for (const date of [d1, d2]) {
+      await expectAccounting(userId, [{
+        device_id: DEVICE_A, agent: "codex", total_tokens: 160, cost_usd: 0.25, version: "20.0.26",
+      }], date);
+    }
+    const decisions = await db.query(
+      `SELECT decision FROM public.usage_device_reconciliation_decisions
+       WHERE candidate_id = $1 ORDER BY created_at, id`,
+      [pending.id],
+    );
+    expect(decisions.rows).toEqual([{ decision: "keep_separate" }, { decision: "merge" }]);
   });
 });
