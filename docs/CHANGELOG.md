@@ -2,6 +2,10 @@
 
 ## Unreleased
 
+### CLI 0.2.3
+
+The release candidate combines the dashboard timeout/retry fix with account-specific sync health in `straude auto`. Credential lifetime is unchanged.
+
 ### Removed
 
 - **Low-signal unit tests.** Delete 26 unit test files and trim individual tests from 27 more (about 3,100 lines) in `apps/web/__tests__` and `packages/cli/__tests__`. The removed tests echoed mocked Supabase rows back, pinned copy, markup or call counts, or repeated trivial input validation, so they broke on refactors without catching bugs. Tests for pricing math, auth and ownership, SSRF and URL validation, idempotency, rate limits, date edges and CLI parsing stay. `test:favicons` no longer lists the deleted `team-badge` unit test.
@@ -10,7 +14,7 @@
 
 - **Normalize PostHog configuration before capture.** Trim the public project token in both browser entry points and trim server token/host inputs. Reuse the server normalization from prior commit `92c948a`; add bounded failure diagnostics that never log provider response bodies or submitted values. A loopback receiver supports real-app lifecycle verification without injecting production analytics.
 
-- **Dashboard rendering after usage sync handles slow and transient responses.** CLI v0.2.2 includes the fix. Default pushes and `--days` now use the same 15-second request budget and GET retries as `straude status`, replacing the three-second, no-retry override. The dashboard endpoint runs independent database reads concurrently to reduce round-trip delay. The packaged CLI E2E covers both command paths with a 3.5-second response, plus recovery from HTTP 503, and saves an inspectable transcript.
+- **Dashboard rendering after usage sync handles slow and transient responses.** CLI v0.2.3 includes the fix. Default pushes and `--days` now use the same 15-second request budget and GET retries as `straude status`, replacing the three-second, no-retry override. The dashboard endpoint runs independent database reads concurrently to reduce round-trip delay. The packaged CLI E2E covers both command paths with a 3.5-second response, plus recovery from HTTP 503, and saves an inspectable transcript.
 
 - **CLI release handles missing npm versions and local tarball paths.** npm writes a JSON error object for a version that does not exist. The release workflow now accepts only a string as a published tarball hash. It also marks the tested tarball as a local path for `npm publish`.
 
