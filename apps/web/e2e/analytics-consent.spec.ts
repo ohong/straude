@@ -1,6 +1,7 @@
 import { createClient } from "@supabase/supabase-js";
-import { expect, test, type Page, type TestInfo } from "@playwright/test";
-import { randomUUID } from "node:crypto";
+import { devices, expect, test, type Page, type TestInfo } from "@playwright/test";
+import { createHash, randomUUID } from "node:crypto";
+import { gunzipSync } from "node:zlib";
 
 /**
  * Requires the real loopback app/Auth/database/mail stack, built with the
@@ -45,16 +46,35 @@ async function snapshot(page: Page, testInfo: TestInfo, name: string, start: num
   await page.screenshot({ path: testInfo.outputPath(`${name}.png`), fullPage: true });
   return receipts;
 }
+const pseudonym = (value: unknown) => typeof value === "string"
+  ? createHash("sha256").update(value).digest("hex").slice(0, 20) : null;
+function sdkCaptures(buffer: Buffer | null) {
+  if (!buffer) return [];
+  const decoded = buffer[0] === 31 && buffer[1] === 139 ? gunzipSync(buffer) : buffer;
+  let text = decoded.toString();
+  if (text.startsWith("data=")) text = Buffer.from(new URLSearchParams(text).get("data") ?? "", "base64").toString();
+  const data = JSON.parse(text);
+  const captures = Array.isArray(data) ? data : [data];
+  return captures.map((capture) => ({
+    event: String(capture.event),
+    identity: pseudonym(capture.properties?.distinct_id ?? capture.distinct_id),
+    anonymous_identity: pseudonym(capture.properties?.$anon_distinct_id),
+    insert_id: pseudonym(capture.uuid ?? capture.properties?.$insert_id),
+  }));
+}
 async function sdkBoundary(page: Page, mode: "accept" | "fail" = "accept") {
   const requests: { path: string; method: string }[] = [];
+  const captures: ReturnType<typeof sdkCaptures> = [];
   let fail = mode === "fail";
   await page.route("**/ingest/**", async (route) => {
     requests.push({ path: new URL(route.request().url()).pathname, method: route.request().method() });
-    if (fail) return route.abort("failed");
+    const isCapture = route.request().method() === "POST" && /\/e\/?$/.test(new URL(route.request().url()).pathname);
+    if (isCapture) captures.push(...sdkCaptures(route.request().postDataBuffer()));
+    if (fail && isCapture) return route.abort("failed");
     // Acknowledge optional SDK transport only. No auth/application route is replaced.
     await route.fulfill({ status: 200, contentType: "application/json", body: '{"status":1,"featureFlags":{}}' });
   });
-  return { requests, recover: () => { fail = false; } };
+  return { requests, captures, recover: () => { fail = false; } };
 }
 async function changeConsent(page: Page, preference: "all" | "essential") {
   // The public consent route and the same event used by CookieConsentModal.
@@ -152,6 +172,11 @@ async function syncProtocolFixture(page: Page) {
 }
 
 test.describe("optional analytics consent and identity", () => {
+  // PostHog intentionally drops automation events (navigator.webdriver and
+  // HeadlessChrome). Use Chromium's ordinary browser environment to exercise
+  // actual SDK emission, without changing SDK/app consent checks or CSP.
+  test.use({ userAgent: devices["Desktop Chrome"].userAgent,
+    launchOptions: { args: ["--disable-blink-features=AutomationControlled"] } });
   test.beforeEach(async ({ page }, testInfo) => {
     for (const [label, value] of [["app", testInfo.project.use.baseURL], ["Supabase", supabaseUrl], ["receiver", receiverUrl]]) {
       if (typeof value !== "string" || !loopback(value)) throw new Error(`Refusing non-loopback or missing ${label} URL`);
@@ -198,11 +223,12 @@ test.describe("optional analytics consent and identity", () => {
     try {
       await page.goto("/");
       await page.getByRole("button", { name: "Accept all", exact: true }).click();
-      await expect.poll(() => sdk.requests.length).toBeGreaterThan(0);
+      await expect.poll(() => sdk.captures.length).toBeGreaterThan(0);
       expect((await activation(page)).status()).toBe(200);
       expect((await page.context().cookies()).some((cookie) => cookie.name === "straude_activation_id")).toBe(true);
-      await signUp(page, email);
+      const userId = await signUp(page, email);
       await assertNoActivationCookie(page);
+      await expect.poll(() => sdk.captures.some((capture) => capture.identity === pseudonym(userId))).toBe(true);
       const replay = await syncProtocolFixture(page);
       await expect(page.getByRole("heading", { name: "Your first sync is complete" })).toBeVisible({ timeout: 15_000 });
       await expect.poll(async () => {
@@ -228,7 +254,7 @@ test.describe("optional analytics consent and identity", () => {
       expect(milestones.filter((receipt) => receipt.event === "first_sync_confirmed").length).toBeGreaterThan(1);
       await testInfo.attach("browser-sdk-emission", { body: JSON.stringify({
         boundary: "browser SDK emitted; analytics-only route acknowledged locally; provider ingestion unverified",
-        requests: sdk.requests,
+        requests: sdk.requests, captures: sdk.captures,
       }, null, 2), contentType: "application/json" });
     } finally { await cleanup(email); }
   });
@@ -238,7 +264,7 @@ test.describe("optional analytics consent and identity", () => {
     const sdk = await sdkBoundary(page, "fail");
     await page.goto("/");
     await page.getByRole("button", { name: "Accept all", exact: true }).click();
-    await expect.poll(() => sdk.requests.length).toBeGreaterThan(0);
+    await expect.poll(() => sdk.captures.length).toBeGreaterThan(0);
     expect((await activation(page)).status()).toBe(200);
     await changeConsent(page, "essential");
     await assertNoActivationCookie(page);
@@ -257,15 +283,16 @@ test.describe("optional analytics consent and identity", () => {
         afterWithdrawal.push({ path: new URL(response.url()).pathname, status: response.status() });
       }
     });
-    await page.goto("/privacy");
+    // Keep the document alive so queued SDK requests retain their retry timers.
     // PostHog retry backoff can reach 3s. Observe a complete backoff interval;
     // either opt-out clears it, or the request gate must answer 204.
     await page.waitForTimeout(6_000);
+    await page.goto("/privacy");
     expect(afterWithdrawal.every((response) => response.status === 204)).toBe(true);
     expect(await receiptCount(page)).toBe(acceptedAtWithdrawal);
     await assertNoActivationCookie(page);
     await testInfo.attach("withdrawal-sdk-boundary", { body: JSON.stringify({
-      initialSdkAttempts: sdk.requests, responsesAfterWithdrawal: afterWithdrawal,
+      initialSdkAttempts: sdk.requests, initialSdkCaptures: sdk.captures, responsesAfterWithdrawal: afterWithdrawal,
       queuedRetryObserved: afterWithdrawal.length > 0,
       boundary: "SDK attempts recorded; actual Next proxy denies transport; provider unverified",
     }, null, 2), contentType: "application/json" });
@@ -282,19 +309,21 @@ test.describe("optional analytics consent and identity", () => {
 
   test("sign-out and a second account never reuse the consumed anonymous join", async ({ page }, testInfo) => {
     const start = await receiptCount(page);
-    await sdkBoundary(page);
+    const sdk = await sdkBoundary(page);
     const first = `consent-switch-a-${randomUUID()}@local.test`;
     const second = `consent-switch-b-${randomUUID()}@local.test`;
     try {
       await page.goto("/");
       await page.getByRole("button", { name: "Accept all", exact: true }).click();
       expect((await activation(page)).status()).toBe(200);
-      await signUp(page, first);
+      const firstUserId = await signUp(page, first);
+      await expect.poll(() => sdk.captures.some((capture) => capture.identity === pseudonym(firstUserId))).toBe(true);
       await assertNoActivationCookie(page);
       expect((await activation(page)).status()).toBe(200);
       await signOut(page);
       await assertNoActivationCookie(page);
-      await signUp(page, second);
+      const secondUserId = await signUp(page, second);
+      await expect.poll(() => sdk.captures.some((capture) => capture.identity === pseudonym(secondUserId))).toBe(true);
       await assertNoActivationCookie(page);
       expect((await activation(page)).status()).toBe(200);
       await expect.poll(async () => (await events(page)).slice(start).filter((receipt) => receipt.event === "signup_completed").length).toBe(2);
@@ -306,6 +335,12 @@ test.describe("optional analytics consent and identity", () => {
       const secondIdentity = signups[1].identity;
       expect(links.some((receipt) => receipt.identity === firstIdentity && Boolean(receipt.anonymous_identity))).toBe(true);
       expect(links.some((receipt) => receipt.identity === secondIdentity && receipt.anonymous_identity === firstIdentity)).toBe(false);
+      const secondSdkIdentities = sdk.captures.filter((capture) => capture.identity === pseudonym(secondUserId));
+      expect(secondSdkIdentities.length).toBeGreaterThan(0);
+      expect(secondSdkIdentities.some((capture) => capture.anonymous_identity === pseudonym(firstUserId))).toBe(false);
+      await testInfo.attach("account-switch-sdk", { body: JSON.stringify({
+        boundary: "browser SDK emission; account and anonymous IDs pseudonymized", captures: sdk.captures,
+      }, null, 2), contentType: "application/json" });
       const firstAnonymous = links.find((receipt) => receipt.identity === firstIdentity)?.anonymous_identity;
       expect(links.some((receipt) => receipt.identity === secondIdentity && receipt.anonymous_identity === firstAnonymous)).toBe(false);
     } finally { await cleanup(first); await cleanup(second); }
