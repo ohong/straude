@@ -127,7 +127,7 @@ jobs:
             fi
             echo "straude@${VERSION} is already published with matching integrity"
           else
-            npm publish artifacts/*.tgz --access public --provenance
+            npm publish ./artifacts/*.tgz --access public --provenance
           fi
 
       - name: Create matching GitHub release
