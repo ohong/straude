@@ -1,7 +1,8 @@
 import { createClient } from "@supabase/supabase-js";
-import { devices, expect, test, type Page, type TestInfo } from "@playwright/test";
+import { expect, test, type Page, type TestInfo } from "@playwright/test";
 import { createHash, randomUUID } from "node:crypto";
 import { gunzipSync } from "node:zlib";
+import { ANALYTICS_BROWSER_USE, assertAnalyticsBrowser, configureAnalyticsBrowser } from "./helpers/analytics-browser";
 
 /**
  * Requires the real loopback app/Auth/database/mail stack, built with the
@@ -144,7 +145,9 @@ async function syncProtocolFixture(page: Page) {
   expect(init.status()).toBe(200);
   const { code, verify_url, poll_secret } = await init.json();
   const verification = await page.context().newPage();
+  await configureAnalyticsBrowser(verification);
   await verification.goto(verify_url);
+  await assertAnalyticsBrowser(verification);
   await verification.getByRole("button", { name: "Authorize CLI", exact: true }).click();
   await expect(verification.getByText("CLI authorized", { exact: true })).toBeVisible();
   await verification.close();
@@ -178,21 +181,11 @@ async function syncProtocolFixture(page: Page) {
 // PostHog intentionally drops automation events (navigator.webdriver and
 // HeadlessChrome). Use Chromium's ordinary browser environment to exercise
 // actual SDK emission, without changing SDK/app consent checks or CSP.
-test.use({ userAgent: devices["Desktop Chrome"].userAgent,
-  launchOptions: { args: ["--disable-blink-features=AutomationControlled"] } });
+test.use(ANALYTICS_BROWSER_USE);
 
 test.describe("optional analytics consent and identity", () => {
   test.beforeEach(async ({ page }, testInfo) => {
-    // Chromium keeps HeadlessChrome in client hints even with an ordinary UA.
-    // Override browser metadata through CDP; PostHog's actual bot filter stays on.
-    const session = await page.context().newCDPSession(page);
-    await session.send("Emulation.setUserAgentOverride", {
-      userAgent: devices["Desktop Chrome"].userAgent,
-      userAgentMetadata: {
-        brands: [{ brand: "Chromium", version: devices["Desktop Chrome"].userAgent.match(/Chrome\/(\d+)/)?.[1] ?? "145" }],
-        platform: "Windows", platformVersion: "10.0.0", architecture: "x86", model: "", mobile: false,
-      },
-    });
+    await configureAnalyticsBrowser(page);
     testInfo.annotations.push({ type: "browser_environment",
       description: "Ordinary Chrome UA/CDP client-hint metadata; AutomationControlled disabled; actual SDK bot/consent checks and CSP remain enabled" });
     for (const [label, value] of [["app", testInfo.project.use.baseURL], ["Supabase", supabaseUrl], ["receiver", receiverUrl]]) {
@@ -212,6 +205,7 @@ test.describe("optional analytics consent and identity", () => {
     const email = `consent-essential-${randomUUID()}@local.test`;
     try {
       const response = await page.goto("/");
+      await assertAnalyticsBrowser(page);
       expect(response?.headers()["content-security-policy"]).toContain("connect-src 'self'");
       await page.getByRole("button", { name: "Accept essential", exact: true }).click();
       await expect(page.getByRole("button", { name: "Accept essential", exact: true })).toHaveCount(0);
@@ -239,6 +233,7 @@ test.describe("optional analytics consent and identity", () => {
     const email = `consent-accepted-${randomUUID()}@local.test`;
     try {
       await page.goto("/");
+      await assertAnalyticsBrowser(page);
       await page.getByRole("button", { name: "Accept all", exact: true }).click();
       await expect.poll(() => sdk.captures.length).toBeGreaterThan(0);
       expect((await activation(page)).status()).toBe(200);
@@ -295,6 +290,7 @@ test.describe("optional analytics consent and identity", () => {
     const start = await receiptCount(page);
     const sdk = await sdkBoundary(page, "fail");
     await page.goto("/");
+    await assertAnalyticsBrowser(page);
     await page.getByRole("button", { name: "Accept all", exact: true }).click();
     await expect.poll(() => sdk.captures.length).toBeGreaterThan(0);
     expect((await activation(page)).status()).toBe(200);
@@ -346,6 +342,7 @@ test.describe("optional analytics consent and identity", () => {
     const second = `consent-switch-b-${randomUUID()}@local.test`;
     try {
       await page.goto("/");
+      await assertAnalyticsBrowser(page);
       await page.getByRole("button", { name: "Accept all", exact: true }).click();
       expect((await activation(page)).status()).toBe(200);
       const firstUserId = await signUp(page, first);
