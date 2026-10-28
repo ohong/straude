@@ -75,7 +75,7 @@
     },
     "packages/cli": {
       "name": "straude",
-      "version": "0.2.0",
+      "version": "0.2.2",
       "bin": {
         "straude": "dist/index.js",
       },
