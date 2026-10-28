@@ -148,7 +148,7 @@ jobs:
         working-directory: apps/web
 
       - name: E2E tests
-        run: bun run test:e2e
+        run: bun run test:e2e --reporter=html,./e2e/helpers/summary-reporter.ts
         working-directory: apps/web
         env:
           BASE_URL: http://localhost:3000
