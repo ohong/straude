@@ -66,13 +66,17 @@ async function sdkBoundary(page: Page, mode: "accept" | "fail" = "accept") {
   const requests: { path: string; method: string }[] = [];
   const captures: ReturnType<typeof sdkCaptures> = [];
   let fail = mode === "fail";
-  await page.route("**/ingest/**", async (route) => {
+  await page.context().route("**/ingest/**", async (route) => {
     requests.push({ path: new URL(route.request().url()).pathname, method: route.request().method() });
     const isCapture = route.request().method() === "POST" && /\/e\/?$/.test(new URL(route.request().url()).pathname);
     if (isCapture) captures.push(...sdkCaptures(route.request().postDataBuffer()));
     if (fail && isCapture) return route.abort("failed");
     // Acknowledge optional SDK transport only. No auth/application route is replaced.
-    await route.fulfill({ status: 200, contentType: "application/json", body: '{"status":1,"featureFlags":{}}' });
+    // Block external executable assets; remote config falls back to JSON.
+    if (new URL(route.request().url()).pathname.endsWith(".js")) return route.abort("failed");
+    const body = new URL(route.request().url()).pathname.endsWith("/config")
+      ? '{"hasFeatureFlags":false}' : '{"status":1,"featureFlags":{}}';
+    await route.fulfill({ status: 200, contentType: "application/json", body });
   });
   return { requests, captures, recover: () => { fail = false; } };
 }
@@ -179,6 +183,18 @@ test.use({ userAgent: devices["Desktop Chrome"].userAgent,
 
 test.describe("optional analytics consent and identity", () => {
   test.beforeEach(async ({ page }, testInfo) => {
+    // Chromium keeps HeadlessChrome in client hints even with an ordinary UA.
+    // Override browser metadata through CDP; PostHog's actual bot filter stays on.
+    const session = await page.context().newCDPSession(page);
+    await session.send("Emulation.setUserAgentOverride", {
+      userAgent: devices["Desktop Chrome"].userAgent,
+      userAgentMetadata: {
+        brands: [{ brand: "Chromium", version: devices["Desktop Chrome"].userAgent.match(/Chrome\/(\d+)/)?.[1] ?? "145" }],
+        platform: "Windows", platformVersion: "10.0.0", architecture: "x86", model: "", mobile: false,
+      },
+    });
+    testInfo.annotations.push({ type: "browser_environment",
+      description: "Ordinary Chrome UA/CDP client-hint metadata; AutomationControlled disabled; actual SDK bot/consent checks and CSP remain enabled" });
     for (const [label, value] of [["app", testInfo.project.use.baseURL], ["Supabase", supabaseUrl], ["receiver", receiverUrl]]) {
       if (typeof value !== "string" || !loopback(value)) throw new Error(`Refusing non-loopback or missing ${label} URL`);
     }
@@ -285,7 +301,7 @@ test.describe("optional analytics consent and identity", () => {
     await changeConsent(page, "essential");
     await assertNoActivationCookie(page);
     const acceptedAtWithdrawal = await receiptCount(page);
-    await page.unroute("**/ingest/**");
+    await page.context().unroute("**/ingest/**");
     // Exercise the actual Next proxy matcher, including a pending SDK retry's
     // endpoint shape. No test route answers these denied requests.
     for (const path of ["/ingest", "/ingest/e/", "/ingest/i/v0/e/"]) {
