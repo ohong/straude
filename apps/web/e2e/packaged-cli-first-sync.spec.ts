@@ -40,6 +40,37 @@ type AnalyticsBoundary = {
   start: number;
 };
 const analytics = new Map<string, AnalyticsBoundary>();
+const evidenceNames = new Set([
+  "installed-candidate", "accepted-storage-comparison", "real-device-auth-and-rotation",
+  "real-auth-recovery", "cli-first-settings-result", "combined-lifecycle-receiver",
+  "browser-sdk-transport-boundary",
+]);
+const evidenceCounts = new Map<string, number>();
+
+async function saveEvidence(testInfo: TestInfo, name: string, receipt: unknown) {
+  if (!evidenceNames.has(name) && !/^cli-\d+-(?:login|push|status)$/.test(name)) {
+    throw new Error("Receipt is not allowlisted for retained CI evidence");
+  }
+  function sanitize(value: unknown): unknown {
+    if (typeof value === "string") return redact(value);
+    if (Array.isArray(value)) return value.map(sanitize);
+    if (value && typeof value === "object") return Object.fromEntries(
+      Object.entries(value).map(([key, item]) => [key,
+        /^(?:token|access_token|refresh_token|authorization|api_key|.*secret.*|.*password.*|.*cookie.*|email|magic_link)$/i.test(key)
+          ? "[redacted]" : sanitize(item),
+      ]),
+    );
+    return value;
+  }
+  const key = testInfo.outputPath(name);
+  const count = (evidenceCounts.get(key) ?? 0) + 1;
+  evidenceCounts.set(key, count);
+  const path = testInfo.outputPath(`${name}${count > 1 ? `-${count}` : ""}.evidence.json`);
+  const body = `${JSON.stringify(sanitize(receipt), null, 2)}\n`;
+  await mkdir(testInfo.outputDir, { recursive: true });
+  await writeFile(path, body, { mode: 0o600 });
+  await testInfo.attach(name, { body, contentType: "application/json" });
+}
 
 async function receiverEvents(page: Page, receiver: string): Promise<AnalyticsReceipt[]> {
   const response = await page.request.get(`${receiver}/events`);
@@ -64,13 +95,11 @@ async function assertLifecycle(page: Page, userId: string, testInfo: TestInfo) {
     expect(row.has_analytics_consent).toBe(true);
   }
   expect(boundary.requests.some(request => request.method === "POST" && /\/(?:e|batch)(?:\/|$)/.test(request.path)), "Browser SDK emitted a capture request at the intercepted transport").toBe(true);
-  await testInfo.attach("combined-lifecycle-receiver", {
-    body: JSON.stringify({
-      boundary: "Local receiver accepted real app server lifecycle events; browser SDK requests were acknowledged by the test transport. External PostHog ingestion and deduplication are unverified.",
-      receipts: milestones,
-      deliveries_by_event: Object.fromEntries(names.map(event => [event, milestones.filter(row => row.event === event).length])),
-      sdk_requests: boundary.requests,
-    }, null, 2), contentType: "application/json",
+  await saveEvidence(testInfo, "combined-lifecycle-receiver", {
+    boundary: "Local receiver accepted real app server lifecycle events; browser SDK requests were acknowledged by the test transport. External PostHog ingestion and deduplication are unverified.",
+    receipts: milestones,
+    deliveries_by_event: Object.fromEntries(names.map(event => [event, milestones.filter(row => row.event === event).length])),
+    sdk_requests: boundary.requests,
   });
 }
 
@@ -87,8 +116,22 @@ function admin() {
 function redact(text: string) {
   return text
     .replace(/eyJ[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+/g, "[redacted token]")
-    .replace(/([?&](?:verify_secret|poll_secret|token|code)=)[^&\s]+/g, "$1[redacted]")
-    .replace(/packaged-browser-[^\s@]+@local\.test/g, "[synthetic local email]");
+    .replace(/\bBearer\s+[^\s"']+/gi, "Bearer [redacted]")
+    .replace(/\bsb_(?:secret|publishable)_[A-Za-z0-9_-]+/g, "[redacted key]")
+    .replace(/^\s*(?:set-cookie|cookie|authorization):.*$/gim, "[redacted credential header]")
+    .replace(/(["']?(?:access_token|refresh_token|verify_secret|poll_secret|password|token)["']?\s*[:=]\s*["']?)[^\s"',}]+/gi, "$1[redacted]")
+    .replace(/https?:\/\/[^\s"'<>]+/g, candidate => {
+      try {
+        const url = new URL(candidate);
+        url.username = "";
+        url.password = "";
+        url.search = "";
+        url.hash = "";
+        return url.href;
+      } catch { return "[redacted URL]"; }
+    })
+    .replace(/([?&](?:verify_secret|poll_secret|token|token_hash|code|access_token|refresh_token)=)[^&\s]+/gi, "$1[redacted]")
+    .replace(/[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Za-z]{2,}/g, "[redacted email]");
 }
 
 async function signup(page: Page, request: APIRequestContext, email: string) {
@@ -145,7 +188,7 @@ async function cliFixture(testInfo: TestInfo) {
     cli_version: pkg.version, collector_version: collector.version, node: process.version,
     environment: "local app + local Supabase + local email + synthetic native Codex sessions", csp_bypassed: false,
   };
-  await testInfo.attach("installed-candidate", { body: JSON.stringify(metadata, null, 2), contentType: "application/json" });
+  await saveEvidence(testInfo, "installed-candidate", metadata);
   const environment = {
     ...process.env, HOME: home, USERPROFILE: home, CODEX_HOME: codex,
     CLAUDE_CONFIG_DIR: join(home, ".claude"), STRAUDE_TELEMETRY_DISABLED: "1", TZ: "UTC",
@@ -162,9 +205,8 @@ async function cliFixture(testInfo: TestInfo) {
       child.once("error", reject);
       child.once("close", async code => {
         try {
-          await testInfo.attach(`cli-${++sequence}-${args[0] ?? "push"}`, {
-            body: JSON.stringify({ command: ["node", "installed/straude/dist/index.js", ...args], started_at: new Date(started).toISOString(), duration_ms: Date.now() - started, exit_code: code, stdout: redact(stdout), stderr: redact(stderr) }, null, 2),
-            contentType: "application/json",
+          await saveEvidence(testInfo, `cli-${++sequence}-${args[0] ?? "push"}`, {
+            command: ["node", "installed/straude/dist/index.js", ...args], started_at: new Date(started).toISOString(), duration_ms: Date.now() - started, exit_code: code, stdout, stderr,
           });
           resolveResult({ code, stdout, stderr });
         } catch (error) { reject(error); }
@@ -249,7 +291,7 @@ async function assertAccepted(page: Page, cli: Cli, userId: string, testInfo: Te
   const status = await response.json();
   expect(status).toMatchObject({ has_usage: true, total_tokens: Number(daily.total_tokens), latest_usage_id: daily.id, latest_post_url: `/post/${stored.posts[0].id}` });
   expect(status.cost_usd).toBe(Math.round(Number(daily.cost_usd) * 100) / 100);
-  await testInfo.attach("accepted-storage-comparison", { body: JSON.stringify({ ...stored, status }, null, 2), contentType: "application/json" });
+  await saveEvidence(testInfo, "accepted-storage-comparison", { ...stored, status });
   return stored;
 }
 
@@ -293,10 +335,7 @@ test.describe("installed CLI and browser first sync", () => {
 
   test.afterEach(async ({}, testInfo) => {
     const boundary = analytics.get(testInfo.testId);
-    if (boundary) await testInfo.attach("browser-sdk-transport-boundary", {
-      body: JSON.stringify({ boundary: "SDK emission recorded and acknowledged locally only; no SDK fixture traffic was forwarded to PostHog", browser_environment: "Shared ordinary Chrome user agent/client-hint metadata with AutomationControlled disabled; webdriver, UA and brands asserted on real origins", requests: boundary.requests, lifecycle_receiver_configured: Boolean(boundary.receiver) }, null, 2),
-      contentType: "application/json",
-    });
+    if (boundary) await saveEvidence(testInfo, "browser-sdk-transport-boundary", { boundary: "SDK emission recorded and acknowledged locally only; no SDK fixture traffic was forwarded to PostHog", browser_environment: "Shared ordinary Chrome user agent/client-hint metadata with AutomationControlled disabled; webdriver, UA and brands asserted on real origins", requests: boundary.requests, lifecycle_receiver_configured: Boolean(boundary.receiver) });
     analytics.delete(testInfo.testId);
   });
 
@@ -330,7 +369,7 @@ test.describe("installed CLI and browser first sync", () => {
       await cli.save("config", { ...config, token: old });
       await cli.run(["status", "--non-interactive"]);
       const rotated = await cli.state("config");
-      expect(rotated.token).not.toBe(old);
+      expect(rotated.token !== old, "Installed config persisted a different refreshed credential").toBe(true);
       const claims = JSON.parse(Buffer.from(rotated.token.split(".")[1], "base64url").toString());
       expect(claims).toMatchObject({ sub: profile.id, oiat: originalIat, exp: originalIat + 30 * 86400 });
       expect(claims.iat).toBeGreaterThanOrEqual(now);
@@ -346,7 +385,7 @@ test.describe("installed CLI and browser first sync", () => {
       await freshSignIn.close();
       await cli.run(["status", "--non-interactive"]);
       await expect(readFile(join(cli.root, "home", ".straude", "sync-health.json"), "utf8")).rejects.toMatchObject({ code: "ENOENT" });
-      await testInfo.attach("real-device-auth-and-rotation", { body: JSON.stringify({ user_id: profile.id, device_login: true, rotated_claims: claims, expired_dashboard_exit: expiredStatus.code, browser_reauthentication: true }, null, 2), contentType: "application/json" });
+      await saveEvidence(testInfo, "real-device-auth-and-rotation", { user_id: profile.id, device_login: true, rotated_claims: claims, expired_dashboard_exit: expiredStatus.code, browser_reauthentication: true });
       await cli.logs();
 
       // Interrupt only the completion transport after the genuine sync. Neither
@@ -419,7 +458,7 @@ test.describe("installed CLI and browser first sync", () => {
       const recovered = await assertAccepted(page, cli, profile.id, testInfo);
       expect(recovered.posts).toEqual(beforeRetry.posts);
       expect(recovered.outcomes.filter(row => row.request_id === pending.batches[0].request.request_id)).toHaveLength(1);
-      await testInfo.attach("real-auth-recovery", { body: JSON.stringify({ rotated_claims: claims, expired_exit: rejected.code, pending_request_id: pending.batches[0].request.request_id, watermark_preserved: true, accepted_pending_once: true }, null, 2), contentType: "application/json" });
+      await saveEvidence(testInfo, "real-auth-recovery", { rotated_claims: claims, expired_exit: rejected.code, pending_request_id: pending.batches[0].request.request_id, watermark_preserved: true, accepted_pending_once: true });
       await assertLifecycle(page, profile.id, testInfo);
     } finally {
       try { await cleanup(email); }
@@ -464,7 +503,7 @@ test.describe("installed CLI and browser first sync", () => {
       const profile = await (await page.request.get("/api/users/me")).json();
       expect(profile.onboarding_completed).toBe(false);
       await page.screenshot({ path: testInfo.outputPath("cli-first-settings-360.png"), fullPage: true });
-      await testInfo.attach("cli-first-settings-result", { body: JSON.stringify({ user_id: profile.id, cli_subject: claims.sub, get_me_status: me.status(), patch_me_status: savedResponse.status(), display_name: profile.display_name, onboarding_completed: profile.onboarding_completed }, null, 2), contentType: "application/json" });
+      await saveEvidence(testInfo, "cli-first-settings-result", { user_id: profile.id, cli_subject: claims.sub, get_me_status: me.status(), patch_me_status: savedResponse.status(), display_name: profile.display_name, onboarding_completed: profile.onboarding_completed });
       const empty = await cli.run(["push", "--date", cli.date, "--non-interactive"]);
       expect(empty.stdout + empty.stderr).toContain("No usage data");
       await expect(readFile(join(cli.root, "home", ".straude", "sync-health.json"), "utf8")).rejects.toMatchObject({ code: "ENOENT" });
