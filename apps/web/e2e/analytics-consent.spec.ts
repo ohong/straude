@@ -294,6 +294,12 @@ test.describe("optional analytics consent and identity", () => {
     await page.getByRole("button", { name: "Accept all", exact: true }).click();
     await expect.poll(() => sdk.captures.length).toBeGreaterThan(0);
     expect((await activation(page)).status()).toBe(200);
+    const sdkIdentityPersistence = () => page.evaluate(() => ({
+      cookieNames: document.cookie.split(";").map((cookie) => cookie.trim().split("=")[0]).filter((name) => /^ph_.+_posthog$/.test(name)),
+      localStorageKeys: Object.keys(localStorage).filter((name) => /^ph_.+_posthog$/.test(name)),
+    }));
+    const persistenceBeforeWithdrawal = await sdkIdentityPersistence();
+    expect(persistenceBeforeWithdrawal.cookieNames.length + persistenceBeforeWithdrawal.localStorageKeys.length).toBeGreaterThan(0);
     await changeConsent(page, "essential");
     await assertNoActivationCookie(page);
     const acceptedAtWithdrawal = await receiptCount(page);
@@ -325,6 +331,13 @@ test.describe("optional analytics consent and identity", () => {
       boundary: "SDK attempts recorded; actual Next proxy denies transport; provider unverified",
     }, null, 2), contentType: "application/json" });
     await snapshot(page, testInfo, "withdrawal", start);
+    const persistenceAfterWithdrawal = await sdkIdentityPersistence();
+    await testInfo.attach("public-withdrawal-sdk-persistence", { body: JSON.stringify({
+      boundary: "actual SDK identity persistence names only; essential opt-out preference may remain",
+      beforeWithdrawal: persistenceBeforeWithdrawal, afterWithdrawal: persistenceAfterWithdrawal,
+    }, null, 2), contentType: "application/json" });
+    expect(persistenceAfterWithdrawal.cookieNames, "Public withdrawal removes SDK identity cookie").toEqual([]);
+    expect(persistenceAfterWithdrawal.localStorageKeys, "Public withdrawal removes SDK identity local storage").toEqual([]);
     // Reaccepting permits fresh analytics without reviving the previous identity.
     await sdkBoundary(page);
     await changeConsent(page, "all");
