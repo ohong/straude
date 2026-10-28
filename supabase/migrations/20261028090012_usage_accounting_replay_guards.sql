@@ -904,6 +904,41 @@ BEGIN
   FOR UPDATE;
   v_action := CASE WHEN FOUND THEN 'updated' ELSE 'created' END;
 
+  -- Fence every deletion target as well as the incoming sources below. A
+  -- partial authoritative snapshot can omit a source from a newer collector;
+  -- partitioned replacement can also implicitly remove a legacy source.
+  -- Lock the device-day inventory before evaluating either deletion predicate.
+  PERFORM 1 FROM public.usage_agent_daily
+  WHERE user_id = p_user_id AND date = v_date
+    AND device_id = v_canonical_device_id
+  ORDER BY agent FOR UPDATE;
+
+  IF v_trusted_partitioned_snapshot AND EXISTS (
+    SELECT 1 FROM public.usage_agent_daily AS stored
+    WHERE stored.user_id = p_user_id AND stored.date = v_date
+      AND stored.device_id = v_canonical_device_id
+      AND public.usage_collector_version(stored.collector ->> 'version')
+        > public.usage_collector_version(p_collector ->> 'version')
+      AND (
+        (v_authoritative AND NOT EXISTS (
+          SELECT 1 FROM jsonb_array_elements(p_entry -> 'agents') AS submitted(value)
+          WHERE submitted.value ->> 'agent' = stored.agent
+        ))
+        OR (stored.agent = 'legacy-unpartitioned' AND NOT EXISTS (
+          SELECT 1 FROM jsonb_array_elements(p_entry -> 'agents') AS submitted(value)
+          WHERE submitted.value ->> 'agent' = 'legacy-unpartitioned'
+        ))
+      )
+  ) THEN
+    RETURN jsonb_build_object(
+      'date', v_date, 'status', 'permanent_error',
+      'error', jsonb_build_object(
+        'code', 'usage_collector_outdated',
+        'message', 'This date includes usage from a newer ccusage collector. Update with npx straude@latest and recollect every source before replacing it.'
+      )
+    );
+  END IF;
+
   -- Decide the whole date before writing any agent. A skipped component must
   -- never be reported as committed or seal the CLI's contiguous watermark.
   FOR v_agent IN
