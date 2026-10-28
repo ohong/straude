@@ -1,28 +1,28 @@
 import Link from "next/link";
 import { Navbar } from "@/components/landing/Navbar";
 import { Footer } from "@/components/landing/Footer";
-import { getOpenStatsForPage } from "@/lib/open-stats";
+import { getOpenStatsForPage, getOpenStatsFreshness } from "@/lib/open-stats";
 import { formatCurrency, formatTokens } from "@/lib/utils/format";
 import type { Metadata } from "next";
 
-export const revalidate = 86400; // refresh once per day
+export const revalidate = 3600; // keep snapshot age visible within an hour
 
 export const metadata: Metadata = {
   title: { absolute: "Global AI Token Usage Statistics | Straude" },
   description:
-    "How much does the average Claude Code user spend? See daily, anonymized usage statistics: total spend, tokens processed, most popular models, and spending distribution across the Straude community.",
+    "Anonymized Claude Code and Codex statistics from Straude: estimated usage cost, tokens, model shares, and spending distribution, with the capture date and snapshot status.",
   alternates: { canonical: "/open" },
   openGraph: {
     url: "/open",
-    title: "Claude Code Usage Statistics — Daily Snapshot from Straude",
+    title: "AI Coding Usage Statistics — Community Snapshot from Straude",
     description:
-      "Daily Claude Code usage statistics from the Straude community. Average spend, popular models, and more.",
+      "Claude Code and Codex statistics from the Straude community, including estimated usage cost, tokens, model shares, and capture status.",
   },
   twitter: {
     card: "summary_large_image",
-    title: "Claude Code Usage Statistics",
+    title: "AI Coding Usage Statistics",
     description:
-      "How much does the average Claude Code user spend? Daily data from Straude.",
+      "Estimated Claude Code and Codex usage cost, tokens, and model shares from Straude community snapshots.",
   },
 };
 
@@ -39,14 +39,14 @@ function fmtUsdDecimal(n: number): string {
   return `$${formatCurrency(n)}`;
 }
 
-function segmentLabel(seg: string): string {
+function segmentLabel(seg: string, percentiles: boolean): string {
   switch (seg) {
     case "top_1":
-      return "Top 1%";
+      return percentiles ? "Top 1%" : "Highest spending profile";
     case "top_5":
-      return "Top 5%";
+      return percentiles ? "Next 4%" : "Profiles ranked 2–5";
     case "top_10":
-      return "Top 10%";
+      return percentiles ? "Next 5%" : "Profiles ranked 6–10";
     case "rest":
       return "Everyone else";
     default:
@@ -68,7 +68,11 @@ function serializeJsonLd(data: unknown): string {
 export default async function OpenStatsPage() {
   const stats = await getOpenStatsForPage();
 
+  const freshness = getOpenStatsFreshness(stats);
+  const available = freshness.state !== "unavailable";
+  const percentiles = stats.concentrationBasis === "percentiles";
   const top10Pct = stats.cumulativePct["top_10"] ?? 0;
+  const topGroup = percentiles ? "top 10% of profiles" : "ten highest spending profiles";
   const topModels = stats.models.slice(0, 3);
 
   const faqLd = {
@@ -77,10 +81,10 @@ export default async function OpenStatsPage() {
     mainEntity: [
       {
         "@type": "Question",
-        name: "How much does the average Claude Code user spend?",
+        name: "What is the average estimated weekly AI coding cost?",
         acceptedAnswer: {
           "@type": "Answer",
-          text: `Based on Straude community data, average weekly spend is about ${fmtUsdDecimal(stats.avgWeeklySpend)}. Spending is heavily concentrated — the top 10% of users account for ${top10Pct}% of total spend.`,
+          text: `Based on Straude community data, average estimated weekly usage cost is about ${fmtUsdDecimal(stats.avgWeeklySpend)} per tracked profile. The ${topGroup} account for ${top10Pct}% of total estimated usage cost.`,
         },
       },
       {
@@ -88,17 +92,17 @@ export default async function OpenStatsPage() {
         name: "How do I track my Claude Code spending?",
         acceptedAnswer: {
           "@type": "Answer",
-          text: "Straude tracks Claude Code spending automatically. Run npx straude@latest to sync your usage data. Straude tracks cost per session, tokens used, model breakdown, and daily streaks, then refreshes the public stats snapshot every day.",
+          text: "Straude tracks Claude Code spending automatically. Run npx straude@latest to sync your usage data. Straude tracks cost per session, tokens used, model breakdown, and daily streaks, with a public stats snapshot scheduled daily.",
         },
       },
       {
         "@type": "Question",
-        name: "What models do Claude Code users use most?",
+        name: "Which models account for the most estimated usage cost?",
         acceptedAnswer: {
           "@type": "Answer",
           text:
             topModels.length >= 3
-              ? `Based on Straude data, the most popular models are ${topModels[0].name} (${topModels[0].pct}%), ${topModels[1].name} (${topModels[1].pct}%), and ${topModels[2].name} (${topModels[2].pct}%).`
+              ? `Based on Straude data, the models with the largest estimated cost shares are ${topModels[0].name} (${topModels[0].pct}%), ${topModels[1].name} (${topModels[1].pct}%), and ${topModels[2].name} (${topModels[2].pct}%).`
               : "Model usage data is currently being collected.",
         },
       },
@@ -132,21 +136,22 @@ export default async function OpenStatsPage() {
     ],
   };
 
-  const updatedHuman = new Date(stats.fetchedAt).toLocaleDateString("en-US", {
+  const updatedHuman = available ? new Date(stats.fetchedAt).toLocaleDateString("en-US", {
     year: "numeric",
     month: "long",
     day: "numeric",
     hour: "numeric",
     minute: "2-digit",
     timeZoneName: "short",
-  });
+    timeZone: "UTC",
+  }) : "Unavailable";
 
   return (
     <>
-      <script
+      {available && <script
         type="application/ld+json"
         dangerouslySetInnerHTML={{ __html: serializeJsonLd(faqLd) }}
-      />
+      />}
       <script
         type="application/ld+json"
         dangerouslySetInnerHTML={{ __html: serializeJsonLd(breadcrumbLd) }}
@@ -158,49 +163,57 @@ export default async function OpenStatsPage() {
         <article className="mx-auto max-w-3xl px-6 md:px-8">
           {/* ---- Header -------------------------------------------------- */}
           <h1 className="text-3xl font-bold tracking-tight md:text-4xl">
-            Claude Code Usage Statistics
+            AI Coding Usage Statistics
           </h1>
           <p className="mt-2 text-[0.9375rem] text-foreground/80">
-            Daily, anonymized data from the Straude community.
+            Anonymized Claude Code and Codex usage from the Straude community.
           </p>
           <p className="mt-2 text-sm text-muted">
-            Updated daily from the latest successful Straude snapshot.
+            Snapshots are scheduled daily. Usage cost is estimated from model
+            pricing; it is not a subscription charge or an invoice.
+          </p>
+          <p className="mt-2 text-sm text-muted" role="status">
+            {freshness.state === "unavailable"
+              ? "Statistics are temporarily unavailable. No successful capture is available."
+              : freshness.state === "stale"
+                ? "Snapshot is stale (over 48 hours old). Showing the last successful capture."
+                : "Showing the latest successful snapshot."}
           </p>
 
           {/* ---- Big Number Grid ----------------------------------------- */}
           <div className="mt-12 grid grid-cols-1 gap-6 sm:grid-cols-3">
-            <StatCard label="Total Spend" value={fmtUsd(stats.totalSpend)} />
+            <StatCard label="Estimated Usage Cost" value={available ? fmtUsd(stats.totalSpend) : "—"} />
             <StatCard
               label="Total Tokens"
-              value={formatTokens(stats.totalTokens)}
+              value={available ? formatTokens(stats.totalTokens) : "—"}
             />
             <StatCard
-              label="Avg Streak"
-              value={`${stats.avgStreak}`}
+              label="Avg Latest Streak"
+              value={available ? `${stats.avgStreak}` : "—"}
               context="days"
             />
           </div>
 
           {/* ---- Spending Distribution ----------------------------------- */}
           <div className="mt-16 space-y-10 text-[0.9375rem] leading-relaxed text-foreground/80">
-            <section>
+            {available && <section>
               <h2 className="text-lg font-bold text-foreground">
-                How Much Does the Average Claude Code User Spend?
+                What Is the Average Estimated Weekly Usage Cost?
               </h2>
               <p className="mt-3">
-                Based on anonymized Straude community snapshots, average weekly
-                Claude Code spend is about{" "}
+                Based on anonymized Straude community snapshots, average estimated
+                weekly usage cost is about{" "}
                 <strong className="text-foreground">
                   {fmtUsdDecimal(stats.avgWeeklySpend)}
                 </strong>{" "}
-                per active profile.
+                per tracked profile over the observed date range (at least one week).
               </p>
               <p className="mt-3">
                 Straude users have tracked a combined{" "}
                 <strong className="text-foreground">
                   {fmtUsd(stats.totalSpend)}
                 </strong>{" "}
-                in Claude Code spend so far.
+                in estimated AI coding usage cost so far.
               </p>
 
               {stats.concentration.length > 0 && (
@@ -215,7 +228,7 @@ export default async function OpenStatsPage() {
                           Segment
                         </th>
                         <th scope="col" className="pb-2 pr-4 font-medium">
-                          Total Spend
+                          Estimated Cost
                         </th>
                         <th scope="col" className="pb-2 font-medium">
                           % of Total
@@ -229,7 +242,7 @@ export default async function OpenStatsPage() {
                           className="border-b border-border/50"
                         >
                           <td className="py-2 pr-4 font-medium text-foreground">
-                            {segmentLabel(row.segment)}
+                            {segmentLabel(row.segment, percentiles)}
                           </td>
                           <td className="py-2 pr-4 font-[family-name:var(--font-mono)]">
                             {fmtUsd(row.total_spend)}
@@ -243,16 +256,16 @@ export default async function OpenStatsPage() {
                   </table>
                 </div>
               )}
-            </section>
+            </section>}
 
             {/* ---- Model Popularity -------------------------------------- */}
             {stats.models.length > 0 && (
               <section>
                 <h2 className="text-lg font-bold text-foreground">
-                  Most Popular Models
+                  Models by Estimated Cost
                 </h2>
                 <p className="mt-3">
-                  Ranked by share of total spend across all sessions.
+                  Ranked by share of estimated cost in reported model breakdowns.
                 </p>
                 <ol
                   className="mt-4 space-y-2"
@@ -283,11 +296,27 @@ export default async function OpenStatsPage() {
               </h2>
               <p className="mt-3">
                 One command to start logging. Your data joins the community
-                totals above — anonymized, aggregated, and refreshed daily.
+                totals above — anonymized and aggregated in scheduled snapshots.
               </p>
               <pre className="mt-3 overflow-x-auto rounded-lg bg-subtle px-4 py-3 font-mono text-[0.8125rem] leading-relaxed">
                 npx straude@latest
               </pre>
+            </section>
+
+            <section>
+              <h2 className="text-lg font-bold text-foreground">How These Metrics Are Counted</h2>
+              <p className="mt-3">
+                Totals combine submitted daily usage across supported agents and
+                include public and private profiles. Seed accounts are excluded
+                from new snapshots. A latest streak is the consecutive run ending
+                on each profile’s most recent usage date, even if that date is in
+                the past. It does not count currently active people.
+              </p>
+              <p className="mt-3">
+                {percentiles
+                  ? "Spending groups are disjoint percentile buckets, rounded up to whole profiles."
+                  : "This historical snapshot groups profiles by spending rank: first, 2–5, 6–10, and everyone else. Older captures may use different exclusions across metrics."}
+              </p>
             </section>
 
             {/* ---- Cross-links ------------------------------------------- */}
@@ -305,9 +334,9 @@ export default async function OpenStatsPage() {
 
             {/* ---- Last Updated ------------------------------------------ */}
             <div className="pt-4 text-xs text-muted">
-              <time dateTime={stats.fetchedAt} suppressHydrationWarning>
-                Last updated: {updatedHuman}
-              </time>
+              {available && <time dateTime={stats.fetchedAt}>
+                Last successful capture: {updatedHuman}
+              </time>}
             </div>
           </div>
         </article>

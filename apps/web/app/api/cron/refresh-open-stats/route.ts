@@ -1,4 +1,5 @@
 import { NextResponse, type NextRequest } from "next/server";
+import { revalidatePath } from "next/cache";
 import { refreshOpenStatsSnapshot } from "@/lib/open-stats";
 
 export const maxDuration = 60;
@@ -13,10 +14,13 @@ export async function GET(request: NextRequest) {
 
   try {
     const stats = await refreshOpenStatsSnapshot();
+    revalidatePath("/open");
+    revalidatePath("/");
 
     return NextResponse.json({
       ok: true,
       snapshotDate: stats.snapshotDate,
+      capturedAt: stats.fetchedAt,
       totalSpend: stats.totalSpend,
       trackedUsers: stats.trackedUsers,
     });
