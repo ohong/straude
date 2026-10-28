@@ -9,7 +9,6 @@ import type { User } from "@supabase/supabase-js";
 import { createClient } from "@/lib/supabase/client";
 import { useAnalyticsConsent } from "@/components/providers/useAnalyticsConsent";
 import { hasAnalyticsConsent, initializeConsentedPostHog } from "@/lib/analytics/client";
-import { COOKIE_CONSENT_EVENT } from "@/lib/cookie-consent";
 
 declare global {
   interface Window {
@@ -39,24 +38,10 @@ export function PostHogClientProvider({
 
   useEffect(() => {
     if (!analyticsConsent || !initializeConsentedPostHog(posthog)) {
-      if (window.__straudePostHogInitialized) {
-        posthog.opt_out_capturing();
-        posthog.reset();
-      }
       const readyTimer = window.setTimeout(() => setReady(false), 0);
       return () => window.clearTimeout(readyTimer);
     }
     const readyTimer = window.setTimeout(() => setReady(true), 0);
-    // Stop direct SDK consumers immediately when the preference changes,
-    // before React has rerendered the provider or its children.
-    const enforceConsent = () => {
-      if (!hasAnalyticsConsent()) {
-        posthog.opt_out_capturing();
-        posthog.reset();
-      }
-    };
-    window.addEventListener(COOKIE_CONSENT_EVENT, enforceConsent);
-
     const supabase = createClient();
     const {
       data: { subscription },
@@ -76,7 +61,6 @@ export function PostHogClientProvider({
 
     return () => {
       window.clearTimeout(readyTimer);
-      window.removeEventListener(COOKIE_CONSENT_EVENT, enforceConsent);
       subscription.unsubscribe();
     };
   }, [analyticsConsent]);

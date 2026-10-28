@@ -5,7 +5,7 @@ import {
   type ActivationEventProperties,
   sanitizeActivationProperties,
 } from "@/lib/analytics/activation";
-import { getCookieConsentFromCookieString } from "@/lib/cookie-consent";
+import { COOKIE_CONSENT_EVENT, getCookieConsentFromCookieString } from "@/lib/cookie-consent";
 
 const POSTHOG_KEY = process.env.NEXT_PUBLIC_POSTHOG_KEY?.trim();
 
@@ -18,6 +18,7 @@ declare global {
 type PostHogClient = typeof import("posthog-js").default;
 
 let posthogPromise: Promise<PostHogClient | null> | null = null;
+let resetIdentityOnConsent = false;
 
 export function hasAnalyticsConsent() {
   if (typeof document === "undefined") return false;
@@ -46,8 +47,24 @@ export function initializeConsentedPostHog(posthog: PostHogClient): boolean {
       before_send: (event) => hasAnalyticsConsent() ? event : null,
     });
     window.__straudePostHogInitialized = true;
+    // Public pages also initialize this client without the authenticated provider.
+    // Keep withdrawal independent of component lifetime and stop persistence now.
+    window.addEventListener(COOKIE_CONSENT_EVENT, () => {
+      if (hasAnalyticsConsent()) {
+        initializeConsentedPostHog(posthog);
+      } else {
+        posthog.opt_out_capturing();
+        resetIdentityOnConsent = true;
+      }
+    });
   }
-  if (posthog.has_opted_out_capturing()) {
+  if (resetIdentityOnConsent) {
+    // reset() clears SDK consent too: call it only after fresh browser consent,
+    // then explicitly opt in. Never recreate an identity during withdrawal.
+    posthog.reset(true);
+    resetIdentityOnConsent = false;
+    posthog.opt_in_capturing({ captureEventName: false });
+  } else if (posthog.has_opted_out_capturing()) {
     posthog.opt_in_capturing({ captureEventName: false });
   }
   return true;
