@@ -966,6 +966,73 @@ describe("POST /api/usage/submit (real Supabase)", () => {
     ]);
   });
 
+  it.each(["authoritative", "legacy"] as const)(
+    "fences deletion of a newer omitted %s source before writing the date",
+    async (mode) => {
+      const username = `v2_omit_${mode}`;
+      const userId = await insertUser(db, { username });
+      const token = await mintCliToken(userId, username);
+      if (mode === "authoritative") {
+        expect((await callSubmit(v2Body("omitted-before", "5".repeat(64), {
+          agents: [v2Agent(), v2Agent({ agent: "claude" })],
+        }, "20.0.26"), token)).status).toBe(200);
+        expect((await callSubmit(v2Body("omitted-newer", "6".repeat(64), {
+          agents: [v2Agent({ agent: "claude" })],
+        }, "20.0.28"), token)).status).toBe(200);
+        await expectAccounting(userId, [
+          { agent: "claude", total_tokens: 160, cost_usd: 0.25, version: "20.0.28" },
+          { agent: "codex", total_tokens: 160, cost_usd: 0.25, version: "20.0.26" },
+        ]);
+      } else {
+        expect((await callSubmit(v2Body("omitted-before", "5".repeat(64), {
+          agents: [v2Agent({ agent: "legacy-unpartitioned" })],
+        }, "20.0.28"), token)).status).toBe(200);
+        await expectAccounting(userId, [{
+          agent: "legacy-unpartitioned", total_tokens: 160, cost_usd: 0.25, version: "20.0.28",
+        }]);
+      }
+      const persistedState = async () => {
+        const state = [];
+        for (const table of [
+          "usage_agent_daily", "device_usage", "daily_usage", "posts", "usage_submission_outcomes",
+        ]) {
+          const result = await db.query(
+            `SELECT to_jsonb(stored) AS row FROM public.${table} AS stored
+             WHERE user_id = $1 ORDER BY to_jsonb(stored)::text`,
+            [userId],
+          );
+          state.push({ table, rows: result.rows });
+        }
+        return state;
+      };
+      const before = await persistedState();
+      const deletionFlags = mode === "authoritative" ? {
+        authoritative_correction: true,
+        migration_id: "ccusage-by-agent-v2",
+      } : {};
+      const stale = await callSubmit(v2Body("omitted-stale", "7".repeat(64), {
+        ...deletionFlags,
+        agents: [v2Agent()],
+      }, "20.0.27"), token);
+      expect(stale.status).toBe(400);
+      expect(await stale.json()).toMatchObject({ outcomes: [{
+        status: "permanent_error", error: { code: "usage_collector_outdated" },
+      }] });
+      expect(await persistedState()).toEqual(before);
+
+      // The deletion remains supported when its collector is at least as new.
+      const current = await callSubmit(v2Body("omitted-current", "8".repeat(64), {
+        ...deletionFlags,
+        agents: [v2Agent()],
+      }, "20.0.28"), token);
+      expect(current.status).toBe(200);
+      expect(await current.json()).toMatchObject({ outcomes: [{ status: "committed" }] });
+      await expectAccounting(userId, [{
+        agent: "codex", total_tokens: 160, cost_usd: 0.25, version: "20.0.28",
+      }]);
+    },
+  );
+
   it("preserves an omitted source and rejects incomplete source regression until its snapshot grows", async () => {
     const userId = await insertUser(db, { username: "v2_partial_source" });
     const token = await mintCliToken(userId, "v2_partial_source");
