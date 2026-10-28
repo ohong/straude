@@ -3,6 +3,7 @@ import { hostname } from "node:os";
 import { performance } from "node:perf_hooks";
 import {
   canonicalizeUsageEntryV2,
+  isSupportedCcusageVersion,
   parseUsageSubmitResponseV2,
   parseUsageSubmitV2,
   type AgentUsageComponent,
@@ -44,6 +45,7 @@ import {
   acquireSyncLease,
   loadPendingBatches,
   removePendingBatch,
+  replacePendingBatch,
   upsertPendingBatch,
   type PendingRangeMode,
   type PendingUsageBatch,
@@ -325,6 +327,60 @@ function createRequest(args: {
     );
   }
   return parsed.value;
+}
+
+async function recollectUnsupportedPendingBatch(
+  config: StraudeConfig,
+  pending: PendingUsageBatch,
+  timeoutMs?: number,
+): Promise<PendingUsageBatch> {
+  if (!isSupportedCcusageVersion(getInstalledCcusageVersion())) {
+    throw new Error("Update with npx straude@latest before recollecting the saved usage batch.");
+  }
+  const dates = pending.request.entries.map((entry) => entry.date).sort();
+  if (dates.length === 0) throw new Error("Saved usage batch has no dates to recollect.");
+  const collected = await collectCcusageUsageAsync(
+    compactCalendarDate(dates[0]!),
+    compactCalendarDate(dates.at(-1)!),
+    timeoutMs,
+    { pricingMode: CCUSAGE_DEFAULT_PRICING_MODE, timezone: pending.request.timezone },
+  );
+  const byDate = new Map(collected.data.map((entry) => [entry.date, entry]));
+  const entries = pending.request.entries.map((original) => {
+    const fresh = byDate.get(original.date);
+    const sources = new Set(fresh?.agentBreakdown.map((agent) => agent.agent));
+    if (!fresh || original.agents.some((agent) => (
+      agent.agent !== "legacy-unpartitioned" && !sources.has(agent.agent)
+    ))) {
+      throw new Error(`Saved usage for ${original.date} could not be fully recollected. Restore complete local logs and retry; the saved batch is unchanged.`);
+    }
+    const entry: UsageEntryV2 = {
+      ...createUsageEntry(fresh, false),
+      ...(original.authoritative_correction !== undefined
+        ? { authoritative_correction: original.authoritative_correction } : {}),
+      ...(original.migration_id ? { migration_id: original.migration_id } : {}),
+    };
+    entry.content_hash = createHash("sha256").update(canonicalizeUsageEntryV2(entry)).digest("hex");
+    return entry;
+  });
+  const request = createRequest({
+    config,
+    timezone: pending.request.timezone,
+    collector: collected.collector,
+    entries: pending.request.entries.map((entry) => byDate.get(entry.date)!),
+    migration: false,
+  });
+  const replacement: PendingUsageBatch = {
+    ...pending,
+    request: {
+      ...request,
+      installation: pending.request.installation,
+      entries,
+    },
+    created_at: new Date().toISOString(),
+  };
+  replacePendingBatch(pending, replacement);
+  return replacement;
 }
 
 function classifySubmitError(error: unknown, interactive: boolean): number {
@@ -768,8 +824,18 @@ export async function pushCommand(
       }
     }
 
-    for (const pending of options.dryRun ? [] : loadPendingBatches()) {
-      if (pending.account_key !== syncAccountKey(config)) continue;
+    for (const saved of options.dryRun ? [] : loadPendingBatches()) {
+      if (saved.account_key !== syncAccountKey(config)) continue;
+      let pending = saved;
+      if (!isSupportedCcusageVersion(pending.request.collector.version)) {
+        console.log("Recollecting a saved usage batch with the upgraded ccusage collector...");
+        try {
+          pending = await recollectUnsupportedPendingBatch(config, pending, options.timeoutMs);
+        } catch (error) {
+          console.error(`Saved usage is preserved. ${errorMessage(error)}`);
+          return error instanceof PricingUnavailableError ? CLI_EXIT.TEMPORARY : CLI_EXIT.PERMANENT;
+        }
+      }
       const pendingResult = await submitBatch(config, pending, !nonInteractive);
       if (!pendingResult.complete) {
         console.error(
