@@ -8,8 +8,7 @@ import { PostHogProvider as PHProvider } from "posthog-js/react";
 import type { User } from "@supabase/supabase-js";
 import { createClient } from "@/lib/supabase/client";
 import { useAnalyticsConsent } from "@/components/providers/useAnalyticsConsent";
-
-const POSTHOG_KEY = process.env.NEXT_PUBLIC_POSTHOG_KEY;
+import { hasAnalyticsConsent, initializeConsentedPostHog } from "@/lib/analytics/client";
 
 declare global {
   interface Window {
@@ -34,29 +33,20 @@ export function PostHogClientProvider({
 }: {
   children: React.ReactNode;
 }) {
-  const initialized = useRef(false);
   const [ready, setReady] = useState(false);
   const analyticsConsent = useAnalyticsConsent();
 
   useEffect(() => {
-    if (!analyticsConsent || !POSTHOG_KEY || initialized.current) return;
-    let readyTimer: number | null = null;
-    posthog.init(POSTHOG_KEY, {
-      api_host: "/ingest",
-      ui_host: "https://us.posthog.com",
-      defaults: "2025-05-24",
-      capture_pageview: false,
-      capture_performance: { web_vitals: true },
-      person_profiles: "identified_only",
-    });
-    initialized.current = true;
-    window.__straudePostHogInitialized = true;
-    readyTimer = window.setTimeout(() => setReady(true), 0);
-
+    if (!analyticsConsent || !initializeConsentedPostHog(posthog)) {
+      const readyTimer = window.setTimeout(() => setReady(false), 0);
+      return () => window.clearTimeout(readyTimer);
+    }
+    const readyTimer = window.setTimeout(() => setReady(true), 0);
     const supabase = createClient();
     const {
       data: { subscription },
     } = supabase.auth.onAuthStateChange((event, session) => {
+      if (!hasAnalyticsConsent()) return;
       if (event === "SIGNED_OUT") {
         posthog.reset();
         return;
@@ -70,16 +60,16 @@ export function PostHogClientProvider({
     });
 
     return () => {
-      if (readyTimer !== null) window.clearTimeout(readyTimer);
+      window.clearTimeout(readyTimer);
       subscription.unsubscribe();
     };
   }, [analyticsConsent]);
 
   return (
     <PHProvider client={posthog}>
-      <WebVitalsReporter ready={ready} />
+      <WebVitalsReporter ready={ready && analyticsConsent} />
       <Suspense fallback={null}>
-        <PageviewTracker ready={ready} />
+        <PageviewTracker ready={ready && analyticsConsent} />
       </Suspense>
       {children}
     </PHProvider>
@@ -116,6 +106,7 @@ export function WebVitalsReporter({ ready }: { ready: boolean }) {
   useEffect(() => {
     if (
       !ready ||
+      !hasAnalyticsConsent() ||
       !ttfbSample ||
       reportedMetricIds.current.has(ttfbSample.metric.id)
     ) {
@@ -142,7 +133,7 @@ function PageviewTracker({ ready }: { ready: boolean }) {
   const searchParams = useSearchParams();
 
   useEffect(() => {
-    if (!ready || !pathname) return;
+    if (!ready || !pathname || !hasAnalyticsConsent()) return;
     const query = searchParams?.toString();
     const path = query ? `${pathname}?${query}` : pathname;
     const url = `${window.location.origin}${path}`;

@@ -15,7 +15,8 @@ vi.mock("@/lib/supabase/service", () => ({
     from: () => ({ select: () => ({ eq: () => ({ single: mocks.profile }) }) }),
   }),
 }));
-vi.mock("@/lib/analytics/server", () => ({
+vi.mock("@/lib/analytics/server", async (importOriginal) => ({
+  ...await importOriginal<typeof import("@/lib/analytics/server")>(),
   captureServerActivationEvent: vi.fn(),
   identifyServerActivationUser: vi.fn(),
 }));

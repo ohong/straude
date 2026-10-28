@@ -1,25 +1,12 @@
-const STABLE_SEMVER = /^(\d+)\.(\d+)\.(\d+)(?:\+[0-9A-Za-z.-]+)?$/;
+import { compareStableSemver, parseStableSemver } from "@straude/shared/usage-protocol";
 
-function parse(version: string | undefined): [number, number, number] | undefined {
-  const match = version ? STABLE_SEMVER.exec(version) : null;
-  return match ? [Number(match[1]), Number(match[2]), Number(match[3])] : undefined;
-}
-
-/**
- * True when `current` is a stable semver strictly newer than `stored`. A missing
- * or unparseable stored version counts as older, matching the server's rule for
- * which stored rows a newer collector may replace.
- */
+/** A missing or unparseable stored version counts as older. */
 export function isNewerCollectorVersion(
   current: string | undefined,
   stored: string | undefined,
 ): boolean {
-  const next = parse(current);
+  const next = current ? parseStableSemver(current) : undefined;
   if (!next) return false;
-  const previous = parse(stored);
-  if (!previous) return true;
-  for (let i = 0; i < 3; i += 1) {
-    if (next[i]! !== previous[i]!) return next[i]! > previous[i]!;
-  }
-  return false;
+  const previous = stored ? parseStableSemver(stored) : undefined;
+  return !previous || compareStableSemver(next, previous) > 0;
 }

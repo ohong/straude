@@ -56,13 +56,16 @@ function makeDb(options: FixtureOptions = {}) {
     from: vi.fn().mockImplementation((table: string) => {
       if (table === "daily_usage") {
         return {
-          select: vi.fn().mockReturnValue({
-            order: vi.fn().mockReturnValue({
+          select: vi.fn().mockImplementation(() => {
+            const query = {
+              order: vi.fn().mockImplementation(() => query),
               range: vi.fn().mockResolvedValue({
                 data: options.usageRows ?? [],
+                count: options.usageRows?.length ?? 0,
                 error: options.usageError ?? null,
               }),
-            }),
+            };
+            return query;
           }),
         };
       }

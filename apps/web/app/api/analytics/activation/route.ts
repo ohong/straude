@@ -8,7 +8,7 @@ import {
   isActivationEventName,
   sanitizeActivationProperties,
 } from "@/lib/analytics/activation";
-import { captureServerActivationEvent, identifyServerActivationUser } from "@/lib/analytics/server";
+import { captureServerActivationEvent, hasServerAnalyticsConsent, identifyServerActivationUser } from "@/lib/analytics/server";
 import { rateLimit } from "@/lib/rate-limit";
 import { createClient } from "@/lib/supabase/server";
 
@@ -19,7 +19,6 @@ const CLIENT_EVENT_ALLOWLIST = new Set([
   "onboarding_profile_started",
   "sync_command_copied",
   "first_sync_nudge_clicked",
-  "activation_completed",
 ]);
 
 async function getUserId(): Promise<string | null> {
@@ -42,6 +41,9 @@ function rateLimitSubject(request: Request, userId: string | null): string {
 }
 
 export async function POST(request: Request) {
+  if (!hasServerAnalyticsConsent(request)) {
+    return new NextResponse(null, { status: 204 });
+  }
   let body: { event?: unknown; properties?: unknown };
   try {
     body = await request.json();
@@ -72,12 +74,12 @@ export async function POST(request: Request) {
     activation_state: deriveActivationState({
       isAuthenticated,
       syncCommandCopied: body.event === "sync_command_copied",
-      webSyncConfirmed: body.event === "activation_completed",
     }),
   });
 
   if (userId && existingAnonymousId) {
     await identifyServerActivationUser({
+      analyticsConsent: true,
       distinctId: userId,
       anonymousDistinctId: existingAnonymousId,
       properties: {
@@ -88,13 +90,18 @@ export async function POST(request: Request) {
   }
 
   await captureServerActivationEvent({
+    analyticsConsent: true,
     event: body.event,
     distinctId,
     properties,
   });
 
   const response = NextResponse.json({ ok: true });
-  if (!existingAnonymousId) {
+  if (userId && existingAnonymousId) {
+    // Consume the anonymous link so a later account cannot inherit it.
+    response.cookies.delete(ACTIVATION_ANONYMOUS_COOKIE);
+  }
+  if (!userId && !existingAnonymousId) {
     response.cookies.set({
       name: ACTIVATION_ANONYMOUS_COOKIE,
       value: anonymousId,

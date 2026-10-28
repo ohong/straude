@@ -1,7 +1,13 @@
-import { afterEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { captureServerActivationEvent } from "@/lib/analytics/server";
 
 describe("server PostHog activation capture", () => {
+  beforeEach(() => {
+    vi.stubEnv("POSTHOG_API_KEY", "");
+    vi.stubEnv("POSTHOG_HOST", "");
+    vi.stubEnv("NEXT_PUBLIC_POSTHOG_KEY", "");
+  });
+
   afterEach(() => {
     vi.unstubAllEnvs();
     vi.unstubAllGlobals();
@@ -13,6 +19,7 @@ describe("server PostHog activation capture", () => {
     vi.stubGlobal("fetch", fetchMock);
 
     const result = await captureServerActivationEvent({
+      analyticsConsent: true,
       event: "activation_completed",
       distinctId: "user-1",
       properties: {
@@ -52,6 +59,7 @@ describe("server PostHog activation capture", () => {
     vi.stubGlobal("fetch", fetchMock);
 
     await expect(captureServerActivationEvent({
+      analyticsConsent: true,
       event: "signup_completed",
       distinctId: "user-1",
     })).resolves.toBe(false);

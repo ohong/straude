@@ -248,6 +248,38 @@ export function upsertPendingBatch(
   );
 }
 
+/** Replace an obsolete payload only after its complete recollection is durable. */
+export function replacePendingBatch(
+  previous: PendingUsageBatch,
+  replacement: PendingUsageBatch,
+  paths: SyncStatePaths = DEFAULT_PATHS,
+): void {
+  if (previous.account_key !== replacement.account_key
+    || previous.request.request_id === replacement.request.request_id) {
+    throw new Error("Pending recollection must retain its account and use a new request ID.");
+  }
+  withFileLock(
+    `${paths.outbox}.lock`,
+    OUTBOX_LOCK_TIMEOUT_MS,
+    OUTBOX_LOCK_STALE_MS,
+    "Another Straude process is updating the sync outbox. Retry shortly.",
+    () => {
+      const batches = loadPendingBatches(paths);
+      const index = batches.findIndex((batch) => (
+        batch.account_key === previous.account_key
+        && batch.request.request_id === previous.request.request_id
+      ));
+      if (index === -1 || JSON.stringify(batches[index]) !== JSON.stringify(previous)) {
+        throw new Error("Pending usage changed during recollection. Retry without modifying the outbox.");
+      }
+      batches[index] = replacement;
+      const validated = parseOutbox({ version: OUTBOX_VERSION, batches });
+      if (!validated) throw new Error("Refusing to persist an invalid Straude outbox.");
+      atomicWriteJson(paths.outbox, validated);
+    },
+  );
+}
+
 export function removePendingBatch(
   requestId: string,
   paths: SyncStatePaths = DEFAULT_PATHS,

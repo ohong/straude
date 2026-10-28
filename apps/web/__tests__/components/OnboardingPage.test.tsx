@@ -59,7 +59,7 @@ describe("first-sync onboarding", () => {
     expect(fetchMock.mock.calls.some(([url]) => url.includes("check-username"))).toBe(false);
   });
 
-  it("activates only after confirmed usage and a successful completion save", async () => {
+  it("completes setup only after confirmed usage and a successful server save", async () => {
     let resolveCompletion!: (value: Response) => void;
     completeSetup.mockImplementationOnce(() => new Promise<Response>((resolve) => { resolveCompletion = resolve; }));
     getStatus.mockResolvedValueOnce(response({ has_data: false })).mockResolvedValueOnce(response(usage));
@@ -93,11 +93,8 @@ describe("first-sync onboarding", () => {
       heard_about: null,
     });
     expect(screen.getByRole("link", { name: /add a handle/ })).toHaveAttribute("href", "/settings");
-    expect(track).toHaveBeenCalledWith("activation_completed", expect.objectContaining({
-      has_existing_usage: false,
-      session_count: 3,
-      "$insert_id": "activation_completed:usage-1",
-    }));
+    // The completion route owns activation capture; the browser confirms its save.
+    expect(track).not.toHaveBeenCalledWith("activation_completed", expect.anything());
     fireEvent.click(screen.getByRole("button", { name: "View your profile" }));
     expect(push).toHaveBeenCalledWith("/u/oscar");
     await act(async () => { await vi.advanceTimersByTimeAsync(12_000); });
@@ -137,7 +134,11 @@ describe("first-sync onboarding", () => {
     expect(screen.getByText("Your first sync is complete")).toBeInTheDocument();
     expect(getStatus).toHaveBeenCalledTimes(1);
     expect(completeSetup).toHaveBeenCalledTimes(2);
-    expect(track.mock.calls.filter(([event]) => event === "activation_completed")).toHaveLength(1);
+    expect(completeSetup.mock.calls.map(([options]) => JSON.parse(options.body))).toEqual([
+      { onboarding_completed: true, timezone: Intl.DateTimeFormat().resolvedOptions().timeZone },
+      { onboarding_completed: true, timezone: Intl.DateTimeFormat().resolvedOptions().timeZone },
+    ]);
+    expect(track).not.toHaveBeenCalledWith("activation_completed", expect.anything());
   });
 
   it("offers sign-in recovery with an onboarding return path", async () => {

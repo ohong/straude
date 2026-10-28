@@ -93,10 +93,13 @@ straude --auto                 # Daily launchd/cron job
 straude --auto --time 14:30    # Choose the local run time
 straude --auto hooks           # Claude Code SessionEnd hook
 straude --no-auto              # Disable the configured mechanism
+straude auto                   # Show sync status and sign-in recovery
 straude auto logs              # Inspect scheduler output
 ```
 
 The OS scheduler is supported on macOS and Linux. Claude Code hooks work anywhere Claude Code supports `SessionEnd`; Windows does not support the OS scheduler.
+
+`straude auto` shows the last successful submission for the current account. After an authentication failure, it shows a sign-in instruction. Run `straude login` in an interactive terminal, then run `straude` to retry pending usage. A dry run or empty scan does not count as a successful submission.
 
 ## Examples
 

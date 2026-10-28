@@ -535,7 +535,13 @@ describe("Migration safety", () => {
 
     for (const migration of futureMigrations) {
       expect(
-        migration.content,
+        // Function replacements define future request behavior; they do not
+        // execute a historical repair during migration. Still inspect every
+        // top-level statement, including DO blocks, for direct usage writes.
+        migration.content.replace(
+          /CREATE\s+OR\s+REPLACE\s+FUNCTION\b[\s\S]*?\bAS\s+(\$[A-Za-z0-9_]*\$)[\s\S]*?\1\s*;/gi,
+          "",
+        ),
         `${migration.name} must not directly rewrite usage totals. Heal incorrect Codex usage by re-pushing from the CLI source logs instead.`,
       ).not.toMatch(
         /\b(UPDATE|INSERT\s+INTO|DELETE\s+FROM)\s+public\.(daily_usage|device_usage)\b/i,

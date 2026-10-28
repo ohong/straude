@@ -1,10 +1,54 @@
 # Architecture & Design Decisions
 
+## Preserve source provenance and explicit device choices (2026-10-28)
+
+**Decision:** Check collector provenance before every overwrite and implicit or authoritative source deletion. A known newer stored collector blocks an older incoming snapshot for the whole date. Keep-separate remains a durable user decision; token overlap updates its evidence but does not reopen or automatically merge it. Matching token totals are evidence under the existing hostname rule, not proof that two physical devices are identical.
+
+**Pending recovery:** Recollect a below-floor durable payload using its original date and timezone intent. Require every formerly reported date and named source before atomically replacing the payload with a fresh request ID. Preserve the original on collection, pricing, persistence or coverage failure. A source with no partition identity requires manual recovery. Source presence cannot prove that every log within that source remains available; lower corrections still rely on complete source-owned snapshots.
+
+**Alternatives:** Allowing older monotonic growth restores known overcounts. Reopening explicit choices silently changes user intent. Dropping outdated outboxes loses recoverable work. Broad historical repair remains outside the normal submission path. New upgrade batches use the existing incremental outbox mode; finish any earlier `collector_upgrade` batches before downgrading to an older client.
+
+**Rollout:** Apply the existing accounting migrations in dependency order, then `20261028090012_usage_accounting_replay_guards.sql`. Coordinate a supported CLI release before enforcing the server floor. These source changes do not authorize production migrations or historical corrections.
+
+## Make optional lifecycle analytics request-consented (2026-10-28)
+
+**Decision:** Optional web capture requires the current request's accepted analytics cookie and an explicit server-helper consent input. No browser consent is inferred from CLI bearer authentication. SDK capture rechecks the live cookie; withdrawal opts out and clears persistence, while the same-origin ingest proxy also rejects queued requests without consent. Necessary authentication, referral, onboarding and usage writes continue independently.
+
+**Identity and meaning:** Signup, first confirmed web sync and completed onboarding use the authenticated user ID and stable per-user insertion IDs. Confirmation denotes accepted usage; completion is emitted only by the successful profile completion route. Anonymous links are consumed after authentication so account switches cannot reuse them. Raw receiver deliveries and unique insertion IDs are separate counts; local receiver acceptance does not establish provider ingestion or deduplication.
+
+**Alternatives:** Browser-only guards leave server forwarding and retry queues active. Persisting browser consent in CLI credentials would couple independent telemetry policies and make withdrawal stale. Request-local denial is simpler and preserves the documented boundary.
+
+## Keep durable public snapshots truthful (2026-10-28)
+
+**Decision:** Retain the scheduled snapshot design, paginate with stable ordering and exact-count checks, and calculate totals and distributions from one consistent non-seed cohort. Report success only after persistence; invalidate public pages after a successful write. Missing capture time remains unavailable, and an old capture stays visibly stale after 48 hours. Labels distinguish estimated usage cost, people, latest recorded streak days and actual percentile groups.
+
+**Alternatives and limits:** A new database aggregation architecture adds deployment scope. The paginated repair removes the row cap and mismatched RPC exclusions, but separate page queries are not an MVCC snapshot: same-count in-place concurrent edits can still change the read. A local protected refresh proves the route and database path, not external cron scheduling or alert delivery.
+
+## Expose sync health without changing authentication policy (2026-10-27)
+
+**Problem:** Background sync can fail when sign-in is required. Background runs cannot sign in interactively, while `straude auto` previously showed scheduling state without the last successful submission or a recovery notice. The events do not prove that expiry caused every failure.
+
+**Decision:** Record a confirmed submission time and a 401 recovery marker under the existing sync lease. Bind these advisory fields to the existing API/account hash. Show them in `straude auto`; clear the notice only after a confirmed submission. Persist only the opaque account key and timestamps, using an atomic file replacement. Diagnostic write failures cannot fail a successful sync.
+
+**Alternatives:** Parsing scheduler logs would cover only scheduler-triggered pushes and depend on human-readable output. Extending credential lifetime would change authentication policy and conceal the recovery gap. Shared push-path state covers manual, scheduled, and hook-triggered submissions with one ownership rule.
+
+**Evidence boundary:** The packed CLI passed recovery with a loopback 401, pending-request replay, account isolation, dry-run/no-data preservation, and successful notice clearing. Real OAuth, operating-system scheduler execution, publication, and production ingestion remain separate checks.
+
+## Normalize analytics inputs and keep diagnostics bounded (2026-10-27)
+
+**Problem:** The inspected production browser bundle contains a project token with a trailing newline. Main forwards configured server token values without trimming. Missing lifecycle events therefore need transport verification before conversion analysis.
+
+**Decision:** Reuse server normalization from prior commit `92c948a` and apply token trimming at both browser SDK entry points. Report failed server capture through constant messages and HTTP status only. Keep existing consent gates, destinations, event names, and the property allowlist. A loopback-only receiver verifies real app event delivery with a dummy token and aliases account identifiers in its artifact.
+
+**Alternatives:** Cleaning only the hosted environment would address one pasted value but leave the same failure reproducible. Logging provider bodies would help debugging but could expose echoed payloads. Boundary normalization and bounded diagnostics address the demonstrated input defect without adding tracking.
+
+**Evidence boundary:** A local HTTP receiver rejected the malformed token before normalization and accepted it afterward. Local evidence does not establish PostHog ingestion or production recovery; those require deployment and observation of a real event.
+
 ## Match duplicate devices on tokens, not the full fingerprint (2026-10-08)
 
 **Problem:** One machine can register two installation ids, and both push the same ccusage data, so `daily_usage` double counts. The hostname quarantine created an `ambiguous` candidate with empty `overlap_dates`, because overlap was only computed by the manual repair path, which required an exact fingerprint including `cost_usd` and collector. Two installations on different ccusage versions never matched, and `straude devices` showed "0 matching days".
 
-**Decision:** At quarantine time, fingerprint the incoming day (per agent: input, output, cache creation, cache read, reasoning and total tokens) and compare it with the other device's stored rows. Identical days go to `overlap_dates`, differing days to `divergent_dates`. Two or more identical days with no differing day auto-merge through the existing `resolve_usage_device_candidate`, which now also compares tokens only. Everything else stays `ambiguous`. A `kept_separate` decision reopens only on new token-identical data for a date after the decision, and is never auto-merged.
+**Decision:** At quarantine time, fingerprint the incoming day (per agent: input, output, cache creation, cache read, reasoning and total tokens) and compare it with the other device's stored rows. Identical days go to `overlap_dates`, differing days to `divergent_dates`. Two or more identical days with no differing day auto-merge through the existing `resolve_usage_device_candidate`, which now also compares tokens only. Everything else stays `ambiguous`. An explicit `kept_separate` decision remains durable (clarified 2026-10-28): new evidence is displayed, and only an explicit user merge can reconsider it.
 
 **Alternatives:** Keep the exact fingerprint and add cost tolerance: ccusage owns pricing, so any tolerance is a guess. Compare incoming rows after writing them: blocked submits write nothing, so there is nothing to compare. Backfill candidates from existing data: out of scope, and it would rewrite user data without a decision.
 
@@ -90,7 +134,7 @@
 
 **Success conditions:** A signed-in new user sees the command without editing a profile; transient failures offer a next action; real usage is required before activation; login returns a CLI user to authorization. Copying a command and browsing the feed do not count as activation. Daily usage counts are not presented as individual coding-session counts.
 
-**Measurement:** Local tests establish these behaviors, not a conversion lift. After release, compare `signup_completed` to `first_sync_confirmed` and `activation_completed`, including time to first sync. Profile setup is optional and is no longer a required funnel step.
+**Measurement:** Local tests establish these behaviors, not a conversion lift. Profile setup is optional and is no longer a required funnel step.
 
 ## Preserve Live Privacy, Rank, and Auth Checks (2026-09-04)
 
@@ -124,7 +168,7 @@
 
 **Decision:** Keep the production-build Playwright measurement harness and optional `perf:check` thresholds. Before recording metrics, verify the target returns success, remains on the intended route, and has an authenticated application shell. Remote Supabase projects require explicit `PERF_ALLOW_REMOTE=1`; default verification uses a local fixture.
 
-**Evidence boundary:** The July scorecards describe the earlier claims-only authentication and persistent snapshot-cache implementation. They do not prove performance of this revision or a production p75 result. The current comparison in `docs/perf/PLAN.md` uses the same runtime, seed, and browser for main and this revision. It does not establish a production percentile. PostHog web vitals remain a post-deploy check.
+**Evidence boundary:** The July scorecards describe the earlier claims-only authentication and persistent snapshot-cache implementation. They do not prove performance of this revision or a production p75 result. The current comparison in `docs/perf/VERIFICATION.md` uses the same runtime, seed, and browser for main and this revision. It does not establish a production percentile. PostHog web vitals remain a post-deploy check.
 
 ## Follow released ccusage source support through the unified collector (2026-09-04)
 
@@ -159,7 +203,7 @@
 
 ## Delegate all usage accounting to bundled ccusage v20 (2026-06-09)
 
-**Reconfirmed (2026-09-04):** Keep ccusage following its speed and coding-agent support improvements, as requested during issue triage. [#99](https://github.com/ohong/straude/issues/99)'s AgentsView replacement proposal is not planned. The current native collector already accepts all sources emitted by ccusage; Straude will not revive the separate provider parsers reviewed in [#28](https://github.com/ohong/straude/issues/28). Model presentation, source attribution, and unsupported sources remain explicit roadmap items.
+**Reconfirmed (2026-09-04):** Keep ccusage following its speed and coding-agent support improvements, as requested during issue triage. [#99](https://github.com/ohong/straude/issues/99)'s AgentsView replacement proposal is not planned. The current native collector already accepts all sources emitted by ccusage; Straude will not revive the separate provider parsers reviewed in [#28](https://github.com/ohong/straude/issues/28).
 
 **Decision:** All supported coding-agent ingestion runs through a single installed `ccusage` v20 dependency invoked as a native binary. The current floor is `20.0.20`; Straude's native collectors, token normalizer, source whitelist, and pricing aliases are deleted, so Straude only parses ccusage's unified daily JSON into storage rows.
 
@@ -311,12 +355,6 @@ Pricing the new-logic numbers at gpt-5.5 rates: $228.68 — matches what OpenAI 
 
 **On the `cli_authenticated` event:** fires on every invocation that loads a stored config for a real command (not `--help`/`--version`). Together with `cli_first_run` and the existing `usage_pushed` it gives a clean three-step funnel: install → has-stored-creds → pushed. Useful for diagnosing whether activation drops happen between install and login (ccusage / EPIPE / declined-prompt) vs. between login and push (auth / network / bug).
 
-## CLI activation check-in is a saved insight + manual reminder, not a PostHog Subscription (2026-05-04)
-
-**Decision:** Track the activation funnel via saved insight [`DV22QC1d`](https://us.posthog.com/project/374497/insights/DV22QC1d) and a companion notebook ([`QQ7eCe7G`](https://us.posthog.com/project/374497/notebooks/QQ7eCe7G)). For now, check it manually on Mondays.
-
-**Why not Subscriptions:** PostHog Subscriptions (scheduled email/Slack delivery of insights) are a paid-tier feature. The Side Projects org is on the free tier, so `subscriptions-create` returns 402 Payment Required. The closest no-cost equivalents are (a) bookmarking the insight URL and checking it manually, or (b) running the query weekly via the PostHog MCP from a Claude scheduled agent. We picked (a) for now because it requires no additional moving parts; if the manual check ever slips, we can either upgrade the tier (sustainable long-term) or stand up a `/schedule`-based remote agent that runs `mcp__posthog__insight-query` on a cron.
-
 ## `calculate_user_streak` runs as SECURITY DEFINER (2026-04-30)
 
 **Status:** Superseded on 2026-08-27 by "Route sensitive mutations through the server service client." The function remains `SECURITY DEFINER`, but now authorizes access to the requested user's streak and ignores caller-supplied freeze allowances.
@@ -338,7 +376,7 @@ Pricing the new-logic numbers at gpt-5.5 rates: $228.68 — matches what OpenAI 
 
 **Decision:** When the multi-device push path encounters a `daily_usage` row with zero `device_usage` backing rows, automatically insert a sentinel `device_usage` row (device_id `00000000-...`, device_name "legacy") before aggregation.
 
-**Why:** Early CLI versions and web pushes wrote directly to `daily_usage` with no `device_id`. When a newer CLI (with device tracking) pushed for the same date, the aggregation only read `device_usage` rows — missing the legacy data entirely — and overwrote `daily_usage` with just the new device's numbers. This caused real data loss for users (~$111 drop reported by @caspian).
+**Why:** Early CLI versions and web pushes wrote directly to `daily_usage` with no `device_id`. When a newer CLI (with device tracking) pushed for the same date, the aggregation only read `device_usage` rows — missing the legacy data entirely — and overwrote `daily_usage` with just the new device's numbers. This caused recorded usage to decrease when a new device submitted data.
 
 **Alternatives considered:**
 1. **Read existing `daily_usage` into aggregation directly** — Would require knowing which portion of `daily_usage` came from legacy vs. devices, creating ambiguity on re-aggregation.
@@ -416,7 +454,7 @@ Pricing the new-logic numbers at gpt-5.5 rates: $228.68 — matches what OpenAI 
 
 **Alternatives considered:**
 1. **SVG instead of PNG** — GitHub sanitizes SVGs aggressively (strips styles, scripts, external refs). The existing `ImageResponse` (Satori → PNG) pipeline is proven and avoids SVG sanitization gotchas.
-2. **Shields.io-style individual stat badges** — Deferred to roadmap. Individual badges (streak, rank) would complement the card but are additive, not a replacement.
+2. **Shields.io-style individual stat badges** — Separate badges would increase the number of maintained formats.
 
 ## CLI Scorecard Compaction: Remove Heatmap, Inline Streak (2026-03-23)
 
@@ -428,7 +466,7 @@ Pricing the new-logic numbers at gpt-5.5 rates: $228.68 — matches what OpenAI 
 1. **Keep heatmap, shrink everything** — couldn't get below ~25 lines without making each element too small to read.
 2. **Toggleable modes (`--compact` / `--full`)** — adds complexity; better to pick one good default.
 
-**Heatmap preserved:** Component file (`Heatmap.tsx`) stays in the codebase for potential future `straude heatmap` command or web use.
+
 
 ## Auto-Push: Two Mechanisms (2026-03-23)
 
@@ -1084,6 +1122,8 @@ Pricing the new-logic numbers at gpt-5.5 rates: $228.68 — matches what OpenAI 
 ---
 **Decision (2026-07-04):** Activation funnel events are captured exclusively server-side; the browser posthog-js duplicate capture in `trackActivationEvent` was removed.
 
+**Updated 2026-10-28:** The request-consented lifecycle decision above supersedes this entry's consent exemption. Server-side ownership remains; sanitized properties do not exempt optional analytics from consent.
+
 **Alternatives considered:** (1) Browser capture as canonical — rejected: it only covers consented users, dropping pre-consent top-of-funnel data. (2) Keep both and filter by a `source` property in funnels — rejected: the two paths use different distinct-id graphs (Supabase user id / activation cookie server-side vs. PostHog device id client-side), so identity fragments and anonymous→signed-up conversion math stays wrong even after filtering.
 
 **Why server-side:** it fires unconditionally (consent-exempt because properties are allowlist-sanitized: no prompts, paths, emails, or raw usage), and it owns `$identify` anonymous→user stitching via the `straude_activation_id` cookie.
@@ -1130,7 +1170,7 @@ Pricing the new-logic numbers at gpt-5.5 rates: $228.68 — matches what OpenAI 
 
 ## A Newer Collector Version Is the Source of Truth for Stored Rows (2026-10-08)
 
-**Decision:** `submit_usage_day_v2` lets a trusted partitioned snapshot replace an existing `usage_agent_daily` row, in either direction, when the snapshot's `collector.version` is strictly newer (semver) than the stored row's `collector.version`. Same-version and older snapshots keep the monotonic guard. A stored row with a missing or unparseable version counts as older. The CLI persists `ccusage_version_pushed` and re-submits the existing 30-day backfill window when the installed ccusage is newer.
+**Decision:** `submit_usage_day_v2` lets a trusted partitioned snapshot replace an existing `usage_agent_daily` row, in either direction, when the snapshot's `collector.version` is strictly newer (semver) than the stored row's `collector.version`. Same-version snapshots keep the monotonic guard. Older collectors are rejected before either overwriting or deleting newer source rows. A stored row with a missing or unparseable version counts as older. The CLI persists `ccusage_version_pushed` and re-submits the existing 30-day backfill window when the installed ccusage is newer.
 
 **Alternatives considered:**
 
@@ -1138,4 +1178,4 @@ Pricing the new-logic numbers at gpt-5.5 rates: $228.68 — matches what OpenAI 
 2. **Repair stored rows with SQL** — rejected because direct rewrites of usage totals are banned by the migration-safety test and cannot recompute from source logs. Only the user's machine has the logs.
 3. **Drop the regression guard for trusted snapshots** — rejected because a machine that lost its local logs would then silently overwrite good history with smaller numbers.
 
-**Why a version comparison:** it states the actual reason a decrease is safe, which is that a newer collector computes the numbers, not that the numbers are bigger. The guard keeps its original job for equal and older versions. Cost: a CLI that moves to a buggy newer ccusage can lower history too, so the ccusage floor and release checks are still the control for collector quality.
+**Why a version comparison:** it states the actual reason a decrease is safe, which is that a newer collector computes the numbers, not that the numbers are bigger. The monotonic guard remains for equal versions; the collector-provenance fence rejects older versions before any source mutation. Cost: a CLI that moves to a buggy newer ccusage can lower history too, so the ccusage floor and release checks are still the control for collector quality.

@@ -4,7 +4,8 @@ vi.mock("@/lib/supabase/server", () => ({
   createClient: vi.fn(),
 }));
 
-vi.mock("@/lib/analytics/server", () => ({
+vi.mock("@/lib/analytics/server", async (importOriginal) => ({
+  ...await importOriginal<typeof import("@/lib/analytics/server")>(),
   captureServerActivationEvent: vi.fn().mockResolvedValue(true),
 }));
 
@@ -18,12 +19,14 @@ function mockUsageStatus({
   totals = { total_cost: 0, total_tokens: 0 },
   latestPost = null,
   latestUsageError = null,
+  totalsError = null,
 }: {
   latestUsage: unknown;
   earliestUsage?: unknown;
   totals?: unknown;
   latestPost?: unknown;
   latestUsageError?: unknown;
+  totalsError?: unknown;
 }) {
   const latestUsageChain = {
     select: vi.fn().mockReturnThis(),
@@ -56,7 +59,7 @@ function mockUsageStatus({
   const rpcChain = {
     single: vi.fn().mockResolvedValue({
       data: totals,
-      error: null,
+      error: totalsError,
     }),
   };
   const dailyUsageChains = [latestUsageChain, earliestUsageChain];
@@ -91,7 +94,7 @@ describe("GET /api/usage/status", () => {
   it("does not activate users without usage", async () => {
     const { latestUsageChain } = mockUsageStatus({ latestUsage: null });
 
-    const res = await GET();
+    const res = await GET(new Request("http://localhost/api/usage/status"));
     const json = await res.json();
 
     expect(res.status).toBe(200);
@@ -120,7 +123,9 @@ describe("GET /api/usage/status", () => {
       latestPost: { id: "post-1" },
     });
 
-    const res = await GET();
+    const res = await GET(new Request("http://localhost/api/usage/status", {
+      headers: { cookie: "straude_cookie_consent=v1-all" },
+    }));
     const json = await res.json();
 
     expect(res.status).toBe(200);
@@ -140,7 +145,7 @@ describe("GET /api/usage/status", () => {
   });
 
   it("captures first sync confirmation when web observes usage", async () => {
-    mockUsageStatus({
+    const statusFixture = {
       latestUsage: {
         id: "usage-1",
         date: "2026-07-02",
@@ -157,9 +162,12 @@ describe("GET /api/usage/status", () => {
         total_tokens: 9000,
       },
       latestPost: { id: "post-1" },
-    });
+    };
+    mockUsageStatus(statusFixture);
 
-    const res = await GET();
+    const res = await GET(new Request("http://localhost/api/usage/status", {
+      headers: { cookie: "straude_cookie_consent=v1-all" },
+    }));
     const json = await res.json();
 
     expect(res.status).toBe(200);
@@ -174,15 +182,30 @@ describe("GET /api/usage/status", () => {
     expect(captureServerActivationEvent).toHaveBeenCalledWith({
       event: "first_sync_confirmed",
       distinctId: "user-1",
+      analyticsConsent: true,
       properties: expect.objectContaining({
         surface: "usage_status",
-        activation_state: "activated",
+        activation_state: "first_usage_submitted",
         is_authenticated: true,
         session_count: 2,
         total_tokens: 9000,
         total_cost_usd: 7.75,
         "$insert_id": "first_sync_confirmed:user-1",
       }),
+    });
+
+    // An unavailable totals RPC must retain output-token semantics.
+    mockUsageStatus({ ...statusFixture, totalsError: { code: "42501" } });
+    const fallback = await GET(new Request("http://localhost/api/usage/status", {
+      headers: { cookie: "straude_cookie_consent=v1-all" },
+    }));
+    expect(fallback.status).toBe(200);
+    expect(await fallback.json()).toMatchObject({
+      has_usage: true,
+      total_tokens: 1200,
+      cost_usd: 1.25,
+      latest_usage_id: "usage-1",
+      latest_post_url: "/post/post-1",
     });
   });
 });
