@@ -43,7 +43,7 @@ const analytics = new Map<string, AnalyticsBoundary>();
 const evidenceNames = new Set([
   "installed-candidate", "accepted-storage-comparison", "real-device-auth-and-rotation",
   "real-auth-recovery", "cli-first-settings-result", "combined-lifecycle-receiver",
-  "browser-sdk-transport-boundary",
+  "browser-sdk-transport-boundary", "web-first-consent",
 ]);
 const evidenceCounts = new Map<string, number>();
 
@@ -259,9 +259,9 @@ async function authorize(cli: Cli, page: Page, origin: string, beforeAuthorize?:
 async function storedUsage(userId: string) {
   const db = admin();
   const [daily, devices, sources, posts, outcomes] = await Promise.all([
-    db.from("daily_usage").select("id,date,total_tokens,cost_usd,models").eq("user_id", userId),
-    db.from("device_usage").select("date,total_tokens,cost_usd").eq("user_id", userId),
-    db.from("usage_agent_daily").select("date,agent,total_tokens,cost_usd,collector").eq("user_id", userId),
+    db.from("daily_usage").select("id,date,total_tokens,output_tokens,cost_usd,models").eq("user_id", userId),
+    db.from("device_usage").select("date,total_tokens,output_tokens,cost_usd").eq("user_id", userId),
+    db.from("usage_agent_daily").select("date,agent,total_tokens,output_tokens,cost_usd,collector").eq("user_id", userId),
     db.from("posts").select("id,daily_usage_id").eq("user_id", userId),
     db.from("usage_submission_outcomes").select("request_id,date,outcome").eq("user_id", userId),
   ]);
@@ -277,11 +277,13 @@ async function assertAccepted(page: Page, cli: Cli, userId: string, testInfo: Te
   expect(stored.posts).toHaveLength(1);
   const daily = stored.daily[0];
   expect(Number(daily.total_tokens)).toBe(440_000);
+  expect(Number(daily.output_tokens)).toBe(40_000);
   expect(Number(daily.cost_usd)).toBeGreaterThan(0);
   expect(daily.models).toHaveLength(4);
   expect(stored.posts[0].daily_usage_id).toBe(daily.id);
   for (const layer of [stored.devices[0], stored.sources[0]]) {
     expect(Number(layer.total_tokens)).toBe(Number(daily.total_tokens));
+    expect(Number(layer.output_tokens)).toBe(Number(daily.output_tokens));
     expect(Number(layer.cost_usd)).toBeCloseTo(Number(daily.cost_usd), 5);
     expect(layer.date).toBe(cli.date);
   }
@@ -289,7 +291,11 @@ async function assertAccepted(page: Page, cli: Cli, userId: string, testInfo: Te
   const response = await page.request.get("/api/usage/status");
   expect(response.status()).toBe(200);
   const status = await response.json();
-  expect(status).toMatchObject({ has_usage: true, total_tokens: Number(daily.total_tokens), latest_usage_id: daily.id, latest_post_url: `/post/${stored.posts[0].id}` });
+  // get_user_usage_totals intentionally aliases total_tokens to output_tokens
+  // (20260406074500_fix_get_user_usage_totals_output_tokens.sql). Four native
+  // fixture sessions independently contain 440k all-category and 40k output.
+  expect(status).toMatchObject({ has_usage: true, total_tokens: 40_000, latest_usage_id: daily.id, latest_post_url: `/post/${stored.posts[0].id}` });
+  expect(status.total_tokens).toBe(Number(daily.output_tokens));
   expect(status.cost_usd).toBe(Math.round(Number(daily.cost_usd) * 100) / 100);
   await saveEvidence(testInfo, "accepted-storage-comparison", { ...stored, status });
   return stored;
@@ -345,12 +351,24 @@ test.describe("installed CLI and browser first sync", () => {
     const cli = await cliFixture(testInfo);
     const origin = String(testInfo.project.use.baseURL);
     try {
-      const signupResponse = await page.goto("/signup");
+      // Cookie consent is an actual landing-layout control; auth pages do not
+      // render it. Complete that UI and its SDK emission before starting signup.
+      const landingResponse = await page.goto("/");
       await assertAnalyticsBrowser(page);
-      expect(signupResponse?.headers()["content-security-policy"]).toContain("connect-src");
+      expect(landingResponse?.headers()["content-security-policy"]).toContain("connect-src");
       const acceptAnalytics = page.getByRole("button", { name: "Accept all", exact: true });
-      if (analytics.get(testInfo.testId)?.receiver) await expect(acceptAnalytics).toBeVisible();
-      if (await acceptAnalytics.isVisible()) await acceptAnalytics.click();
+      await expect(acceptAnalytics).toBeVisible();
+      const consentSaved = page.waitForResponse(response => response.url().endsWith("/api/cookie-consent") && response.request().method() === "POST");
+      await acceptAnalytics.click();
+      const consentResponse = await consentSaved;
+      expect(consentResponse.status()).toBe(200);
+      await consentResponse.finished();
+      await expect(acceptAnalytics).toHaveCount(0);
+      const boundary = analytics.get(testInfo.testId)!;
+      if (boundary.receiver) await expect.poll(() => boundary.requests.some(request => request.method === "POST" && /\/(?:e|batch)(?:\/|$)/.test(request.path)), { timeout: 15_000 }).toBe(true);
+      await saveEvidence(testInfo, "web-first-consent", { landing_status: landingResponse?.status(), csp_enforced: true, consent_save_status: consentResponse.status(), sdk_capture_observed: boundary.requests.some(request => request.method === "POST" && /\/(?:e|batch)(?:\/|$)/.test(request.path)), sdk_requests: boundary.requests });
+      await page.goto("/signup");
+      await assertAnalyticsBrowser(page);
       await signup(page, request, email);
       await expect(page).toHaveURL(/\/onboarding$/);
       const profile = await (await page.request.get("/api/users/me")).json();
@@ -405,7 +423,7 @@ test.describe("installed CLI and browser first sync", () => {
       await page.getByRole("button", { name: "Retry setup", exact: true }).click();
       await expect(page.getByRole("heading", { name: "Your first sync is complete" })).toBeVisible();
       await expect(page.locator("dl")).toContainText(`$${Number(beforeRetry.daily[0].cost_usd).toFixed(2)}`);
-      await expect(page.locator("dl")).toContainText("440k");
+      await expect(page.locator("dl")).toContainText("40k");
       const github = page.getByRole("radio", { name: "GitHub", exact: true });
       await page.locator("label").filter({ has: github }).click();
       await page.getByLabel("Anything more specific?", { exact: false }).fill("  Native collector browser journey  ");
