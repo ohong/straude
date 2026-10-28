@@ -141,7 +141,12 @@ async function signOut(page: Page) {
   await expect(page).toHaveURL(/\/(?:login)?$/);
 }
 async function syncProtocolFixture(page: Page) {
-  const init = await page.request.post("/api/auth/cli/init");
+  // Isolate this direct protocol fixture's client-IP rate-limit bucket from
+  // installed-CLI journeys sharing loopback. Auth and the app limiter stay real;
+  // beforeEach refuses non-loopback app/backend URLs.
+  const init = await page.request.post("/api/auth/cli/init", {
+    headers: { "x-forwarded-for": "198.51.100.7" },
+  });
   expect(init.status()).toBe(200);
   const { code, verify_url, poll_secret } = await init.json();
   const verification = await page.context().newPage();
