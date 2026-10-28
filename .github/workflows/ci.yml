@@ -104,6 +104,8 @@ jobs:
           with open(os.environ["GITHUB_ENV"], "a") as output:
               for name in names:
                   if name in values:
+                      if name in {"SUPABASE_SECRET_KEY", "CLI_JWT_SECRET", "CRON_SECRET"}:
+                          print(f"::add-mask::{values[name]}")
                       output.write(f"{name}={values[name]}\n")
           PY
 
