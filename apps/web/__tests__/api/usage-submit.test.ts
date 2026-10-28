@@ -19,9 +19,10 @@ vi.mock("@/lib/supabase/service", () => ({
   getServiceClient: vi.fn(() => ({ rpc })),
 }));
 
-vi.mock("@/lib/analytics/server", () => ({
-  captureServerActivationEvent: vi.fn().mockResolvedValue(true),
-}));
+vi.mock("@/lib/analytics/server", async (importOriginal) => {
+  const actual = await importOriginal<typeof import("@/lib/analytics/server")>();
+  return { ...actual, captureServerActivationEvent: vi.fn().mockResolvedValue(true) };
+});
 
 import { CliIdentityUnavailableError, isActiveCliUser } from "@/lib/api/active-cli-user";
 import { POST } from "@/app/api/usage/submit/route";

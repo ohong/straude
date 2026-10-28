@@ -118,6 +118,7 @@ test.describe("public snapshot freshness (exclusive local database)", () => {
     const headers = { authorization: `Bearer ${cronSecret}` };
     const refresh = () => request.get("/api/cron/refresh-open-stats", { headers });
     let restored = false;
+    let cleanupPageInvalidationStatus: number | null = null;
 
     try {
       await test.step("prepare synthetic local aggregate fixtures, including historical and private profiles", async () => {
@@ -288,6 +289,13 @@ test.describe("public snapshot freshness (exclusive local database)", () => {
       try {
         await db.query(`DROP TRIGGER IF EXISTS ${faultTrigger} ON public.open_stats_snapshots`);
         await db.query(`DROP FUNCTION IF EXISTS ${faultFunction}()`);
+        // Mark both page caches for their next read before restoring rows. This
+        // final local refresh is discarded with the other fixture snapshots.
+        try {
+          cleanupPageInvalidationStatus = (await refresh()).status();
+        } catch {
+          // An unavailable app must not prevent database/identity restoration.
+        }
         await db.query("BEGIN");
         await db.query("DELETE FROM auth.users WHERE id = ANY($1::uuid[])", [ids]);
         await db.query("DELETE FROM public.open_stats_snapshots");
@@ -300,7 +308,7 @@ test.describe("public snapshot freshness (exclusive local database)", () => {
         expect((await db.query("SELECT count(*) FROM pg_trigger WHERE tgname = $1", [faultTrigger])).rows[0].count).toBe("0");
         restored = true;
       } finally {
-        await attach(info, "fixture-cleanup", { restoredOriginalSnapshots: restored, syntheticIdentitiesRemoved: restored, localFaultTriggerRemoved: restored });
+        await attach(info, "fixture-cleanup", { restoredOriginalSnapshots: restored, syntheticIdentitiesRemoved: restored, localFaultTriggerRemoved: restored, cleanupPageInvalidationStatus });
         await db.end();
       }
     }
