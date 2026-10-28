@@ -969,7 +969,7 @@ describe("POST /api/usage/submit (real Supabase)", () => {
   it.each(["authoritative", "legacy"] as const)(
     "fences deletion of a newer omitted %s source before writing the date",
     async (mode) => {
-      const username = `v2_omit_${mode}`;
+      const username = mode === "authoritative" ? "v2_omit_auth" : "v2_omit_legacy";
       const userId = await insertUser(db, { username });
       const token = await mintCliToken(userId, username);
       if (mode === "authoritative") {
