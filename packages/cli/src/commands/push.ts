@@ -337,6 +337,11 @@ async function recollectUnsupportedPendingBatch(
   if (!isSupportedCcusageVersion(getInstalledCcusageVersion())) {
     throw new Error("Update with npx straude@latest before recollecting the saved usage batch.");
   }
+  if (pending.request.entries.some((entry) => (
+    entry.agents.some((agent) => agent.agent === "legacy-unpartitioned")
+  ))) {
+    throw new Error("Saved legacy usage has no source inventory. Keep the saved batch and restore complete local logs before manual recovery; it cannot be safely recollected automatically.");
+  }
   const dates = pending.request.entries.map((entry) => entry.date).sort();
   if (dates.length === 0) throw new Error("Saved usage batch has no dates to recollect.");
   const collected = await collectCcusageUsageAsync(
@@ -350,7 +355,7 @@ async function recollectUnsupportedPendingBatch(
     const fresh = byDate.get(original.date);
     const sources = new Set(fresh?.agentBreakdown.map((agent) => agent.agent));
     if (!fresh || original.agents.some((agent) => (
-      agent.agent !== "legacy-unpartitioned" && !sources.has(agent.agent)
+      !sources.has(agent.agent)
     ))) {
       throw new Error(`Saved usage for ${original.date} could not be fully recollected. Restore complete local logs and retry; the saved batch is unchanged.`);
     }
@@ -933,7 +938,9 @@ export async function pushCommand(
         },
         requested_dates: requestedDates,
         ...(automaticWatermarkDate ? { watermark_date: automaticWatermarkDate } : {}),
-        range_mode: resolution.mode,
+        // Reuse the established automatic mode on disk so older CLIs can
+        // preserve and replay a pending upgrade batch after a downgrade.
+        range_mode: resolution.mode === "collector_upgrade" ? "incremental" : resolution.mode,
         migration_pending: isMigrationBatch,
         created_at: new Date().toISOString(),
       };
@@ -958,7 +965,7 @@ export async function pushCommand(
       request,
       requested_dates: requestedDates,
       ...(automaticWatermarkDate ? { watermark_date: automaticWatermarkDate } : {}),
-      range_mode: resolution.mode,
+      range_mode: resolution.mode === "collector_upgrade" ? "incremental" : resolution.mode,
       migration_pending: isMigrationBatch,
       created_at: new Date().toISOString(),
     };
