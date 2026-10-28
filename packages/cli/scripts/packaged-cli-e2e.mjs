@@ -79,6 +79,8 @@ let server;
 let dashboardRequests = 0;
 let submitRequests = 0;
 let transientDashboardFailure = false;
+let rejectAuthentication = false;
+const acceptedRequestIds = [];
 const dashboardDelayMs = 3_500;
 const reportPath = resolve(readOption("--report") ?? join(packageDir, "test-results", "packaged-cli-e2e.json"));
 const report = { node: process.version, dashboard_delay_ms: dashboardDelayMs, scenarios: [] };
@@ -86,6 +88,7 @@ const report = { node: process.version, dashboard_delay_ms: dashboardDelayMs, sc
 try {
   await mkdir(installDir, { recursive: true });
   await mkdir(join(homeDir, ".straude"), { recursive: true });
+  await mkdir(join(homeDir, ".claude", "projects"), { recursive: true });
   await writeFile(join(installDir, "package.json"), JSON.stringify({ private: true }));
 
   const fixtureSource = new URL("../__tests__/fixtures/ccusage-gpt-5.6/codex", import.meta.url);
@@ -143,6 +146,7 @@ try {
     HOME: homeDir,
     USERPROFILE: homeDir,
     CODEX_HOME: codexHome,
+    CLAUDE_CONFIG_DIR: join(homeDir, ".claude"),
     STRAUDE_TELEMETRY_DISABLED: "1",
   };
   const versionResult = await execFileAsync(process.execPath, [cli, "--version"], {
@@ -160,6 +164,10 @@ try {
       const chunks = [];
       for await (const chunk of request) chunks.push(chunk);
       const submission = JSON.parse(Buffer.concat(chunks).toString("utf8"));
+      if (rejectAuthentication) {
+        response.writeHead(401).end(JSON.stringify({ error: "Synthetic expired credential" }));
+        return;
+      }
       if (submission.protocol_version !== 2) {
         throw new Error(`Expected usage protocol v2, got ${submission.protocol_version}`);
       }
@@ -168,6 +176,7 @@ try {
           `Expected installed ccusage ${installedCcusage.version}, got ${submission.collector?.version}`,
         );
       }
+      acceptedRequestIds.push(submission.request_id);
       response.end(JSON.stringify({
         request_id: submission.request_id,
         outcomes: submission.entries.map((entry) => ({
@@ -271,6 +280,81 @@ try {
     }
     console.log(`${scenario.name} passed on Node ${process.version} (${elapsedMs}ms)`);
   }
+  rejectAuthentication = true;
+  transientDashboardFailure = false;
+  submitRequests = 0;
+  dashboardRequests = 0;
+  acceptedRequestIds.length = 0;
+  const recoveryArgs = ["push", "--date", date, "--non-interactive"];
+  let rejected;
+  try {
+    await execFileAsync(process.execPath, [cli, ...recoveryArgs], { cwd: installDir, env: childEnvironment });
+    throw new Error("An expired credential unexpectedly synced.");
+  } catch (error) {
+    if (error.code !== 2) throw error;
+    rejected = { stdout: error.stdout, stderr: error.stderr, exit_code: error.code };
+  }
+  const healthPath = join(homeDir, ".straude", "sync-health.json");
+  const outboxPath = join(homeDir, ".straude", "pending-sync.json");
+  const pending = JSON.parse(await readFile(outboxPath, "utf8"));
+  const blockedHealth = JSON.parse(await readFile(healthPath, "utf8"));
+  const blockedStatus = await execFileAsync(process.execPath, [cli, "auto"], { cwd: installDir, env: childEnvironment });
+  if (!blockedHealth.auth_required_at || !blockedHealth.last_success_at || !blockedStatus.stdout.includes("straude login")
+      || submitRequests !== 1 || dashboardRequests !== 0 || pending.batches.length !== 1) {
+    throw new Error("Background authentication failure was not visible in auto status.");
+  }
+  const allowedHealthKeys = new Set(["account_key", "last_success_at", "auth_required_at"]);
+  if (Object.keys(blockedHealth).some(key => !allowedHealthKeys.has(key))
+      || !/^[a-f0-9]{64}$/.test(blockedHealth.account_key)
+      || !Number.isFinite(Date.parse(blockedHealth.auth_required_at))
+      || !Number.isFinite(Date.parse(blockedHealth.last_success_at))) {
+    throw new Error("Sync health must contain only an opaque account key and timestamps.");
+  }
+  // A dry run must not claim that the server accepted the expired credential.
+  await execFileAsync(process.execPath, [cli, "push", "--date", date, "--dry-run", "--non-interactive"], { cwd: installDir, env: childEnvironment });
+  if (!(JSON.parse(await readFile(healthPath, "utf8"))).auth_required_at || submitRequests !== 1) {
+    throw new Error("Dry run cleared the sign-in requirement without a submission.");
+  }
+  const configPath = join(homeDir, ".straude", "config.json");
+  const originalConfig = await readFile(configPath, "utf8");
+  await writeFile(configPath, JSON.stringify({ ...JSON.parse(originalConfig), token: "other-account-token" }));
+  const otherAccountStatus = await execFileAsync(process.execPath, [cli, "auto"], { cwd: installDir, env: childEnvironment });
+  if (otherAccountStatus.stdout.includes("Sign-in required") || otherAccountStatus.stdout.includes(blockedHealth.last_success_at)) {
+    throw new Error("Another account inherited the prior account's sync health.");
+  }
+  await writeFile(configPath, originalConfig);
+  rejectAuthentication = false;
+  const recovered = await execFileAsync(process.execPath, [cli, ...recoveryArgs], { cwd: installDir, env: childEnvironment });
+  const recoveredHealth = JSON.parse(await readFile(healthPath, "utf8"));
+  const recoveredStatus = await execFileAsync(process.execPath, [cli, "auto"], { cwd: installDir, env: childEnvironment });
+  if (recoveredHealth.auth_required_at || !recoveredHealth.last_success_at
+      || recoveredStatus.stdout.includes("Sign-in required")
+      || !recoveredStatus.stdout.includes(recoveredHealth.last_success_at)
+      || acceptedRequestIds.filter(id => id === pending.batches[0].request.request_id).length !== 1
+      || JSON.parse(await readFile(outboxPath, "utf8")).batches.length !== 0) {
+    throw new Error("Successful sync did not clear the old sign-in notice and show its success time.");
+  }
+  const yesterday = new Date(today);
+  yesterday.setDate(yesterday.getDate() - 1);
+  const emptyDate = [yesterday.getFullYear(), String(yesterday.getMonth() + 1).padStart(2, "0"), String(yesterday.getDate()).padStart(2, "0")].join("-");
+  const submissionsBeforeEmpty = submitRequests;
+  const empty = await execFileAsync(process.execPath, [cli, "push", "--date", emptyDate, "--non-interactive"], { cwd: installDir, env: childEnvironment });
+  if (!empty.stdout.includes("No usage data") || submitRequests !== submissionsBeforeEmpty
+      || JSON.stringify(JSON.parse(await readFile(healthPath, "utf8"))) !== JSON.stringify(recoveredHealth)) {
+    throw new Error("An empty local scan changed the last confirmed sync without a submission.");
+  }
+  report.scenarios.push({
+    name: "background-auth-health-recovery", passed: true,
+    rejected, blocked_health: blockedHealth, blocked_status: blockedStatus.stdout,
+    recovered: { stdout: recovered.stdout, stderr: recovered.stderr },
+    recovered_health: recoveredHealth, recovered_status: recoveredStatus.stdout,
+    other_account_status: otherAccountStatus.stdout,
+    replayed_request_id: pending.batches[0].request.request_id,
+    accepted_request_ids: acceptedRequestIds,
+    empty: { stdout: empty.stdout, stderr: empty.stderr },
+  });
+  await writeFile(reportPath, JSON.stringify(report, null, 2) + "\n");
+  console.log("background-auth-health-recovery passed (401, visible recovery, account isolation, preserved pending work, dry-run/no-data status, success clears notice)");
   console.log(`straude v${packageJson.version} with ccusage ${installedCcusage.version}; report: ${reportPath}`);
 } finally {
   if (server) {

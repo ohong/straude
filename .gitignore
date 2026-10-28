@@ -100,3 +100,6 @@ AGENTS.md
 # perf harness output & auth state
 perf-results/
 apps/web/e2e/perf/.auth/
+
+# Private planning and research stay local.
+/plans/

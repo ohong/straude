@@ -33,6 +33,7 @@ import {
   type CcusageDailyEntry,
 } from "../lib/ccusage.js";
 import { syncAccountKey } from "../lib/sync-account.js";
+import { recordSyncHealth } from "../lib/sync-health.js";
 import { getDistinctId, getInstallationId } from "../lib/machine-id.js";
 import { isInteractive } from "../lib/prompt.js";
 import { posthog } from "../lib/posthog.js";
@@ -451,6 +452,9 @@ async function submitBatch(
         await sleep(delay);
       }
     } catch (error) {
+      if (error instanceof ApiHttpError && error.status === 401) {
+        recordSyncHealth(config, "auth_required");
+      }
       const exitCode = classifySubmitError(error, interactive);
       if (exitCode === CLI_EXIT.TEMPORARY && attempt + 1 < PROTOCOL_RETRY_ATTEMPTS) {
         const retryAfter = error instanceof ApiHttpError
@@ -751,6 +755,7 @@ export async function pushCommand(
       }
       advanceCompletedBatch(pending);
       removePendingBatch(pending.request.request_id);
+      recordSyncHealth(config, "success");
     }
 
     const effectiveSince = requestedDates[0]!;
@@ -889,6 +894,7 @@ export async function pushCommand(
     const updatedConfig = advanceCompletedBatch(batch);
     removePendingBatch(batch.request.request_id);
     lease.acknowledgeQueuedDates(queuedDatesToConsume);
+    recordSyncHealth(config, "success");
     printSubmitSuccess(entries, submitted.results);
     const dashboard = await renderDashboard(updatedConfig, submitted.results);
     timings.dashboard_ms = dashboard.durationMs;

@@ -46,7 +46,7 @@ After completing a chunk of work, update the following docs:
 
 1. **`docs/CHANGELOG.md`** — Summarise what changed. Follow Keep a Changelog format (Added/Changed/Fixed/Removed). Group under `## Unreleased` until a release is cut.
 2. **`docs/DECISIONS.md`** — Record major architectural or design decisions that future maintainers would want to reference. Include: the decision, alternatives considered, and why this option was chosen. Date each entry.
-3. **`docs/ROADMAP.md`** — Feature requests, ideas, or improvements that came up during the session but are being saved for later. Include enough context for someone to pick it up cold.
+3. **Local plans** — Save internal plans as Markdown in `plans/`. Keep the entire directory ignored and local. Never commit internal strategy, research, recruitment lists, or prototype studies, and do not copy them into public docs or release notes.
 
 ## Scope
 

@@ -1,5 +1,25 @@
 # Architecture & Design Decisions
 
+## Expose sync health without changing authentication policy (2026-10-27)
+
+**Problem:** Background sync can fail when sign-in is required. Background runs cannot sign in interactively, while `straude auto` previously showed scheduling state without the last successful submission or a recovery notice. The events do not prove that expiry caused every failure.
+
+**Decision:** Record a confirmed submission time and a 401 recovery marker under the existing sync lease. Bind these advisory fields to the existing API/account hash. Show them in `straude auto`; clear the notice only after a confirmed submission. Persist only the opaque account key and timestamps, using an atomic file replacement. Diagnostic write failures cannot fail a successful sync.
+
+**Alternatives:** Parsing scheduler logs would cover only scheduler-triggered pushes and depend on human-readable output. Extending credential lifetime would change authentication policy and conceal the recovery gap. Shared push-path state covers manual, scheduled, and hook-triggered submissions with one ownership rule.
+
+**Evidence boundary:** The packed CLI passed recovery with a loopback 401, pending-request replay, account isolation, dry-run/no-data preservation, and successful notice clearing. Real OAuth, operating-system scheduler execution, publication, and production ingestion remain separate checks.
+
+## Normalize analytics inputs and keep diagnostics bounded (2026-10-27)
+
+**Problem:** The inspected production browser bundle contains a project token with a trailing newline. Main forwards configured server token values without trimming. Missing lifecycle events therefore need transport verification before conversion analysis.
+
+**Decision:** Reuse server normalization from prior commit `92c948a` and apply token trimming at both browser SDK entry points. Report failed server capture through constant messages and HTTP status only. Keep existing consent gates, destinations, event names, and the property allowlist. A loopback-only receiver verifies real app event delivery with a dummy token and aliases account identifiers in its artifact.
+
+**Alternatives:** Cleaning only the hosted environment would address one pasted value but leave the same failure reproducible. Logging provider bodies would help debugging but could expose echoed payloads. Boundary normalization and bounded diagnostics address the demonstrated input defect without adding tracking.
+
+**Evidence boundary:** A local HTTP receiver rejected the malformed token before normalization and accepted it afterward. Local evidence does not establish PostHog ingestion or production recovery; those require deployment and observation of a real event.
+
 ## Share the dashboard request budget and parallelize live reads (2026-09-28)
 
 **Problem:** A successful push could print `Usage synced; dashboard unavailable.` because it gave the dashboard only three seconds with no retries. Both the default and `--days` paths used this override. Four authenticated production requests took 1.84–2.96 seconds before the change.
@@ -70,7 +90,7 @@
 
 **Success conditions:** A signed-in new user sees the command without editing a profile; transient failures offer a next action; real usage is required before activation; login returns a CLI user to authorization. Copying a command and browsing the feed do not count as activation. Daily usage counts are not presented as individual coding-session counts.
 
-**Measurement:** Local tests establish these behaviors, not a conversion lift. After release, compare `signup_completed` to `first_sync_confirmed` and `activation_completed`, including time to first sync. Profile setup is optional and is no longer a required funnel step.
+**Measurement:** Local tests establish these behaviors, not a conversion lift. Profile setup is optional and is no longer a required funnel step.
 
 ## Preserve Live Privacy, Rank, and Auth Checks (2026-09-04)
 
@@ -104,7 +124,7 @@
 
 **Decision:** Keep the production-build Playwright measurement harness and optional `perf:check` thresholds. Before recording metrics, verify the target returns success, remains on the intended route, and has an authenticated application shell. Remote Supabase projects require explicit `PERF_ALLOW_REMOTE=1`; default verification uses a local fixture.
 
-**Evidence boundary:** The July scorecards describe the earlier claims-only authentication and persistent snapshot-cache implementation. They do not prove performance of this revision or a production p75 result. The current comparison in `docs/perf/PLAN.md` uses the same runtime, seed, and browser for main and this revision. It does not establish a production percentile. PostHog web vitals remain a post-deploy check.
+**Evidence boundary:** The July scorecards describe the earlier claims-only authentication and persistent snapshot-cache implementation. They do not prove performance of this revision or a production p75 result. The current comparison in `docs/perf/VERIFICATION.md` uses the same runtime, seed, and browser for main and this revision. It does not establish a production percentile. PostHog web vitals remain a post-deploy check.
 
 ## Follow released ccusage source support through the unified collector (2026-09-04)
 
@@ -139,7 +159,7 @@
 
 ## Delegate all usage accounting to bundled ccusage v20 (2026-06-09)
 
-**Reconfirmed (2026-09-04):** Keep ccusage following its speed and coding-agent support improvements, as requested during issue triage. [#99](https://github.com/ohong/straude/issues/99)'s AgentsView replacement proposal is not planned. The current native collector already accepts all sources emitted by ccusage; Straude will not revive the separate provider parsers reviewed in [#28](https://github.com/ohong/straude/issues/28). Model presentation, source attribution, and unsupported sources remain explicit roadmap items.
+**Reconfirmed (2026-09-04):** Keep ccusage following its speed and coding-agent support improvements, as requested during issue triage. [#99](https://github.com/ohong/straude/issues/99)'s AgentsView replacement proposal is not planned. The current native collector already accepts all sources emitted by ccusage; Straude will not revive the separate provider parsers reviewed in [#28](https://github.com/ohong/straude/issues/28).
 
 **Decision:** All supported coding-agent ingestion runs through a single installed `ccusage` v20 dependency invoked as a native binary. The current floor is `20.0.20`; Straude's native collectors, token normalizer, source whitelist, and pricing aliases are deleted, so Straude only parses ccusage's unified daily JSON into storage rows.
 
@@ -291,12 +311,6 @@ Pricing the new-logic numbers at gpt-5.5 rates: $228.68 — matches what OpenAI 
 
 **On the `cli_authenticated` event:** fires on every invocation that loads a stored config for a real command (not `--help`/`--version`). Together with `cli_first_run` and the existing `usage_pushed` it gives a clean three-step funnel: install → has-stored-creds → pushed. Useful for diagnosing whether activation drops happen between install and login (ccusage / EPIPE / declined-prompt) vs. between login and push (auth / network / bug).
 
-## CLI activation check-in is a saved insight + manual reminder, not a PostHog Subscription (2026-05-04)
-
-**Decision:** Track the activation funnel via saved insight [`DV22QC1d`](https://us.posthog.com/project/374497/insights/DV22QC1d) and a companion notebook ([`QQ7eCe7G`](https://us.posthog.com/project/374497/notebooks/QQ7eCe7G)). For now, check it manually on Mondays.
-
-**Why not Subscriptions:** PostHog Subscriptions (scheduled email/Slack delivery of insights) are a paid-tier feature. The Side Projects org is on the free tier, so `subscriptions-create` returns 402 Payment Required. The closest no-cost equivalents are (a) bookmarking the insight URL and checking it manually, or (b) running the query weekly via the PostHog MCP from a Claude scheduled agent. We picked (a) for now because it requires no additional moving parts; if the manual check ever slips, we can either upgrade the tier (sustainable long-term) or stand up a `/schedule`-based remote agent that runs `mcp__posthog__insight-query` on a cron.
-
 ## `calculate_user_streak` runs as SECURITY DEFINER (2026-04-30)
 
 **Status:** Superseded on 2026-08-27 by "Route sensitive mutations through the server service client." The function remains `SECURITY DEFINER`, but now authorizes access to the requested user's streak and ignores caller-supplied freeze allowances.
@@ -318,7 +332,7 @@ Pricing the new-logic numbers at gpt-5.5 rates: $228.68 — matches what OpenAI 
 
 **Decision:** When the multi-device push path encounters a `daily_usage` row with zero `device_usage` backing rows, automatically insert a sentinel `device_usage` row (device_id `00000000-...`, device_name "legacy") before aggregation.
 
-**Why:** Early CLI versions and web pushes wrote directly to `daily_usage` with no `device_id`. When a newer CLI (with device tracking) pushed for the same date, the aggregation only read `device_usage` rows — missing the legacy data entirely — and overwrote `daily_usage` with just the new device's numbers. This caused real data loss for users (~$111 drop reported by @caspian).
+**Why:** Early CLI versions and web pushes wrote directly to `daily_usage` with no `device_id`. When a newer CLI (with device tracking) pushed for the same date, the aggregation only read `device_usage` rows — missing the legacy data entirely — and overwrote `daily_usage` with just the new device's numbers. This caused recorded usage to decrease when a new device submitted data.
 
 **Alternatives considered:**
 1. **Read existing `daily_usage` into aggregation directly** — Would require knowing which portion of `daily_usage` came from legacy vs. devices, creating ambiguity on re-aggregation.
@@ -396,7 +410,7 @@ Pricing the new-logic numbers at gpt-5.5 rates: $228.68 — matches what OpenAI 
 
 **Alternatives considered:**
 1. **SVG instead of PNG** — GitHub sanitizes SVGs aggressively (strips styles, scripts, external refs). The existing `ImageResponse` (Satori → PNG) pipeline is proven and avoids SVG sanitization gotchas.
-2. **Shields.io-style individual stat badges** — Deferred to roadmap. Individual badges (streak, rank) would complement the card but are additive, not a replacement.
+2. **Shields.io-style individual stat badges** — Separate badges would increase the number of maintained formats.
 
 ## CLI Scorecard Compaction: Remove Heatmap, Inline Streak (2026-03-23)
 
@@ -408,7 +422,7 @@ Pricing the new-logic numbers at gpt-5.5 rates: $228.68 — matches what OpenAI 
 1. **Keep heatmap, shrink everything** — couldn't get below ~25 lines without making each element too small to read.
 2. **Toggleable modes (`--compact` / `--full`)** — adds complexity; better to pick one good default.
 
-**Heatmap preserved:** Component file (`Heatmap.tsx`) stays in the codebase for potential future `straude heatmap` command or web use.
+
 
 ## Auto-Push: Two Mechanisms (2026-03-23)
 

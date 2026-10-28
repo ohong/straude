@@ -20,14 +20,17 @@ interface IdentifyInput {
 }
 
 function getPostHogConfig() {
-  const apiKey = process.env.POSTHOG_API_KEY ?? process.env.NEXT_PUBLIC_POSTHOG_KEY;
-  const host = (process.env.POSTHOG_HOST ?? DEFAULT_POSTHOG_HOST).replace(/\/+$/, "");
+  const apiKey = process.env.POSTHOG_API_KEY?.trim() || process.env.NEXT_PUBLIC_POSTHOG_KEY?.trim();
+  const host = (process.env.POSTHOG_HOST?.trim() || DEFAULT_POSTHOG_HOST).replace(/\/+$/, "");
   return apiKey ? { apiKey, host } : null;
 }
 
 async function postToPostHog(body: Record<string, unknown>): Promise<boolean> {
   const config = getPostHogConfig();
-  if (!config) return false;
+  if (!config) {
+    console.error("[posthog] server capture skipped: project key is not configured");
+    return false;
+  }
 
   try {
     const response = await fetch(`${config.host}/capture/`, {
@@ -38,8 +41,13 @@ async function postToPostHog(body: Record<string, unknown>): Promise<boolean> {
         ...body,
       }),
     });
+    if (!response.ok) {
+      // Provider responses can echo submitted data; only log the status.
+      console.error(`[posthog] server capture rejected: HTTP ${response.status}`);
+    }
     return response.ok;
   } catch {
+    console.error("[posthog] server capture failed: network request did not complete");
     return false;
   }
 }

@@ -7,7 +7,7 @@ import {
 } from "@/lib/analytics/activation";
 import { getCookieConsentFromCookieString } from "@/lib/cookie-consent";
 
-const POSTHOG_KEY = process.env.NEXT_PUBLIC_POSTHOG_KEY;
+const POSTHOG_KEY = process.env.NEXT_PUBLIC_POSTHOG_KEY?.trim();
 
 declare global {
   interface Window {

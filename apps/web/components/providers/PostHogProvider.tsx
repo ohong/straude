@@ -9,7 +9,7 @@ import type { User } from "@supabase/supabase-js";
 import { createClient } from "@/lib/supabase/client";
 import { useAnalyticsConsent } from "@/components/providers/useAnalyticsConsent";
 
-const POSTHOG_KEY = process.env.NEXT_PUBLIC_POSTHOG_KEY;
+const POSTHOG_KEY = process.env.NEXT_PUBLIC_POSTHOG_KEY?.trim();
 
 declare global {
   interface Window {
