@@ -15,6 +15,11 @@ concurrency:
 jobs:
   ci:
     runs-on: ubuntu-latest
+    needs: cli-package
+    env:
+      NEXT_PUBLIC_POSTHOG_KEY: phc_local_runtime_evidence
+      POSTHOG_API_KEY: phc_local_runtime_evidence
+      POSTHOG_HOST: http://127.0.0.1:3118
 
     steps:
       - uses: actions/checkout@v7
@@ -22,6 +27,10 @@ jobs:
       - uses: oven-sh/setup-bun@v2
         with:
           bun-version: 1.3.3
+
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 22
 
       - uses: actions/cache@v6
         with:
@@ -78,6 +87,33 @@ jobs:
       - name: Configure web for local Supabase
         run: bun run local:env
 
+      - name: Download the tested CLI package
+        uses: actions/download-artifact@v8
+        with:
+          name: straude-cli-package
+          path: artifacts
+
+      - name: Install the exact CLI for browser journeys
+        run: |
+          set -euo pipefail
+          cli_tarball=$(node -e 'const fs=require("node:fs");const path=require("node:path");const files=fs.readdirSync("artifacts").filter(f=>f.endsWith(".tgz"));if(files.length!==1)throw Error("Expected exactly one CLI package");process.stdout.write(path.resolve("artifacts",files[0]));')
+          cli_install="$RUNNER_TEMP/straude-browser-cli"
+          mkdir -p "$cli_install"
+          npm install --prefix "$cli_install" "$cli_tarball" --no-audit --no-fund
+          echo "STRAUDE_E2E_CLI_INSTALL=$cli_install" >> "$GITHUB_ENV"
+          echo "STRAUDE_E2E_CLI_TARBALL=$cli_tarball" >> "$GITHUB_ENV"
+          echo "STRAUDE_E2E_CLI_COMMIT=$GITHUB_SHA" >> "$GITHUB_ENV"
+
+      - name: Start the local analytics evidence receiver
+        run: |
+          mkdir -p artifacts
+          node apps/web/scripts/capture-activation-evidence.mjs artifacts/activation-receiver.json > artifacts/activation-receiver.log 2>&1 &
+          for attempt in $(seq 1 20); do
+            if curl --fail --silent http://127.0.0.1:3118/health; then exit 0; fi
+            sleep 1
+          done
+          exit 1
+
       - name: Build web and shared
         run: bun run build --filter=@straude/web
 
@@ -96,6 +132,16 @@ jobs:
           BASE_URL: http://localhost:3000
           # Lambda disables require(ESM); exercise the same route-loading boundary.
           NODE_OPTIONS: --no-experimental-require-module
+
+      - name: Preserve runtime verification reports
+        if: always()
+        uses: actions/upload-artifact@v7
+        with:
+          name: straude-runtime-evidence
+          path: |
+            apps/web/test-results/**/*.png
+            artifacts/activation-receiver.json
+          if-no-files-found: warn
 
   cli-package:
     name: CLI package
