@@ -171,12 +171,13 @@ async function syncProtocolFixture(page: Page) {
   };
 }
 
+// PostHog intentionally drops automation events (navigator.webdriver and
+// HeadlessChrome). Use Chromium's ordinary browser environment to exercise
+// actual SDK emission, without changing SDK/app consent checks or CSP.
+test.use({ userAgent: devices["Desktop Chrome"].userAgent,
+  launchOptions: { args: ["--disable-blink-features=AutomationControlled"] } });
+
 test.describe("optional analytics consent and identity", () => {
-  // PostHog intentionally drops automation events (navigator.webdriver and
-  // HeadlessChrome). Use Chromium's ordinary browser environment to exercise
-  // actual SDK emission, without changing SDK/app consent checks or CSP.
-  test.use({ userAgent: devices["Desktop Chrome"].userAgent,
-    launchOptions: { args: ["--disable-blink-features=AutomationControlled"] } });
   test.beforeEach(async ({ page }, testInfo) => {
     for (const [label, value] of [["app", testInfo.project.use.baseURL], ["Supabase", supabaseUrl], ["receiver", receiverUrl]]) {
       if (typeof value !== "string" || !loopback(value)) throw new Error(`Refusing non-loopback or missing ${label} URL`);
