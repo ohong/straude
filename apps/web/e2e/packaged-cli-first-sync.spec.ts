@@ -6,6 +6,7 @@ import { cp, mkdir, mkdtemp, readFile, readdir, rm, writeFile } from "node:fs/pr
 import { readFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
+import { stripVTControlCharacters } from "node:util";
 import { ANALYTICS_BROWSER_USE, assertAnalyticsBrowser, configureAnalyticsBrowser } from "./helpers/analytics-browser";
 
 // General builds and installs the candidate once. This suite must consume those
@@ -217,6 +218,10 @@ async function cliFixture(testInfo: TestInfo) {
   async function run(args: string[], code = 0) {
     const result = await start(args).finished;
     expect(result.code, redact(result.stdout + result.stderr)).toBe(code);
+    if (code === 0 && ["status", "push"].includes(args[0])) {
+      const output = stripVTControlCharacters(redact(result.stdout + result.stderr));
+      expect(output, "Successful CLI command must render without dashboard errors").not.toMatch(/dashboard unavailable|Cannot read properties|\b(?:TypeError|ReferenceError|ERROR)\b/i);
+    }
     return result;
   }
   async function logs() {
@@ -508,6 +513,7 @@ test.describe("installed CLI and browser first sync", () => {
       expect(me.status()).toBe(200);
       expect(me.headers()["content-type"]).toContain("application/json");
       const initialProfile = await me.json();
+      expect(initialProfile.username, "CLI-first account has no claimed handle").toBeNull();
       const config = await cli.state("config");
       const claims = JSON.parse(Buffer.from(config.token.split(".")[1], "base64url").toString());
       expect(initialProfile.id).toBe(claims.sub);
@@ -523,8 +529,9 @@ test.describe("installed CLI and browser first sync", () => {
       await expect(page.getByLabel("Display Name", { exact: true })).toHaveValue("Local CLI first");
       const profile = await (await page.request.get("/api/users/me")).json();
       expect(profile.onboarding_completed).toBe(false);
+      expect(profile.username).toBeNull();
       await page.screenshot({ path: testInfo.outputPath("cli-first-settings-360.png"), fullPage: true });
-      await saveEvidence(testInfo, "cli-first-settings-result", { user_id: profile.id, cli_subject: claims.sub, get_me_status: me.status(), patch_me_status: savedResponse.status(), display_name: profile.display_name, onboarding_completed: profile.onboarding_completed });
+      await saveEvidence(testInfo, "cli-first-settings-result", { user_id: profile.id, cli_subject: claims.sub, username: profile.username, get_me_status: me.status(), patch_me_status: savedResponse.status(), display_name: profile.display_name, onboarding_completed: profile.onboarding_completed });
       const empty = await cli.run(["push", "--date", cli.date, "--non-interactive"]);
       expect(empty.stdout + empty.stderr).toContain("No usage data");
       await expect(readFile(join(cli.root, "home", ".straude", "sync-health.json"), "utf8")).rejects.toMatchObject({ code: "ENOENT" });
