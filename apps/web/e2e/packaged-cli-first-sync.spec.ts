@@ -26,6 +26,53 @@ const value = (key: string) => process.env[key] || fileEnv.get(key) || "";
 const supabaseUrl = value("NEXT_PUBLIC_SUPABASE_URL");
 const secretKey = value("SUPABASE_SECRET_KEY");
 
+type AnalyticsReceipt = {
+  event: string;
+  identity: string;
+  insert_id: string | null;
+  transport: string;
+  has_analytics_consent: boolean | null;
+};
+type AnalyticsBoundary = {
+  requests: { path: string; method: string }[];
+  receiver: string | null;
+  start: number;
+};
+const analytics = new Map<string, AnalyticsBoundary>();
+
+async function receiverEvents(page: Page, receiver: string): Promise<AnalyticsReceipt[]> {
+  const response = await page.request.get(`${receiver}/events`);
+  expect(response.status(), "Configured local analytics receiver must be available").toBe(200);
+  return response.json();
+}
+
+async function assertLifecycle(page: Page, userId: string, testInfo: TestInfo) {
+  const boundary = analytics.get(testInfo.testId)!;
+  if (!boundary.receiver) return;
+  const names = ["signup_completed", "first_sync_confirmed", "activation_completed"];
+  const insertionId = (event: string) => createHash("sha256").update(`${event}:${userId}`).digest("hex").slice(0, 20);
+  let received: AnalyticsReceipt[] = [];
+  await expect.poll(async () => {
+    received = (await receiverEvents(page, boundary.receiver!)).slice(boundary.start);
+    return names.every(event => received.some(row => row.event === event && row.insert_id === insertionId(event)));
+  }, { timeout: 15_000 }).toBe(true);
+  const milestones = received.filter(row => names.some(event => row.event === event && row.insert_id === insertionId(event)));
+  expect(new Set(milestones.map(row => row.identity)).size).toBe(1);
+  for (const row of milestones) {
+    expect(row.transport).toBe("server_capture");
+    expect(row.has_analytics_consent).toBe(true);
+  }
+  expect(boundary.requests.some(request => request.method === "POST" && /\/(?:e|batch)(?:\/|$)/.test(request.path)), "Browser SDK emitted a capture request at the intercepted transport").toBe(true);
+  await testInfo.attach("combined-lifecycle-receiver", {
+    body: JSON.stringify({
+      boundary: "Local receiver accepted real app server lifecycle events; browser SDK requests were acknowledged by the test transport. External PostHog ingestion and deduplication are unverified.",
+      receipts: milestones,
+      deliveries_by_event: Object.fromEntries(names.map(event => [event, milestones.filter(row => row.event === event).length])),
+      sdk_requests: boundary.requests,
+    }, null, 2), contentType: "application/json",
+  });
+}
+
 function local(url: string) {
   return ["localhost", "127.0.0.1", "[::1]"].includes(new URL(url).hostname);
 }
@@ -211,12 +258,32 @@ function signedToken(payload: Record<string, unknown>) {
 }
 
 test.describe("installed CLI and browser first sync", () => {
-  test.beforeEach(({}, testInfo) => {
+  test.beforeEach(async ({ page }, testInfo) => {
     test.skip(!install || !tarball || !sourceCommit, "Requires the exact candidate install, tarball and source commit via STRAUDE_E2E_CLI_*.");
     test.skip(!supabaseUrl || !secretKey, "Requires local Supabase fixture credentials.");
     expect(local(supabaseUrl), "Fixture operations must stay on loopback").toBe(true);
     expect(local(String(testInfo.project.use.baseURL))).toBe(true);
     expect(testInfo.project.use.bypassCSP ?? false).toBe(false);
+    const host = value("POSTHOG_HOST");
+    const receiver = host && local(host) && new URL(host).port === "3118" ? new URL(host).origin : null;
+    const boundary: AnalyticsBoundary = { requests: [], receiver, start: 0 };
+    analytics.set(testInfo.testId, boundary);
+    // Cover every verification tab too. Only optional SDK transport is replaced;
+    // the real activation forwarding, auth and usage endpoints remain untouched.
+    await page.context().route("**/ingest/**", async route => {
+      boundary.requests.push({ path: new URL(route.request().url()).pathname, method: route.request().method() });
+      await route.fulfill({ status: 200, contentType: "application/json", body: '{"status":1,"featureFlags":{}}' });
+    });
+    if (receiver) boundary.start = (await receiverEvents(page, receiver)).length;
+  });
+
+  test.afterEach(async ({}, testInfo) => {
+    const boundary = analytics.get(testInfo.testId);
+    if (boundary) await testInfo.attach("browser-sdk-transport-boundary", {
+      body: JSON.stringify({ boundary: "SDK emission recorded and acknowledged locally only; no SDK fixture traffic was forwarded to PostHog", requests: boundary.requests, lifecycle_receiver_configured: Boolean(boundary.receiver) }, null, 2),
+      contentType: "application/json",
+    });
+    analytics.delete(testInfo.testId);
   });
 
   test("web signup collects native logs, retries completion, and recovers expired CLI sign-in", async ({ page, request }, testInfo) => {
@@ -228,6 +295,7 @@ test.describe("installed CLI and browser first sync", () => {
       const signupResponse = await page.goto("/signup");
       expect(signupResponse?.headers()["content-security-policy"]).toContain("connect-src");
       const acceptAnalytics = page.getByRole("button", { name: "Accept all", exact: true });
+      if (analytics.get(testInfo.testId)?.receiver) await expect(acceptAnalytics).toBeVisible();
       if (await acceptAnalytics.isVisible()) await acceptAnalytics.click();
       await signup(page, request, email);
       await expect(page).toHaveURL(/\/onboarding$/);
@@ -250,6 +318,8 @@ test.describe("installed CLI and browser first sync", () => {
       expect(rotated.token).not.toBe(old);
       const claims = JSON.parse(Buffer.from(rotated.token.split(".")[1], "base64url").toString());
       expect(claims).toMatchObject({ sub: profile.id, oiat: originalIat, exp: originalIat + 30 * 86400 });
+      expect(claims.iat).toBeGreaterThanOrEqual(now);
+      expect(claims.iat).toBeLessThanOrEqual(Math.floor(Date.now() / 1000));
       const expired = signedToken({ sub: profile.id, iat: now - 31 * 86400, oiat: now - 31 * 86400, exp: now - 86400 });
       await cli.save("config", { ...rotated, token: expired });
       const expiredStatus = await cli.run(["status", "--non-interactive"], 1);
@@ -335,6 +405,7 @@ test.describe("installed CLI and browser first sync", () => {
       expect(recovered.posts).toEqual(beforeRetry.posts);
       expect(recovered.outcomes.filter(row => row.request_id === pending.batches[0].request.request_id)).toHaveLength(1);
       await testInfo.attach("real-auth-recovery", { body: JSON.stringify({ rotated_claims: claims, expired_exit: rejected.code, pending_request_id: pending.batches[0].request.request_id, watermark_preserved: true, accepted_pending_once: true }, null, 2), contentType: "application/json" });
+      await assertLifecycle(page, profile.id, testInfo);
     } finally {
       try { await cleanup(email); }
       finally { await rm(cli.root, { recursive: true, force: true }); }
