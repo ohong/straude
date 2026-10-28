@@ -470,7 +470,7 @@ try {
     report.scenarios.push({ name: activeScenario, skipped: true, reason: "POSIX shell invocation requires Linux/macOS; current-candidate Windows CI is separate." });
   } else {
     await writeFile(join(homeDir, ".claude", "settings.json"), "{}\n");
-    await execFileAsync(process.execPath, [cli, "push", "--date", date, "--non-interactive", "--auto", "hooks"], { cwd: installDir, env: childEnvironment });
+    await execFileAsync(process.execPath, [cli, "--auto", "hooks", "--date", date, "--non-interactive"], { cwd: installDir, env: childEnvironment });
     const settings = JSON.parse(await readFile(join(homeDir, ".claude", "settings.json"), "utf8"));
     const hook = settings.hooks.SessionEnd.flatMap(group => group.hooks)
       .find(entry => entry.type === "command" && entry.command.includes(cli));
