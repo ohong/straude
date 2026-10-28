@@ -118,7 +118,8 @@ jobs:
         run: |
           VERSION=$(node -p "require('./packages/cli/package.json').version")
           LOCAL_INTEGRITY=$(node -e "const crypto = require('node:crypto'); const fs = require('node:fs'); const file = fs.readdirSync('artifacts').find((name) => name.endsWith('.tgz')); if (!file) throw new Error('Missing package artifact'); process.stdout.write('sha512-' + crypto.createHash('sha512').update(fs.readFileSync('artifacts/' + file)).digest('base64'));")
-          PUBLISHED_INTEGRITY=$(npm view "straude@${VERSION}" dist.integrity --json 2>/dev/null | tr -d '"' || true)
+          # npm --json writes an error object to stdout for a missing version.
+          PUBLISHED_INTEGRITY=$(npm view "straude@${VERSION}" dist.integrity --json 2>/dev/null | jq -r 'if type == "string" then . else empty end')
           if [ -n "$PUBLISHED_INTEGRITY" ]; then
             if [ "$PUBLISHED_INTEGRITY" != "$LOCAL_INTEGRITY" ]; then
               echo "::error::straude@${VERSION} already exists with different integrity"
