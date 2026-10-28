@@ -1,4 +1,5 @@
-import { createHash } from "node:crypto";
+import assert from "node:assert/strict";
+import { createHash, randomUUID } from "node:crypto";
 import { execFile } from "node:child_process";
 import { cp, mkdir, mkdtemp, readFile, readdir, rm, stat, writeFile } from "node:fs/promises";
 import { createServer } from "node:http";
@@ -78,6 +79,7 @@ const homeDir = join(root, "home");
 const codexHome = join(homeDir, "codex");
 let server;
 let dashboardRequests = 0;
+let httpRequests = 0;
 let submitRequests = 0;
 let transientDashboardFailure = false;
 let rejectAuthentication = false;
@@ -85,6 +87,7 @@ const acceptedRequestIds = [];
 const rejectedRequests = [];
 let authInitRequests = 0;
 let activeScenario = "package-installation";
+let submissionObserver;
 const dashboardDelayMs = 3_500;
 const reportPath = resolve(readOption("--report") ?? join(packageDir, "test-results", "packaged-cli-e2e.json"));
 const startedAt = new Date().toISOString();
@@ -97,7 +100,7 @@ const report = {
   cwd: process.cwd(),
   boundary: "Installed tarball, synthetic native Codex logs, real collector and filesystem, controlled loopback API. No real authentication or database acceptance is claimed.",
   dashboard_delay_ms: dashboardDelayMs,
-  planned_scenarios: ["default-slow-dashboard", "days-slow-dashboard", "date-slow-dashboard", "default-transient-dashboard", "synthetic-401-pending-recovery", "fresh-dry-run-and-empty-scan", "installed-background-hook-invocation"],
+  planned_scenarios: ["default-slow-dashboard", "days-slow-dashboard", "date-slow-dashboard", "default-transient-dashboard", "synthetic-401-pending-recovery", "fresh-dry-run-and-empty-scan", "installed-background-hook-invocation", "unsupported-pending-native-recollection"],
   scenarios: [],
 };
 async function saveReport() {
@@ -194,6 +197,7 @@ try {
   }
 
   server = createServer(async (request, response) => {
+    httpRequests += 1;
     response.setHeader("Content-Type", "application/json");
     if (request.url === "/api/auth/cli/init") {
       authInitRequests += 1;
@@ -205,6 +209,14 @@ try {
       const chunks = [];
       for await (const chunk of request) chunks.push(chunk);
       const submission = JSON.parse(Buffer.concat(chunks).toString("utf8"));
+      if (submissionObserver) {
+        try {
+          await submissionObserver(submission);
+        } catch (error) {
+          response.writeHead(500).end(JSON.stringify({ error: error.message }));
+          return;
+        }
+      }
       if (rejectAuthentication) {
         rejectedRequests.push(submission);
         response.writeHead(401).end(JSON.stringify({ error: "Synthetic expired credential" }));
@@ -435,7 +447,7 @@ try {
     recovered_health: recoveredHealth, recovered_status: recoveredStatus.stdout,
     other_account_status: otherAccountStatus.stdout,
     replayed_request_id: pending.batches[0].request.request_id,
-    accepted_request_ids: acceptedRequestIds,
+    accepted_request_ids: [...acceptedRequestIds],
     empty: { stdout: empty.stdout, stderr: empty.stderr },
   });
   await saveReport();
@@ -490,6 +502,119 @@ try {
       actual_scheduler_execution: "not exercised" });
   }
   await saveReport();
+  activeScenario = "unsupported-pending-native-recollection";
+  // The legacy outbox is derived from a real native collection. Only its
+  // collector version and the explicit missing-source fixture are altered.
+  const recollectionHome = join(root, "recollection-home");
+  const recollectionConfigPath = join(recollectionHome, ".straude", "config.json");
+  const recollectionOutboxPath = join(recollectionHome, ".straude", "pending-sync.json");
+  const missingLogs = join(recollectionHome, "missing-codex");
+  await mkdir(join(recollectionHome, ".straude"), { recursive: true });
+  await mkdir(join(recollectionHome, ".claude", "projects"), { recursive: true });
+  await mkdir(join(missingLogs, "sessions"), { recursive: true });
+  await writeFile(recollectionConfigPath, JSON.stringify({
+    token: "pending-recollection-loopback-only",
+    username: "packaged-e2e",
+    api_url: `http://127.0.0.1:${address.port}`,
+    last_push_date: emptyDate,
+    usage_protocol_v2_migration_completed_at: new Date().toISOString(),
+    ccusage_version_pushed: installedCcusage.version,
+  }));
+  const recollectionEnvironment = { ...childEnvironment, HOME: recollectionHome,
+    USERPROFILE: recollectionHome, CLAUDE_CONFIG_DIR: join(recollectionHome, ".claude") };
+  const recollectionRuns = [];
+  async function runRecollection(name, environment = {}) {
+    const command = [cli, "push", "--non-interactive"];
+    const started = performance.now();
+    let result;
+    try {
+      result = { exit_code: 0, ...await execFileAsync(process.execPath, command, {
+        cwd: installDir, env: { ...recollectionEnvironment, ...environment },
+        timeout: 90_000, maxBuffer: 10 * 1024 * 1024,
+      }) };
+    } catch (error) {
+      result = { exit_code: error.code, stdout: error.stdout, stderr: error.stderr };
+    }
+    recollectionRuns.push({ name, command: [process.execPath, ...command],
+      elapsed_ms: Math.round(performance.now() - started), ...result });
+    return result;
+  }
+  rejectAuthentication = true;
+  assert.equal((await runRecollection("save actual native batch behind synthetic 401")).exit_code, 2);
+  const nativePending = JSON.parse(await readFile(recollectionOutboxPath, "utf8"));
+  assert.equal(nativePending.batches.length, 1);
+  const obsolete = nativePending.batches[0];
+  assert.equal(obsolete.request.collector.version, installedCcusage.version);
+  obsolete.request.collector.version = "20.0.20";
+  const otherAccount = structuredClone(obsolete);
+  otherAccount.account_key = "f".repeat(64);
+  otherAccount.request.request_id = randomUUID();
+  const obsoleteOutbox = { version: nativePending.version, batches: [obsolete, otherAccount] };
+  await writeFile(recollectionOutboxPath, JSON.stringify(obsoleteOutbox));
+  const obsoleteBytes = await readFile(recollectionOutboxPath, "utf8");
+  const unchangedConfig = await readFile(recollectionConfigPath, "utf8");
+  const submissionsBeforeRecollection = submitRequests;
+  const httpRequestsBeforeRecollection = httpRequests;
+  assert.equal((await runRecollection("missing local logs", { CODEX_HOME: missingLogs })).exit_code, 1);
+  assert.equal(await readFile(recollectionOutboxPath, "utf8"), obsoleteBytes);
+  assert.equal(await readFile(recollectionConfigPath, "utf8"), unchangedConfig);
+  assert.equal(submitRequests, submissionsBeforeRecollection);
+  assert.equal(httpRequests, httpRequestsBeforeRecollection);
+
+  const missingSourceOutbox = structuredClone(obsoleteOutbox);
+  const originalAgent = missingSourceOutbox.batches[0].request.entries[0].agents[0];
+  missingSourceOutbox.batches[0].request.entries[0].agents.push({ ...originalAgent, agent: "claude" });
+  await writeFile(recollectionOutboxPath, JSON.stringify(missingSourceOutbox));
+  const missingSourceBytes = await readFile(recollectionOutboxPath, "utf8");
+  assert.equal((await runRecollection("missing prior source inventory")).exit_code, 1);
+  assert.equal(await readFile(recollectionOutboxPath, "utf8"), missingSourceBytes);
+  assert.equal(await readFile(recollectionConfigPath, "utf8"), unchangedConfig);
+  assert.equal(submitRequests, submissionsBeforeRecollection);
+  assert.equal(httpRequests, httpRequestsBeforeRecollection);
+
+  await writeFile(recollectionOutboxPath, obsoleteBytes);
+  const observedSubmissions = [];
+  submissionObserver = async submission => {
+    const durable = JSON.parse(await readFile(recollectionOutboxPath, "utf8"));
+    assert.ok(!durable.batches.some(batch => batch.request.request_id === obsolete.request.request_id));
+    assert.deepEqual(durable.batches.find(batch => batch.request.request_id === submission.request_id)?.request, submission);
+    assert.deepEqual(durable.batches.find(batch => batch.account_key === otherAccount.account_key), otherAccount);
+    observedSubmissions.push({ request_id: submission.request_id, sha256: digest(JSON.stringify(submission)),
+      collector_version: submission.collector.version });
+  };
+  assert.equal((await runRecollection("replacement durable before synthetic rejection")).exit_code, 2);
+  const replacementOutbox = JSON.parse(await readFile(recollectionOutboxPath, "utf8"));
+  const replacement = replacementOutbox.batches.find(batch => batch.account_key === obsolete.account_key);
+  assert.ok(replacement);
+  assert.notEqual(replacement.request.request_id, obsolete.request.request_id);
+  assert.equal(replacement.request.collector.version, installedCcusage.version);
+  for (const key of ["requested_dates", "watermark_date", "range_mode", "migration_pending"]) {
+    assert.deepEqual(replacement[key], obsolete[key]);
+  }
+  assert.deepEqual(replacement.request.installation, obsolete.request.installation);
+  assert.equal(replacement.request.timezone, obsolete.request.timezone);
+  assert.deepEqual(replacementOutbox.batches.find(batch => batch.account_key === otherAccount.account_key), otherAccount);
+  assert.equal(await readFile(recollectionConfigPath, "utf8"), unchangedConfig);
+  const acceptancesBeforeReplay = acceptedRequestIds.filter(id => id === replacement.request.request_id).length;
+  rejectAuthentication = false;
+  assert.equal((await runRecollection("replay supported replacement and settle once")).exit_code, 0);
+  assert.deepEqual(JSON.parse(await readFile(recollectionOutboxPath, "utf8")).batches, [otherAccount]);
+  assert.equal(JSON.parse(await readFile(recollectionConfigPath, "utf8")).last_push_date, date);
+  const replacementAttempts = observedSubmissions.filter(submission => submission.request_id === replacement.request.request_id);
+  assert.equal(replacementAttempts.length, 2);
+  assert.equal(replacementAttempts[0].sha256, replacementAttempts[1].sha256);
+  assert.equal(acceptedRequestIds.filter(id => id === replacement.request.request_id).length - acceptancesBeforeReplay, 1);
+  submissionObserver = undefined;
+  report.scenarios.push({ name: activeScenario, passed: true,
+    boundary: "Actual installed CLI and native collector; fixture old20.0.20 outbox metadata and missing-source inventory; synthetic credential and loopback401/acceptance. No real API auth or database ingestion.",
+    checks: ["missing logs preserve old bytes/config with no HTTP", "missing source preserves old bytes/config with no HTTP",
+      "fresh request UUID and installed collector durable before HTTP", "intent, installation, timezone and other account preserved",
+      "unchanged replacement replay accepted once, watermark advances after acceptance"],
+    obsolete_request_id: obsolete.request.request_id, replacement_request_id: replacement.request.request_id,
+    obsolete_outbox_sha256: digest(obsoleteBytes), missing_source_outbox_sha256: digest(missingSourceBytes),
+    observed_submissions: observedSubmissions, runs: recollectionRuns });
+  await saveReport();
+  console.log("unsupported-pending-native-recollection passed (complete native recollection, durable replacement, source/account preservation, replay once)");
   console.log(`straude v${packageJson.version} with ccusage ${installedCcusage.version}; report: ${reportPath}`);
 } catch (error) {
   if (!report.scenarios.some(scenario => scenario.name === activeScenario && scenario.passed === false)) {
