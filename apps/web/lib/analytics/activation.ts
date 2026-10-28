@@ -1,6 +1,16 @@
 export const ACTIVATION_ANONYMOUS_COOKIE = "straude_activation_id";
 export const ACTIVATION_ANONYMOUS_COOKIE_MAX_AGE = 60 * 60 * 24 * 30;
 
+/**
+ * Authenticated lifecycle milestones use the Supabase user UUID as distinct_id:
+ * signup_completed = successful auth callback before onboarding completes;
+ * first_sync_confirmed = browser observes accepted usage, independent of setup;
+ * activation_completed = server accepts onboarding completion with stored usage.
+ * Each uses `${event}:${userId}` as $insert_id across retries and reloads.
+ * usage_submit_succeeded is per accepted request, not a unique activation.
+ * Repeated HTTP deliveries do not imply multiple unique milestones; ingestion
+ * deduplication is the provider's responsibility. CLI telemetry is separate.
+ */
 export const ACTIVATION_EVENTS = [
   "landing_primary_cta_clicked",
   "guest_signup_cta_clicked",
@@ -103,7 +113,12 @@ export function getCookieValue(cookieHeader: string | null, name: string): strin
     .split(";")
     .map((part) => part.trim())
     .find((part) => part.startsWith(target));
-  return entry ? decodeURIComponent(entry.slice(target.length)) : null;
+  if (!entry) return null;
+  try {
+    return decodeURIComponent(entry.slice(target.length));
+  } catch {
+    return null;
+  }
 }
 
 export function isActivationEventName(value: unknown): value is ActivationEventName {

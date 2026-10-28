@@ -4,7 +4,8 @@ vi.mock("@/lib/supabase/server", () => ({
   createClient: vi.fn(),
 }));
 
-vi.mock("@/lib/analytics/server", () => ({
+vi.mock("@/lib/analytics/server", async (importOriginal) => ({
+  ...await importOriginal<typeof import("@/lib/analytics/server")>(),
   captureServerActivationEvent: vi.fn().mockResolvedValue(true),
   identifyServerActivationUser: vi.fn().mockResolvedValue(true),
 }));
@@ -41,7 +42,7 @@ function request(
     headers: {
       "Content-Type": "application/json",
       ...extraHeaders,
-      ...(cookie ? { cookie } : {}),
+      cookie: `straude_cookie_consent=v1-all${cookie ? `; ${cookie}` : ""}`,
     },
     body: JSON.stringify(body),
   });
@@ -97,6 +98,7 @@ describe("POST /api/analytics/activation", () => {
 
     expect(res.status).toBe(200);
     expect(identifyServerActivationUser).toHaveBeenCalledWith({
+      analyticsConsent: true,
       distinctId: "user-1",
       anonymousDistinctId: "anon-1",
       properties: {

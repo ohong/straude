@@ -3,20 +3,32 @@ import {
   type ActivationEventProperties,
   sanitizeActivationProperties,
 } from "@/lib/analytics/activation";
+import { getCookieConsentFromCookieString } from "@/lib/cookie-consent";
 
 const DEFAULT_POSTHOG_HOST = "https://us.i.posthog.com";
 const SERVER_LIB = "straude-web-server";
 
 interface CaptureInput {
+  analyticsConsent?: boolean;
   event: ActivationEventName;
   distinctId: string;
   properties?: ActivationEventProperties | Record<string, unknown>;
 }
 
 interface IdentifyInput {
+  analyticsConsent?: boolean;
   distinctId: string;
   anonymousDistinctId: string;
   properties?: Record<string, unknown>;
+}
+
+/** Browser consent is request-local; CLI telemetry has its own policy. */
+export function hasServerAnalyticsConsent(request: Request): boolean {
+  try {
+    return getCookieConsentFromCookieString(request.headers.get("cookie") ?? "")?.analytics === true;
+  } catch {
+    return false;
+  }
 }
 
 function getPostHogConfig() {
@@ -53,26 +65,30 @@ async function postToPostHog(body: Record<string, unknown>): Promise<boolean> {
 }
 
 export async function captureServerActivationEvent(input: CaptureInput): Promise<boolean> {
+  if (input.analyticsConsent !== true) return false;
   const properties = sanitizeActivationProperties({
     source: "server",
     ...(input.properties ?? {}),
-    "$lib": SERVER_LIB,
+    has_analytics_consent: true,
   });
 
   return postToPostHog({
     event: input.event,
     distinct_id: input.distinctId,
-    properties,
+    properties: { ...properties, "$lib": SERVER_LIB },
   });
 }
 
 export async function identifyServerActivationUser(input: IdentifyInput): Promise<boolean> {
+  if (input.analyticsConsent !== true) return false;
   const properties = sanitizeActivationProperties(input.properties);
   return postToPostHog({
     event: "$identify",
     distinct_id: input.distinctId,
     properties: {
       ...properties,
+      has_analytics_consent: true,
+      "$insert_id": `identify:${input.distinctId}:${input.anonymousDistinctId}`,
       "$anon_distinct_id": input.anonymousDistinctId,
       "$lib": SERVER_LIB,
     },

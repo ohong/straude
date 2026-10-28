@@ -2,9 +2,16 @@ import { NextResponse } from "next/server";
 import { safeAuthNext } from "@/lib/supabase/redirect";
 import { after } from "@/lib/utils/after";
 import { ACTIVATION_ANONYMOUS_COOKIE, deriveActivationState, getCookieValue } from "@/lib/analytics/activation";
-import { captureServerActivationEvent, identifyServerActivationUser } from "@/lib/analytics/server";
+import { captureServerActivationEvent, hasServerAnalyticsConsent, identifyServerActivationUser } from "@/lib/analytics/server";
 import { createClient } from "@/lib/supabase/server";
 import { getServiceClient } from "@/lib/supabase/service";
+
+function authenticatedRedirect(url: string) {
+  const response = NextResponse.redirect(url);
+  // The anonymous identity is linked at most once, before any account switch.
+  response.cookies.delete(ACTIVATION_ANONYMOUS_COOKIE);
+  return response;
+}
 
 export async function GET(request: Request) {
   const { searchParams, origin: requestOrigin } = new URL(request.url);
@@ -33,9 +40,10 @@ export async function GET(request: Request) {
           ACTIVATION_ANONYMOUS_COOKIE,
         );
 
-        after(async () => {
+        if (hasServerAnalyticsConsent(request)) after(async () => {
           if (anonymousId) {
             await identifyServerActivationUser({
+              analyticsConsent: true,
               distinctId: user.id,
               anonymousDistinctId: anonymousId,
               properties: {
@@ -47,10 +55,12 @@ export async function GET(request: Request) {
 
           if (!profile?.onboarding_completed) {
             await captureServerActivationEvent({
+              analyticsConsent: true,
               event: "signup_completed",
               distinctId: user.id,
               properties: {
                 surface: "auth_callback",
+                "$insert_id": `signup_completed:${user.id}`,
                 activation_state: deriveActivationState({ isAuthenticated: true }),
                 is_authenticated: true,
               },
@@ -75,11 +85,11 @@ export async function GET(request: Request) {
 
         // Send new users to onboarding instead of feed
         if (profile && !profile.onboarding_completed && next === "/feed") {
-          return NextResponse.redirect(`${origin}/onboarding`);
+          return authenticatedRedirect(`${origin}/onboarding`);
         }
       }
 
-      return NextResponse.redirect(`${origin}${next}`);
+      return authenticatedRedirect(`${origin}${next}`);
     }
   }
 

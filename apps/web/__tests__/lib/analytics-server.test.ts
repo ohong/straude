@@ -13,6 +13,7 @@ describe("server PostHog activation capture", () => {
     vi.stubGlobal("fetch", fetchMock);
 
     const result = await captureServerActivationEvent({
+      analyticsConsent: true,
       event: "activation_completed",
       distinctId: "user-1",
       properties: {
@@ -52,6 +53,7 @@ describe("server PostHog activation capture", () => {
     vi.stubGlobal("fetch", fetchMock);
 
     await expect(captureServerActivationEvent({
+      analyticsConsent: true,
       event: "signup_completed",
       distinctId: "user-1",
     })).resolves.toBe(false);

@@ -1,4 +1,5 @@
 import { agentNotFoundMarkdown, getAgentMarkdown } from "@/lib/agent-content";
+import { getCookieConsentFromCookieString } from "@/lib/cookie-consent";
 import {
   appendVary,
   preferredRepresentation,
@@ -101,6 +102,20 @@ function notAcceptable(method: string): Response {
 }
 
 export async function proxy(request: NextRequest): Promise<Response> {
+  if (request.nextUrl.pathname === "/ingest" || request.nextUrl.pathname.startsWith("/ingest/")) {
+    // SDK retries can outlive the consent granted at initial capture time.
+    let analyticsConsent = false;
+    try {
+      analyticsConsent = getCookieConsentFromCookieString(request.headers.get("cookie") ?? "")?.analytics === true;
+    } catch {
+      // Malformed or absent consent always fails closed.
+    }
+    if (!analyticsConsent) {
+      return new NextResponse(null, { status: 204, headers: { "Cache-Control": "no-store" } });
+    }
+    return NextResponse.next();
+  }
+
   if (!isDocumentRequest(request)) return updateSession(request);
 
   const pathname = normalizedPathname(request.nextUrl.pathname);
@@ -150,6 +165,8 @@ export async function proxy(request: NextRequest): Promise<Response> {
 
 export const config = {
   matcher: [
+    "/ingest",
+    "/ingest/:path*",
     "/((?!_next/static|_next/image|favicon.ico|manifest.webmanifest|ingest|images|og-image|.*\\.(?:svg|png|jpg|jpeg|gif|webp)$).*)",
   ],
 };
