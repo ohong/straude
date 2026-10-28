@@ -1,7 +1,5 @@
 import { test, expect, type Page, type TestInfo } from "@playwright/test";
 import { createClient } from "@supabase/supabase-js";
-import { prettifyModel } from "@straude/shared/models";
-import { formatTokens } from "@straude/shared/format";
 import { Client } from "pg";
 import { randomUUID } from "node:crypto";
 
@@ -101,6 +99,11 @@ test.use({ bypassCSP: false, trace: "on" });
 
 test.describe("public snapshot freshness (exclusive local database)", () => {
   test("reconciles paginated totals, refreshes warmed pages, and preserves stale or missing capture states", async ({ page, request }, info) => {
+    // Playwright loads specs through CommonJS; production disables require(ESM).
+    const [{ prettifyModel }, { formatTokens }] = await Promise.all([
+      import("@straude/shared/models"),
+      import("@straude/shared/format"),
+    ]);
     test.setTimeout(180_000);
     test.skip(!apiUrl || !secretKey || !cronSecret, "Requires local Supabase and protected cron fixture environment.");
     assertLoopback(apiUrl, "Supabase API");
