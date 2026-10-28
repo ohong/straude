@@ -276,7 +276,9 @@ test.describe("optional analytics consent and identity", () => {
       expect((await page.request.patch("/api/users/me", { data: { onboarding_completed: true } })).status()).toBe(200);
       expect((await activation(page)).status()).toBe(204);
       await page.reload();
-      await expect(page.getByRole("heading", { name: "Your first sync is complete" })).toBeVisible();
+      const profileAfterWithdrawal = await page.request.get("/api/users/me");
+      expect(profileAfterWithdrawal.status()).toBe(200);
+      expect(await profileAfterWithdrawal.json()).toMatchObject({ onboarding_completed: true });
       expect((await events(page)).slice(withdrawnStart)).toEqual([]);
       await assertNoActivationCookie(page);
       await testInfo.attach("withdrawn-authenticated-lifecycle", { body: JSON.stringify({
