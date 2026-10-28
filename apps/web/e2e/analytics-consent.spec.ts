@@ -256,6 +256,21 @@ test.describe("optional analytics consent and identity", () => {
         boundary: "browser SDK emitted; analytics-only route acknowledged locally; provider ingestion unverified",
         requests: sdk.requests, captures: sdk.captures,
       }, null, 2), contentType: "application/json" });
+      // Withdrawal must gate authenticated server lifecycle producers too.
+      // Retrying the real status/completion endpoints retains the product state.
+      await changeConsent(page, "essential");
+      const withdrawnStart = await receiptCount(page);
+      expect((await page.request.get("/api/usage/status")).status()).toBe(200);
+      expect((await page.request.patch("/api/users/me", { data: { onboarding_completed: true } })).status()).toBe(200);
+      expect((await activation(page)).status()).toBe(204);
+      await page.reload();
+      await expect(page.getByRole("heading", { name: "Your first sync is complete" })).toBeVisible();
+      expect((await events(page)).slice(withdrawnStart)).toEqual([]);
+      await assertNoActivationCookie(page);
+      await testInfo.attach("withdrawn-authenticated-lifecycle", { body: JSON.stringify({
+        boundary: "real authenticated usage/status and users/me completion after withdrawal",
+        receiverDeliveries: 0,
+      }, null, 2), contentType: "application/json" });
     } finally { await cleanup(email); }
   });
 
