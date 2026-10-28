@@ -1,7 +1,13 @@
-import { afterEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { captureServerActivationEvent } from "@/lib/analytics/server";
 
 describe("server PostHog activation capture", () => {
+  beforeEach(() => {
+    vi.stubEnv("POSTHOG_API_KEY", "");
+    vi.stubEnv("POSTHOG_HOST", "");
+    vi.stubEnv("NEXT_PUBLIC_POSTHOG_KEY", "");
+  });
+
   afterEach(() => {
     vi.unstubAllEnvs();
     vi.unstubAllGlobals();
