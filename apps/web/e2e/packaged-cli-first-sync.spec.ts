@@ -1,4 +1,4 @@
-import { test, expect, type APIRequestContext, type Page, type TestInfo } from "@playwright/test";
+import { devices, test, expect, type APIRequestContext, type Page, type TestInfo } from "@playwright/test";
 import { createClient } from "@supabase/supabase-js";
 import { spawn } from "node:child_process";
 import { createHash, createHmac, randomUUID } from "node:crypto";
@@ -257,6 +257,13 @@ function signedToken(payload: Record<string, unknown>) {
   return `${header}.${body}.${createHmac("sha256", key).update(`${header}.${body}`).digest("base64url")}`;
 }
 
+// Exercise consented SDK capture outside its bot filter. The application SDK
+// and CSP remain unchanged; only this browser test's environment differs.
+test.use({
+  userAgent: devices["Desktop Chrome"].userAgent,
+  launchOptions: { args: ["--disable-blink-features=AutomationControlled"] },
+});
+
 test.describe("installed CLI and browser first sync", () => {
   test.beforeEach(async ({ page }, testInfo) => {
     test.skip(!install || !tarball || !sourceCommit, "Requires the exact candidate install, tarball and source commit via STRAUDE_E2E_CLI_*.");
@@ -280,7 +287,7 @@ test.describe("installed CLI and browser first sync", () => {
   test.afterEach(async ({}, testInfo) => {
     const boundary = analytics.get(testInfo.testId);
     if (boundary) await testInfo.attach("browser-sdk-transport-boundary", {
-      body: JSON.stringify({ boundary: "SDK emission recorded and acknowledged locally only; no SDK fixture traffic was forwarded to PostHog", requests: boundary.requests, lifecycle_receiver_configured: Boolean(boundary.receiver) }, null, 2),
+      body: JSON.stringify({ boundary: "SDK emission recorded and acknowledged locally only; no SDK fixture traffic was forwarded to PostHog", browser_environment: "Desktop Chrome user agent with AutomationControlled disabled so the SDK bot filter permits capture", requests: boundary.requests, lifecycle_receiver_configured: Boolean(boundary.receiver) }, null, 2),
       contentType: "application/json",
     });
     analytics.delete(testInfo.testId);
