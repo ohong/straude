@@ -2,9 +2,9 @@
 
 ## Unreleased
 
-### CLI 0.2.3
+### Release context
 
-The release candidate combines the dashboard timeout/retry fix with account-specific sync health in `straude auto`. Credential lifetime is unchanged.
+Published CLI 0.2.3 contains the dashboard timeout/retry fix and account-specific sync health in `straude auto`. The accounting and consent changes below remain unreleased. Coordinate a supported-collector CLI release before enforcing the new server collector floor. Credential lifetime is unchanged.
 
 ### Added
 
@@ -26,8 +26,8 @@ The release candidate combines the dashboard timeout/retry fix with account-spec
 ### Fixed
 
 - **Recover interrupted sign-in safely.** Preserve the sync-health notice when interactive recovery fails, reject explicit noninteractive login before opening a browser, and prevent delayed rotation from overwriting a newer sign-in. Absolute credential expiry is unchanged.
-- **Recollect outdated pending submissions without discarding them on failure.** Preserve account, dates, source coverage and watermark; atomically replace a fully recollected batch with a new request ID. Missing logs or an unknown legacy source keep the original batch for recovery. New upgrade batches remain readable by older outbox readers.
-- **Honor browser analytics consent across the full lifecycle.** Essential-only requests create no activation identity or optional server capture. Withdrawal stops SDK capture and proxy forwarding, including queued retries. Confirmed sync and completed onboarding have separate, stable event identifiers. CLI telemetry retains its separate policy.
+- **Recollect outdated pending submissions without discarding them on failure.** Preserve account, dates, source coverage and watermark; atomically replace a successfully recollected batch with a new request ID. Missing dates, missing named sources or an unknown legacy source keep the original batch for recovery. Presence of a source does not prove completeness of its logs. New upgrade batches remain readable by older outbox readers.
+- **Honor browser analytics consent across the full lifecycle.** Essential-only requests create no activation identity or optional server capture. Withdrawal stops SDK capture and proxy forwarding, including queued retries, and removes SDK identity persistence on public and authenticated pages. Renewed consent starts a fresh anonymous SDK identity. Confirmed sync and completed onboarding have separate, stable event identifiers. CLI telemetry retains its separate policy.
 - **Report public snapshot freshness and consistent totals.** Page through all source rows, use consistent seed-account exclusions and actual percentile groups, and fail a refresh if persistence fails. Public pages retain the real capture time, mark snapshots older than 48 hours, and label estimated usage cost and latest streak days accurately. Remove the fixed latency claim.
 - **Allow Settings retry after transport and invalid-response failures.** Save and clear actions leave their pending state on failure. Forms and fieldsets fit a 360px viewport.
 

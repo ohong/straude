@@ -1122,6 +1122,8 @@ Pricing the new-logic numbers at gpt-5.5 rates: $228.68 — matches what OpenAI 
 ---
 **Decision (2026-07-04):** Activation funnel events are captured exclusively server-side; the browser posthog-js duplicate capture in `trackActivationEvent` was removed.
 
+**Updated 2026-10-28:** The request-consented lifecycle decision above supersedes this entry's consent exemption. Server-side ownership remains; sanitized properties do not exempt optional analytics from consent.
+
 **Alternatives considered:** (1) Browser capture as canonical — rejected: it only covers consented users, dropping pre-consent top-of-funnel data. (2) Keep both and filter by a `source` property in funnels — rejected: the two paths use different distinct-id graphs (Supabase user id / activation cookie server-side vs. PostHog device id client-side), so identity fragments and anonymous→signed-up conversion math stays wrong even after filtering.
 
 **Why server-side:** it fires unconditionally (consent-exempt because properties are allowlist-sanitized: no prompts, paths, emails, or raw usage), and it owns `$identify` anonymous→user stitching via the `straude_activation_id` cookie.
