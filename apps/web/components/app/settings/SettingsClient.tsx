@@ -221,7 +221,7 @@ export default function SettingsClient({
         </Link>
       </header>
 
-      <form onSubmit={handleSave} className="mx-auto max-w-lg px-[var(--app-page-padding-x)] py-8">
+      <form onSubmit={handleSave} className="mx-auto min-w-0 w-full max-w-lg px-[var(--app-page-padding-x)] py-8">
         <div className="flex items-center gap-4 pb-6">
           <div className="relative">
             <Avatar
@@ -261,7 +261,7 @@ export default function SettingsClient({
         </div>
 
         {/* ── Profile ── */}
-        <fieldset className="space-y-6 border-t border-border pt-6">
+        <fieldset className="min-w-0 space-y-6 border-t border-border pt-6">
           <legend className="text-sm font-semibold uppercase tracking-widest text-muted">Profile</legend>
 
           <div>
@@ -459,7 +459,7 @@ export default function SettingsClient({
         </fieldset>
 
         {/* ── Notifications ── */}
-        <fieldset className="mt-8 space-y-4 border-t border-border pt-6">
+        <fieldset className="min-w-0 mt-8 space-y-4 border-t border-border pt-6">
           <legend className="text-sm font-semibold uppercase tracking-widest text-muted">Notifications</legend>
 
           <div className="space-y-1.5">
@@ -524,7 +524,7 @@ export default function SettingsClient({
         </fieldset>
 
         {/* ── Privacy & Account ── */}
-        <fieldset className="mt-8 space-y-4 border-t border-border pt-6">
+        <fieldset className="min-w-0 mt-8 space-y-4 border-t border-border pt-6">
           <legend className="text-sm font-semibold uppercase tracking-widest text-muted">Privacy &amp; Account</legend>
 
           <div className="space-y-1.5">
@@ -573,7 +573,7 @@ export default function SettingsClient({
         </div>
 
         {/* ── Delete Account ── */}
-        <fieldset className="mt-12 space-y-4">
+        <fieldset className="min-w-0 mt-12 space-y-4">
           <legend className="text-2xl font-semibold text-error">Delete account</legend>
           <hr className="border-error/30" />
 
