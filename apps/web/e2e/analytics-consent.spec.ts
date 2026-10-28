@@ -341,8 +341,14 @@ test.describe("optional analytics consent and identity", () => {
     expect(persistenceAfterWithdrawal.cookieNames, "Public withdrawal removes SDK identity cookie").toEqual([]);
     expect(persistenceAfterWithdrawal.localStorageKeys, "Public withdrawal removes SDK identity local storage").toEqual([]);
     // Reaccepting permits fresh analytics without reviving the previous identity.
-    await sdkBoundary(page);
+    const reacceptedSdk = await sdkBoundary(page);
     await changeConsent(page, "all");
+    await expect.poll(() => reacceptedSdk.captures.length).toBeGreaterThan(0);
+    const priorSdkIdentities = new Set(sdk.captures.map((capture) => capture.identity));
+    expect(reacceptedSdk.captures.every((capture) => Boolean(capture.identity) && !priorSdkIdentities.has(capture.identity))).toBe(true);
+    await testInfo.attach("reaccepted-sdk-identity", { body: JSON.stringify({
+      boundary: "actual SDK capture emission after reconsent; IDs pseudonymized", captures: reacceptedSdk.captures,
+    }, null, 2), contentType: "application/json" });
     expect((await activation(page)).status()).toBe(200);
     const fresh = (await events(page)).slice(acceptedAtWithdrawal).filter((receipt) => receipt.event === "sync_command_copied");
     const old = (await events(page)).slice(start, acceptedAtWithdrawal).find((receipt) => receipt.event === "sync_command_copied");
@@ -359,6 +365,7 @@ test.describe("optional analytics consent and identity", () => {
       await page.goto("/");
       await assertAnalyticsBrowser(page);
       await page.getByRole("button", { name: "Accept all", exact: true }).click();
+      await expect.poll(() => sdk.captures.length).toBeGreaterThan(0);
       expect((await activation(page)).status()).toBe(200);
       const firstUserId = await signUp(page, first);
       await expect.poll(() => sdk.captures.some((capture) => capture.identity === pseudonym(firstUserId))).toBe(true);
