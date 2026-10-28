@@ -392,6 +392,9 @@ test.describe("installed CLI and browser first sync", () => {
       expect(claims).toMatchObject({ sub: profile.id, oiat: originalIat, exp: originalIat + 30 * 86400 });
       expect(claims.iat).toBeGreaterThanOrEqual(now);
       expect(claims.iat).toBeLessThanOrEqual(Math.floor(Date.now() / 1000));
+      const nextStatus = await cli.run(["status", "--non-interactive"]);
+      expect(nextStatus.stdout + nextStatus.stderr).not.toContain("Opening browser");
+      expect((await cli.state("config")).token === rotated.token, "Next request accepted the persisted rotated credential without replacing it").toBe(true);
       const expired = signedToken({ sub: profile.id, iat: now - 31 * 86400, oiat: now - 31 * 86400, exp: now - 86400 });
       await cli.save("config", { ...rotated, token: expired });
       const expiredStatus = await cli.run(["status", "--non-interactive"], 1);
@@ -403,7 +406,7 @@ test.describe("installed CLI and browser first sync", () => {
       await freshSignIn.close();
       await cli.run(["status", "--non-interactive"]);
       await expect(readFile(join(cli.root, "home", ".straude", "sync-health.json"), "utf8")).rejects.toMatchObject({ code: "ENOENT" });
-      await saveEvidence(testInfo, "real-device-auth-and-rotation", { user_id: profile.id, device_login: true, rotated_claims: claims, expired_dashboard_exit: expiredStatus.code, browser_reauthentication: true });
+      await saveEvidence(testInfo, "real-device-auth-and-rotation", { user_id: profile.id, device_login: true, rotated_claims: claims, persisted_rotation_next_request_accepted: true, expired_dashboard_exit: expiredStatus.code, browser_reauthentication: true });
       await cli.logs();
 
       // Interrupt only the completion transport after the genuine sync. Neither
