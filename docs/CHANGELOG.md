@@ -31,6 +31,7 @@ Published CLI 0.2.3 contains the dashboard timeout/retry fix and account-specifi
 - **Report public snapshot freshness and consistent totals.** Page through all source rows, use consistent seed-account exclusions and actual percentile groups, and fail a refresh if persistence fails. Public pages retain the real capture time, mark snapshots older than 48 hours, and label estimated usage cost and latest streak days accurately. Remove the fixed latency claim.
 - **Allow Settings retry after transport and invalid-response failures.** Save and clear actions leave their pending state on failure. Forms and fieldsets fit a 360px viewport.
 - **Keep sync status token units consistent during a totals-query failure.** The latest-day fallback now reports output tokens, matching the existing aggregate metric, rather than switching to all token categories. Stored accounting totals are unchanged.
+- **Render CLI dashboards before a username is chosen.** New accounts and leaderboard neighbors with no username receive an honest display label instead of crashing the dashboard after a successful sync.
 
 - **Normalize PostHog configuration before capture.** Trim the public project token in both browser entry points and trim server token/host inputs. Reuse the server normalization from prior commit `92c948a`; add bounded failure diagnostics that never log provider response bodies or submitted values. A loopback receiver supports real-app lifecycle verification without injecting production analytics.
 
