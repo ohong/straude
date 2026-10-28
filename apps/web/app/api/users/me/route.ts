@@ -1,6 +1,6 @@
 import { NextResponse, type NextRequest } from "next/server";
 import { after } from "@/lib/utils/after";
-import { captureServerActivationEvent } from "@/lib/analytics/server";
+import { captureServerActivationEvent, hasServerAnalyticsConsent } from "@/lib/analytics/server";
 import { createClient } from "@/lib/supabase/server";
 import { getServiceClient } from "@/lib/supabase/service";
 import { COUNTRY_TO_REGION } from "@/lib/constants/regions";
@@ -408,20 +408,21 @@ export async function PATCH(request: NextRequest) {
 
   // Auto-follow top active users so new users see content in their feed
   if (isOnboardingUpdate) {
-    after(() => captureServerActivationEvent({
-      event: "activation_completed",
-      distinctId: user.id,
-      properties: {
-        surface: "onboarding",
-        activation_state: "activated",
-        is_authenticated: true,
-        session_count: Number(activationUsage?.session_count ?? 0),
-        total_tokens: Number(activationUsage?.total_tokens ?? 0),
-        "$insert_id": activationUsage?.id
-          ? `activation_completed:${activationUsage.id}`
-          : `activation_completed:${user.id}`,
-      },
-    }));
+    if (hasServerAnalyticsConsent(request)) {
+      after(() => captureServerActivationEvent({
+        event: "activation_completed",
+        distinctId: user.id,
+        analyticsConsent: true,
+        properties: {
+          surface: "onboarding",
+          activation_state: "activated",
+          is_authenticated: true,
+          session_count: Number(activationUsage?.session_count ?? 0),
+          total_tokens: Number(activationUsage?.total_tokens ?? 0),
+          "$insert_id": `activation_completed:${user.id}`,
+        },
+      }));
+    }
 
     autoFollowTopUsers(user.id).catch(() => {});
 

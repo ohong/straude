@@ -4,7 +4,8 @@ vi.mock("@/lib/supabase/server", () => ({
   createClient: vi.fn(),
 }));
 
-vi.mock("@/lib/analytics/server", () => ({
+vi.mock("@/lib/analytics/server", async (importOriginal) => ({
+  ...await importOriginal<typeof import("@/lib/analytics/server")>(),
   captureServerActivationEvent: vi.fn().mockResolvedValue(true),
 }));
 
@@ -91,7 +92,7 @@ describe("GET /api/usage/status", () => {
   it("does not activate users without usage", async () => {
     const { latestUsageChain } = mockUsageStatus({ latestUsage: null });
 
-    const res = await GET();
+    const res = await GET(new Request("http://localhost/api/usage/status"));
     const json = await res.json();
 
     expect(res.status).toBe(200);
@@ -120,7 +121,9 @@ describe("GET /api/usage/status", () => {
       latestPost: { id: "post-1" },
     });
 
-    const res = await GET();
+    const res = await GET(new Request("http://localhost/api/usage/status", {
+      headers: { cookie: "straude_cookie_consent=v1-all" },
+    }));
     const json = await res.json();
 
     expect(res.status).toBe(200);
@@ -159,7 +162,9 @@ describe("GET /api/usage/status", () => {
       latestPost: { id: "post-1" },
     });
 
-    const res = await GET();
+    const res = await GET(new Request("http://localhost/api/usage/status", {
+      headers: { cookie: "straude_cookie_consent=v1-all" },
+    }));
     const json = await res.json();
 
     expect(res.status).toBe(200);
@@ -174,9 +179,10 @@ describe("GET /api/usage/status", () => {
     expect(captureServerActivationEvent).toHaveBeenCalledWith({
       event: "first_sync_confirmed",
       distinctId: "user-1",
+      analyticsConsent: true,
       properties: expect.objectContaining({
         surface: "usage_status",
-        activation_state: "activated",
+        activation_state: "first_usage_submitted",
         is_authenticated: true,
         session_count: 2,
         total_tokens: 9000,

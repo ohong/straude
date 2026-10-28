@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 import { after } from "@/lib/utils/after";
-import { captureServerActivationEvent } from "@/lib/analytics/server";
+import { captureServerActivationEvent, hasServerAnalyticsConsent } from "@/lib/analytics/server";
 import { createClient } from "@/lib/supabase/server";
 
 type LatestUsageRow = {
@@ -39,7 +39,7 @@ function isWithinFirstSyncConfirmationWindow(createdAt: string | null | undefine
   return ageMs >= 0 && ageMs < FIRST_SYNC_CONFIRMATION_WINDOW_MS;
 }
 
-export async function GET() {
+export async function GET(request: Request) {
   const supabase = await createClient();
   const {
     data: { user },
@@ -96,15 +96,17 @@ export async function GET() {
 
   const earliestUsage = earliestUsageResult.data as EarliestUsageRow | null;
   if (
-    !earliestUsageResult.error
+    hasServerAnalyticsConsent(request)
+    && !earliestUsageResult.error
     && isWithinFirstSyncConfirmationWindow(earliestUsage?.created_at)
   ) {
     after(() => captureServerActivationEvent({
       event: "first_sync_confirmed",
       distinctId: user.id,
+      analyticsConsent: true,
       properties: {
         surface: "usage_status",
-        activation_state: "activated",
+        activation_state: "first_usage_submitted",
         is_authenticated: true,
         session_count,
         total_tokens,
