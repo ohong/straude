@@ -162,6 +162,7 @@ jobs:
           name: straude-runtime-evidence
           path: |
             apps/web/test-results/**/*.png
+            apps/web/test-results/**/*.evidence.json
             artifacts/activation-receiver.json
           if-no-files-found: warn
 
@@ -234,4 +235,12 @@ jobs:
           path: artifacts
 
       - name: Test installed package
-        run: node packages/cli/scripts/packaged-cli-e2e.mjs --tarball artifacts
+        run: node packages/cli/scripts/packaged-cli-e2e.mjs --tarball artifacts --source-commit ${{ github.sha }}
+
+      - name: Preserve installed package evidence
+        if: always()
+        uses: actions/upload-artifact@v7
+        with:
+          name: straude-cli-evidence-${{ matrix.os }}-node-${{ matrix.node }}
+          path: packages/cli/test-results/packaged-cli-e2e.json
+          if-no-files-found: warn
