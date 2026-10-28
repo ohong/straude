@@ -1,5 +1,7 @@
 import { describe, it, expect, beforeAll, beforeEach, afterEach } from "vitest";
 import { spawnSync } from "node:child_process";
+import { createServer } from "node:http";
+import type { AddressInfo } from "node:net";
 import { existsSync, mkdtempSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join, dirname, resolve } from "node:path";
@@ -21,9 +23,9 @@ import { spawnCli, rmDir, CLI_DIST_ENTRY } from "./spawn";
  *  - Future regressions to the CLI's startup-time behavior under real Node.
  *
  * Out of scope for this exemplar suite (tracked as follow-ups):
- *  - Full `straude push` flow — needs ccusage on PATH or a stub binary.
- *  - `straude login` — needs an HTTP listener mocking the auth poll.
- *  - Auto-push / hooks — needs Claude Code's settings.json scaffold.
+ *  - Full collection, signed-token rotation and browser sign-in are covered by
+ *    the installed-package and combined browser journeys.
+ *  - This suite checks only login rejection before any network/browser work.
  */
 
 const PKG_DIR = resolve(dirname(fileURLToPath(import.meta.url)), "../..");
@@ -84,6 +86,32 @@ describe("straude binary — smoke", () => {
     const r = await spawnCli({ args: ["nonsense"], home });
     expect(r.exitCode).not.toBe(0);
     expect(r.stderr).toMatch(/Unknown command/);
+  });
+
+  it("login --non-interactive exits with guidance before device initialization", async () => {
+    let requests = 0;
+    const server = createServer((_request, response) => {
+      requests += 1;
+      response.writeHead(500, { "Content-Type": "application/json" });
+      response.end(JSON.stringify({ error: "Login must not reach this server" }));
+    });
+    await new Promise<void>(resolveListen => server.listen(0, "127.0.0.1", resolveListen));
+    try {
+      const address = server.address() as AddressInfo;
+      const r = await spawnCli({
+        args: ["login", "--non-interactive", "--api-url", `http://127.0.0.1:${address.port}`],
+        home,
+      });
+      expect(r.exitCode).toBe(2);
+      expect(r.stderr).toMatch(/interactive terminal/);
+      expect(r.stderr).toMatch(/straude login/);
+      expect(r.stdout).not.toContain("Opening browser");
+      expect(requests).toBe(0);
+      expect(existsSync(join(home, ".straude", "config.json"))).toBe(false);
+      expect(existsSync(join(home, ".straude", "sync-health.json"))).toBe(false);
+    } finally {
+      await new Promise<void>((resolveClose, reject) => server.close(error => error ? reject(error) : resolveClose()));
+    }
   });
 
   it("--version does not create an authenticated config", async () => {

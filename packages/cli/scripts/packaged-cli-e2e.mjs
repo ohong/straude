@@ -1,3 +1,4 @@
+import { createHash } from "node:crypto";
 import { execFile } from "node:child_process";
 import { cp, mkdir, mkdtemp, readFile, readdir, rm, stat, writeFile } from "node:fs/promises";
 import { createServer } from "node:http";
@@ -21,7 +22,7 @@ function isCompatibleCcusageVersion(version) {
     .exec(version);
   if (!match) return false;
   const [, major, minor, patch] = match.map(Number);
-  return major > 20 || (major === 20 && (minor > 0 || patch >= 20));
+  return major > 20 || (major === 20 && (minor > 0 || patch >= 26));
 }
 
 function readOption(name) {
@@ -81,11 +82,44 @@ let submitRequests = 0;
 let transientDashboardFailure = false;
 let rejectAuthentication = false;
 const acceptedRequestIds = [];
+const rejectedRequests = [];
+let authInitRequests = 0;
+let activeScenario = "package-installation";
 const dashboardDelayMs = 3_500;
 const reportPath = resolve(readOption("--report") ?? join(packageDir, "test-results", "packaged-cli-e2e.json"));
-const report = { node: process.version, dashboard_delay_ms: dashboardDelayMs, scenarios: [] };
+const startedAt = new Date().toISOString();
+const report = {
+  started_at: startedAt,
+  node: process.version,
+  platform: process.platform,
+  architecture: process.arch,
+  command: [process.execPath, ...process.argv.slice(1)],
+  cwd: process.cwd(),
+  boundary: "Installed tarball, synthetic native Codex logs, real collector and filesystem, controlled loopback API. No real authentication or database acceptance is claimed.",
+  dashboard_delay_ms: dashboardDelayMs,
+  planned_scenarios: ["default-slow-dashboard", "days-slow-dashboard", "date-slow-dashboard", "default-transient-dashboard", "synthetic-401-pending-recovery", "fresh-dry-run-and-empty-scan", "installed-background-hook-invocation"],
+  scenarios: [],
+};
+async function saveReport() {
+  report.finished_at = new Date().toISOString();
+  report.duration_ms = Date.now() - Date.parse(startedAt);
+  report.not_run_scenarios = report.planned_scenarios.filter(name => !report.scenarios.some(scenario => scenario.name === name));
+  report.counts = {
+    passed: report.scenarios.filter(scenario => scenario.passed).length,
+    failed: report.scenarios.filter(scenario => scenario.passed === false).length,
+    skipped: report.scenarios.filter(scenario => scenario.skipped).length
+      + (report.scenarios.some(scenario => scenario.passed === false) ? report.not_run_scenarios.length : 0),
+    flaky: 0,
+  };
+  await mkdir(dirname(reportPath), { recursive: true });
+  await writeFile(reportPath, JSON.stringify(report, null, 2) + "\n");
+}
+const digest = value => createHash("sha256").update(value).digest("hex");
 
 try {
+  const source = await execFileAsync("git", ["rev-parse", "HEAD"], { cwd: packageDir });
+  report.harness_source_commit = source.stdout.trim();
+  report.tarball_source_commit = readOption("--source-commit") ?? null;
   await mkdir(installDir, { recursive: true });
   await mkdir(join(homeDir, ".straude"), { recursive: true });
   await mkdir(join(homeDir, ".claude", "projects"), { recursive: true });
@@ -111,6 +145,8 @@ try {
     ? await resolveTarball(suppliedTarball)
     : await createTarball(root);
 
+  report.tarball = { path: tarball, sha256: digest(await readFile(tarball)) };
+  await saveReport();
   await execNpm(["install", "--no-audit", "--no-fund", tarball], {
     cwd: installDir,
     maxBuffer: 10 * 1024 * 1024,
@@ -159,12 +195,18 @@ try {
 
   server = createServer(async (request, response) => {
     response.setHeader("Content-Type", "application/json");
+    if (request.url === "/api/auth/cli/init") {
+      authInitRequests += 1;
+      response.writeHead(500).end(JSON.stringify({ error: "Background execution must not start login" }));
+      return;
+    }
     if (request.url === "/api/usage/submit" && request.method === "POST") {
       submitRequests += 1;
       const chunks = [];
       for await (const chunk of request) chunks.push(chunk);
       const submission = JSON.parse(Buffer.concat(chunks).toString("utf8"));
       if (rejectAuthentication) {
+        rejectedRequests.push(submission);
         response.writeHead(401).end(JSON.stringify({ error: "Synthetic expired credential" }));
         return;
       }
@@ -231,6 +273,7 @@ try {
     { name: "default-transient-dashboard", args: [], transientFailure: true },
   ];
   for (const scenario of scenarios) {
+    activeScenario = scenario.name;
     dashboardRequests = 0;
     submitRequests = 0;
     transientDashboardFailure = scenario.transientFailure;
@@ -273,19 +316,27 @@ try {
       stdout,
       stderr,
     });
-    await mkdir(dirname(reportPath), { recursive: true });
-    await writeFile(reportPath, JSON.stringify(report, null, 2) + "\n");
+    await saveReport();
     if (!passed) {
       throw new Error(`Packaged CLI failed ${scenario.name}:\n${output}\nReport: ${reportPath}`);
     }
     console.log(`${scenario.name} passed on Node ${process.version} (${elapsedMs}ms)`);
   }
+  activeScenario = "synthetic-401-pending-recovery";
   rejectAuthentication = true;
   transientDashboardFailure = false;
   submitRequests = 0;
   dashboardRequests = 0;
   acceptedRequestIds.length = 0;
-  const recoveryArgs = ["push", "--date", date, "--non-interactive"];
+  const configPath = join(homeDir, ".straude", "config.json");
+  const previousDate = new Date(today.getFullYear(), today.getMonth(), today.getDate() - 1);
+  const emptyDate = [previousDate.getFullYear(), String(previousDate.getMonth() + 1).padStart(2, "0"), String(previousDate.getDate()).padStart(2, "0")].join("-");
+  await writeFile(configPath, JSON.stringify({
+    ...JSON.parse(await readFile(configPath, "utf8")),
+    last_push_date: emptyDate,
+    ccusage_version_pushed: installedCcusage.version,
+  }));
+  const recoveryArgs = ["push", "--non-interactive"];
   let rejected;
   try {
     await execFileAsync(process.execPath, [cli, ...recoveryArgs], { cwd: installDir, env: childEnvironment });
@@ -296,7 +347,9 @@ try {
   }
   const healthPath = join(homeDir, ".straude", "sync-health.json");
   const outboxPath = join(homeDir, ".straude", "pending-sync.json");
-  const pending = JSON.parse(await readFile(outboxPath, "utf8"));
+  const pendingText = await readFile(outboxPath, "utf8");
+  const pending = JSON.parse(pendingText);
+  const blockedConfig = JSON.parse(await readFile(join(homeDir, ".straude", "config.json"), "utf8"));
   const blockedHealth = JSON.parse(await readFile(healthPath, "utf8"));
   const blockedStatus = await execFileAsync(process.execPath, [cli, "auto"], { cwd: installDir, env: childEnvironment });
   if (!blockedHealth.auth_required_at || !blockedHealth.last_success_at || !blockedStatus.stdout.includes("straude login")
@@ -310,12 +363,36 @@ try {
       || !Number.isFinite(Date.parse(blockedHealth.last_success_at))) {
     throw new Error("Sync health must contain only an opaque account key and timestamps.");
   }
+  if (!rejected.stderr.includes("straude login") || authInitRequests !== 0
+      || rejectedRequests.length !== 1
+      || JSON.stringify(rejectedRequests[0]) !== JSON.stringify(pending.batches[0].request)
+      || pending.batches[0].watermark_date !== date
+      || blockedConfig.last_push_date !== emptyDate) {
+    throw new Error("A rejected noninteractive submission lost its payload or started login.");
+  }
   // A dry run must not claim that the server accepted the expired credential.
   await execFileAsync(process.execPath, [cli, "push", "--date", date, "--dry-run", "--non-interactive"], { cwd: installDir, env: childEnvironment });
-  if (!(JSON.parse(await readFile(healthPath, "utf8"))).auth_required_at || submitRequests !== 1) {
+  if (await readFile(outboxPath, "utf8") !== pendingText
+      || JSON.stringify(JSON.parse(await readFile(healthPath, "utf8"))) !== JSON.stringify(blockedHealth)
+      || JSON.parse(await readFile(join(homeDir, ".straude", "config.json"), "utf8")).last_push_date !== blockedConfig.last_push_date
+      || submitRequests !== 1) {
     throw new Error("Dry run cleared the sign-in requirement without a submission.");
   }
-  const configPath = join(homeDir, ".straude", "config.json");
+  // A separate background invocation must retry the identical durable request,
+  // even when its requested local date has no logs. It must not open a browser.
+  try {
+    await execFileAsync(process.execPath, [cli, "push", "--date", emptyDate, "--non-interactive"], { cwd: installDir, env: childEnvironment });
+    throw new Error("Pending expired work unexpectedly disappeared during an empty scan.");
+  } catch (error) {
+    if (error.code !== 2) throw error;
+  }
+  if (await readFile(outboxPath, "utf8") !== pendingText || authInitRequests !== 0
+      || rejectedRequests.length !== 2
+      || JSON.stringify(rejectedRequests[1]) !== JSON.stringify(pending.batches[0].request)
+      || JSON.parse(await readFile(healthPath, "utf8")).last_success_at !== blockedHealth.last_success_at
+      || JSON.parse(await readFile(configPath, "utf8")).last_push_date !== emptyDate) {
+    throw new Error("Repeated background rejection changed durable work or invented acceptance.");
+  }
   const originalConfig = await readFile(configPath, "utf8");
   await writeFile(configPath, JSON.stringify({ ...JSON.parse(originalConfig), token: "other-account-token" }));
   const otherAccountStatus = await execFileAsync(process.execPath, [cli, "auto"], { cwd: installDir, env: childEnvironment });
@@ -331,20 +408,28 @@ try {
       || recoveredStatus.stdout.includes("Sign-in required")
       || !recoveredStatus.stdout.includes(recoveredHealth.last_success_at)
       || acceptedRequestIds.filter(id => id === pending.batches[0].request.request_id).length !== 1
-      || JSON.parse(await readFile(outboxPath, "utf8")).batches.length !== 0) {
+      || JSON.parse(await readFile(outboxPath, "utf8")).batches.length !== 0
+      || JSON.parse(await readFile(configPath, "utf8")).last_push_date !== date) {
     throw new Error("Successful sync did not clear the old sign-in notice and show its success time.");
   }
   const yesterday = new Date(today);
   yesterday.setDate(yesterday.getDate() - 1);
-  const emptyDate = [yesterday.getFullYear(), String(yesterday.getMonth() + 1).padStart(2, "0"), String(yesterday.getDate()).padStart(2, "0")].join("-");
+  const recoveredEmptyDate = [yesterday.getFullYear(), String(yesterday.getMonth() + 1).padStart(2, "0"), String(yesterday.getDate()).padStart(2, "0")].join("-");
   const submissionsBeforeEmpty = submitRequests;
-  const empty = await execFileAsync(process.execPath, [cli, "push", "--date", emptyDate, "--non-interactive"], { cwd: installDir, env: childEnvironment });
+  const empty = await execFileAsync(process.execPath, [cli, "push", "--date", recoveredEmptyDate, "--non-interactive"], { cwd: installDir, env: childEnvironment });
   if (!empty.stdout.includes("No usage data") || submitRequests !== submissionsBeforeEmpty
       || JSON.stringify(JSON.parse(await readFile(healthPath, "utf8"))) !== JSON.stringify(recoveredHealth)) {
     throw new Error("An empty local scan changed the last confirmed sync without a submission.");
   }
   report.scenarios.push({
-    name: "background-auth-health-recovery", passed: true,
+    name: activeScenario, passed: true,
+    boundary: "Synthetic 401 followed by loopback acceptance of the same synthetic credential; this is not browser reauthentication or signed-token verification.",
+    repeated_401_invocations: 2,
+    authentication_init_requests: authInitRequests,
+    pending_sha256: digest(pendingText),
+    watermark_before_acceptance: blockedConfig.last_push_date,
+    watermark_after_acceptance: JSON.parse(await readFile(configPath, "utf8")).last_push_date,
+    rejected_request_sha256: rejectedRequests.map(request => digest(JSON.stringify(request))),
     rejected, blocked_health: blockedHealth, blocked_status: blockedStatus.stdout,
     recovered: { stdout: recovered.stdout, stderr: recovered.stderr },
     recovered_health: recoveredHealth, recovered_status: recoveredStatus.stdout,
@@ -353,9 +438,67 @@ try {
     accepted_request_ids: acceptedRequestIds,
     empty: { stdout: empty.stdout, stderr: empty.stderr },
   });
-  await writeFile(reportPath, JSON.stringify(report, null, 2) + "\n");
-  console.log("background-auth-health-recovery passed (401, visible recovery, account isolation, preserved pending work, dry-run/no-data status, success clears notice)");
+  await saveReport();
+  console.log("synthetic-401-pending-recovery passed (401, visible recovery, account isolation, preserved pending work, dry-run/no-data status, success clears notice)");
+  activeScenario = "fresh-dry-run-and-empty-scan";
+  const freshHome = join(root, "fresh-home");
+  const freshEnvironment = { ...childEnvironment, HOME: freshHome, USERPROFILE: freshHome,
+    CODEX_HOME: join(freshHome, "codex"), CLAUDE_CONFIG_DIR: join(freshHome, ".claude") };
+  await mkdir(join(freshHome, ".straude"), { recursive: true });
+  await mkdir(join(freshHome, "codex", "sessions"), { recursive: true });
+  await mkdir(join(freshHome, ".claude", "projects"), { recursive: true });
+  await writeFile(join(freshHome, ".straude", "config.json"), await readFile(configPath));
+  const submissionsBeforeFresh = submitRequests;
+  const freshOutputs = [];
+  for (const extraArgs of [["--dry-run"], []]) {
+    const output = await execFileAsync(process.execPath, [cli, "push", "--date", date, "--non-interactive", ...extraArgs], { cwd: installDir, env: freshEnvironment });
+    freshOutputs.push(output);
+  }
+  const freshHealth = await readFile(join(freshHome, ".straude", "sync-health.json"), "utf8").catch(error => {
+    if (error.code === "ENOENT") return null;
+    throw error;
+  });
+  if (freshHealth !== null || submitRequests !== submissionsBeforeFresh
+      || !freshOutputs[1].stdout.includes("No usage data")) {
+    throw new Error("A first dry run or empty scan invented an accepted sync.");
+  }
+  report.scenarios.push({ name: activeScenario, passed: true, outputs: freshOutputs, health_created: false, submit_requests: 0 });
+  await saveReport();
+
+  activeScenario = "installed-background-hook-invocation";
+  if (process.platform === "win32") {
+    report.scenarios.push({ name: activeScenario, skipped: true, reason: "POSIX shell invocation requires Linux/macOS; current-candidate Windows CI is separate." });
+  } else {
+    await writeFile(join(homeDir, ".claude", "settings.json"), "{}\n");
+    await execFileAsync(process.execPath, [cli, "push", "--date", date, "--non-interactive", "--auto", "hooks"], { cwd: installDir, env: childEnvironment });
+    const settings = JSON.parse(await readFile(join(homeDir, ".claude", "settings.json"), "utf8"));
+    const hook = settings.hooks.SessionEnd.flatMap(group => group.hooks)
+      .find(entry => entry.type === "command" && entry.command.includes(cli));
+    if (!hook || !hook.command.includes("--non-interactive") || hook.async !== true || hook.timeout !== 300) {
+      throw new Error("Installed CLI did not install its durable background hook.");
+    }
+    const submissionsBeforeHook = submitRequests;
+    const hookResult = await execFileAsync("/bin/sh", ["-c", hook.command], { cwd: installDir, env: childEnvironment, maxBuffer: 10 * 1024 * 1024 });
+    if (submitRequests !== submissionsBeforeHook + 1 || authInitRequests !== 0
+        || !hookResult.stdout.includes("Synced 1 day")) {
+      throw new Error("The installed background hook did not collect and submit usage without login.");
+    }
+    report.scenarios.push({ name: activeScenario, passed: true, platform: process.platform,
+      boundary: "Actual installed hook command invoked manually through /bin/sh; no Claude SessionEnd event or scheduler daemon execution is claimed.",
+      command: hook.command, stdout: hookResult.stdout, stderr: hookResult.stderr,
+      submit_requests: submitRequests - submissionsBeforeHook,
+      actual_scheduler_execution: "not exercised" });
+  }
+  await saveReport();
   console.log(`straude v${packageJson.version} with ccusage ${installedCcusage.version}; report: ${reportPath}`);
+} catch (error) {
+  if (!report.scenarios.some(scenario => scenario.name === activeScenario && scenario.passed === false)) {
+    report.scenarios.push({ name: activeScenario, passed: false,
+      error: { name: error.name, message: String(error.message).slice(0, 8_000),
+        exit_code: error.code ?? null, stdout: String(error.stdout ?? "").slice(-8_000), stderr: String(error.stderr ?? "").slice(-8_000) } });
+  }
+  await saveReport();
+  throw error;
 } finally {
   if (server) {
     await new Promise((resolveClose, reject) => {
