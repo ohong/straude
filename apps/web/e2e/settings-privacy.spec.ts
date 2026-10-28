@@ -124,7 +124,8 @@ test.describe("Settings persistence and privacy with real local Auth", () => {
       expect(selected.status()).toBe(200);
       const display = page.getByLabel("Display Name", { exact: true });
       await display.focus();
-      await page.keyboard.type("Settings keyboard fixture");
+      await page.keyboard.type("Settings keyboard fixture", { delay: 20 });
+      await expect(display).toHaveValue("Settings keyboard fixture");
       await page.keyboard.press("Tab");
       await expect(page.getByLabel("Bio", { exact: true })).toBeFocused();
       await page.keyboard.type("Private fixture biography");
