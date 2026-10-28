@@ -138,7 +138,7 @@ test.describe("Settings persistence and privacy with real local Auth", () => {
       const abort = (route: Route) => route.request().method() === "PATCH" ? route.abort("failed") : route.continue();
       await page.route("**/api/users/me", abort);
       await retry.press("Enter");
-      await expect(page.getByRole("alert")).toBeVisible();
+      await expect(page.locator("form").getByRole("alert")).toBeVisible();
       await expect(retry).toBeEnabled();
       await expect(display).toHaveValue("Settings keyboard fixture");
       await page.unroute("**/api/users/me", abort);
@@ -146,7 +146,7 @@ test.describe("Settings persistence and privacy with real local Auth", () => {
         ? route.fulfill({ status: 502, contentType: "text/html", body: "<h1>Temporary gateway failure</h1>" }) : route.continue();
       await page.route("**/api/users/me", html);
       await retry.press("Enter");
-      await expect(page.getByRole("alert")).toBeVisible();
+      await expect(page.locator("form").getByRole("alert")).toBeVisible();
       await expect(retry).toBeEnabled();
       await expect(display).toHaveValue("Settings keyboard fixture");
       await page.unroute("**/api/users/me", html);
@@ -189,7 +189,7 @@ test.describe("Settings persistence and privacy with real local Auth", () => {
       const abort = (route: Route) => route.request().method() === "PATCH" ? route.abort("failed") : route.continue();
       await page.route("**/api/users/me", abort);
       await clear.press("Enter");
-      await expect(page.getByRole("alert")).toBeVisible();
+      await expect(page.locator("form").getByRole("alert")).toBeVisible();
       await expect(clear).toBeEnabled();
       await expect(page.getByLabel("Team", { exact: true })).toHaveValue(`https://${fixture.domain}`);
       await page.unroute("**/api/users/me", abort);
@@ -198,7 +198,7 @@ test.describe("Settings persistence and privacy with real local Auth", () => {
       await page.route("**/api/users/me", html);
       await clear.press("Enter");
       await expect(clear).toBeEnabled();
-      await expect(page.getByRole("alert")).toBeVisible();
+      await expect(page.locator("form").getByRole("alert")).toBeVisible();
       await page.unroute("**/api/users/me", html);
       const responsePromise = page.waitForResponse((response) => response.url().endsWith("/api/users/me") && response.request().method() === "PATCH");
       await clear.press("Enter");
