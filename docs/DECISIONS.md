@@ -1,5 +1,29 @@
 # Architecture & Design Decisions
 
+## Preserve source provenance and explicit device choices (2026-10-28)
+
+**Decision:** Check collector provenance before every overwrite and implicit or authoritative source deletion. A known newer stored collector blocks an older incoming snapshot for the whole date. Keep-separate remains a durable user decision; token overlap updates its evidence but does not reopen or automatically merge it. Matching token totals are evidence under the existing hostname rule, not proof that two physical devices are identical.
+
+**Pending recovery:** Recollect a below-floor durable payload using its original date and timezone intent. Require every formerly reported date and named source before atomically replacing the payload with a fresh request ID. Preserve the original on collection, pricing, persistence or coverage failure. A source with no partition identity requires manual recovery. Source presence cannot prove that every log within that source remains available; lower corrections still rely on complete source-owned snapshots.
+
+**Alternatives:** Allowing older monotonic growth restores known overcounts. Reopening explicit choices silently changes user intent. Dropping outdated outboxes loses recoverable work. Broad historical repair remains outside the normal submission path. New upgrade batches use the existing incremental outbox mode; finish any earlier `collector_upgrade` batches before downgrading to an older client.
+
+**Rollout:** Apply the existing accounting migrations in dependency order, then `20261028090012_usage_accounting_replay_guards.sql`. Coordinate a supported CLI release before enforcing the server floor. These source changes do not authorize production migrations or historical corrections.
+
+## Make optional lifecycle analytics request-consented (2026-10-28)
+
+**Decision:** Optional web capture requires the current request's accepted analytics cookie and an explicit server-helper consent input. No browser consent is inferred from CLI bearer authentication. SDK capture rechecks the live cookie; withdrawal opts out and clears persistence, while the same-origin ingest proxy also rejects queued requests without consent. Necessary authentication, referral, onboarding and usage writes continue independently.
+
+**Identity and meaning:** Signup, first confirmed web sync and completed onboarding use the authenticated user ID and stable per-user insertion IDs. Confirmation denotes accepted usage; completion is emitted only by the successful profile completion route. Anonymous links are consumed after authentication so account switches cannot reuse them. Raw receiver deliveries and unique insertion IDs are separate counts; local receiver acceptance does not establish provider ingestion or deduplication.
+
+**Alternatives:** Browser-only guards leave server forwarding and retry queues active. Persisting browser consent in CLI credentials would couple independent telemetry policies and make withdrawal stale. Request-local denial is simpler and preserves the documented boundary.
+
+## Keep durable public snapshots truthful (2026-10-28)
+
+**Decision:** Retain the scheduled snapshot design, paginate with stable ordering and exact-count checks, and calculate totals and distributions from one consistent non-seed cohort. Report success only after persistence; invalidate public pages after a successful write. Missing capture time remains unavailable, and an old capture stays visibly stale after 48 hours. Labels distinguish estimated usage cost, people, latest recorded streak days and actual percentile groups.
+
+**Alternatives and limits:** A new database aggregation architecture adds deployment scope. The paginated repair removes the row cap and mismatched RPC exclusions, but separate page queries are not an MVCC snapshot: same-count in-place concurrent edits can still change the read. A local protected refresh proves the route and database path, not external cron scheduling or alert delivery.
+
 ## Expose sync health without changing authentication policy (2026-10-27)
 
 **Problem:** Background sync can fail when sign-in is required. Background runs cannot sign in interactively, while `straude auto` previously showed scheduling state without the last successful submission or a recovery notice. The events do not prove that expiry caused every failure.
@@ -24,7 +48,7 @@
 
 **Problem:** One machine can register two installation ids, and both push the same ccusage data, so `daily_usage` double counts. The hostname quarantine created an `ambiguous` candidate with empty `overlap_dates`, because overlap was only computed by the manual repair path, which required an exact fingerprint including `cost_usd` and collector. Two installations on different ccusage versions never matched, and `straude devices` showed "0 matching days".
 
-**Decision:** At quarantine time, fingerprint the incoming day (per agent: input, output, cache creation, cache read, reasoning and total tokens) and compare it with the other device's stored rows. Identical days go to `overlap_dates`, differing days to `divergent_dates`. Two or more identical days with no differing day auto-merge through the existing `resolve_usage_device_candidate`, which now also compares tokens only. Everything else stays `ambiguous`. A `kept_separate` decision reopens only on new token-identical data for a date after the decision, and is never auto-merged.
+**Decision:** At quarantine time, fingerprint the incoming day (per agent: input, output, cache creation, cache read, reasoning and total tokens) and compare it with the other device's stored rows. Identical days go to `overlap_dates`, differing days to `divergent_dates`. Two or more identical days with no differing day auto-merge through the existing `resolve_usage_device_candidate`, which now also compares tokens only. Everything else stays `ambiguous`. An explicit `kept_separate` decision remains durable (clarified 2026-10-28): new evidence is displayed, and only an explicit user merge can reconsider it.
 
 **Alternatives:** Keep the exact fingerprint and add cost tolerance: ccusage owns pricing, so any tolerance is a guess. Compare incoming rows after writing them: blocked submits write nothing, so there is nothing to compare. Backfill candidates from existing data: out of scope, and it would rewrite user data without a decision.
 
@@ -1144,7 +1168,7 @@ Pricing the new-logic numbers at gpt-5.5 rates: $228.68 — matches what OpenAI 
 
 ## A Newer Collector Version Is the Source of Truth for Stored Rows (2026-10-08)
 
-**Decision:** `submit_usage_day_v2` lets a trusted partitioned snapshot replace an existing `usage_agent_daily` row, in either direction, when the snapshot's `collector.version` is strictly newer (semver) than the stored row's `collector.version`. Same-version and older snapshots keep the monotonic guard. A stored row with a missing or unparseable version counts as older. The CLI persists `ccusage_version_pushed` and re-submits the existing 30-day backfill window when the installed ccusage is newer.
+**Decision:** `submit_usage_day_v2` lets a trusted partitioned snapshot replace an existing `usage_agent_daily` row, in either direction, when the snapshot's `collector.version` is strictly newer (semver) than the stored row's `collector.version`. Same-version snapshots keep the monotonic guard. Older collectors are rejected before either overwriting or deleting newer source rows. A stored row with a missing or unparseable version counts as older. The CLI persists `ccusage_version_pushed` and re-submits the existing 30-day backfill window when the installed ccusage is newer.
 
 **Alternatives considered:**
 
@@ -1152,4 +1176,4 @@ Pricing the new-logic numbers at gpt-5.5 rates: $228.68 — matches what OpenAI 
 2. **Repair stored rows with SQL** — rejected because direct rewrites of usage totals are banned by the migration-safety test and cannot recompute from source logs. Only the user's machine has the logs.
 3. **Drop the regression guard for trusted snapshots** — rejected because a machine that lost its local logs would then silently overwrite good history with smaller numbers.
 
-**Why a version comparison:** it states the actual reason a decrease is safe, which is that a newer collector computes the numbers, not that the numbers are bigger. The guard keeps its original job for equal and older versions. Cost: a CLI that moves to a buggy newer ccusage can lower history too, so the ccusage floor and release checks are still the control for collector quality.
+**Why a version comparison:** it states the actual reason a decrease is safe, which is that a newer collector computes the numbers, not that the numbers are bigger. The monotonic guard remains for equal versions; the collector-provenance fence rejects older versions before any source mutation. Cost: a CLI that moves to a buggy newer ccusage can lower history too, so the ccusage floor and release checks are still the control for collector quality.

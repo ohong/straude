@@ -85,7 +85,27 @@ jobs:
         run: bunx supabase start --workdir .
 
       - name: Configure web for local Supabase
-        run: bun run local:env
+        run: |
+          bun run local:env
+          # Browser test processes need the same disposable fixture settings as
+          # Next.js. Copy only this local setup's required keys without logging them.
+          python3 - <<'PY'
+          import os
+          from pathlib import Path
+          from urllib.parse import urlparse
+          values = {}
+          for line in Path("apps/web/.env.local").read_text().splitlines():
+              if "=" in line and not line.lstrip().startswith("#"):
+                  key, value = line.split("=", 1)
+                  values[key.strip()] = value.strip().strip('"').strip("'")
+          assert urlparse(values["NEXT_PUBLIC_SUPABASE_URL"]).hostname in {"localhost", "127.0.0.1"}
+          names = ["NEXT_PUBLIC_SUPABASE_URL", "NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY",
+                   "SUPABASE_SECRET_KEY", "CLI_JWT_SECRET", "CRON_SECRET", "NEXT_PUBLIC_APP_URL"]
+          with open(os.environ["GITHUB_ENV"], "a") as output:
+              for name in names:
+                  if name in values:
+                      output.write(f"{name}={values[name]}\n")
+          PY
 
       - name: Download the tested CLI package
         uses: actions/download-artifact@v8
