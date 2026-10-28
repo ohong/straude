@@ -1,4 +1,4 @@
-import { devices, test, expect, type APIRequestContext, type Page, type TestInfo } from "@playwright/test";
+import { test, expect, type APIRequestContext, type Page, type TestInfo } from "@playwright/test";
 import { createClient } from "@supabase/supabase-js";
 import { spawn } from "node:child_process";
 import { createHash, createHmac, randomUUID } from "node:crypto";
@@ -6,6 +6,7 @@ import { cp, mkdir, mkdtemp, readFile, readdir, rm, writeFile } from "node:fs/pr
 import { readFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
+import { ANALYTICS_BROWSER_USE, assertAnalyticsBrowser, configureAnalyticsBrowser } from "./helpers/analytics-browser";
 
 // General builds and installs the candidate once. This suite must consume those
 // exact bytes, rather than accidentally testing the registry's mutable latest.
@@ -111,6 +112,7 @@ async function signup(page: Page, request: APIRequestContext, email: string) {
   const link = String(message.HTML).match(/href="([^"]*\/auth\/v1\/verify[^\"]*)"/)?.[1]?.replaceAll("&amp;", "&");
   if (!link) throw new Error("Local signup email did not contain a verification link");
   await page.goto(link);
+  await assertAnalyticsBrowser(page);
 }
 
 async function cleanup(email: string) {
@@ -199,7 +201,9 @@ async function authorize(cli: Cli, page: Page, origin: string, beforeAuthorize?:
       return Boolean(url);
     }, { timeout: 30_000 }).toBe(true);
     expect(new URL(url).origin).toBe(origin);
+    await configureAnalyticsBrowser(page);
     await page.goto(url);
+    await assertAnalyticsBrowser(page);
     await page.waitForLoadState("networkidle");
     if (beforeAuthorize) await beforeAuthorize(page);
     await page.getByRole("button", { name: "Authorize CLI", exact: true }).click();
@@ -259,10 +263,7 @@ function signedToken(payload: Record<string, unknown>) {
 
 // Exercise consented SDK capture outside its bot filter. The application SDK
 // and CSP remain unchanged; only this browser test's environment differs.
-test.use({
-  userAgent: devices["Desktop Chrome"].userAgent,
-  launchOptions: { args: ["--disable-blink-features=AutomationControlled"] },
-});
+test.use(ANALYTICS_BROWSER_USE);
 
 test.describe("installed CLI and browser first sync", () => {
   test.beforeEach(async ({ page }, testInfo) => {
@@ -271,6 +272,7 @@ test.describe("installed CLI and browser first sync", () => {
     expect(local(supabaseUrl), "Fixture operations must stay on loopback").toBe(true);
     expect(local(String(testInfo.project.use.baseURL))).toBe(true);
     expect(testInfo.project.use.bypassCSP ?? false).toBe(false);
+    await configureAnalyticsBrowser(page);
     const host = value("POSTHOG_HOST");
     const receiver = host && local(host) && new URL(host).port === "3118" ? new URL(host).origin : null;
     const boundary: AnalyticsBoundary = { requests: [], receiver, start: 0 };
@@ -278,8 +280,13 @@ test.describe("installed CLI and browser first sync", () => {
     // Cover every verification tab too. Only optional SDK transport is replaced;
     // the real activation forwarding, auth and usage endpoints remain untouched.
     await page.context().route("**/ingest/**", async route => {
-      boundary.requests.push({ path: new URL(route.request().url()).pathname, method: route.request().method() });
-      await route.fulfill({ status: 200, contentType: "application/json", body: '{"status":1,"featureFlags":{}}' });
+      const path = new URL(route.request().url()).pathname;
+      boundary.requests.push({ path, method: route.request().method() });
+      // External SDK executable assets fail locally; its config retry receives
+      // valid JSON. Never treat JSON as an executable remote SDK extension.
+      if (path.endsWith(".js")) return route.abort("failed");
+      const body = path.endsWith("/config") ? '{"hasFeatureFlags":false}' : '{"status":1,"featureFlags":{}}';
+      await route.fulfill({ status: 200, contentType: "application/json", body });
     });
     if (receiver) boundary.start = (await receiverEvents(page, receiver)).length;
   });
@@ -287,7 +294,7 @@ test.describe("installed CLI and browser first sync", () => {
   test.afterEach(async ({}, testInfo) => {
     const boundary = analytics.get(testInfo.testId);
     if (boundary) await testInfo.attach("browser-sdk-transport-boundary", {
-      body: JSON.stringify({ boundary: "SDK emission recorded and acknowledged locally only; no SDK fixture traffic was forwarded to PostHog", browser_environment: "Desktop Chrome user agent with AutomationControlled disabled so the SDK bot filter permits capture", requests: boundary.requests, lifecycle_receiver_configured: Boolean(boundary.receiver) }, null, 2),
+      body: JSON.stringify({ boundary: "SDK emission recorded and acknowledged locally only; no SDK fixture traffic was forwarded to PostHog", browser_environment: "Shared ordinary Chrome user agent/client-hint metadata with AutomationControlled disabled; webdriver, UA and brands asserted on real origins", requests: boundary.requests, lifecycle_receiver_configured: Boolean(boundary.receiver) }, null, 2),
       contentType: "application/json",
     });
     analytics.delete(testInfo.testId);
@@ -300,6 +307,7 @@ test.describe("installed CLI and browser first sync", () => {
     const origin = String(testInfo.project.use.baseURL);
     try {
       const signupResponse = await page.goto("/signup");
+      await assertAnalyticsBrowser(page);
       expect(signupResponse?.headers()["content-security-policy"]).toContain("connect-src");
       const acceptAnalytics = page.getByRole("button", { name: "Accept all", exact: true });
       if (analytics.get(testInfo.testId)?.receiver) await expect(acceptAnalytics).toBeVisible();
@@ -433,6 +441,7 @@ test.describe("installed CLI and browser first sync", () => {
         await expect(verification).toHaveURL(/\/cli\/verify\?/);
       });
       const settings = await page.goto("/settings");
+      await assertAnalyticsBrowser(page);
       expect(settings?.status()).toBe(200);
       expect(settings?.headers()["content-security-policy"]).toContain("connect-src");
       const me = await page.request.get("/api/users/me");
@@ -461,6 +470,7 @@ test.describe("installed CLI and browser first sync", () => {
       await expect(readFile(join(cli.root, "home", ".straude", "sync-health.json"), "utf8")).rejects.toMatchObject({ code: "ENOENT" });
       expect((await storedUsage(profile.id)).daily).toEqual([]);
       await page.goto("/onboarding");
+      await assertAnalyticsBrowser(page);
       await expect(page.getByText("Waiting for your first sync. This page checks automatically.")).toBeVisible();
       await page.screenshot({ path: testInfo.outputPath("cli-first-missing-logs-360.png"), fullPage: true });
       await cli.logs();
