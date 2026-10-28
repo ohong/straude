@@ -7,7 +7,7 @@ type LatestUsageRow = {
   id: string;
   date: string;
   cost_usd: number | string | null;
-  total_tokens: number | string | null;
+  output_tokens: number | string | null;
   session_count: number | string | null;
   models: unknown;
   created_at: string | null;
@@ -52,7 +52,7 @@ export async function GET(request: Request) {
   const [latestUsageResult, usageTotalsResult, earliestUsageResult] = await Promise.all([
     supabase
       .from("daily_usage")
-      .select("id,date,cost_usd,total_tokens,session_count,models,created_at")
+      .select("id,date,cost_usd,output_tokens,session_count,models,created_at")
       .eq("user_id", user.id)
       .order("date", { ascending: false })
       .limit(1)
@@ -84,8 +84,8 @@ export async function GET(request: Request) {
     ? Number(latestUsage.cost_usd ?? 0)
     : Number(totals?.total_cost ?? latestUsage.cost_usd ?? 0);
   const total_tokens = usageTotalsResult.error
-    ? Number(latestUsage.total_tokens ?? 0)
-    : Number(totals?.total_tokens ?? latestUsage.total_tokens ?? 0);
+    ? Number(latestUsage.output_tokens ?? 0)
+    : Number(totals?.total_tokens ?? latestUsage.output_tokens ?? 0);
   const session_count = Number(latestUsage.session_count ?? 0);
 
   const { data: latestPost } = await supabase
