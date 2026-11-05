@@ -12,6 +12,8 @@ The release candidate combines the dashboard timeout/retry fix with account-spec
 
 ### Fixed
 
+- **Account deletion clears team affiliation.** Anonymizing a deleted profile now removes both its team URL and cached favicon URL from the retained user row.
+
 - **Normalize PostHog configuration before capture.** Trim the public project token in both browser entry points and trim server token/host inputs. Reuse the server normalization from prior commit `92c948a`; add bounded failure diagnostics that never log provider response bodies or submitted values. A loopback receiver supports real-app lifecycle verification without injecting production analytics.
 
 - **Dashboard rendering after usage sync handles slow and transient responses.** CLI v0.2.3 includes the fix. Default pushes and `--days` now use the same 15-second request budget and GET retries as `straude status`, replacing the three-second, no-retry override. The dashboard endpoint runs independent database reads concurrently to reduce round-trip delay. The packaged CLI E2E covers both command paths with a 3.5-second response, plus recovery from HTTP 503, and saves an inspectable transcript.

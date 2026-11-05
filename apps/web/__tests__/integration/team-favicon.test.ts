@@ -5,7 +5,7 @@ import sharp from "sharp";
 import { getServiceClient } from "@/lib/supabase/service";
 import { createClient } from "@/lib/supabase/server";
 import { resolveTeamFavicon } from "@/lib/team-favicon";
-import { PATCH } from "@/app/api/users/me/route";
+import { DELETE, PATCH } from "@/app/api/users/me/route";
 import type { FaviconResponse } from "@/lib/favicons/public-fetch";
 
 const remote = vi.hoisted(() => ({ fetch: vi.fn<(url: URL) => Promise<FaviconResponse | null>>() }));
@@ -137,6 +137,47 @@ describe("team favicon save with real database and Storage", () => {
     const { data, error } = await db.from("team_favicon_cache").select("object_path,retry_after").eq("domain", domains[4]).single();
     expect(error).toBeNull();
     expect(data).toEqual({ object_path: `${domains[4]}.svg`, retry_after: null });
+  });
+
+  it("erases publicly readable team affiliation when the account is deleted", async () => {
+    const saved = await patch({ team_url: `https://${domains[0]}` });
+    expect(saved.status).toBe(200);
+    const profile = await saved.json();
+    expect(profile.team_favicon_url).toContain(`${domains[0]}.svg`);
+
+    const anonymous = createSupabaseClient(
+      process.env.NEXT_PUBLIC_SUPABASE_URL!,
+      process.env.NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY!,
+      { auth: { persistSession: false, autoRefreshToken: false } },
+    );
+    const readTeam = () => anonymous.from("users")
+      .select("team_url,team_favicon_url").eq("id", id).single();
+    const before = await readTeam();
+    expect(before.error).toBeNull();
+    expect(before.data).toEqual({
+      team_url: profile.team_url,
+      team_favicon_url: profile.team_favicon_url,
+    });
+
+    const remove = (username: string) => DELETE(new NextRequest("http://localhost/api/users/me", {
+      method: "DELETE",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ username }),
+    }));
+    expect((await remove("wrong_username")).status).toBe(400);
+    expect((await readTeam()).data).toEqual(before.data);
+
+    const response = await remove(`fav_${id.slice(0, 8)}`);
+    expect(response.status).toBe(200);
+    expect(await response.json()).toEqual({ ok: true });
+    const after = await readTeam();
+    expect(after.error).toBeNull();
+    expect(after.data).toEqual({ team_url: null, team_favicon_url: null });
+    const retained = await db.from("users").select("username,is_public").eq("id", id).single();
+    expect(retained.error).toBeNull();
+    expect(retained.data).toEqual({ username: `deleted_${id.slice(0, 8)}`, is_public: false });
+    // Shared domain icons still serve other users after this profile is erased.
+    expect((await fetch(profile.team_favicon_url)).status).toBe(200);
   });
 
 });

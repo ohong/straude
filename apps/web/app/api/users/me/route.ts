@@ -525,6 +525,8 @@ export async function DELETE(request: NextRequest) {
       region: null,
       link: null,
       github_username: null,
+      team_url: null,
+      team_favicon_url: null,
       heard_about: null,
       heard_about_sources: null,
       is_public: false,
