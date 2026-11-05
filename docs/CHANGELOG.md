@@ -12,7 +12,7 @@ The release candidate combines the dashboard timeout/retry fix with account-spec
 
 ### Fixed
 
-- **Account deletion clears team affiliation.** Anonymizing a deleted profile now removes both its team URL and cached favicon URL from the retained user row.
+- **Account deletion clears team affiliation and prevents stale profile saves.** Anonymizing a deleted profile removes both its team URL and cached favicon URL. A durable deletion marker prevents an already authenticated profile save from restoring personal fields after deletion; a migration marks previously anonymized, banned accounts and clears any remaining team fields.
 
 - **Normalize PostHog configuration before capture.** Trim the public project token in both browser entry points and trim server token/host inputs. Reuse the server normalization from prior commit `92c948a`; add bounded failure diagnostics that never log provider response bodies or submitted values. A loopback receiver supports real-app lifecycle verification without injecting production analytics.
 

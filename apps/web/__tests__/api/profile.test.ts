@@ -303,6 +303,7 @@ describe("PATCH /api/users/me", () => {
   function mockAuthenticatedProfileUpdate(resultData: Record<string, unknown> = { id: "u-1" }) {
     const updateMock = vi.fn().mockReturnValue({
       eq: vi.fn().mockReturnValue({
+        is: vi.fn().mockReturnThis(),
         select: vi.fn().mockReturnValue({
           single: vi.fn().mockResolvedValue({
             data: resultData,
@@ -349,6 +350,7 @@ describe("PATCH /api/users/me", () => {
       from: vi.fn().mockReturnValue({
         update: vi.fn().mockReturnValue({
           eq: vi.fn().mockReturnValue({
+            is: vi.fn().mockReturnThis(),
             select: vi.fn().mockReturnValue({
               single: vi.fn().mockResolvedValue({
                 data: updatedProfile,
@@ -450,6 +452,7 @@ describe("PATCH /api/users/me", () => {
     };
     const updateMock = vi.fn().mockReturnValue({
       eq: vi.fn().mockReturnValue({
+        is: vi.fn().mockReturnThis(),
         select: vi.fn().mockReturnValue({
           single: vi.fn().mockResolvedValue({
             data: updatedProfile,
@@ -723,6 +726,7 @@ describe("PATCH /api/users/me", () => {
   it("auto-derives region from country", async () => {
     const updateMock = vi.fn().mockReturnValue({
       eq: vi.fn().mockReturnValue({
+        is: vi.fn().mockReturnThis(),
         select: vi.fn().mockReturnValue({
           single: vi.fn().mockResolvedValue({
             data: { id: "u-1", country: "US", region: "north_america" },
@@ -771,6 +775,7 @@ describe("PATCH /api/users/me", () => {
       from: vi.fn().mockReturnValue({
         update: vi.fn().mockReturnValue({
           eq: vi.fn().mockReturnValue({
+            is: vi.fn().mockReturnThis(),
             select: vi.fn().mockReturnValue({
               single: vi.fn().mockResolvedValue({
                 data: null,

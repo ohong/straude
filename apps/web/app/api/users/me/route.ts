@@ -381,10 +381,16 @@ export async function PATCH(request: NextRequest) {
     .from("users")
     .update(updates)
     .eq("id", user.id)
+    // Rechecked atomically by Postgres even if deletion finished while this
+    // request was resolving a favicon or performing another asynchronous read.
+    .is("deleted_at", null)
     .select()
     .single();
 
   if (error) {
+    if (error.code === "PGRST116") {
+      return NextResponse.json({ error: "Account is no longer available" }, { status: 409 });
+    }
     // Unique constraint on username
     if (error.code === "23505") {
       return NextResponse.json(
@@ -527,6 +533,7 @@ export async function DELETE(request: NextRequest) {
       github_username: null,
       team_url: null,
       team_favicon_url: null,
+      deleted_at: new Date().toISOString(),
       heard_about: null,
       heard_about_sources: null,
       is_public: false,

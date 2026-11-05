@@ -17,7 +17,7 @@ vi.mock("@/lib/favicons/public-fetch", async (original) => ({
 }));
 
 const id = crypto.randomUUID();
-const domains = [0, 1, 2, 3, 4, 5].map((index) => `favicon-${id}-${index}.example`);
+const domains = [0, 1, 2, 3, 4, 5, 6].map((index) => `favicon-${id}-${index}.example`);
 const paths = domains.flatMap((domain) => [`${domain}.svg`, `${domain}.png`]);
 const svg = Buffer.from('<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 200 100"><rect width="200" height="100" fill="red" onclick="alert(1)"/></svg>');
 let db: ReturnType<typeof getServiceClient>;
@@ -139,7 +139,7 @@ describe("team favicon save with real database and Storage", () => {
     expect(data).toEqual({ object_path: `${domains[4]}.svg`, retry_after: null });
   });
 
-  it("erases publicly readable team affiliation when the account is deleted", async () => {
+  it("erases team affiliation and rejects an in-flight save after account deletion", async () => {
     const saved = await patch({ team_url: `https://${domains[0]}` });
     expect(saved.status).toBe(200);
     const profile = await saved.json();
@@ -167,15 +167,37 @@ describe("team favicon save with real database and Storage", () => {
     expect((await remove("wrong_username")).status).toBe(400);
     expect((await readTeam()).data).toEqual(before.data);
 
+    let release!: () => void;
+    let started!: () => void;
+    const lookupStarted = new Promise<void>((resolve) => { started = resolve; });
+    const lookupGate = new Promise<void>((resolve) => { release = resolve; });
+    remote.fetch.mockImplementation(async (url) => {
+      if (url.pathname !== "/favicon.svg") return null;
+      started();
+      await lookupGate;
+      return { url, bytes: svg, contentType: "image/svg+xml" };
+    });
+    // Use a fresh domain so the PATCH pauses after authentication, before its
+    // database write. DELETE must win even when this request resumes afterward.
+    const pending = patch({
+      team_url: `https://${domains[6]}`,
+      display_name: "Stale profile edit",
+      deleted_at: null,
+    });
+    await lookupStarted;
     const response = await remove(`fav_${id.slice(0, 8)}`);
+    release();
     expect(response.status).toBe(200);
     expect(await response.json()).toEqual({ ok: true });
+    const staleSave = await pending;
+    expect(staleSave.status).toBe(409);
+    expect(await staleSave.json()).toEqual({ error: "Account is no longer available" });
     const after = await readTeam();
     expect(after.error).toBeNull();
     expect(after.data).toEqual({ team_url: null, team_favicon_url: null });
-    const retained = await db.from("users").select("username,is_public").eq("id", id).single();
+    const retained = await db.from("users").select("username,display_name,is_public,deleted_at").eq("id", id).single();
     expect(retained.error).toBeNull();
-    expect(retained.data).toEqual({ username: `deleted_${id.slice(0, 8)}`, is_public: false });
+    expect(retained.data).toEqual({ username: `deleted_${id.slice(0, 8)}`, display_name: null, is_public: false, deleted_at: expect.any(String) });
     // Shared domain icons still serve other users after this profile is erased.
     expect((await fetch(profile.team_favicon_url)).status).toBe(200);
   });

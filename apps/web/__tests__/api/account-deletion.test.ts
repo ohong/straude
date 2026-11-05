@@ -124,6 +124,7 @@ describe("DELETE /api/users/me", () => {
     expect(usersChain.update).toHaveBeenCalledWith(expect.objectContaining({
       team_url: null,
       team_favicon_url: null,
+      deleted_at: expect.any(String),
     }));
     expect(usersChain.eq).toHaveBeenCalledWith("id", "user-1");
     expect(usersChain.delete).not.toHaveBeenCalled();
