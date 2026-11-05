@@ -70,7 +70,8 @@ jobs:
       - name: Setup Supabase CLI
         uses: supabase/setup-cli@v3
         with:
-          version: latest
+          # Match the validated local stack; CLI v3 rejects our [inbucket] config.
+          version: 2.75.0
 
       - name: Start local Supabase stack
         run: bunx supabase start --workdir .
