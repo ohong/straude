@@ -91,6 +91,10 @@ describe("DELETE /api/users/me", () => {
 
   it("anonymizes account and bans auth user when username matches", async () => {
     mockAuthClient("user-1", { username: "alice" });
+    const usersChain = serviceChain();
+    mockServiceFrom.mockImplementation((table: string) =>
+      table === "users" ? usersChain : serviceChain(),
+    );
 
     const res = await DELETE(makeRequest({ username: "alice" }));
     const json = await res.json();
@@ -117,6 +121,13 @@ describe("DELETE /api/users/me", () => {
     // Verify profile was anonymized (users table updated, not deleted)
     const usersCall = mockServiceFrom.mock.calls.find((c: any[]) => c[0] === "users");
     expect(usersCall).toBeDefined();
+    expect(usersChain.update).toHaveBeenCalledWith(expect.objectContaining({
+      team_url: null,
+      team_favicon_url: null,
+      deleted_at: expect.any(String),
+    }));
+    expect(usersChain.eq).toHaveBeenCalledWith("id", "user-1");
+    expect(usersChain.delete).not.toHaveBeenCalled();
 
     // Verify auth user was banned, not deleted
     expect(mockUpdateUserById).toHaveBeenCalledWith("user-1", {
