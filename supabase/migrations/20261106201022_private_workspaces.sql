@@ -100,7 +100,10 @@ BEGIN
   IF p_action = 'join' THEN
     SELECT * INTO i FROM public.workspace_invites WHERE id = i.id FOR UPDATE;
     IF i.revoked_at IS NOT NULL OR i.accepted_at IS NOT NULL OR i.expires_at <= now()
-      OR i.email IS DISTINCT FROM lower(p_input->>'actor_email') THEN
+      OR i.email IS DISTINCT FROM lower(p_input->>'actor_email')
+      OR EXISTS (SELECT 1 FROM public.workspace_members former
+        WHERE former.workspace_id=w.id AND former.user_id=p_actor
+          AND former.removed_at IS NOT NULL AND i.created_at<=former.removed_at) THEN
       RAISE EXCEPTION 'Invitation unavailable for this account' USING ERRCODE = '42501';
     END IF;
     INSERT INTO public.workspace_members(workspace_id,user_id,role,email) VALUES (w.id,p_actor,'member',lower(p_input->>'actor_email'))
