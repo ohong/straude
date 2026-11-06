@@ -93,6 +93,9 @@ jobs:
       - name: Build CLI for browser boundary tests
         run: bun run --cwd packages/cli build
 
+      - name: Prepare isolated native CLI runtime
+        run: docker pull node:22-bookworm-slim
+
       - name: Browser and CLI boundary tests
         run: bun run test:e2e
         working-directory: apps/web
