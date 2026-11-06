@@ -14,6 +14,7 @@ export function WorkspaceListClient() {
   const [name, setName] = useState("");
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
+  const [ready, setReady] = useState(false);
 
   const load = useCallback(async () => {
     setError(null);
@@ -27,7 +28,7 @@ export function WorkspaceListClient() {
     }
   }, []);
 
-  useEffect(() => { void load(); }, [load]);
+  useEffect(() => { setReady(true); void load(); }, [load]);
 
   async function create(event: React.FormEvent<HTMLFormElement>) {
     event.preventDefault();
@@ -66,8 +67,8 @@ export function WorkspaceListClient() {
         <p className="mt-2 text-sm text-muted">Creating a workspace does not move or publish any existing usage.</p>
         <form onSubmit={create} className="mt-5 space-y-3">
           <label htmlFor="workspace-name" className="block text-sm font-medium">Workspace name</label>
-          <Input id="workspace-name" value={name} onChange={(event) => setName(event.target.value)} required maxLength={100} autoComplete="organization" />
-          <Button type="submit" disabled={busy || !name.trim()}>{busy ? "Creating…" : "Create workspace"}</Button>
+          <Input id="workspace-name" value={name} onChange={(event) => setName(event.target.value)} disabled={!ready} required maxLength={100} autoComplete="organization" />
+          <Button type="submit" disabled={!ready || busy || !name.trim()}>{busy ? "Creating…" : "Create workspace"}</Button>
         </form>
       </section>
       <p className="text-sm text-muted"><Link href="/recap" className="text-accent underline">Review your personal week</Link> or <Link href="/teams" className="text-accent underline">read the team setup guide</Link>.</p>
