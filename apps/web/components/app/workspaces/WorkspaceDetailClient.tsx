@@ -84,7 +84,7 @@ export function WorkspaceDetailClient({ workspaceId }: { workspaceId: string }) 
     catch { setError("Could not copy the invitation. Select and copy the link below."); }
   }
 
-  const command = `npx straude@latest workspace connect ${workspaceId} --work-only`;
+  const command = `straude workspace connect ${workspaceId} --work-only`;
 
   return (
     <div className="space-y-8">
@@ -96,15 +96,15 @@ export function WorkspaceDetailClient({ workspaceId }: { workspaceId: string }) 
         </header>
         <WeeklyWorkspaceReport workspaceId={workspaceId} />
         <section aria-labelledby="setup-heading" className="space-y-5 border-t border-border pt-8">
-          <div><h2 id="setup-heading" className="text-2xl font-semibold">Connect your work-only source</h2><p className="mt-2 text-sm text-muted">Review this before running the command. Connecting does not collect usage; collection begins with a later sync.</p></div>
+          <div><h2 id="setup-heading" className="text-2xl font-semibold">Connect your work-only source</h2><p className="mt-2 text-sm text-muted">Use the workspace-capable pilot CLI supplied by your workspace administrator. The commands below use that installed build. Connecting does not collect usage; collection begins with a later sync.</p></div>
           <SharingDisclosure />
           <ol className="list-decimal space-y-4 pl-5 text-sm leading-relaxed">
-            <li>Open a terminal on a device or operating-system account used only for work. Sign in to Straude with the same account you used here.</li>
+            <li>Install the workspace-capable pilot CLI using your administrator’s instructions on a device or operating-system account used only for work. Run <code className="font-mono">straude login</code> and sign in with the same account you used here.</li>
             <li>Designate that source for this workspace. The <code className="font-mono">--work-only</code> flag confirms your choice.<pre className="mt-2 whitespace-pre-wrap break-all rounded border border-border bg-subtle p-4 font-mono text-sm"><code>{command}</code></pre></li>
-            <li>Starting the next UTC day, run <code className="font-mono">npx straude@latest</code> after using Claude Code or Codex. Refresh setup status here to confirm the first sync.</li>
-            <li>For automatic sync, use the existing <code className="font-mono">npx straude@latest --auto</code> setup. Check the local scheduler with <code className="font-mono">npx straude@latest auto</code>. This page confirms received data; it cannot verify a scheduler on your device.</li>
+            <li>Starting the next UTC day, run <code className="font-mono">straude</code> after using Claude Code or Codex. Refresh setup status here to confirm the first sync.</li>
+            <li>For automatic sync, use the existing <code className="font-mono">straude --auto</code> setup. Check the local scheduler with <code className="font-mono">straude auto</code>. This page confirms received data; it cannot verify a scheduler on your device.</li>
           </ol>
-          <details className="rounded border border-border p-4"><summary className="cursor-pointer font-semibold">No data received? Repair your setup</summary><div className="mt-3 space-y-2 text-sm leading-relaxed text-muted"><p>Check <code>npx straude@latest workspace status</code> on the work-only source. If sharing has not started yet, wait until its start date; personal history cannot be backfilled.</p><p>After the start date, finish a supported tool session, rerun <code>npx straude@latest</code>, and refresh this page. Retrying replaces the same daily totals rather than adding them twice.</p><p>If authentication expired, run <code>npx straude@latest login</code> with the same account. If access was removed, ask the workspace owner. <Link href="/cli" className="text-accent underline">CLI reference</Link> · <Link href="/contact" className="text-accent underline">Get help</Link></p></div></details>
+          <details className="rounded border border-border p-4"><summary className="cursor-pointer font-semibold">No data received? Repair your setup</summary><div className="mt-3 space-y-2 text-sm leading-relaxed text-muted"><p>Check <code>straude workspace status</code> on the work-only source. If sharing has not started yet, wait until its start date; personal history cannot be backfilled.</p><p>After the start date, finish a supported tool session, rerun <code>straude</code>, and refresh this page. Retrying replaces the same daily totals rather than adding them twice.</p><p>If authentication expired, run <code>straude login</code> with the same account. If access was removed, ask the workspace owner. <Link href="/cli" className="text-accent underline">CLI reference</Link> · <Link href="/contact" className="text-accent underline">Get help</Link></p></div></details>
         </section>
         <section aria-labelledby="members-heading" className="space-y-4 border-t border-border pt-8">
           <div><h2 id="members-heading" className="text-2xl font-semibold">Members and setup</h2><p className="mt-2 text-sm text-muted">A received zero-usage day is data. “No data received” means collection is unconfirmed. Last checked {receivedAt(loadedAt)}.</p></div>
