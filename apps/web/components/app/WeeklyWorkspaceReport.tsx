@@ -66,7 +66,7 @@ export default function WeeklyWorkspaceReport({ workspaceId }: { workspaceId: st
       </div>
       {report.tools.length > 0 && <div className="space-y-4">
         <h3 className="text-lg font-semibold">What changed by tool and model</h3>
-        <div className="overflow-x-auto"><table className="w-full text-left text-sm">
+        <div className="overflow-x-auto focus-visible:outline-2 focus-visible:outline-accent" tabIndex={0} role="region" aria-label="Tool and model comparison"><table className="w-full text-left text-sm">
           <caption className="mb-2 text-left text-muted">Estimated value at API prices (USD)</caption>
           <thead><tr className="border-b border-border"><th scope="col" className="py-2 pr-4">Tool / model</th><th scope="col" className="p-2 text-right">This period</th><th scope="col" className="p-2 text-right">Prior period</th><th scope="col" className="p-2 text-right">Change</th></tr></thead>
           <tbody>{report.tools.map(tool => <tr key={tool.tool} className="border-b border-border font-semibold"><th scope="row" className="py-2 pr-4">{tool.tool}</th><td className="p-2 text-right tabular-nums">{money(tool.current.estimated_value_usd)}</td><td className="p-2 text-right tabular-nums">{money(tool.previous.estimated_value_usd)}</td><td className="p-2 text-right tabular-nums">{delta(tool.current.estimated_value_usd - tool.previous.estimated_value_usd)}</td></tr>)}</tbody>
