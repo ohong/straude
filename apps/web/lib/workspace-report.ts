@@ -114,6 +114,7 @@ export function workspaceReportCsv(report: WorkspaceReport): string {
     ["period", "through", "", "", report.period.through, report.period.previous_through, "UTC date"],
     ["period", "incomplete_week", "", "", String(report.period.incomplete), "", "boolean"],
     ["metadata", "generated_at", "", "", report.generated_at, "", "UTC timestamp"],
+    ["metadata", "collection_scope", "", "", "Locally available priced usage; unpriced external models may be omitted. A received day does not prove complete activity.", "", "limitation"],
     ["total", "estimated_value", "", "", report.current.estimated_value_usd, report.previous.estimated_value_usd, "estimated value USD at API prices; actual billed charges unknown"],
     ["total", "tokens", "", "", report.current.tokens, report.previous.tokens, "tokens"],
     ["participation", "contributors", "", "", report.contributors.current, report.contributors.previous, "people with received days, including zero usage"],

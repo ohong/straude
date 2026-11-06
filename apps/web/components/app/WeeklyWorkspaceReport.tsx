@@ -46,6 +46,7 @@ export default function WeeklyWorkspaceReport({ workspaceId }: { workspaceId: st
         <p>{report.period.start}–{report.period.through} UTC compared with {report.period.previous_start}–{report.period.previous_through} UTC.</p>
         {report.period.incomplete && <p>Incomplete week: today is still in progress. The previous period covers the same calendar days, including a full day for its last date.</p>}
         <p>Dollar figures are estimated value at API prices. Actual billed charges are unknown. Usage is not a measure of employee productivity.</p>
+        <p>Collection covers locally available logs the collector can price. Unpriced external models may be omitted; a received day does not prove complete activity.</p>
       </div>
       <dl className="grid gap-4 sm:grid-cols-3">
         <div className="rounded border border-border p-4"><dt className="text-sm text-muted">Estimated value at API prices</dt><dd className="text-3xl font-semibold tabular-nums">{money(report.current.estimated_value_usd)}</dd><dd className="text-sm">{delta(report.delta_estimated_value_usd)} vs prior period ({money(report.previous.estimated_value_usd)})</dd></div>

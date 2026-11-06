@@ -98,6 +98,14 @@ jobs:
           # Lambda disables require(ESM); exercise the same route-loading boundary.
           NODE_OPTIONS: --no-experimental-require-module
 
+      - name: Upload sanitized workspace walkthrough evidence
+        if: always()
+        uses: actions/upload-artifact@v7
+        with:
+          name: private-workspace-walkthrough
+          path: apps/web/test-results/private-workspaces-evidence/
+          if-no-files-found: ignore
+
   cli-package:
     name: CLI package
     runs-on: ubuntu-latest
