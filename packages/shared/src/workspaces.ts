@@ -11,6 +11,7 @@ export interface WorkspaceSource {
   workspace_id: string;
   user_id: string;
   installation_id: string;
+  previous_device_id?: string | null;
   name: string;
   start_date: string;
   first_sync_at: string | null;

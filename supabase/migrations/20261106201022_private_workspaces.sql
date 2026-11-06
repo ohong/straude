@@ -31,6 +31,7 @@ CREATE TABLE public.workspace_sources (
   workspace_id uuid NOT NULL REFERENCES public.workspaces(id) ON DELETE CASCADE,
   user_id uuid NOT NULL REFERENCES public.users(id),
   installation_id uuid NOT NULL,
+  previous_device_id uuid,
   name text NOT NULL CHECK (length(name) BETWEEN 1 AND 100),
   start_date date NOT NULL DEFAULT ((clock_timestamp() AT TIME ZONE 'UTC')::date + 1),
   first_sync_at timestamptz,
@@ -73,6 +74,8 @@ DECLARE
   d jsonb;
   result jsonb;
   day date;
+  identities uuid[];
+  identity uuid;
   today date := (now() AT TIME ZONE 'UTC')::date;
 BEGIN
   IF p_actor IS NULL OR NOT EXISTS (SELECT 1 FROM public.users WHERE id=p_actor AND deleted_at IS NULL) THEN
@@ -137,18 +140,42 @@ BEGIN
     ),'[]'::jsonb));
   END IF;
   IF p_action = 'source' THEN
-    PERFORM pg_catalog.pg_advisory_xact_lock(pg_catalog.hashtextextended(p_actor::text || ':work-source:' || (p_input->>'installation_id'),0));
     IF p_input->'work_only' IS DISTINCT FROM 'true'::jsonb THEN
       RAISE EXCEPTION 'A work-only source must be explicitly confirmed' USING ERRCODE='22023';
     END IF;
+    -- Protect the durable installation and the device identity used by older CLIs.
+    -- Expand known aliases so two workspaces cannot adopt the same canonical source.
+    SELECT array_agg(DISTINCT candidate) INTO identities FROM (
+      SELECT unnest(ARRAY[(p_input->>'installation_id')::uuid,(p_input->>'previous_device_id')::uuid]) AS candidate
+      UNION SELECT alias.canonical_device_id FROM public.usage_installation_aliases alias
+        WHERE alias.user_id=p_actor AND alias.device_id=ANY(ARRAY[(p_input->>'installation_id')::uuid,(p_input->>'previous_device_id')::uuid])
+    ) candidates WHERE candidate IS NOT NULL;
+    FOR identity IN SELECT unnest(identities) ORDER BY 1 LOOP
+      PERFORM pg_catalog.pg_advisory_xact_lock(pg_catalog.hashtextextended(p_actor::text || ':work-source:' || identity::text,0));
+    END LOOP;
     SELECT * INTO s FROM public.workspace_sources
       WHERE user_id=p_actor AND installation_id=(p_input->>'installation_id')::uuid AND revoked_at IS NULL;
-    IF FOUND THEN
+    IF EXISTS (SELECT 1 FROM public.workspace_sources src
+      WHERE src.user_id=p_actor AND src.revoked_at IS NULL AND src.id IS DISTINCT FROM s.id AND (
+        src.installation_id=ANY(identities) OR src.previous_device_id=ANY(identities)
+        OR EXISTS (SELECT 1 FROM public.usage_installation_aliases alias
+          WHERE alias.user_id=p_actor AND alias.device_id=ANY(ARRAY[src.installation_id,src.previous_device_id])
+            AND alias.canonical_device_id=ANY(identities))
+      )) THEN
+      RAISE EXCEPTION 'This device identity already belongs to an active work source' USING ERRCODE='22023';
+    END IF;
+    IF s.id IS NOT NULL THEN
       IF s.workspace_id<>w.id THEN RAISE EXCEPTION 'Source belongs to another workspace' USING ERRCODE='22023'; END IF;
+      IF s.previous_device_id IS NOT NULL AND p_input->>'previous_device_id' IS NOT NULL
+        AND s.previous_device_id<>(p_input->>'previous_device_id')::uuid THEN
+        RAISE EXCEPTION 'The previous device identity cannot be changed' USING ERRCODE='22023';
+      END IF;
+      UPDATE public.workspace_sources SET previous_device_id=COALESCE(previous_device_id,(p_input->>'previous_device_id')::uuid)
+        WHERE id=s.id RETURNING * INTO s;
       RETURN jsonb_build_object('source',to_jsonb(s));
     END IF;
-    INSERT INTO public.workspace_sources(workspace_id,user_id,installation_id,name)
-      VALUES(w.id,p_actor,(p_input->>'installation_id')::uuid,p_input->>'name') RETURNING * INTO s;
+    INSERT INTO public.workspace_sources(workspace_id,user_id,installation_id,previous_device_id,name)
+      VALUES(w.id,p_actor,(p_input->>'installation_id')::uuid,(p_input->>'previous_device_id')::uuid,p_input->>'name') RETURNING * INTO s;
     RETURN jsonb_build_object('source',to_jsonb(s));
   END IF;
   IF p_action = 'sync' THEN
@@ -213,13 +240,13 @@ GRANT EXECUTE ON FUNCTION public.workspace_action(uuid,text,uuid,jsonb) TO servi
 
 -- A stale CLI/public outbox cannot publish a designated source's work dates.
 -- Keep earlier personal history editable and private-source revocations sticky.
-CREATE FUNCTION public.guard_private_work_source() RETURNS trigger
+CREATE OR REPLACE FUNCTION public.guard_private_work_source() RETURNS trigger
 LANGUAGE plpgsql SECURITY DEFINER SET search_path = '' AS $$
 BEGIN
   PERFORM pg_catalog.pg_advisory_xact_lock(pg_catalog.hashtextextended(NEW.user_id::text || ':work-source:' || NEW.device_id::text,0));
   IF EXISTS (SELECT 1 FROM public.workspace_sources src
-    LEFT JOIN public.usage_installation_aliases alias ON alias.user_id=src.user_id AND alias.device_id=src.installation_id
-    WHERE src.user_id=NEW.user_id AND (src.installation_id=NEW.device_id OR alias.canonical_device_id=NEW.device_id) AND src.start_date<=NEW.date) THEN
+    LEFT JOIN public.usage_installation_aliases alias ON alias.user_id=src.user_id AND alias.device_id=ANY(ARRAY[src.installation_id,src.previous_device_id])
+    WHERE src.user_id=NEW.user_id AND (src.installation_id=NEW.device_id OR src.previous_device_id=NEW.device_id OR alias.canonical_device_id=NEW.device_id) AND src.start_date<=NEW.date) THEN
     RAISE EXCEPTION 'This installation shares work usage privately; use workspace sync' USING ERRCODE='42501';
   END IF;
   RETURN NEW;
