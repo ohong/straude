@@ -4,6 +4,7 @@ import { createServerClient } from "@supabase/ssr";
 import { randomUUID } from "node:crypto";
 import { execFile } from "node:child_process";
 import { promisify } from "node:util";
+import { createRequire } from "node:module";
 import { mkdir, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { resolve, join } from "node:path";
@@ -283,6 +284,12 @@ test("built CLI collects native work usage and retries against the real private 
   const fixtureDirectory = await mkdtemp(join(tmpdir(), "straude-native-work-"));
   let workspace: string | undefined;
   try {
+    // Package managers may extract the native binary without execute bits. Its
+    // official launcher repairs those bits, which must happen before the
+    // dependency tree is mounted read-only in the isolated collector container.
+    // --version never reads usage logs.
+    const cliRequire = createRequire(resolve(process.cwd(), "../../packages/cli/package.json"));
+    await exec(process.execPath, [cliRequire.resolve("ccusage/src/cli.js"), "--version"]);
     expect((await admin.auth.admin.createUser({ id, email: `native-${id}@example.test`, email_confirm: true })).error).toBeNull();
     expect((await admin.from("users").upsert({ id, username, is_public: false, timezone: "UTC", onboarding_completed: false })).error).toBeNull();
     const token = createCliToken(id, username);
