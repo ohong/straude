@@ -105,13 +105,17 @@ test("private workspace browser journey, CLI enrollment, report accuracy and rev
     // A private account without completed public onboarding can create a workspace by keyboard.
     await ownerPage.goto("/recap");
     await expect(ownerPage.getByRole("heading", { name: "Personal recap", exact: true })).toBeVisible();
+    const listLoaded = ownerPage.waitForResponse(response => response.url().endsWith("/api/workspaces") && response.request().method() === "GET");
     await ownerPage.getByRole("link", { name: "Private workspaces", exact: true }).click();
+    expect((await listLoaded).status()).toBe(200);
     await ownerPage.getByLabel("Workspace name").fill("Example Workshop");
+    await expect(ownerPage.getByRole("button", { name: "Create workspace", exact: true })).toBeEnabled();
     await ownerPage.getByLabel("Workspace name").press("Enter");
     await expect(ownerPage).toHaveURL(/\/workspaces\/[0-9a-f-]+$/);
     const workspace = new URL(ownerPage.url()).pathname.split("/").at(-1)!;
     workspaces.push(workspace);
     await expect(ownerPage.getByRole("heading", { name: "Example Workshop", exact: true })).toBeVisible();
+    await expect(ownerPage.getByText("No source connected · No data received", { exact: true })).toBeVisible();
     const second = (await json(await outsider.context.request.post("/api/workspaces", { data: { name: "Other Example Workshop" } }))).workspace.id;
     workspaces.push(second);
     await denied(outsider, workspace);
@@ -149,7 +153,8 @@ test("private workspace browser journey, CLI enrollment, report accuracy and rev
     expect(authorization.status).toBe("completed");
     const configDir = join(cliDirectory, ".straude");
     await mkdir(configDir, { recursive: true });
-    await writeFile(join(configDir, "config.json"), JSON.stringify({ token: authorization.token, username: member.username, api_url: baseURL, device_name: "Example work-only source" }));
+    const legacyDeviceId = randomUUID();
+    await writeFile(join(configDir, "config.json"), JSON.stringify({ token: authorization.token, username: member.username, api_url: baseURL, device_id: legacyDeviceId, device_name: "Example work-only source" }));
     // Keep the host's HOME and CODEX_HOME untouched; enrollment only needs Node's home API.
     const preload = join(cliDirectory, "fixture-home.cjs");
     await writeFile(preload, `require('node:os').homedir = () => ${JSON.stringify(cliDirectory)}; require('node:module').syncBuiltinESMExports();`);
@@ -181,6 +186,7 @@ test("private workspace browser journey, CLI enrollment, report accuracy and rev
     const marker = JSON.parse(await readFile(markerPath, "utf8"));
     expect(marker.start_date).toBe(shift(today, 1));
     const memberSource = (await admin.from("workspace_sources").select("*").eq("id", marker.source_id).single()).data!;
+    expect(memberSource.previous_device_id).toBe(legacyDeviceId);
     await sync(member, workspace, memberSource, [{ date: today, agents: [agent(100, 1000)] }], 400);
     await cli(["push", "--date", today, "--non-interactive"], false);
 
