@@ -291,11 +291,14 @@ test("built CLI collects native work usage and retries against the real private 
     async function cli(args: string[]) {
       // The container's default home is a disposable bind mount. Neither the host's
       // HOME/CODEX_HOME nor any developer usage stores are passed to the collector.
-      const output = await exec("docker", ["run", "--rm", "--network=host", "--user=node",
+      const output = await exec("docker", ["run", "--rm", "--network=host",
         "--mount", `type=bind,source=${resolve(process.cwd(), "../..")},target=/app,readonly`,
-        "--mount", `type=bind,source=${fixtureDirectory},target=/home/node`,
+        "--mount", `type=bind,source=${fixtureDirectory},target=/root`,
         "-e", "STRAUDE_TELEMETRY_DISABLED=1", "-e", "DO_NOT_TRACK=1", "-e", "TZ=UTC", "-e", "CI=1",
-        "node:22-bookworm-slim", "node", "/app/packages/cli/dist/index.js", ...args,
+        "-e", `STRAUDE_FIXTURE_OWNER=${process.getuid!()}:${process.getgid!()}`,
+        "node:22-bookworm-slim", "sh", "-c",
+        'node "$@"; straude_result=$?; chown -R "$STRAUDE_FIXTURE_OWNER" /root; exit "$straude_result"',
+        "fixture-cli", "/app/packages/cli/dist/index.js", ...args,
       ], { timeout: 60_000 });
       transcript.push(`straude ${args.join(" ")}\n${output.stdout}${output.stderr}`);
     }
