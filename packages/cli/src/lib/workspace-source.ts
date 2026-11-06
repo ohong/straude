@@ -14,6 +14,7 @@ export interface WorkspaceSource {
   version: 1;
   workspace_id: string;
   installation_id: string;
+  previous_device_id?: string;
   account_key: string;
   api_url: string;
   source_id?: string;
@@ -25,7 +26,8 @@ export function loadWorkspaceSource(path = WORKSPACE_SOURCE_FILE): WorkspaceSour
   try {
     const value: WorkspaceSource = JSON.parse(readFileSync(path, "utf8"));
     if (!value || value.version !== 1 || !UUID.test(value.workspace_id)
-      || !UUID.test(value.installation_id) || !/^[a-f0-9]{64}$/.test(value.account_key)
+      || !UUID.test(value.installation_id)
+      || (value.previous_device_id !== undefined && (!UUID.test(value.previous_device_id) || value.previous_device_id === value.installation_id)) || !/^[a-f0-9]{64}$/.test(value.account_key)
       || typeof value.api_url !== "string" || !["http:", "https:"].includes(new URL(value.api_url).protocol)
       || (value.source_id !== undefined && !UUID.test(value.source_id))
       || ((value.source_id === undefined) !== (value.start_date === undefined))) throw new Error();

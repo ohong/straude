@@ -26,9 +26,13 @@ describe("private sharing boundaries", () => {
     directories.push(directory);
     const path = join(directory, "workspace.json");
     const { source_id: _, start_date: __, ...pending } = source;
-    saveWorkspaceSource(pending, path);
+    saveWorkspaceSource({ ...pending, previous_device_id: "44444444-4444-4444-8444-444444444444" }, path);
     const recovered = loadWorkspaceSource(path)!;
     expect(recovered.workspace_id).toBe(source.workspace_id);
+    // Retry keeps the old public identity even if auth config has been reset.
+    expect(recovered.previous_device_id).toBe("44444444-4444-4444-8444-444444444444");
+    saveWorkspaceSource({ ...recovered, source_id: source.source_id, start_date: source.start_date }, path);
+    expect(loadWorkspaceSource(path)?.previous_device_id).toBe(recovered.previous_device_id);
     expect(() => workspaceDateRange(recovered, {}, "2026-11-04")).toThrow();
   });
 

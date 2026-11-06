@@ -32,7 +32,9 @@ Prompts and code are not uploaded. No work data is published to profiles, feeds,
 recaps or leaderboards by this connection. Personal history is not imported.
 Daily aggregates cannot separate accounts on a mixed device. Use an exclusively
 work-only device or OS account. Sharing begins next UTC day, including all usage
-from that day onward. Keep personal activity on a different OS account/device.`;
+from that day onward. Keep personal activity on a different OS account/device.
+Reports cover available priced local logs. Missing logs and unpriced third-party
+models are not included; a successful receipt does not prove complete usage.`;
 
 function authenticatedConfig(apiUrl?: string): StraudeConfig {
   const config = loadConfig();
@@ -51,8 +53,17 @@ export async function workspaceConnect(workspaceId: string, workOnly: boolean, a
     if (routing) {
       assertWorkspaceAccount(routing, config);
       if (routing.workspace_id !== workspaceId) throw new Error("This source already belongs to a different private workspace. Use a separate work-only OS account; this connection remains private.");
+      if (!routing.previous_device_id && config.device_id && config.device_id !== routing.installation_id) {
+        routing = { ...routing, previous_device_id: config.device_id };
+        saveWorkspaceSource(routing);
+      }
     } else {
-      routing = { version: 1, workspace_id: workspaceId, installation_id: getInstallationId(), account_key: syncAccountKey(config), api_url: config.api_url };
+      const installationId = getInstallationId();
+      routing = {
+        version: 1, workspace_id: workspaceId, installation_id: installationId,
+        account_key: syncAccountKey(config), api_url: config.api_url,
+        ...(config.device_id && config.device_id !== installationId ? { previous_device_id: config.device_id } : {}),
+      };
       // Write the fail-closed destination BEFORE a request that could succeed
       // remotely but fail locally. Enrollment retry uses the same installation.
       saveWorkspaceSource(routing);
@@ -69,7 +80,7 @@ export async function workspaceConnect(workspaceId: string, workOnly: boolean, a
     if (config.auto_push?.enabled) disableAutoPush(config);
     const { source } = await apiRequest<{ source: SourceResponse }>(config, `/api/workspaces/${workspaceId}/sources`, {
       method: "POST",
-      body: JSON.stringify({ installation_id: routing.installation_id, name: config.device_name ?? hostname(), work_only: true }),
+      body: JSON.stringify({ installation_id: routing.installation_id, ...(routing.previous_device_id ? { previous_device_id: routing.previous_device_id } : {}), name: config.device_name ?? hostname(), work_only: true }),
     });
     if (source.workspace_id !== workspaceId || source.installation_id !== routing.installation_id || source.revoked_at) {
       throw new Error("The server did not confirm this source. Private routing remains enabled; retry the connection.");
@@ -117,6 +128,7 @@ export async function workspacePush(config: StraudeConfig, options: PushOptions)
   try {
     console.log(`Private workspace ${routing.workspace_id}: collecting ${dates[0]} to ${dates.at(-1)} (UTC).`);
     const collected = await collectCcusageUsageAsync(compactCalendarDate(dates[0]!), compactCalendarDate(dates.at(-1)!), options.timeoutMs, { timezone: "UTC", pricingMode: "online" });
+    console.log(`Collector: ccusage ${collected.version} (online API pricing). Reports cover available priced local logs; missing logs and unpriced third-party models are excluded.`);
     if (collected.data.some((day) => !dates.includes(day.date))) throw new Error("Collector returned dates outside the consented range. Nothing was shared.");
     const entries = dates.map((date) => ({ date, agents: collected.data.find((day) => day.date === date)?.agentBreakdown.map(toWireAgent) ?? [] }));
     if (options.dryRun) {
@@ -131,7 +143,7 @@ export async function workspacePush(config: StraudeConfig, options: PushOptions)
     if (result.accepted_days !== entries.length || !Number.isFinite(Date.parse(result.last_received_at))) {
       throw new Error("Server receipt did not confirm every date. Retry `straude`; already accepted dates are counted once.");
     }
-    console.log(`Workspace received ${result.accepted_days} daily snapshots at ${result.last_received_at}. Empty dates confirm zero recorded usage; today's snapshot is partial.`);
+    console.log(`Workspace received ${result.accepted_days} daily snapshots at ${result.last_received_at}. Empty dates confirm zero recorded priced usage; receipt does not prove complete activity. Today's snapshot is partial.`);
     console.log(`${config.api_url}/workspaces/${routing.workspace_id}`);
     return 0;
   } catch (error) {
