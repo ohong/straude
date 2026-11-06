@@ -238,15 +238,17 @@ $$;
 REVOKE ALL ON FUNCTION public.workspace_action(uuid,text,uuid,jsonb) FROM PUBLIC,anon,authenticated;
 GRANT EXECUTE ON FUNCTION public.workspace_action(uuid,text,uuid,jsonb) TO service_role;
 
--- A stale CLI/public outbox cannot publish a designated source's work dates.
--- Keep earlier personal history editable and private-source revocations sticky.
+-- A stale CLI/public outbox cannot publish any designated source snapshot.
+-- Legacy senders aggregate in local time, so a pre-start date may contain work
+-- after UTC consent. Preserve stored personal history but block every public
+-- insert/update for these identities, including after source revocation.
 CREATE OR REPLACE FUNCTION public.guard_private_work_source() RETURNS trigger
 LANGUAGE plpgsql SECURITY DEFINER SET search_path = '' AS $$
 BEGIN
   PERFORM pg_catalog.pg_advisory_xact_lock(pg_catalog.hashtextextended(NEW.user_id::text || ':work-source:' || NEW.device_id::text,0));
   IF EXISTS (SELECT 1 FROM public.workspace_sources src
     LEFT JOIN public.usage_installation_aliases alias ON alias.user_id=src.user_id AND alias.device_id=ANY(ARRAY[src.installation_id,src.previous_device_id])
-    WHERE src.user_id=NEW.user_id AND (src.installation_id=NEW.device_id OR src.previous_device_id=NEW.device_id OR alias.canonical_device_id=NEW.device_id) AND src.start_date<=NEW.date) THEN
+    WHERE src.user_id=NEW.user_id AND (src.installation_id=NEW.device_id OR src.previous_device_id=NEW.device_id OR alias.canonical_device_id=NEW.device_id)) THEN
     RAISE EXCEPTION 'This installation shares work usage privately; use workspace sync' USING ERRCODE='42501';
   END IF;
   RETURN NEW;
