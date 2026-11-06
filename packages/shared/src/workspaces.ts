@@ -15,6 +15,8 @@ export interface WorkspaceSource {
   start_date: string;
   first_sync_at: string | null;
   last_received_at: string | null;
+  /** Latest covered UTC date; included in workspace detail/report responses. */
+  latest_usage_date?: string | null;
   revoked_at: string | null;
 }
 export interface WorkspaceSync {

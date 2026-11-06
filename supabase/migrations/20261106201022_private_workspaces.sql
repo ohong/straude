@@ -119,7 +119,9 @@ BEGIN
     result := jsonb_build_object('workspace',to_jsonb(w),'role',m.role,
       'members',COALESCE((SELECT jsonb_agg(to_jsonb(mem) || jsonb_build_object('display_name',COALESCE(u.display_name,u.username),'email',mem.email) ORDER BY mem.joined_at)
         FROM public.workspace_members mem JOIN public.users u ON u.id=mem.user_id WHERE mem.workspace_id=w.id),'[]'::jsonb),
-      'sources',COALESCE((SELECT jsonb_agg(to_jsonb(src) ORDER BY src.created_at) FROM public.workspace_sources src WHERE src.workspace_id=w.id),'[]'::jsonb));
+      'sources',COALESCE((SELECT jsonb_agg(to_jsonb(src) || jsonb_build_object(
+        'latest_usage_date',(SELECT max(usage.date) FROM public.workspace_usage_days usage WHERE usage.source_id=src.id)
+      ) ORDER BY src.created_at) FROM public.workspace_sources src WHERE src.workspace_id=w.id),'[]'::jsonb));
     IF p_action = 'detail' THEN
       RETURN result || jsonb_build_object('invites',CASE WHEN m.role='owner' THEN COALESCE((
         SELECT jsonb_agg(to_jsonb(inv)-'token_hash' ORDER BY inv.created_at) FROM public.workspace_invites inv WHERE inv.workspace_id=w.id
