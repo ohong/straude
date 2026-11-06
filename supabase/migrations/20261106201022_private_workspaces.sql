@@ -63,7 +63,7 @@ GRANT SELECT, INSERT, UPDATE, DELETE ON public.workspaces, public.workspace_memb
 
 -- The trusted server supplies actor identity after checking Auth/CLI credentials.
 -- One workspace lock serializes membership removal, invite revocation and sync.
-CREATE FUNCTION public.workspace_action(p_actor uuid, p_action text, p_workspace uuid DEFAULT NULL, p_input jsonb DEFAULT '{}')
+CREATE OR REPLACE FUNCTION public.workspace_action(p_actor uuid, p_action text, p_workspace uuid DEFAULT NULL, p_input jsonb DEFAULT '{}')
 RETURNS jsonb LANGUAGE plpgsql SECURITY INVOKER SET search_path = '' AS $$
 DECLARE
   w public.workspaces%ROWTYPE;
@@ -75,7 +75,9 @@ DECLARE
   day date;
   today date := (now() AT TIME ZONE 'UTC')::date;
 BEGIN
-  IF p_actor IS NULL THEN RAISE EXCEPTION 'Authentication required' USING ERRCODE = '42501'; END IF;
+  IF p_actor IS NULL OR NOT EXISTS (SELECT 1 FROM public.users WHERE id=p_actor AND deleted_at IS NULL) THEN
+    RAISE EXCEPTION 'Authentication required' USING ERRCODE = '42501';
+  END IF;
   IF p_action = 'list' THEN
     RETURN jsonb_build_object('workspaces', COALESCE((
       SELECT jsonb_agg(to_jsonb(ws) || jsonb_build_object('role', mem.role) ORDER BY ws.created_at)
@@ -156,6 +158,24 @@ BEGIN
       day := (d->>'date')::date;
       IF day IS NULL OR day < s.start_date OR day > today OR day < today-30 THEN
         RAISE EXCEPTION 'Date outside this source sharing window' USING ERRCODE='22023';
+      END IF;
+      -- Missing or rotated collector logs must not erase already received work.
+      -- Corrections that reduce counters require an explicit future correction flow.
+      IF EXISTS (
+        SELECT 1 FROM public.workspace_usage_days previous,
+          LATERAL jsonb_array_elements(previous.agents) old_agent
+        WHERE previous.source_id=s.id AND previous.date=day AND NOT EXISTS (
+          SELECT 1 FROM jsonb_array_elements(d->'agents') new_agent
+          WHERE new_agent->>'agent'=old_agent->>'agent'
+            AND (new_agent->>'input_tokens')::numeric >= (old_agent->>'input_tokens')::numeric
+            AND (new_agent->>'output_tokens')::numeric >= (old_agent->>'output_tokens')::numeric
+            AND (new_agent->>'reasoning_output_tokens')::numeric >= (old_agent->>'reasoning_output_tokens')::numeric
+            AND (new_agent->>'cache_creation_tokens')::numeric >= (old_agent->>'cache_creation_tokens')::numeric
+            AND (new_agent->>'cache_read_tokens')::numeric >= (old_agent->>'cache_read_tokens')::numeric
+            AND (new_agent->>'total_tokens')::numeric >= (old_agent->>'total_tokens')::numeric
+        )
+      ) THEN
+        RAISE EXCEPTION 'Previously received usage decreased. Restore this work source logs and retry; automatic corrections are not supported.' USING ERRCODE='22023';
       END IF;
       INSERT INTO public.workspace_usage_days(source_id,workspace_id,user_id,date,agents)
         VALUES(s.id,w.id,p_actor,day,d->'agents')
