@@ -7,7 +7,7 @@ import { Input } from "@/components/ui/Input";
 import WeeklyWorkspaceReport from "@/components/app/WeeklyWorkspaceReport";
 import { SharingDisclosure } from "./SharingDisclosure";
 
-type Source = { id: string; user_id: string; name: string; start_date: string; first_sync_at: string | null; last_received_at: string | null; revoked_at: string | null };
+type Source = { id: string; user_id: string; name: string; start_date: string; first_sync_at: string | null; last_received_at: string | null; latest_usage_date: string | null; revoked_at: string | null };
 type Member = { user_id: string; role: string; joined_at: string; removed_at: string | null; email: string | null; display_name: string | null };
 type Invite = { id: string; email: string; created_at: string; expires_at: string; accepted_at: string | null; revoked_at: string | null };
 type Detail = { workspace: { id: string; name: string }; role: string; members: Member[]; invites: Invite[]; sources: Source[] };
@@ -19,6 +19,10 @@ function receivedAt(value: string | null) {
 function sourceStatus(source: Source) {
   if (source.revoked_at) return "Access removed";
   if (!source.first_sync_at) return "Waiting for first sync";
+  if (!source.latest_usage_date) return "No usage days received";
+  const yesterday = new Date();
+  yesterday.setUTCDate(yesterday.getUTCDate() - 1);
+  if (source.latest_usage_date < yesterday.toISOString().slice(0, 10)) return "Stale — usage is behind yesterday";
   if (!source.last_received_at || Date.now() - new Date(source.last_received_at).getTime() > 48 * 60 * 60 * 1000) return "Stale — no sync in 48 hours";
   return "First sync confirmed";
 }
@@ -112,7 +116,7 @@ export function WorkspaceDetailClient({ workspaceId }: { workspaceId: string }) 
             {detail.members.map((member) => {
               const sources = detail.sources.filter((source) => source.user_id === member.user_id);
               const label = member.display_name || member.email || "Workspace member";
-              return <li key={member.user_id} className="rounded border border-border p-5"><div className="flex flex-wrap items-start justify-between gap-3"><div className="min-w-0"><h3 className="break-words font-semibold">{label}</h3><p className="mt-1 break-all text-sm text-muted">{member.email} · {member.role} · {member.removed_at ? "Removed" : `Joined ${member.joined_at.slice(0, 10)}`}</p></div>{detail.role === "owner" && member.role !== "owner" && !member.removed_at && <Button variant="secondary" size="sm" disabled={busy} onClick={() => void act({ action: "remove", user_id: member.user_id })} aria-label={`Remove ${label}`}>Remove access</Button>}</div>{sources.length === 0 ? <p className="mt-3 text-sm text-muted">No source connected · No data received</p> : <ul className="mt-4 space-y-3">{sources.map((source) => <li key={source.id} className="border-l-2 border-border pl-3 text-sm"><p className="break-words font-medium">{source.name} · {sourceStatus(source)}</p><p className="mt-1 text-muted">Sharing from {source.start_date} UTC · Last received: {receivedAt(source.last_received_at)}</p></li>)}</ul>}</li>;
+              return <li key={member.user_id} className="rounded border border-border p-5"><div className="flex flex-wrap items-start justify-between gap-3"><div className="min-w-0"><h3 className="break-words font-semibold">{label}</h3><p className="mt-1 break-all text-sm text-muted">{member.email} · {member.role} · {member.removed_at ? "Removed" : `Joined ${member.joined_at.slice(0, 10)}`}</p></div>{detail.role === "owner" && member.role !== "owner" && !member.removed_at && <Button variant="secondary" size="sm" disabled={busy} onClick={() => void act({ action: "remove", user_id: member.user_id })} aria-label={`Remove ${label}`}>Remove access</Button>}</div>{sources.length === 0 ? <p className="mt-3 text-sm text-muted">No source connected · No data received</p> : <ul className="mt-4 space-y-3">{sources.map((source) => <li key={source.id} className="border-l-2 border-border pl-3 text-sm"><p className="break-words font-medium">{source.name} · {sourceStatus(source)}</p><p className="mt-1 text-muted">Sharing from {source.start_date} UTC · Last received: {receivedAt(source.last_received_at)}</p><p className="mt-1 text-muted">{source.latest_usage_date ? `Data through ${source.latest_usage_date} (UTC)` : "No usage dates received"}</p></li>)}</ul>}</li>;
             })}
           </ul>
           <p className="text-sm text-muted">Removing access stops future sharing and workspace access. Previously contributed report totals remain.</p>
