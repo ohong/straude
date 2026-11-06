@@ -33,7 +33,9 @@ const STATIC_PAGE_PATHS = new Set([
   "/settings/import",
   "/signup",
   "/terms",
+  "/teams",
   "/token-rich",
+  "/workspaces",
 ]);
 
 const DYNAMIC_PAGE_PATTERNS = [
@@ -42,6 +44,8 @@ const DYNAMIC_PAGE_PATTERNS = [
   /^\/recap\/[^/]+$/,
   /^\/stats\/[^/]+$/,
   /^\/u\/[^/]+(?:\/follows)?$/,
+  /^\/workspaces\/[^/]+$/,
+  /^\/workspaces\/join\/[^/]+$/,
 ];
 
 function normalizedPathname(pathname: string): string {
