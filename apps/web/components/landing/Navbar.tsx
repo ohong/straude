@@ -23,7 +23,7 @@ export function Navbar({ variant = "dark" }: { variant?: "dark" | "light" }) {
         </Link>
 
         {/* Desktop nav */}
-        <div className="hidden md:flex items-center gap-8 font-[family-name:var(--font-mono)] text-sm uppercase">
+        <div className="hidden lg:flex items-center gap-8 font-[family-name:var(--font-mono)] text-sm uppercase">
           <Link
             href="/feed"
             className={`${text} hover:text-accent transition-colors`}
@@ -41,6 +41,12 @@ export function Navbar({ variant = "dark" }: { variant?: "dark" | "light" }) {
             className={`${text} hover:text-accent transition-colors`}
           >
             Prometheus List
+          </Link>
+          <Link
+            href="/teams"
+            className={`${text} hover:text-accent transition-colors`}
+          >
+            Teams
           </Link>
           <SignupCtaLink
             ctaLocation="nav_desktop"

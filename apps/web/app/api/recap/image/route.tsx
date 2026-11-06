@@ -22,7 +22,7 @@ export async function GET(request: NextRequest) {
     .eq("id", user.id)
     .single();
 
-  if (!profile?.username) {
+  if (!profile) {
     return new Response("Profile not found", { status: 404 });
   }
 
@@ -35,7 +35,7 @@ export async function GET(request: NextRequest) {
   try {
     const [fonts, data] = await Promise.all([
       loadFonts(),
-      getRecapData(supabase, user.id, profile.username, profile.is_public, period),
+      getRecapData(supabase, user.id, profile.username ?? "Your account", Boolean(profile.username && profile.is_public), period),
     ]);
 
     const response = new ImageResponse(
@@ -53,6 +53,7 @@ export async function GET(request: NextRequest) {
       `attachment; filename="straude-recap-${period}.png"`
     );
 
+    response.headers.set("Cache-Control", "private, no-store");
     return response;
   } catch (err) {
     console.error("Recap image generation failed:", err);

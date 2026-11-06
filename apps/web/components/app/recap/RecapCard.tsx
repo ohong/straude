@@ -63,7 +63,7 @@ export function RecapCard({
             className="mt-1 text-xs font-medium uppercase tracking-widest"
             style={{ color: palette.textSubtle }}
           >
-            total spend
+            estimated value at API prices
           </p>
         </div>
 
