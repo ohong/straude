@@ -2,12 +2,13 @@ import { MAX_BACKFILL_DAYS } from "../config.js";
 import { assertCalendarDate } from "./calendar.js";
 
 const MAX_TIMEOUT_SECONDS = 3_600;
-const COMMANDS = new Set(["push", "login", "status", "auto", "devices", "help"]);
+const COMMANDS = new Set(["push", "login", "status", "auto", "devices", "workspace", "help"]);
 const UUID_PATTERN =
   /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 const VALUE_FLAGS = new Set(["--date", "--days", "--timeout", "--time", "--api-url"]);
 
 export interface ParsedCliOptions {
+  workOnly?: true;
   dryRun?: true;
   auto?: true;
   noAuto?: true;
@@ -130,6 +131,9 @@ export function parseCliArgs(args: string[]): ParsedCliArgs {
     }
 
     switch (argument) {
+      case "--work-only":
+        options.workOnly = true;
+        break;
       case "--dry-run":
         options.dryRun = true;
         break;
@@ -176,7 +180,17 @@ export function parseCliArgs(args: string[]): ParsedCliArgs {
   if (command === "auto" && subcommand !== null && subcommand !== "logs") {
     throw new CliArgumentError(`Unsupported auto subcommand: ${subcommand}`);
   }
-  if (command === "devices") {
+  if (command === "workspace") {
+    if (subcommand !== "connect" && subcommand !== "status") {
+      throw new CliArgumentError("Use workspace connect <workspace-id> --work-only or workspace status.");
+    }
+    if (subcommand === "connect" && (operand === null || !UUID_PATTERN.test(operand))) {
+      throw new CliArgumentError("workspace connect requires a workspace UUID.");
+    }
+    if (subcommand === "status" && operand !== null) {
+      throw new CliArgumentError("workspace status takes no additional argument.");
+    }
+  } else if (command === "devices") {
     if (subcommand === null && operand !== null) {
       throw new CliArgumentError(`Unexpected devices argument: ${operand}`);
     }
@@ -201,6 +215,9 @@ export function parseCliArgs(args: string[]): ParsedCliArgs {
     throw new CliArgumentError("--auto and --no-auto cannot be used together.");
   }
 
+  if (options.workOnly && (command !== "workspace" || subcommand !== "connect")) {
+    throw new CliArgumentError("--work-only is only valid with workspace connect.");
+  }
   const resolvedCommand = command ?? "push";
   const pushOnly = options.date !== undefined
     || options.days !== undefined

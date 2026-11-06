@@ -1,5 +1,15 @@
 # Architecture & Design Decisions
 
+## Keep work-only collection separate from community usage (2026-11-06)
+
+**Decision:** Private workspaces use explicit owner/member membership and verified-email invitations. Public affiliation badges and email domains confer no access. Store private source/day tool and model aggregates separately from `daily_usage`, posts, recaps, and leaderboard inputs. Only the server can access the tables or call the transactional membership/sync RPC; each scoped operation checks current membership under the workspace lock. Removal revokes sources and outstanding invitations, denies further access, and retains past contributions. Rejoining requires a new source consent window.
+
+**Collection alternatives:** The current collector returns daily aggregates by tool/model without account or project identity. Account filtering on a mixed device cannot reliably recover this distinction. The supported option is an explicitly designated work-only device or OS account. Start at the next UTC midnight and collect in UTC, avoiding accidental inclusion of earlier activity in a partially elapsed daily aggregate. The server rejects earlier dates, future dates, and dates outside the existing 30-day backfill window. A separate durable CLI routing marker survives credential resets and never replays the personal outbox into a workspace. Public storage triggers reject every write from enrolled current, legacy, and canonical source identities, including historical retries. An older sender's local calendar date cannot safely establish whether its aggregate contains post-consent UTC activity. Existing personal records remain stored and other personal sources remain usable.
+
+**Observed state:** Enrollment is not a sync. Successful source/day receipts, including explicit zero records, establish first sync and freshness. No prompts or code are submitted. Stopping older installed automation at enrollment prevents it from invoking a public-only build; private automation requires a durable installed compatible CLI and its existing scheduler diagnostics. A compatible CLI must be installed before source enrollment; no release is performed by this change.
+
+**Limits:** A work-only designation is a user assertion, not account classification. Copies of the same logs enrolled as distinct sources can still double count. The existing collector-accuracy and recovery work in PRs #162–#165 is separate and must be assessed before a release. Private contributions do not change the existing cumulative-spend north-star definition. Dollar estimates describe API-price value, not invoices or employee performance.
+
 ## Reject profile saves after account deletion (2026-11-05)
 
 **Problem:** Account deletion omitted team affiliation fields. Clearing them alone still allowed a PATCH authenticated before deletion to restore affiliation after slow favicon discovery finished.

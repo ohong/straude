@@ -1,3 +1,6 @@
+import { loadWorkspaceSource } from "../lib/workspace-source.js";
+import { workspacePush } from "./workspace.js";
+import { toWireAgent } from "../lib/usage-agent.js";
 import { createHash, randomUUID } from "node:crypto";
 import { hostname } from "node:os";
 import { performance } from "node:perf_hooks";
@@ -5,7 +8,6 @@ import {
   canonicalizeUsageEntryV2,
   parseUsageSubmitResponseV2,
   parseUsageSubmitV2,
-  type AgentUsageComponent,
   type UsageEntryV2,
   type UsageOutcomeV2,
   type UsageSubmitRequestV2,
@@ -28,7 +30,6 @@ import {
   PricingUnavailableError,
   collectCcusageUsageAsync,
   resolveLocalTimezone,
-  type CcusageAgentEntry,
   type CcusageCollectorMeta,
   type CcusageDailyEntry,
 } from "../lib/ccusage.js";
@@ -221,30 +222,6 @@ export function isWithinBackfillWindow(date: string, today = new Date()): boolea
   } catch {
     return false;
   }
-}
-
-function toWireAgent(agent: CcusageAgentEntry): AgentUsageComponent {
-  return {
-    agent: agent.agent,
-    models: [...agent.models].sort(),
-    input_tokens: agent.inputTokens,
-    output_tokens: agent.outputTokens,
-    reasoning_output_tokens: agent.reasoningOutputTokens,
-    cache_creation_tokens: agent.cacheCreationTokens,
-    cache_read_tokens: agent.cacheReadTokens,
-    total_tokens: agent.totalTokens,
-    cost_usd: agent.costUSD,
-    model_breakdown: agent.modelBreakdown.map((model) => ({
-      model: model.model,
-      input_tokens: model.inputTokens,
-      output_tokens: model.outputTokens,
-      reasoning_output_tokens: model.reasoningOutputTokens,
-      cache_creation_tokens: model.cacheCreationTokens,
-      cache_read_tokens: model.cacheReadTokens,
-      total_tokens: model.totalTokens,
-      cost_usd: model.cost_usd,
-    })),
-  };
 }
 
 function createUsageEntry(
@@ -684,6 +661,8 @@ export async function pushCommand(
   const config = await authenticate(apiUrlOverride, nonInteractive, timings);
   if (!config) return CLI_EXIT.AUTH_REQUIRED;
 
+  if (loadWorkspaceSource()) return workspacePush(config, options);
+
   const timezone = resolveLocalTimezone();
   const today = new Date();
   const migrationPending = !config.usage_protocol_v2_migration_completed_at;
@@ -728,6 +707,11 @@ export async function pushCommand(
   }
 
   try {
+    // Enrollment holds this same lease; never replay a public outbox after it.
+    if (loadWorkspaceSource()) {
+      console.error("This installation is now private. Run `straude` again to sync its workspace.");
+      return CLI_EXIT.TEMPORARY;
+    }
     const queuedDatesToConsume = resolution.mode === "first_sync" || resolution.mode === "migration"
       ? lease.queuedDates.filter((date) => requestedDates.includes(date))
       : lease.queuedDates;

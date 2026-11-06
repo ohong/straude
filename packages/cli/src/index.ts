@@ -1,5 +1,6 @@
 #!/usr/bin/env node
 
+import { workspaceConnect, workspaceStatus } from "./commands/workspace.js";
 import { loginCommand } from "./commands/login.js";
 import { pushCommand } from "./commands/push.js";
 import { statusCommand } from "./commands/status.js";
@@ -63,6 +64,12 @@ Commands:
   status             Show your current stats
   auto               Show auto-push status or logs
   devices            List or resolve installation identity conflicts
+  workspace          Connect a work-only source or show its status
+
+Private workspace:
+  straude workspace connect <workspace-id> --work-only
+  straude workspace status
+  Use a work-only device or OS account. Sharing starts next UTC day.
 
 Push options:
   --date YYYY-MM-DD  Push a specific date (within last 30 days)
@@ -173,6 +180,10 @@ async function main(): Promise<void> {
   }
 
   switch (command) {
+    case "workspace":
+      if (subcommand === "connect") await workspaceConnect(operand!, options.workOnly === true, apiUrl);
+      else await workspaceStatus();
+      break;
     case "login":
       await loginCommand(apiUrl);
       break;
