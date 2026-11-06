@@ -12,7 +12,7 @@ function fixture(): WorkspaceReportInput {
   return {
     workspace: { id: "example", name: "Fictional workspace" },
     members: ["a", "b", "c", "d"].map(user_id => ({ user_id, removed_at: null })),
-    sources: ["a", "b", "c"].map(id => ({ id, user_id: id, start_date: "2026-10-01", first_sync_at: id === "c" ? null : "2026-10-26T12:00:00Z", last_received_at: id === "c" ? null : id === "b" ? "2026-11-01T12:00:00Z" : now.toISOString(), revoked_at: null })),
+    sources: ["a", "b", "c"].map(id => ({ id, user_id: id, start_date: "2026-10-01", first_sync_at: id === "c" ? null : "2026-10-26T12:00:00Z", last_received_at: id === "c" ? null : id === "b" ? "2026-11-01T12:00:00Z" : now.toISOString(), latest_usage_date: id === "a" ? "2026-11-06" : id === "b" ? "2026-11-01" : null, revoked_at: null })),
     days: [
       { source_id: "a", user_id: "a", date: "2026-10-26", agents: [agent(10)] },
       { source_id: "a", user_id: "a", date: "2026-11-02", agents: [agent(15)] },
@@ -42,6 +42,9 @@ describe("private weekly accounting", () => {
     expect(report.coverage.stale_sources).toBe(1);
     expect(report.coverage.never_synced_sources).toBe(1);
     expect(report.coverage.unconnected_members).toBe(1);
+    const backfill = fixture();
+    backfill.sources[1]!.last_received_at = now.toISOString();
+    expect(buildWorkspaceReport(backfill, null, now).coverage.stale_sources).toBe(1);
     const empty = fixture();
     empty.days = [{ source_id: "a", user_id: "a", date: "2026-11-02", agents: [] }];
     const zero = buildWorkspaceReport(empty, null, now);

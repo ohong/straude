@@ -61,8 +61,8 @@ export default function WeeklyWorkspaceReport({ workspaceId }: { workspaceId: st
       </div>
       <div className="space-y-2 text-sm">
         <h3 className="text-lg font-semibold">Coverage and setup</h3>
-        <p>Current setup: {report.coverage.active_members} members, {report.coverage.unconnected_members} without an active source, {report.coverage.never_synced_sources} sources never synced, {report.coverage.stale_sources} sources last received over 48 hours ago.</p>
-        <p>Coverage counts each source day from its sharing start through the selected period (including weekends). A missing day is unknown; a received day may explicitly record zero. Source freshness reflects the latest receipt now. Removed members’ past contributions remain in totals.</p>
+        <p>Current setup: {report.coverage.active_members} members, {report.coverage.unconnected_members} without an active source, {report.coverage.never_synced_sources} sources never synced, {report.coverage.stale_sources} stale sources (no receipt in 48 hours or data older than yesterday UTC).</p>
+        <p>Coverage counts each source day from its sharing start through the selected period (including weekends). A missing day is unknown; a received day may explicitly record zero. Freshness checks both the last receipt and the latest covered date now. Removed members’ past contributions remain in totals.</p>
       </div>
       {report.tools.length > 0 && <div className="space-y-4">
         <h3 className="text-lg font-semibold">What changed by tool and model</h3>

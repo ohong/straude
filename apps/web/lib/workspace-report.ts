@@ -3,6 +3,7 @@ import type { AgentUsageComponent } from "@straude/shared/usage-protocol";
 export interface ReportSource {
   id: string; user_id: string; start_date: string;
   first_sync_at: string | null; last_received_at: string | null; revoked_at: string | null;
+  latest_usage_date?: string | null;
 }
 export interface ReportDay {
   source_id: string; user_id: string; date: string; agents: AgentUsageComponent[];
@@ -96,7 +97,10 @@ export function buildWorkspaceReport(input: WorkspaceReportInput, week: string |
       active_members: activeMembers.length,
       unconnected_members: activeMembers.filter(m => !activeSources.some(s => s.user_id === m.user_id)).length,
       never_synced_sources: activeSources.filter(s => !s.last_received_at).length,
-      stale_sources: activeSources.filter(s => s.last_received_at && now.getTime() - Date.parse(s.last_received_at) > 2 * DAY).length },
+      stale_sources: activeSources.filter(s => s.last_received_at && (
+        now.getTime() - Date.parse(s.last_received_at) > 2 * DAY
+        || !s.latest_usage_date || s.latest_usage_date < shiftDate(now.toISOString().slice(0, 10), -1)
+      )).length },
     tools: [...tools.values()].sort((a, b) => b.current.estimated_value_usd - a.current.estimated_value_usd),
     models: [...drivers.values()].sort((a, b) => b.current.estimated_value_usd - a.current.estimated_value_usd),
   };
