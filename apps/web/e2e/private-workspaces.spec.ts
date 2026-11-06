@@ -191,6 +191,32 @@ test("private workspace browser journey, CLI enrollment, report accuracy and rev
     await sync(member, workspace, memberSource, [{ date: today, agents: [agent(100, 1000)] }], 400);
     await cli(["push", "--date", today, "--non-interactive"], false);
 
+    // An older client can label post-consent UTC usage with the previous local
+    // date. Block public writes for enrolled identities even before start_date,
+    // including the legacy config identity, while preserving stored personal history.
+    for (const installationId of [marker.installation_id, legacyDeviceId]) {
+      const publicV2 = await json(await member.context.request.post("/api/usage/submit", {
+        headers: { Authorization: `Bearer ${authorization.token}` },
+        data: {
+          protocol_version: 2, request_id: randomUUID(), source: "cli", timezone: "America/Vancouver",
+          installation: { id: installationId }, collector: { name: "ccusage", version: "20.0.26", pricing_mode: "online" },
+          entries: [{ date: today, content_hash: "0".repeat(64), agents: [agent(1, 100)] }],
+        },
+      }), 400);
+      expect(publicV2.outcomes).toMatchObject([{ status: "permanent_error", error: { code: "42501" } }]);
+      const publicV1 = await json(await member.context.request.post("/api/usage/submit", {
+        headers: { Authorization: `Bearer ${authorization.token}` },
+        data: {
+          source: "cli", device_id: installationId, collector: { ccusage_version: "20.0.26" },
+          entries: [{ date: today, data: { date: today, models: ["gpt-5.6"], inputTokens: 100, outputTokens: 0, cacheCreationTokens: 0, cacheReadTokens: 0, totalTokens: 100, costUSD: 1 } }],
+        },
+      }), 400);
+      expect(publicV1.results).toEqual([]);
+      expect(publicV1.errors).toHaveLength(1);
+    }
+    expect((await admin.from("daily_usage").select("cost_usd,total_tokens").eq("user_id", member.id)).data).toEqual([{ cost_usd: 77, total_tokens: 7700 }]);
+    expect((await admin.from("posts").select("id").eq("user_id", member.id)).data).toEqual([]);
+
     // Fixture-only enrollment in the past lets a real collector exercise a week boundary.
     // Production source creation never accepts a historical start date.
     expect((await admin.from("workspace_sources").update({ start_date: nativeDay }).in("id", [memberSource.id, ownerSource.id, neverSource.id])).error).toBeNull();
