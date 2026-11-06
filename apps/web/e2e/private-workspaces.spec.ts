@@ -99,7 +99,7 @@ test("private workspace browser journey, CLI enrollment, report accuracy and rev
     const unsynced = await actor("Unconnected", browser);
     const ownerPage = await owner.context.newPage();
     const memberPage = await member.context.newPage();
-    const personal = { user_id: member.id, date: shift(previousMonday, -1), cost_usd: 77, input_tokens: 7700, output_tokens: 0, cache_creation_tokens: 0, cache_read_tokens: 0, total_tokens: 7700, models: ["personal-model"], session_count: 1, is_verified: true, raw_hash: `personal-${member.id}` };
+    const personal = { user_id: member.id, date: monday, cost_usd: 77, input_tokens: 7700, output_tokens: 0, cache_creation_tokens: 0, cache_read_tokens: 0, total_tokens: 7700, models: ["personal-model"], session_count: 1, is_verified: true, raw_hash: `personal-${member.id}` };
     expect((await admin.from("daily_usage").insert(personal)).error).toBeNull();
 
     // A private account without completed public onboarding can create a workspace by keyboard.
