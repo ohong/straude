@@ -50,6 +50,8 @@ The release candidate combines the dashboard timeout/retry fix with account-spec
 
 ### Added
 
+- **Private workspaces and work-only sources.** Authenticated users can create a workspace, accept an email-bound invitation, revoke invitations, and remove members without a public profile. Explicitly designated work-only CLI sources start sharing the next UTC day into separate private tables. Source/date snapshots make retries idempotent; removal stops reads and writes while preserving previous contributions. Durable CLI routing keeps personal outboxes and work sync separate, including after sign-in changes and failures. Existing automation is stopped at enrollment; enabling it again requires an installed workspace-capable CLI.
+
 - **Show background sync recovery in `straude auto`.** Report the last confirmed submission time and login guidance after HTTP 401. Account-bound local state preserves the previous success through failures, clears the notice after a successful submission, and does not change on dry runs or empty scans. The packaged E2E exercises recovery, pending-request replay, and account isolation.
 
 
