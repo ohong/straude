@@ -143,6 +143,12 @@ async function main(): Promise<void> {
 
   const apiUrl = options.apiUrl;
 
+  if (options.noAuto) {
+    if (existingConfig) disableAutoPush(existingConfig);
+    else console.log("Auto-push is not enabled.");
+    return;
+  }
+
   if (!command || command === "push") {
     exitCode = await pushCommand(
       {
@@ -163,18 +169,14 @@ async function main(): Promise<void> {
       if (config) {
         enableAutoPush(config, options.time, options.autoMechanism);
       }
-    } else if (options.noAuto) {
-      const config = loadConfig();
-      if (config) {
-        disableAutoPush(config);
-      }
+
     }
     return;
   }
 
   switch (command) {
     case "login":
-      await loginCommand(apiUrl);
+      await loginCommand(apiUrl, { requireInteractive: options.nonInteractive === true });
       break;
     case "status":
       await statusCommand();

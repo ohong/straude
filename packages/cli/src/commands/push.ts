@@ -199,7 +199,7 @@ export function resolvePushDateRange(args: {
     return { ok: true, since: date, until: date, mode: "incremental" };
   }
 
-  const nextUncommitted = addCalendarDays(args.lastPushDate, 1);
+  const nextUncommitted = args.lastPushDate;
   const oldestAccepted = addCalendarDays(today, -MAX_BACKFILL_DAYS);
   const since = nextUncommitted < oldestAccepted ? oldestAccepted : nextUncommitted;
   const until = calendarDaysBetween(since, today) >= DEFAULT_SYNC_DAYS
@@ -714,7 +714,7 @@ export async function pushCommand(
     : undefined;
   const isMigrationBatch = resolution.mode === "first_sync"
     || resolution.mode === "migration";
-  const lease = await acquireSyncLease({
+  const lease = options.dryRun ? { queuedDates: [], acknowledgeQueuedDates() {}, release() {} } : await acquireSyncLease({
     dates: requestedDates,
     interactive: !nonInteractive,
   });
@@ -728,16 +728,16 @@ export async function pushCommand(
   }
 
   try {
+    const expiredDates = lease.queuedDates.filter((date) => !isWithinBackfillWindow(date, today));
+    if (expiredDates.length) lease.acknowledgeQueuedDates(expiredDates);
+    const eligibleDates = lease.queuedDates.filter((date) => !expiredDates.includes(date));
     const queuedDatesToConsume = resolution.mode === "first_sync" || resolution.mode === "migration"
-      ? lease.queuedDates.filter((date) => requestedDates.includes(date))
-      : lease.queuedDates;
+      ? eligibleDates.filter((date) => requestedDates.includes(date))
+      : eligibleDates;
     if (queuedDatesToConsume.length > 0) {
       const allDates = [...new Set([...requestedDates, ...queuedDatesToConsume])].sort();
-      requestedDates = listCalendarDates(allDates[0]!, allDates.at(-1)!);
-      if (calendarDaysBetween(requestedDates[0]!, requestedDates.at(-1)!) >= MAX_BACKFILL_DAYS) {
-        console.error("Queued sync dates exceed the 30-day backfill window.");
-        return CLI_EXIT.PERMANENT;
-      }
+      requestedDates = allDates;
+
     }
 
     for (const pending of options.dryRun ? [] : loadPendingBatches()) {
@@ -809,7 +809,7 @@ export async function pushCommand(
     const requested = new Set(requestedDates);
     const entries = collected.data.filter((entry) => requested.has(entry.date));
     const unexpectedDates = collected.data
-      .filter((entry) => !requested.has(entry.date))
+      .filter((entry) => entry.date < effectiveSince || entry.date > effectiveUntil)
       .map((entry) => entry.date);
     if (unexpectedDates.length > 0) {
       console.error(`Collector returned dates outside the requested range: ${unexpectedDates.join(", ")}`);
