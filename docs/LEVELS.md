@@ -98,4 +98,3 @@ Table: `user_levels`
 | `apps/web/components/app/leaderboard/LeaderboardTable.tsx` | Renders level badge on leaderboard rows |
 | `packages/cli/src/components/PushSummary.tsx` | Renders `Lv N` in CLI output |
 | `apps/web/types/index.ts` | `UserLevel` and `LeaderboardEntry` types |
-| `.waypoint/docs/usage-levels-plan.md` | Original product spec and rationale |

@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
+import { ACTIVATION_ANONYMOUS_COOKIE } from "@/lib/analytics/activation";
 import {
   COOKIE_CONSENT_COOKIE,
   COOKIE_CONSENT_MAX_AGE,
@@ -39,6 +40,10 @@ export async function POST(request: NextRequest) {
     sameSite: "lax",
     secure: process.env.NODE_ENV === "production",
   });
+
+  if (typedPreference === "essential") {
+    response.cookies.delete(ACTIVATION_ANONYMOUS_COOKIE);
+  }
 
   return response;
 }

@@ -16,7 +16,8 @@ vi.mock("@/lib/referral", () => ({
   attributeReferral: vi.fn().mockResolvedValue(undefined),
 }));
 
-vi.mock("@/lib/analytics/server", () => ({
+vi.mock("@/lib/analytics/server", async (importOriginal) => ({
+  ...await importOriginal<typeof import("@/lib/analytics/server")>(),
   captureServerActivationEvent: vi.fn().mockResolvedValue(true),
 }));
 
@@ -45,10 +46,13 @@ function makeContext(username: string) {
   return { params: Promise.resolve({ username }) };
 }
 
-function makeRequest(method: string, url: string, body?: any) {
+function makeRequest(method: string, url: string, body?: any, analyticsConsent = false) {
   return new NextRequest(new URL(url, "http://localhost"), {
     method,
-    headers: body ? { "Content-Type": "application/json" } : undefined,
+    headers: {
+      ...(body ? { "Content-Type": "application/json" } : {}),
+      ...(analyticsConsent ? { cookie: "straude_cookie_consent=v1-all" } : {}),
+    },
     body: body ? JSON.stringify(body) : undefined,
   });
 }
@@ -476,7 +480,7 @@ describe("PATCH /api/users/me", () => {
     (getServiceClient as any).mockReturnValue(db);
 
     const res = await PATCH(
-      makeRequest("PATCH", "/api/users/me", { onboarding_completed: true })
+      makeRequest("PATCH", "/api/users/me", { onboarding_completed: true }, true)
     );
     const json = await res.json();
 
@@ -491,13 +495,14 @@ describe("PATCH /api/users/me", () => {
     expect(captureServerActivationEvent).toHaveBeenCalledWith({
       event: "activation_completed",
       distinctId: "u-1",
+      analyticsConsent: true,
       properties: expect.objectContaining({
         surface: "onboarding",
         activation_state: "activated",
         is_authenticated: true,
         session_count: 2,
         total_tokens: 2500,
-        "$insert_id": "activation_completed:usage-1",
+        "$insert_id": "activation_completed:u-1",
       }),
     });
   });

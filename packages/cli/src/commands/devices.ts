@@ -115,14 +115,17 @@ export async function devicesCommand(
       );
       const candidates = parseCandidates(response);
       if (candidates.length === 0) {
-        console.log("No unresolved device identity candidates.");
+        console.log("No device identity candidates.");
         return 0;
       }
-      console.log("Unresolved device identity candidates:");
+      console.log("Device identity candidates:");
       for (const candidate of candidates) {
         console.log(
-          `${candidate.id}  ${candidate.normalized_hostname}  ${candidate.overlap_dates.length} matching days, ${candidate.divergent_dates.length} differing days`,
+          `${candidate.id}  ${candidate.normalized_hostname}  ${candidate.overlap_dates.length} matching days, ${candidate.divergent_dates.length} differing days  [${candidate.status}]`,
         );
+        if (candidate.status === "kept_separate") {
+          console.log("  Your keep-separate choice remains active. Merge only to reconsider it explicitly.");
+        }
         console.log(`  merge:         straude devices merge ${candidate.id}`);
         console.log(`  keep separate: straude devices keep-separate ${candidate.id}`);
       }

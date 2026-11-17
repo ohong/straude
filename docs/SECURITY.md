@@ -89,9 +89,3 @@ Supabase can check passwords against HaveIBeenPwned to block known-compromised p
 | HIGH | 3 | 2 | 1 | 0 |
 | MEDIUM | 1 | 1 | 0 | 0 |
 | INFO | 2 | 0 | 0 | 2 |
-
-## Remaining Action Items
-
-1. **Enable leaked password protection** in Supabase dashboard (HIGH)
-2. **Add rate limiting** to data creation endpoints — see ROADMAP.md
-3. **Add Content Security Policy** once all script/style sources are inventoried — see ROADMAP.md
