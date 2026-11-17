@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 
-import { loginCommand } from "./commands/login.js";
-import { pushCommand } from "./commands/push.js";
+import { loginCommand, NonInteractiveLoginError } from "./commands/login.js";
+import { CLI_EXIT, pushCommand } from "./commands/push.js";
 import { statusCommand } from "./commands/status.js";
 import { autoCommand, enableAutoPush, disableAutoPush } from "./commands/auto.js";
 import { devicesCommand } from "./commands/devices.js";
@@ -30,7 +30,7 @@ import { setInteractiveOverride } from "./lib/prompt.js";
 // the failed request. apiRequest gates this on isInteractive() so auto-push
 // and CI runs still surface the original error.
 setAuthRefreshStrategy(async (apiUrl) => {
-  await loginCommand(apiUrl);
+  await loginCommand(apiUrl, { requireInteractive: true });
   return loadConfig();
 });
 
@@ -174,7 +174,7 @@ async function main(): Promise<void> {
 
   switch (command) {
     case "login":
-      await loginCommand(apiUrl);
+      await loginCommand(apiUrl, { requireInteractive: options.nonInteractive === true });
       break;
     case "status":
       await statusCommand();
@@ -197,8 +197,8 @@ let exitCode = 0;
 
 main()
   .catch((err: unknown) => {
-    exitCode = 1;
-    process.exitCode = 1;
+    exitCode = err instanceof NonInteractiveLoginError ? CLI_EXIT.AUTH_REQUIRED : CLI_EXIT.PERMANENT;
+    process.exitCode = exitCode;
     let config = null;
     try {
       config = loadConfig();
@@ -215,7 +215,9 @@ main()
         command: activeCommand ?? "unknown",
       });
     }
-    const prefix = err instanceof CliArgumentError ? `${err.code}: ` : "Error: ";
+    const prefix = err instanceof NonInteractiveLoginError
+      ? "AUTH_REQUIRED: "
+      : err instanceof CliArgumentError ? `${err.code}: ` : "Error: ";
     console.error(`${prefix}${errorMessage(err)}`);
   })
   .finally(() =>

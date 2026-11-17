@@ -11,7 +11,7 @@ import { Textarea } from "@/components/ui/Textarea";
 import { Button } from "@/components/ui/Button";
 import { Avatar } from "@/components/ui/Avatar";
 import { LogOut, Copy, Check, Camera, Loader2, X as XIcon } from "lucide-react";
-import { usePostHog } from "posthog-js/react";
+import { captureConsentedPostHogEvent } from "@/lib/analytics/client";
 import { compressImage } from "@/lib/utils/compress-image";
 import { CountryPicker } from "@/components/ui/CountryPicker";
 import { TeamBadge } from "@/components/app/shared/TeamBadge";
@@ -63,7 +63,6 @@ export default function SettingsClient({
 }) {
   const hydrated = useSyncExternalStore(subscribeToHydration, () => true, () => false);
   const router = useRouter();
-  const posthog = usePostHog();
   const [profile, setProfile] = useState<SettingsProfile | null>(initialProfile);
   const [saving, setSaving] = useState(false);
   const [saved, setSaved] = useState(false);
@@ -143,43 +142,48 @@ export default function SettingsClient({
     setError(null);
     setSaved(false);
 
-    const res = await fetch("/api/users/me", {
-      method: "PATCH",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify(buildProfileUpdatePayload({
-        username,
-        displayName,
-        bio,
-        heardAbout,
-        link,
-        country,
-        githubUsername,
-        teamUrl,
-        isPublic,
-        emailNotifications,
-        emailMentionNotifications,
-        emailDmNotifications,
-        timezone,
-      })),
-    });
+    try {
+      const res = await fetch("/api/users/me", {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(buildProfileUpdatePayload({
+          username,
+          displayName,
+          bio,
+          heardAbout,
+          link,
+          country,
+          githubUsername,
+          teamUrl,
+          isPublic,
+          emailNotifications,
+          emailMentionNotifications,
+          emailDmNotifications,
+          timezone,
+        })),
+      });
+      const data = await res.json().catch(() => null);
+      if (!res.ok || !data) {
+        setError(data?.error ?? "Failed to save. Please try again.");
+        return;
+      }
 
-    if (!res.ok) {
-      const data = await res.json();
-      setError(data.error ?? "Failed to save");
-    } else {
-      const data = await res.json();
       setProfile((prev) => (prev ? { ...prev, ...data } : data));
       setTeamUrl(data.team_url ?? "");
       setTimezone(data.timezone ?? timezone);
       setSaved(true);
-      posthog.capture("profile_saved", { is_public: isPublic });
+      void captureConsentedPostHogEvent("profile_saved", { is_public: isPublic });
+    } catch {
+      setError("We could not save your changes. Check your connection and try again.");
+    } finally {
+      setSaving(false);
     }
-    setSaving(false);
   }
 
   async function handleClearTeam() {
     setClearingTeam(true);
     setError(null);
+    setSaved(false);
     try {
       const res = await fetch("/api/users/me", {
         method: "PATCH",
@@ -194,6 +198,8 @@ export default function SettingsClient({
       const data = await res.json();
       setProfile((prev) => (prev ? { ...prev, ...data } : data));
       setTeamUrl("");
+    } catch {
+      setError("We could not clear your team. Check your connection and try again.");
     } finally {
       setClearingTeam(false);
     }
@@ -215,7 +221,7 @@ export default function SettingsClient({
         </Link>
       </header>
 
-      <form onSubmit={handleSave} className="mx-auto max-w-lg px-[var(--app-page-padding-x)] py-8">
+      <form onSubmit={handleSave} className="mx-auto min-w-0 w-full max-w-lg px-[var(--app-page-padding-x)] py-8">
         <div className="flex items-center gap-4 pb-6">
           <div className="relative">
             <Avatar
@@ -255,7 +261,7 @@ export default function SettingsClient({
         </div>
 
         {/* ── Profile ── */}
-        <fieldset className="space-y-6 border-t border-border pt-6">
+        <fieldset className="min-w-0 space-y-6 border-t border-border pt-6">
           <legend className="text-sm font-semibold uppercase tracking-widest text-muted">Profile</legend>
 
           <div>
@@ -436,7 +442,7 @@ export default function SettingsClient({
                     navigator.clipboard.writeText(`https://straude.com/join/${username}`);
                     setRefCopied(true);
                     setTimeout(() => setRefCopied(false), 2000);
-                    posthog.capture("referral_link_copied", { username });
+                    void captureConsentedPostHogEvent("referral_link_copied", { username });
                   }}
                   className="inline-flex items-center gap-1.5 border border-border px-3 py-2 text-sm font-semibold hover:bg-subtle"
                   style={{ borderRadius: 4 }}
@@ -453,7 +459,7 @@ export default function SettingsClient({
         </fieldset>
 
         {/* ── Notifications ── */}
-        <fieldset className="mt-8 space-y-4 border-t border-border pt-6">
+        <fieldset className="min-w-0 mt-8 space-y-4 border-t border-border pt-6">
           <legend className="text-sm font-semibold uppercase tracking-widest text-muted">Notifications</legend>
 
           <div className="space-y-1.5">
@@ -518,7 +524,7 @@ export default function SettingsClient({
         </fieldset>
 
         {/* ── Privacy & Account ── */}
-        <fieldset className="mt-8 space-y-4 border-t border-border pt-6">
+        <fieldset className="min-w-0 mt-8 space-y-4 border-t border-border pt-6">
           <legend className="text-sm font-semibold uppercase tracking-widest text-muted">Privacy &amp; Account</legend>
 
           <div className="space-y-1.5">
@@ -543,8 +549,8 @@ export default function SettingsClient({
         </fieldset>
 
         <div className="mt-8 space-y-4">
-          {error && <p className="text-sm text-error">{error}</p>}
-          {saved && <p className="text-sm text-accent">Saved successfully.</p>}
+          {error && <p role="alert" className="text-sm text-error">{error}</p>}
+          {saved && <p role="status" className="text-sm text-accent">Saved successfully.</p>}
 
           <Button type="submit" disabled={saving} className="w-full py-3">
             {saving ? "Saving\u2026" : "Save Changes"}
@@ -567,7 +573,7 @@ export default function SettingsClient({
         </div>
 
         {/* ── Delete Account ── */}
-        <fieldset className="mt-12 space-y-4">
+        <fieldset className="min-w-0 mt-12 space-y-4">
           <legend className="text-2xl font-semibold text-error">Delete account</legend>
           <hr className="border-error/30" />
 

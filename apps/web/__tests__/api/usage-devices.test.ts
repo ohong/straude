@@ -30,6 +30,7 @@ const CANDIDATE = {
   device_id_b: "66666666-7777-4888-8999-000000000000",
   normalized_hostname: "work-macbook",
   overlap_dates: ["2026-07-21", "2026-07-22"],
+  divergent_dates: [],
   status: "pending",
   created_at: "2026-07-23T10:00:00.000Z",
 };
