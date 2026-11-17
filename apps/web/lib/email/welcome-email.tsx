@@ -41,7 +41,7 @@ export default function WelcomeEmail({
         }}
       >
         <Head />
-        <Preview>You are in. Your streak starts at zero.</Preview>
+        <Preview>Your first sync is complete.</Preview>
         <Body className="bg-gray-100 font-sans py-10">
           <Container className="max-w-lg mx-auto bg-white rounded border border-solid border-gray-200">
             <Section className="px-6 pt-8 pb-6">
@@ -49,29 +49,15 @@ export default function WelcomeEmail({
                 {greeting}
               </Text>
               <Text className="text-base text-gray-900 leading-relaxed m-0 mb-6">
-                Your streak starts at zero. Time to log your first session.
+                Your first sync is complete. Your usage is ready to view.
               </Text>
 
-              <Text className="text-sm font-semibold text-gray-900 m-0 mb-2">
-                Run this in your terminal:
-              </Text>
-              <Section className="bg-gray-50 border border-solid border-gray-200 rounded px-4 py-3 mb-2">
-                <Text className="text-sm text-gray-900 font-mono m-0">
-                  npx straude@latest
-                </Text>
-              </Section>
-              <Text className="text-xs text-gray-500 m-0 mb-6">
-                Scans your Claude Code usage and posts it to your profile.
-              </Text>
-
-              {username && (
-                <Button
-                  href={profileUrl}
-                  className="bg-brand text-white px-6 py-3 rounded text-sm font-semibold no-underline text-center box-border"
-                >
-                  View Your Profile
-                </Button>
-              )}
+              <Button
+                href={profileUrl}
+                className="bg-brand text-white px-6 py-3 rounded text-sm font-semibold no-underline text-center box-border"
+              >
+                {username ? "View your profile" : "View your feed"}
+              </Button>
             </Section>
 
             <Hr className="border-gray-200 m-0" />

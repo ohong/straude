@@ -78,6 +78,10 @@ export async function updateSession(request: NextRequest) {
   const redirectWithSession = (pathname: string) => {
     const url = request.nextUrl.clone();
     url.pathname = pathname;
+    if (pathname === "/login") {
+      url.search = "";
+      url.searchParams.set("next", request.nextUrl.pathname + request.nextUrl.search);
+    }
     const redirectResponse = NextResponse.redirect(url);
     supabaseResponse.cookies.getAll().forEach((cookie) =>
       redirectResponse.cookies.set(cookie)
@@ -94,8 +98,8 @@ export async function updateSession(request: NextRequest) {
   }
 
   // Protect app routes
-  const protectedPaths = ["/settings", "/post/new", "/search", "/prompts", "/messages", "/notifications", "/recap", "/admin"];
-  const isProtected = protectedPaths.some((p) =>
+  const protectedPaths = ["/settings", "/post/new", "/search", "/prompts", "/messages", "/notifications", "/admin"];
+  const isProtected = request.nextUrl.pathname === "/recap" || protectedPaths.some((p) =>
     request.nextUrl.pathname.startsWith(p)
   );
 

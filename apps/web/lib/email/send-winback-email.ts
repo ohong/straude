@@ -22,17 +22,18 @@ export async function sendWinbackEmail({
   const fromEmail =
     process.env.RESEND_FROM_EMAIL ?? "notifications@straude.com";
 
-  await resend.emails.send({
+  const { error: deliveryError } = await resend.emails.send({
     from: `Straude <${fromEmail}>`,
     replyTo: "hey@straude.com",
     to: email,
     subject: "Set up your Strava for Claude Code profile in 30 seconds",
     react: WinbackEmail({ unsubscribeUrl }),
     headers: {
-      "Idempotency-Key": `winback/${userId}`,
+
       "List-Unsubscribe": `<${unsubscribeUrl}>`,
       "List-Unsubscribe-Post": "List-Unsubscribe=One-Click",
     },
     tags: [{ name: "type", value: "winback" }],
-  });
+  }, { idempotencyKey: `winback/${userId}` });
+  if (deliveryError) throw new Error(deliveryError.message);
 }

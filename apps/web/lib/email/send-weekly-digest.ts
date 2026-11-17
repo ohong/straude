@@ -180,7 +180,7 @@ export async function sendWeeklyDigest(
     const unsubscribeUrl = `${appUrl}/api/unsubscribe?token=${unsubscribeToken}`;
 
     try {
-      await resend.emails.send({
+      const { error: deliveryError } = await resend.emails.send({
         from: `Straude <${fromEmail}>`,
         replyTo: "hey@straude.com",
         to: email,
@@ -192,12 +192,13 @@ export async function sendWeeklyDigest(
           unsubscribeUrl,
         }),
         headers: {
-          "Idempotency-Key": `weekly-digest/${user.id}/${weekDate}`,
+
           "List-Unsubscribe": `<${unsubscribeUrl}>`,
           "List-Unsubscribe-Post": "List-Unsubscribe=One-Click",
         },
         tags: [{ name: "type", value: "weekly-digest" }],
-      });
+      }, { idempotencyKey: `weekly-digest/${user.id}/${weekDate}` });
+      if (deliveryError) throw new Error(deliveryError.message);
       sent++;
     } catch (err) {
       errors.push(
