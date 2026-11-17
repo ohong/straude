@@ -270,7 +270,7 @@ export default function OnboardingPage() {
             </Button>
           </div>
           <p className="mt-1.5 text-pretty text-xs text-muted" role="status">
-            {copyError ? "Clipboard access was blocked. Select the command above and copy it manually." : copied ? "Copied to clipboard" : "Requires Node.js 18 or later. No global install needed."}
+            {copyError ? "Clipboard access was blocked. Select the command above and copy it manually." : copied ? "Copied to clipboard" : "Requires Node.js 20 or later. No global install needed."}
           </p>
           <p className="mt-4 text-pretty text-xs leading-relaxed text-muted">
             Straude uses ccusage to read local usage from supported coding agents, including Claude Code and Codex. The first sync checks your last three days.

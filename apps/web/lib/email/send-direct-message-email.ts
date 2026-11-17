@@ -33,7 +33,7 @@ export async function sendDirectMessageEmail({
   const fromEmail =
     process.env.RESEND_FROM_EMAIL ?? "notifications@straude.com";
 
-  await resend.emails.send({
+  const { error: deliveryError } = await resend.emails.send({
     from: `Straude <${fromEmail}>`,
     replyTo: "hey@straude.com",
     to: recipientEmail,
@@ -46,7 +46,7 @@ export async function sendDirectMessageEmail({
       unsubscribeUrl,
     }),
     headers: {
-      "Idempotency-Key": idempotencyKey,
+
       "List-Unsubscribe": `<${unsubscribeUrl}>`,
       "List-Unsubscribe-Post": "List-Unsubscribe=One-Click",
     },
@@ -54,5 +54,6 @@ export async function sendDirectMessageEmail({
       { name: "type", value: "direct_message" },
       { name: "actor", value: actorUsername },
     ],
-  });
+  }, { idempotencyKey: idempotencyKey });
+  if (deliveryError) throw new Error(deliveryError.message);
 }

@@ -25,13 +25,17 @@ export function NotificationsList() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [hasMore, setHasMore] = useState(true);
+  const activeRequest = useRef<AbortController | null>(null);
   const loadingRef = useRef(false);
   const sentinelRef = useRef<HTMLDivElement>(null);
   const notificationsLengthRef = useRef(0);
 
   const fetchNotifications = useCallback(
     async (offset: number, type: string | null, replace: boolean) => {
-      if (loadingRef.current) return;
+      if (loadingRef.current && !replace) return;
+      activeRequest.current?.abort();
+      const controller = new AbortController();
+      activeRequest.current = controller;
       loadingRef.current = true;
       if (replace) setLoading(true);
       if (replace) setError(null);
@@ -43,11 +47,12 @@ export function NotificationsList() {
       if (type) params.set("type", type);
 
       try {
-        const res = await fetch(`/api/notifications?${params}`);
+        const res = await fetch(`/api/notifications?${params}`, { signal: controller.signal });
         if (!res.ok) {
           const payload = await res
             .json()
             .catch(() => ({ error: "Failed to load notifications." }));
+          if (controller.signal.aborted) return;
           if (!replace) {
             setHasMore(false);
           }
@@ -60,6 +65,7 @@ export function NotificationsList() {
         }
 
         const data = await res.json();
+        if (controller.signal.aborted) return;
         const fetched: Notification[] = data.notifications ?? [];
 
         setNotifications((prev) => (replace ? fetched : [...prev, ...fetched]));
@@ -67,13 +73,16 @@ export function NotificationsList() {
         setHasMore(fetched.length >= PAGE_SIZE);
         setError(null);
       } catch {
+        if (controller.signal.aborted) return;
         if (!replace) {
           setHasMore(false);
         }
         setError("Failed to load notifications.");
       } finally {
-        setLoading(false);
-        loadingRef.current = false;
+        if (!controller.signal.aborted) {
+          setLoading(false);
+          loadingRef.current = false;
+        }
       }
     },
     [],
@@ -84,6 +93,7 @@ export function NotificationsList() {
     setNotifications([]);
     setHasMore(true);
     fetchNotifications(0, typeFilter, true);
+    return () => activeRequest.current?.abort();
   }, [typeFilter, fetchNotifications]);
 
   // Keep length ref in sync so the observer can read it without being in deps

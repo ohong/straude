@@ -156,30 +156,36 @@ export function CommentThread({
     setComments((prev) => [...prev, optimisticComment]);
     opts.setDraft("");
 
-    const res = await fetch(`/api/posts/${postId}/comments`, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        content: trimmed,
-        parent_comment_id: opts.parentCommentId ?? null,
-      }),
-    });
-
-    if (res.ok) {
-      const comment = await res.json();
-      setComments((prev) => prev.map((current) => (current.id === tempId ? comment : current)));
-      posthog.capture("comment_posted", {
-        post_id: postId,
-        is_reply: Boolean(opts.parentCommentId),
+    try {
+      const res = await fetch(`/api/posts/${postId}/comments`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          content: trimmed,
+          parent_comment_id: opts.parentCommentId ?? null,
+        }),
       });
-      opts.onSuccess?.();
-    } else {
+
+      if (res.ok) {
+        const comment = await res.json();
+        setComments((prev) => prev.map((current) => (current.id === tempId ? comment : current)));
+        posthog.capture("comment_posted", {
+          post_id: postId,
+          is_reply: Boolean(opts.parentCommentId),
+        });
+        opts.onSuccess?.();
+      } else {
+        setComments((prev) => prev.filter((comment) => comment.id !== tempId));
+        opts.setDraft(trimmed);
+        opts.setError(await readErrorMessage(res, "Couldn't post comment."));
+      }
+    } catch {
       setComments((prev) => prev.filter((comment) => comment.id !== tempId));
       opts.setDraft(trimmed);
-      opts.setError(await readErrorMessage(res, "Couldn't post comment."));
+      opts.setError("Couldn’t post your comment. Try again.");
+    } finally {
+      opts.setSubmittingState(false);
     }
-
-    opts.setSubmittingState(false);
   }
 
   async function handleRootSubmit() {

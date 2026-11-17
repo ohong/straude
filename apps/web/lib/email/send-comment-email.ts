@@ -48,7 +48,7 @@ export async function sendNotificationEmail({
   const fromEmail =
     process.env.RESEND_FROM_EMAIL ?? "notifications@straude.com";
 
-  await resend.emails.send({
+  const { error: deliveryError } = await resend.emails.send({
     from: `Straude <${fromEmail}>`,
     replyTo: "hey@straude.com",
     to: recipientEmail,
@@ -62,7 +62,7 @@ export async function sendNotificationEmail({
       unsubscribeUrl,
     }),
     headers: {
-      "Idempotency-Key": idempotencyKey,
+
       "List-Unsubscribe": `<${unsubscribeUrl}>`,
       "List-Unsubscribe-Post": "List-Unsubscribe=One-Click",
     },
@@ -70,7 +70,8 @@ export async function sendNotificationEmail({
       { name: "type", value: type },
       { name: "post_id", value: postId },
     ],
-  });
+  }, { idempotencyKey: idempotencyKey });
+  if (deliveryError) throw new Error(deliveryError.message);
 }
 
 // Re-export for backwards compat with existing test imports
