@@ -7,7 +7,7 @@ import { ModelPalette } from './ModelPalette.js';
 import { LeaderboardSnippet } from './LeaderboardSnippet.js';
 
 export interface DashboardData {
-  username: string;
+  username: string | null;
   level: number | null;
   streak: number;
   daily: Array<{ date: string; cost_usd: number }>;
@@ -16,8 +16,8 @@ export interface DashboardData {
   leaderboard: {
     rank: number;
     total_users: number;
-    above: Array<{ username: string; cost: number; rank: number }>;
-    below: Array<{ username: string; cost: number; rank: number }>;
+    above: Array<{ username: string | null; cost: number; rank: number }>;
+    below: Array<{ username: string | null; cost: number; rank: number }>;
   } | null;
   model_breakdown?: Array<{
     model: string;
@@ -38,6 +38,7 @@ export interface PushSummaryProps {
 }
 
 export function PushSummary({ dashboard, results }: PushSummaryProps) {
+  const username = dashboard.username?.trim();
   // Last 7 days for bar chart
   const last7 = dashboard.daily.slice(-7);
 
@@ -55,7 +56,7 @@ export function PushSummary({ dashboard, results }: PushSummaryProps) {
       <Box>
         <Text color={theme.accent} bold>straude</Text>
         <Text color={theme.muted}> · </Text>
-        <Text color={theme.bright} bold>@{dashboard.username}</Text>
+        <Text color={theme.bright} bold>{username ? `@${username}` : 'Your account'}</Text>
         {dashboard.level != null && (
           <Text color={theme.muted}> · Lv {dashboard.level}</Text>
         )}

@@ -144,7 +144,7 @@ on Windows. Claude Code hooks are independent of the OS scheduler.
 ## Data Sources
 
 Straude invokes its installed `ccusage` native binary once per sync. Supported
-collector versions are stable releases `>=20.0.20`:
+collector versions are stable releases `>=20.0.26`:
 
 ```bash
 ccusage daily --json --since YYYYMMDD --until YYYYMMDD --no-offline --by-agent --timezone IANA_TIMEZONE
@@ -285,7 +285,7 @@ when its output passes; schema drift, missing paid-model pricing, or a run
 beyond the 60-second budget fails.
 The product runtime never invokes `npx ccusage@latest`.
 
-The published `>=20.0.20` range affects dependency resolution on fresh installs.
+The published `>=20.0.26` range affects dependency resolution on fresh installs.
 An existing installation keeps its installed collector until Straude is
 reinstalled or upgraded.
 

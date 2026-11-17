@@ -24,9 +24,10 @@ vi.mock("@/lib/supabase/service", () => ({
   getServiceClient: vi.fn(() => ({ rpc, from })),
 }));
 
-vi.mock("@/lib/analytics/server", () => ({
-  captureServerActivationEvent: vi.fn().mockResolvedValue(true),
-}));
+vi.mock("@/lib/analytics/server", async (importOriginal) => {
+  const actual = await importOriginal<typeof import("@/lib/analytics/server")>();
+  return { ...actual, captureServerActivationEvent: vi.fn().mockResolvedValue(true) };
+});
 
 import ALL_BUILT_IN_CCUSAGE_AGENTS from "../../../../packages/cli/__tests__/fixtures/ccusage-sources.json";
 import { POST } from "@/app/api/usage/submit/route";
@@ -66,7 +67,7 @@ function requestBody() {
     source: "cli",
     timezone: "UTC",
     installation: { id: INSTALLATION_ID, name: "work-laptop" },
-    collector: { name: "ccusage", version: "20.0.16", pricing_mode: "online" },
+    collector: { name: "ccusage", version: "20.0.26", pricing_mode: "online" },
     entries: [{
       date: DATE,
       content_hash: "a".repeat(64),
@@ -119,13 +120,51 @@ beforeEach(() => {
 describe("POST /api/usage/submit protocol v2", () => {
   it.each([...ALL_BUILT_IN_CCUSAGE_AGENTS, "custom-agent"])("accepts %s as a partitioned source", async (source) => {
     const body = requestBody();
-    body.collector.version = "20.0.20";
+    body.collector.version = "20.0.26";
     body.entries[0].agents[0].agent = source;
     const response = await POST(request(body));
     expect(response.status).toBe(200);
     expect(rpc).toHaveBeenCalledWith("submit_usage_day_v2", expect.objectContaining({
       p_entry: expect.objectContaining({ agents: [expect.objectContaining({ agent: source })] }),
     }));
+  });
+
+  it.each(["20.0.20", "20.0.25", "legacy", "20.0.26-beta.1"])(
+    "rejects a v2 CLI submission from collector %j with 426 collector_outdated",
+    async (version) => {
+      const body = requestBody();
+      body.collector.version = version;
+      const response = await POST(request(body));
+      expect(response.status).toBe(426);
+      expect(await response.json()).toMatchObject({
+        code: "collector_outdated",
+        update_command: "npx straude@latest",
+      });
+      expect(rpc).not.toHaveBeenCalledWith("submit_usage_day_v2", expect.anything());
+    },
+  );
+
+  it.each([
+    ["20.0.20", { ccusage_version: "20.0.20" }],
+    ["a missing collector", undefined],
+    ["a missing version", {}],
+  ])("rejects a v1 CLI submission with %s with 426 collector_outdated", async (_label, collector) => {
+    const response = await POST(request({
+      entries: [{
+        date: DATE,
+        data: {
+          date: DATE, models: ["gpt-5.6"], inputTokens: 100, outputTokens: 20,
+          reasoningOutputTokens: 10, cacheCreationTokens: 0, cacheReadTokens: 30,
+          totalTokens: 160, costUSD: 0.25,
+        },
+      }],
+      source: "cli",
+      ...(collector ? { collector } : {}),
+      device_id: INSTALLATION_ID,
+    }));
+    expect(response.status).toBe(426);
+    expect(await response.json()).toMatchObject({ code: "collector_outdated" });
+    expect(rpc).not.toHaveBeenCalledWith("submit_usage_day_v2", expect.anything());
   });
 
   it("returns an outcome for every date when a queued date expires", async () => {
@@ -185,7 +224,7 @@ describe("POST /api/usage/submit protocol v2", () => {
       protocol_version: 2,
       request_id: "request-v2",
       date: DATE,
-      collector_version: "20.0.16",
+      collector_version: "20.0.26",
       cli_version: "0.2.0",
       outcome: "committed",
       retry_count: 0,
@@ -363,6 +402,7 @@ describe("POST /api/usage/submit protocol v2", () => {
       entries: [legacyEntry(DATE), legacyEntry(prior)],
       hash: "b".repeat(64),
       source: "cli",
+      collector: { ccusage_version: "20.0.26" },
       device_id: INSTALLATION_ID,
       device_name: "work-laptop",
     }));
@@ -398,6 +438,7 @@ describe("POST /api/usage/submit protocol v2", () => {
         },
       }],
       source: "cli",
+      collector: { ccusage_version: "20.0.26" },
       device_id: INSTALLATION_ID,
       device_name: "work-laptop",
     };

@@ -18,7 +18,6 @@ export function Footer({ hideLogo = false }: { hideLogo?: boolean }) {
         <div>
           STATUS: <span className="text-accent">ONLINE</span>
         </div>
-        <div>SYS LATENCY: 12ms</div>
         <div><UtcClock /></div>
       </div>
 

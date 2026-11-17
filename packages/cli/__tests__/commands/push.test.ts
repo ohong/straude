@@ -102,6 +102,8 @@ function config(overrides: Record<string, unknown> = {}) {
     device_name: "work-laptop",
     last_push_date: "2026-03-12",
     usage_protocol_v2_migration_completed_at: "2026-03-01T00:00:00.000Z",
+    // Newer than any installed ccusage, so these tests stay on the incremental path.
+    ccusage_version_pushed: "999.0.0",
     ...overrides,
   };
 }
@@ -167,11 +169,11 @@ function collected(entries = [usageEntry()]) {
     agents: ["codex"],
     collector: {
       codex: "ccusage-codex-v20",
-      ccusage_version: "20.0.20",
+      ccusage_version: "20.0.26",
       ccusage_agents: ["codex"],
       pricing_mode: "online",
     },
-    version: "20.0.20",
+    version: "20.0.26",
     raw: "{}",
     stderr: "",
   };
@@ -259,7 +261,7 @@ describe("pushCommand v2", () => {
       },
       collector: {
         name: "ccusage",
-        version: "20.0.20",
+        version: "20.0.26",
         pricing_mode: "online",
       },
     });
@@ -294,7 +296,7 @@ describe("pushCommand v2", () => {
     const submitCall = apiRequestMock.mock.calls.find(([, path]) => path === "/api/usage/submit")!;
     const body = JSON.parse(submitCall[2].body);
     expect(body.entries[0].agents.map((row: { agent: string }) => row.agent)).toEqual(agents);
-    expect(body.collector).toMatchObject({ name: "ccusage", version: "20.0.20", pricing_mode: "online" });
+    expect(body.collector).toMatchObject({ name: "ccusage", version: "20.0.26", pricing_mode: "online" });
   });
 
   it("retries only failed dates with the same request id", async () => {

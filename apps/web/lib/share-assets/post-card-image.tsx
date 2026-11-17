@@ -25,8 +25,8 @@ function prettifyModel(model: string): string {
   const normalized = model.trim();
   if (/claude-fable/i.test(normalized)) return "Claude Fable";
   if (/claude-opus/i.test(normalized)) return "Claude Opus";
-  if (/claude-sonnet-4/i.test(normalized)) return "Claude Sonnet";
-  if (/claude-haiku-4/i.test(normalized)) return "Claude Haiku";
+  if (/claude-sonnet/i.test(normalized)) return "Claude Sonnet";
+  if (/claude-haiku/i.test(normalized)) return "Claude Haiku";
   if (/^gpt-/i.test(normalized)) {
     return normalized
       .replace(/^gpt/i, "GPT")

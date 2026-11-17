@@ -24,7 +24,8 @@ export async function statusCommand(): Promise<void> {
     await waitUntilExit();
   } catch (err) {
     // Fallback: plain text if Ink fails
-    console.log(`@${dashboard.username}`);
+    const username = dashboard.username?.trim();
+    console.log(username ? `@${username}` : "Your account");
     console.log(`  Streak: ${dashboard.streak} day${dashboard.streak !== 1 ? "s" : ""}`);
     console.log(`  This week: $${dashboard.week_cost.toFixed(2)}`);
     if (dashboard.leaderboard) {
