@@ -43,42 +43,48 @@ export default function ImportPage() {
       return;
     }
 
-    const obj = parsed as { type?: string; data?: unknown[] };
-    if (obj.type !== "daily" || !Array.isArray(obj.data)) {
+    const obj = parsed as { daily?: unknown[]; type?: string; data?: unknown[] } | null;
+    const rows = obj?.daily ?? (obj?.type === "daily" ? obj.data : undefined);
+    if (!Array.isArray(rows) || !rows.length || rows.some(row => !row || typeof row !== "object")) {
       setError(
-        'Expected ccusage output with { "type": "daily", "data": [...] }. Make sure you run: ccusage daily --json',
+        'Expected ccusage output with a nonempty "daily" array. Make sure you run: ccusage daily --json',
       );
       setLoading(false);
       return;
     }
 
     const entries = toLegacyUsageImportEntries(
-      obj.data as Record<string, unknown>[],
+      rows as Record<string, unknown>[],
     );
 
-    const res = await fetch("/api/usage/submit", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        entries,
-        source: "web",
-        device_id: "00000000-0000-0000-0000-000000000001",
-        device_name: "web-import",
-      }),
-    });
-
-    if (!res.ok) {
-      const body = await res.json();
-      setError(body.error ?? "Import failed");
-    } else {
-      const body = await res.json();
-      setResults(body.results);
-      posthog.capture("usage_imported", {
-        days_imported: (body.results as ImportResult[]).length,
-        source: "web",
+    try {
+      const res = await fetch("/api/usage/submit", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          entries,
+          source: "web",
+          device_id: "00000000-0000-0000-0000-000000000001",
+          device_name: "web-import",
+        }),
       });
+
+      if (!res.ok) {
+        const body = await res.json();
+        setError(body.error ?? "Import failed");
+      } else {
+        const body = await res.json();
+        setResults(body.results);
+        posthog.capture("usage_imported", {
+          days_imported: (body.results as ImportResult[]).length,
+          source: "web",
+        });
+      }
+    } catch {
+      setError("Import failed. Check your connection and try again.");
+    } finally {
+      setLoading(false);
     }
-    setLoading(false);
   }
 
   return (
@@ -117,7 +123,7 @@ export default function ImportPage() {
           <Textarea
             value={json}
             onChange={(e) => setJson(e.target.value)}
-            placeholder='{"type":"daily","data":[...],"summary":{...}}'
+            placeholder='{"daily":[...]}'
             rows={12}
             className="font-mono text-sm"
           />

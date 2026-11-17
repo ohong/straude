@@ -36,7 +36,7 @@ export async function sendReferralJoinedEmail({
 
   const who = newUsername ? `@${newUsername}` : "Someone";
 
-  await resend.emails.send({
+  const { error: deliveryError } = await resend.emails.send({
     from: `Straude <${fromEmail}>`,
     replyTo: "hey@straude.com",
     to: referrerEmail,
@@ -48,10 +48,11 @@ export async function sendReferralJoinedEmail({
       unsubscribeUrl,
     }),
     headers: {
-      "Idempotency-Key": `referral-joined/${referrerId}/${newUserId}`,
+
       "List-Unsubscribe": `<${unsubscribeUrl}>`,
       "List-Unsubscribe-Post": "List-Unsubscribe=One-Click",
     },
     tags: [{ name: "type", value: "referral-joined" }],
-  });
+  }, { idempotencyKey: `referral-joined/${referrerId}/${newUserId}` });
+  if (deliveryError) throw new Error(deliveryError.message);
 }

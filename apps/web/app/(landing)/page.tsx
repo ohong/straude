@@ -12,11 +12,11 @@ import { Footer } from "@/components/landing/Footer";
 import { LazyHalftoneCanvas } from "@/components/landing/LazyHalftoneCanvas";
 import { wallOfLovePosts } from "@/content/wall-of-love";
 import { getServiceClient } from "@/lib/supabase/service";
-import { getOpenStatsForPage } from "@/lib/open-stats";
+import { getOpenStatsForPage, getOpenStatsFreshness } from "@/lib/open-stats";
 import { formatTokens } from "@/lib/utils/format";
 import type { Metadata } from "next";
 
-export const revalidate = 86400; // cache for 1 day
+export const revalidate = 3600; // keep snapshot age visible within an hour
 
 export const metadata: Metadata = {
   title: "Straude — Code like an athlete.",
@@ -28,8 +28,8 @@ const TICKER_FALLBACK = [
   { label: "Pace Leader", value: "---" },
   { label: "Sessions Logged", value: "---" },
   { label: "Tokens Processed", value: "---" },
-  { label: "Spend Tracked", value: "---" },
-  { label: "Active Streaks", value: "---" },
+  { label: "Estimated Cost Logged", value: "---" },
+  { label: "Latest Streak Days", value: "---" },
 ];
 
 async function getTickerStats() {
@@ -43,6 +43,9 @@ async function getTickerStats() {
       .single(),
   ]);
 
+  const freshness = getOpenStatsFreshness(stats);
+  if (freshness.state === "unavailable") return TICKER_FALLBACK;
+
   const paceLeader = topUser
     ? `@${topUser.username} (${formatTokens(topUser.total_output_tokens)}/wk)`
     : "---";
@@ -55,10 +58,14 @@ async function getTickerStats() {
     },
     { label: "Tokens Processed", value: formatTokens(stats.totalTokens) },
     {
-      label: "Spend Tracked",
+      label: "Estimated Cost Logged",
       value: `$${Math.round(stats.totalSpend).toLocaleString("en-US")}`,
     },
-    { label: "Active Streaks", value: stats.totalStreaks.toLocaleString("en-US") },
+    { label: "Latest Streak Days", value: stats.totalStreaks.toLocaleString("en-US") },
+    {
+      label: freshness.state === "stale" ? "Snapshot Stale (>48h)" : "Snapshot Captured",
+      value: stats.fetchedAt.slice(0, 10),
+    },
   ];
 }
 

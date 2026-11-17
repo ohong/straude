@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useRef } from "react";
+import { useState, useRef, useEffect } from "react";
 import Link from "next/link";
 import { Search } from "lucide-react";
 import type { User } from "@/types";
@@ -23,8 +23,19 @@ export default function SearchClient({
   const [loading, setLoading] = useState(false);
   const timerRef = useRef<ReturnType<typeof setTimeout>>(undefined);
 
+  const activeRequest = useRef<AbortController | null>(null);
+  const [error, setError] = useState(false);
+  useEffect(() => () => {
+    clearTimeout(timerRef.current);
+    activeRequest.current?.abort();
+  }, []);
+
   function handleSearch(value: string) {
+    activeRequest.current?.abort();
     setQuery(value);
+    setError(false);
+    setResults([]);
+    setLoading(value.length >= 2);
     clearTimeout(timerRef.current);
 
     if (value.length < 2) {
@@ -40,10 +51,18 @@ export default function SearchClient({
       // URL-only updates avoid a second server search beside the API request.
       window.history.replaceState(null, "", `/search?${params.toString()}`);
 
-      const res = await fetch(`/api/search?q=${encodeURIComponent(value)}&limit=20`);
-      const data = await res.json().catch(() => ({}));
-      setResults(res.ok ? (data.users ?? []) : []);
-      setLoading(false);
+      const controller = new AbortController();
+      activeRequest.current = controller;
+      try {
+        const res = await fetch(`/api/search?q=${encodeURIComponent(value)}&limit=20`, { signal: controller.signal });
+        const data = await res.json().catch(() => ({}));
+        if (!res.ok) throw new Error();
+        if (!controller.signal.aborted) setResults(data.users ?? []);
+      } catch {
+        if (!controller.signal.aborted) setError(true);
+      } finally {
+        if (!controller.signal.aborted) setLoading(false);
+      }
     }, 300);
   }
 
@@ -57,7 +76,7 @@ export default function SearchClient({
             name="q"
             value={query}
             onChange={(e) => handleSearch(e.target.value)}
-            placeholder="Search by username or email"
+            placeholder="Search by name or username"
             aria-label="Search users"
             className="flex-1 bg-transparent text-base outline-none placeholder:text-muted"
           />
@@ -67,13 +86,14 @@ export default function SearchClient({
       <div>
         {query.length < 2 && !loading && results.length === 0 && (
           <p className="px-[var(--app-page-padding-x)] py-8 text-center text-sm text-muted">
-            Search by username or email
+            Enter at least 2 characters
           </p>
         )}
         {loading && (
           <p className="px-[var(--app-page-padding-x)] py-8 text-center text-sm text-muted">Searching&hellip;</p>
         )}
-        {!loading && query.length >= 2 && results.length === 0 && (
+        {error && <p role="alert" className="p-4 text-center">Search failed. <button onClick={() => handleSearch(query)} className="underline">Retry</button></p>}
+        {!loading && !error && query.length >= 2 && results.length === 0 && (
           <p className="px-[var(--app-page-padding-x)] py-8 text-center text-sm text-muted">
             No users found for &ldquo;{query}&rdquo;
           </p>

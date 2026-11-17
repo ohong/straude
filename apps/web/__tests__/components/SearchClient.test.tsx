@@ -23,7 +23,7 @@ describe("client search data ownership", () => {
     expect(fetchMock).not.toHaveBeenCalled();
     await act(async () => { await vi.advanceTimersByTimeAsync(300); });
 
-    expect(fetchMock).toHaveBeenCalledExactlyOnceWith("/api/search?q=alice&limit=20");
+    expect(fetchMock).toHaveBeenCalledExactlyOnceWith("/api/search?q=alice&limit=20", { signal: expect.any(AbortSignal) });
     expect(replaceState).toHaveBeenCalledWith(null, "", "/search?q=alice");
     expect(navigation.replace).not.toHaveBeenCalled();
     expect(screen.getByText(/No users found/)).toBeInTheDocument();

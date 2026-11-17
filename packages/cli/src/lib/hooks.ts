@@ -163,9 +163,14 @@ export function uninstallClaudeCodeHook(): void {
   if (!hooks || !Array.isArray(hooks.SessionEnd)) return;
 
   const sessionEnd = hooks.SessionEnd as HookGroup[];
-  const filtered = sessionEnd.filter((group) => !isStraudeHook(group));
+  if (!sessionEnd.some(isStraudeHook)) return;
+  const filtered = sessionEnd.flatMap((group) => {
+    if (!isStraudeHook(group)) return [group];
+    const hooks = group.hooks.filter((hook) => !isStraudeHook({ ...group, hooks: [hook] }));
+    return hooks.length ? [{ ...group, hooks }] : [];
+  });
 
-  if (filtered.length === sessionEnd.length) return; // Nothing to remove
+
 
   if (filtered.length === 0) {
     delete hooks.SessionEnd;

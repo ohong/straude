@@ -14,6 +14,7 @@ const scriptSrc = [
 ].filter(Boolean).join(" ");
 
 const nextConfig: NextConfig = {
+  typescript: { tsconfigPath: "tsconfig.check.json" },
   poweredByHeader: false,
   skipTrailingSlashRedirect: true,
   images: {

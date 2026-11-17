@@ -43,10 +43,14 @@ async function queryLeaderboard({
     .from(VIEW_BY_PERIOD[period])
     .select(LEADERBOARD_SELECT)
     .order("total_cost", { ascending: false })
+    .order("user_id", { ascending: true })
     .limit(limit);
 
   if (region) query = query.eq("region", region);
-  if (cursor) query = query.lt("total_cost", cursor);
+  if (cursor?.startsWith("offset-")) {
+    const start = Number(cursor.slice(7));
+    query = query.range(start, start + limit - 1);
+  } else if (cursor) query = query.lt("total_cost", cursor);
 
   const result = await query;
   if (result.error) throw new Error(result.error.message);
@@ -91,7 +95,7 @@ async function queryLeaderboardRank(
   let countQuery = db
     .from(source)
     .select("*", { count: "exact", head: true })
-    .gt("total_cost", entry.data.total_cost);
+    .or(`total_cost.gt.${Number(entry.data.total_cost)},and(total_cost.eq.${Number(entry.data.total_cost)},user_id.lt.${userId})`);
 
   if (region) countQuery = countQuery.eq("region", region);
 

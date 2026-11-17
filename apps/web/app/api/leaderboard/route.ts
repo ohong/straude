@@ -20,6 +20,8 @@ export async function GET(request: NextRequest) {
   const requestedPeriod = searchParams.get("period") ?? "week";
   const region = searchParams.get("region");
   const cursor = searchParams.get("cursor");
+  const offset = cursor?.startsWith("offset-") ? Number(cursor.slice(7)) : 0;
+  if (!Number.isSafeInteger(offset) || offset < 0) return NextResponse.json({ error: "Invalid cursor" }, { status: 400 });
   const requestedLimit = Number(searchParams.get("limit") ?? 50);
   const limit = Number.isFinite(requestedLimit)
     ? Math.min(Math.max(Math.trunc(requestedLimit), 1), 100)
@@ -66,7 +68,7 @@ export async function GET(request: NextRequest) {
   // Assign ranks and streaks
   const ranked = entries.map((entry, i) => ({
     ...entry,
-    rank: i + 1,
+    rank: offset + i + 1,
     streak: streakMap.get(entry.user_id) ?? 0,
     level: levelMap.get(entry.user_id),
   }));
@@ -85,7 +87,7 @@ export async function GET(request: NextRequest) {
 
   const next_cursor =
     ranked.length === limit
-      ? ranked[ranked.length - 1]?.total_cost?.toString()
+      ? `offset-${offset + limit}`
       : undefined;
 
   return NextResponse.json({ entries: ranked, user_rank, next_cursor });

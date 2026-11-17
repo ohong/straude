@@ -31,6 +31,9 @@ vi.mock("posthog-js", () => ({
     capture: mocks.capture,
     identify: vi.fn(),
     init: mocks.init,
+    has_opted_out_capturing: vi.fn().mockReturnValue(false),
+    opt_in_capturing: vi.fn(),
+    opt_out_capturing: vi.fn(),
     reset: vi.fn(),
   },
 }));
@@ -58,6 +61,7 @@ describe("WebVitalsReporter", () => {
     mocks.capture.mockClear();
     mocks.init.mockClear();
     mocks.analyticsConsent = false;
+    document.cookie = "straude_cookie_consent=v1-essential; path=/";
     mocks.reportWebVitals = undefined;
     mocks.unsubscribe.mockClear();
     window.__straudePostHogInitialized = undefined;
@@ -74,6 +78,7 @@ describe("WebVitalsReporter", () => {
     expect(mocks.init).not.toHaveBeenCalled();
 
     mocks.analyticsConsent = true;
+    document.cookie = "straude_cookie_consent=v1-all; path=/";
     rerender(
       <PostHogClientProvider>
         <div>Content</div>
@@ -90,6 +95,7 @@ describe("WebVitalsReporter", () => {
   });
 
   it("buffers TTFB until PostHog is ready and ignores built-in metrics", async () => {
+    document.cookie = "straude_cookie_consent=v1-all; path=/";
     const { rerender } = render(<WebVitalsReporter ready={false} />);
 
     act(() => {
@@ -132,6 +138,7 @@ describe("WebVitalsReporter", () => {
   });
 
   it("does not report the same TTFB metric twice", async () => {
+    document.cookie = "straude_cookie_consent=v1-all; path=/";
     render(<WebVitalsReporter ready />);
     const metric = {
       name: "TTFB" as const,

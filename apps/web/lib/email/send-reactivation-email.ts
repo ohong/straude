@@ -22,17 +22,18 @@ export async function sendReactivationEmail({
   const fromEmail =
     process.env.RESEND_FROM_EMAIL ?? "notifications@straude.com";
 
-  await resend.emails.send({
+  const { error: deliveryError } = await resend.emails.send({
     from: `Straude <${fromEmail}>`,
     replyTo: "hey@straude.com",
     to: email,
     subject: "Your Straude account is ready — sorry for the delay",
     react: ReactivationEmail({ unsubscribeUrl }),
     headers: {
-      "Idempotency-Key": `reactivation/${userId}`,
+
       "List-Unsubscribe": `<${unsubscribeUrl}>`,
       "List-Unsubscribe-Post": "List-Unsubscribe=One-Click",
     },
     tags: [{ name: "type", value: "reactivation" }],
-  });
+  }, { idempotencyKey: `reactivation/${userId}` });
+  if (deliveryError) throw new Error(deliveryError.message);
 }

@@ -1,7 +1,7 @@
 import { loadPersonalWeeklyReview } from "@/lib/utils/personal-review";
-import { getServiceClient } from "@/lib/supabase/service";
 import { redirect } from "next/navigation";
 import { getAuthContext } from "@/lib/supabase/auth";
+import { getServiceClient } from "@/lib/supabase/service";
 import { createClient } from "@/lib/supabase/server";
 import { getRecapData } from "@/lib/utils/recap";
 import { RecapPage } from "@/components/app/recap/RecapPage";
@@ -14,7 +14,7 @@ export default async function RecapRoutePage() {
   }
 
   const supabase = await createClient();
-  const { data: profile } = await supabase
+  const { data: profile } = await getServiceClient()
     .from("users")
     .select("username, is_public, streak_freezes")
     .eq("id", identity.id)
@@ -31,9 +31,8 @@ export default async function RecapRoutePage() {
     Boolean(profile.username && profile.is_public),
     "week",
     profile.streak_freezes ?? 0,
-  );
+  ).catch(() => null);
 
-  initialData.personal_review = await loadPersonalWeeklyReview(getServiceClient(), identity.id);
-
-  return <RecapPage initialData={initialData} />;
+  if (initialData) initialData.personal_review = await loadPersonalWeeklyReview(getServiceClient(), identity.id);
+  return <RecapPage initialError={initialData ? null : "Unable to load recap statistics."} initialData={initialData} />;
 }

@@ -1,5 +1,6 @@
 [
   "amp",
+  "antigravity",
   "claude",
   "codebuff",
   "codex",
@@ -14,5 +15,6 @@
   "openclaw",
   "opencode",
   "pi",
-  "qwen"
+  "qwen",
+  "zcode"
 ]

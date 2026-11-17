@@ -1,6 +1,7 @@
 "use client";
 
 import { Fragment, useEffect, useRef, useState, useCallback } from "react";
+import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { ChevronDown, Copy, Check } from "lucide-react";
 import { ActivityCard } from "./ActivityCard";
@@ -19,7 +20,7 @@ function SyncCommandHint() {
   return (
     <div className="hidden items-center gap-2.5 sm:flex">
       <span className="text-xs text-muted whitespace-nowrap">
-        Sync your Claude sessions:
+        Sync your sessions:
       </span>
       <button
         type="button"
@@ -77,7 +78,7 @@ export function FeedList({
   const cursorRef = useRef(cursor);
   const loadingRef = useRef(false);
   const feedTypeRef = useRef(feedType);
-  const sentinel = useRef<HTMLDivElement>(null);
+  const [sentinel, setSentinel] = useState<HTMLDivElement | null>(null);
   const activeRequestRef = useRef<AbortController | null>(null);
 
   cursorRef.current = cursor;
@@ -167,20 +168,20 @@ export function FeedList({
   }, [profileUserId]);
 
   useEffect(() => {
-    if (!sentinel.current) return;
+    if (!sentinel) return;
     const observer = new IntersectionObserver(
       (entries) => {
         if (entries[0].isIntersecting) loadMore();
       },
       { rootMargin: "200px" }
     );
-    observer.observe(sentinel.current);
+    observer.observe(sentinel);
     return () => observer.disconnect();
-  }, [loadMore]);
+  }, [loadMore, sentinel]);
 
   const switchTab = useCallback(
-    async (newType: FeedType) => {
-      if (newType === feedType) return;
+    async (newType: FeedType, retry = false) => {
+      if (!retry && newType === feedType) return;
       const controller = new AbortController();
       activeRequestRef.current?.abort();
       activeRequestRef.current = controller;
@@ -275,7 +276,7 @@ export function FeedList({
           <p className="text-sm text-error">{error}</p>
           <button
             type="button"
-            onClick={() => { setError(null); switchTab(feedType); }}
+            onClick={() => { setError(null); switchTab(feedType, true); }}
             className="text-sm font-medium text-accent hover:underline"
           >
             Retry
@@ -294,7 +295,7 @@ export function FeedList({
               </p>
               <p className="mt-2 text-sm text-muted">
                 {feedType === "following"
-                  ? "Follow some builders to see their posts here."
+                  ? <Link href="/search" className="text-accent underline">Find people to follow</Link>
                   : "Check back soon."}
               </p>
             </>
@@ -323,7 +324,7 @@ export function FeedList({
             </div>
           )}
           {cursor && !error && (
-            <div ref={sentinel} className="flex justify-center py-8" role="status" aria-live="polite">
+            <div ref={setSentinel} className="flex justify-center py-8" role="status" aria-live="polite">
               {loading && (
                 <span className="text-sm text-muted">Loading&hellip;</span>
               )}

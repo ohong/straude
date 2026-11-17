@@ -20,12 +20,12 @@ export interface RecapData {
 const MODEL_DISPLAY_NAMES: Record<string, string> = {
   "claude-fable": "Claude Fable",
   "claude-opus": "Claude Opus",
-  "claude-sonnet-4": "Claude Sonnet",
-  "claude-haiku-4": "Claude Haiku",
+  "claude-sonnet": "Claude Sonnet",
+  "claude-haiku": "Claude Haiku",
 };
 
 function resolveModelName(raw: string): string {
-  // Match against known prefixes (e.g. "claude-sonnet-4-20250514" → "Claude Sonnet")
+  // Match against known prefixes (e.g. "claude-sonnet-20250514" → "Claude Sonnet")
   for (const [prefix, display] of Object.entries(MODEL_DISPLAY_NAMES)) {
     if (raw.startsWith(prefix)) return display;
   }
@@ -135,7 +135,7 @@ export async function getRecapData(
 ): Promise<RecapData> {
   const { start, end, totalDays, label } = getPeriodRange(period);
 
-  const [{ data: usageRows }, { data: streakData }] = await Promise.all([
+  const [{ data: usageRows, error: usageError }, { data: streakData, error: streakError }] = await Promise.all([
     supabase
       .from("daily_usage")
       .select("date, cost_usd, output_tokens, session_count, models")
@@ -149,6 +149,7 @@ export async function getRecapData(
     }),
   ]);
 
+  if (usageError || streakError) throw new Error("Unable to load recap statistics.");
   const rows = usageRows ?? [];
 
   let totalCost = 0;
@@ -170,7 +171,7 @@ export async function getRecapData(
   }
 
   // Resolve primary model
-  let primaryModel = "Claude Sonnet";
+  let primaryModel = "";
   if (modelCounts.size > 0) {
     const topModel = [...modelCounts.entries()].sort(
       (a, b) => b[1] - a[1]

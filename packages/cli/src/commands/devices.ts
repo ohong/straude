@@ -7,6 +7,7 @@ interface UsageDeviceCandidate {
   device_id_b: string;
   normalized_hostname: string;
   overlap_dates: string[];
+  divergent_dates: string[];
   status: string;
   created_at: string;
 }
@@ -35,6 +36,13 @@ function parseCandidates(value: unknown): UsageDeviceCandidate[] {
       || typeof candidate.normalized_hostname !== "string"
       || !Array.isArray(candidate.overlap_dates)
       || candidate.overlap_dates.some((date) => typeof date !== "string")
+      || (
+        candidate.divergent_dates !== undefined
+        && (
+          !Array.isArray(candidate.divergent_dates)
+          || candidate.divergent_dates.some((date) => typeof date !== "string")
+        )
+      )
       || typeof candidate.status !== "string"
       || typeof candidate.created_at !== "string"
     ) {
@@ -46,6 +54,7 @@ function parseCandidates(value: unknown): UsageDeviceCandidate[] {
       device_id_b: candidate.device_id_b,
       normalized_hostname: candidate.normalized_hostname,
       overlap_dates: candidate.overlap_dates as string[],
+      divergent_dates: (candidate.divergent_dates as string[] | undefined) ?? [],
       status: candidate.status,
       created_at: candidate.created_at,
     };
@@ -106,14 +115,17 @@ export async function devicesCommand(
       );
       const candidates = parseCandidates(response);
       if (candidates.length === 0) {
-        console.log("No unresolved device identity candidates.");
+        console.log("No device identity candidates.");
         return 0;
       }
-      console.log("Unresolved device identity candidates:");
+      console.log("Device identity candidates:");
       for (const candidate of candidates) {
         console.log(
-          `${candidate.id}  ${candidate.normalized_hostname}  ${candidate.overlap_dates.length} matching days`,
+          `${candidate.id}  ${candidate.normalized_hostname}  ${candidate.overlap_dates.length} matching days, ${candidate.divergent_dates.length} differing days  [${candidate.status}]`,
         );
+        if (candidate.status === "kept_separate") {
+          console.log("  Your keep-separate choice remains active. Merge only to reconsider it explicitly.");
+        }
         console.log(`  merge:         straude devices merge ${candidate.id}`);
         console.log(`  keep separate: straude devices keep-separate ${candidate.id}`);
       }

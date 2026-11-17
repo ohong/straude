@@ -3,6 +3,9 @@ import { getServiceClient } from "@/lib/supabase/service";
 
 const OPEN_STATS_SNAPSHOT_TABLE = "open_stats_snapshots";
 const DAY_MS = 86_400_000;
+const USAGE_PAGE_SIZE = 1000;
+const SEED_USER_PREFIX = "a0000000-0000-4000-8000-";
+export const OPEN_STATS_STALE_AFTER_HOURS = 48;
 
 export type OpenStatsSource = "live" | "snapshot";
 
@@ -28,6 +31,7 @@ export interface OpenStats {
   avgStreak: number;
   totalStreaks: number;
   concentration: ConcentrationRow[];
+  concentrationBasis?: "percentiles" | "users";
   cumulativePct: Record<string, number>;
   models: ModelEntry[];
   fetchedAt: string;
@@ -60,6 +64,7 @@ type SupabaseErrorLike = {
 type SupabaseResult<T = unknown> = {
   data: T | null;
   error: SupabaseErrorLike;
+  count?: number | null;
 };
 
 type OpenStatsQueryResult = PromiseLike<SupabaseResult> & {
@@ -136,14 +141,14 @@ function normalizeOpenStats(
   if (!value || typeof value !== "object") return null;
 
   const record = value as Record<string, unknown>;
-  const fetchedAt =
-    typeof record.fetchedAt === "string" && record.fetchedAt
-      ? record.fetchedAt
-      : options?.fallbackFetchedAt || new Date().toISOString();
-  const snapshotDate =
-    typeof record.snapshotDate === "string" && record.snapshotDate
+  // The durable row is authoritative. Never give missing data a new capture time.
+  const fetchedAt = options?.fallbackFetchedAt ||
+    (typeof record.fetchedAt === "string" ? record.fetchedAt : "");
+  if (!fetchedAt || !Number.isFinite(Date.parse(fetchedAt))) return null;
+  const snapshotDate = options?.fallbackSnapshotDate ||
+    (typeof record.snapshotDate === "string" && record.snapshotDate
       ? record.snapshotDate
-      : options?.fallbackSnapshotDate || snapshotDateFromIso(fetchedAt);
+      : snapshotDateFromIso(fetchedAt));
 
   return {
     trackedUsers: normalizeNumber(record.trackedUsers ?? record.uniqueUsers),
@@ -155,6 +160,8 @@ function normalizeOpenStats(
     avgStreak: normalizeNumber(record.avgStreak),
     totalStreaks: normalizeNumber(record.totalStreaks),
     concentration: normalizeConcentrationRows(record.concentration),
+    // Historical snapshots used rank buckets (people), despite percentage labels.
+    concentrationBasis: record.concentrationBasis === "percentiles" ? "percentiles" : "users",
     cumulativePct:
       record.cumulativePct && typeof record.cumulativePct === "object"
         ? Object.fromEntries(
@@ -196,19 +203,18 @@ function logOpenStatsError(message: string, error: unknown) {
 
 function buildOpenStats(params: {
   usageRows: UsageRow[];
-  concentrationRows: unknown;
   growthRows: unknown;
   fetchedAt: string;
   source: OpenStatsSource;
-  totalSpendOverride?: number;
 }): OpenStats {
-  const { usageRows, concentrationRows, growthRows, fetchedAt, source } = params;
+  const { usageRows, growthRows, fetchedAt, source } = params;
 
   let totalSessions = 0;
   let totalTokens = 0;
   let totalSpend = 0;
   const datesByUser = new Map<string, string[]>();
   const modelCostMap = new Map<string, number>();
+  const spendByUser = new Map<string, number>();
 
   for (const row of usageRows) {
     totalSessions += row.session_count ?? 0;
@@ -219,6 +225,7 @@ function buildOpenStats(params: {
       const dates = datesByUser.get(row.user_id) ?? [];
       dates.push(row.date);
       datesByUser.set(row.user_id, dates);
+      spendByUser.set(row.user_id, (spendByUser.get(row.user_id) ?? 0) + (row.cost_usd ?? 0));
     }
 
     if (row.model_breakdown && Array.isArray(row.model_breakdown)) {
@@ -265,12 +272,25 @@ function buildOpenStats(params: {
     weeksOfData = Math.max(1, (latest - earliest) / (7 * DAY_MS));
   }
 
-  const effectiveSpend = params.totalSpendOverride ?? totalSpend;
-
   const avgWeeklySpend =
-    trackedUsers > 0 ? effectiveSpend / trackedUsers / weeksOfData : 0;
+    trackedUsers > 0 ? totalSpend / trackedUsers / weeksOfData : 0;
 
-  const concentration = normalizeConcentrationRows(concentrationRows);
+  // Disjoint percentile buckets; their cumulative percentages describe top 1/5/10%.
+  const rankedSpend = [...spendByUser.entries()].sort((a, b) => b[1] - a[1] || a[0].localeCompare(b[0]));
+  const concentration: ConcentrationRow[] = [];
+  let previousEnd = 0;
+  for (const [segment, fraction] of [["top_1", 0.01], ["top_5", 0.05], ["top_10", 0.1], ["rest", 1]] as const) {
+    const end = Math.ceil(rankedSpend.length * fraction);
+    const members = rankedSpend.slice(previousEnd, end);
+    const spend = members.reduce((sum, [, cost]) => sum + cost, 0);
+    concentration.push({
+      segment,
+      user_count: members.length,
+      total_spend: spend,
+      pct_of_total: totalSpend > 0 ? Math.round(spend / totalSpend * 1000) / 10 : 0,
+    });
+    previousEnd = end;
+  }
   const cumulativePct: Record<string, number> = {};
   let runningPct = 0;
   for (const segment of ["top_1", "top_5", "top_10"]) {
@@ -306,13 +326,14 @@ function buildOpenStats(params: {
   return {
     trackedUsers,
     totalUsers: cumulativeUsers || trackedUsers,
-    totalSpend: effectiveSpend,
+    totalSpend,
     avgWeeklySpend,
     totalTokens,
     totalSessions,
     avgStreak,
     totalStreaks,
     concentration,
+    concentrationBasis: "percentiles",
     cumulativePct,
     models,
     fetchedAt,
@@ -322,53 +343,52 @@ function buildOpenStats(params: {
 }
 
 async function fetchLiveOpenStats(db: OpenStatsDb): Promise<OpenStats> {
-  const [usageResult, concentrationResult, growthResult, spendResult] = await Promise.all([
-    db
-      .from("daily_usage")
-      .select(
-        "session_count, total_tokens, cost_usd, user_id, date, model_breakdown",
-      )
-      .order("date", { ascending: false })
-      .range(0, 49999),
-    db.rpc("admin_revenue_concentration"),
-    db.rpc("admin_growth_metrics"),
-    db.rpc("admin_cumulative_spend"),
-  ]);
+  const usageRows: UsageRow[] = [];
+  let offset = 0;
+  let expectedCount: number | null = null;
 
-  throwIfSupabaseError("open stats daily_usage query failed", usageResult.error);
-  throwIfSupabaseError(
-    "open stats revenue concentration query failed",
-    concentrationResult.error,
-  );
-  throwIfSupabaseError(
-    "open stats growth metrics query failed",
-    growthResult.error,
-  );
-  throwIfSupabaseError(
-    "open stats cumulative spend query failed",
-    spendResult.error,
-  );
-
-  const usageRows = Array.isArray(usageResult.data)
-    ? (usageResult.data as UsageRow[])
-    : [];
+  // A large range does not override PostgREST's row cap. Advance by the actual
+  // returned length, with a unique ordering, so smaller server caps work too.
+  for (;;) {
+    const result = await db.from("daily_usage")
+      .select("session_count, total_tokens, cost_usd, user_id, date, model_breakdown", { count: "exact" })
+      .order("date", { ascending: true })
+      .order("user_id", { ascending: true })
+      .range(offset, offset + USAGE_PAGE_SIZE - 1);
+    throwIfSupabaseError("open stats daily_usage query failed", result.error);
+    const rows = Array.isArray(result.data) ? result.data as UsageRow[] : [];
+    if (result.count == null) {
+      throw new Error("open stats daily_usage query did not return an exact count");
+    }
+    if (expectedCount != null && expectedCount !== result.count) {
+      throw new Error("open stats usage changed during pagination; retry refresh");
+    }
+    expectedCount = result.count;
+    if (rows.length === 0) {
+      if (offset !== expectedCount) {
+        throw new Error("open stats daily_usage query returned an incomplete result");
+      }
+      break;
+    }
+    usageRows.push(...rows.filter(row => row.user_id && !row.user_id.startsWith(SEED_USER_PREFIX)));
+    offset += rows.length;
+    if (offset === expectedCount) break;
+    if (offset > expectedCount) throw new Error("open stats daily_usage query exceeded its exact count");
+  }
 
   if (usageRows.length === 0) {
     throw new Error("open stats daily_usage query returned no rows");
   }
 
-  const spendRows = Array.isArray(spendResult.data) ? spendResult.data as Array<{ cumulative_total: number | string }> : [];
-  const totalSpendFromRpc = spendRows.length > 0
-    ? Number(spendRows[spendRows.length - 1].cumulative_total)
-    : undefined;
-
+  // This count uses the same seed exclusion; usage metrics all derive from the
+  // paginated cohort instead of mixing independently capped RPC totals.
+  const growthResult = await db.rpc("admin_growth_metrics");
+  throwIfSupabaseError("open stats growth metrics query failed", growthResult.error);
   return buildOpenStats({
     usageRows,
-    concentrationRows: concentrationResult.data,
     growthRows: growthResult.data,
     fetchedAt: new Date().toISOString(),
     source: "live",
-    totalSpendOverride: totalSpendFromRpc,
   });
 }
 
@@ -412,7 +432,6 @@ async function persistOpenStatsSnapshot(db: OpenStatsDb, stats: OpenStats) {
 }
 
 function createPlaceholderOpenStats(): OpenStats {
-  const now = new Date().toISOString();
   return {
     trackedUsers: 0,
     totalUsers: 0,
@@ -425,8 +444,8 @@ function createPlaceholderOpenStats(): OpenStats {
     concentration: [],
     cumulativePct: {},
     models: [],
-    fetchedAt: now,
-    snapshotDate: snapshotDateFromIso(now),
+    fetchedAt: "",
+    snapshotDate: "",
     source: "snapshot",
   };
 }
@@ -436,14 +455,8 @@ export async function refreshOpenStatsSnapshot(
 ): Promise<OpenStats> {
   const liveStats = await fetchLiveOpenStats(db);
 
-  try {
-    await persistOpenStatsSnapshot(db, liveStats);
-  } catch (error) {
-    // TODO(observability): forward to PostHog server-side capture once a
-    // helper exists (context: "open-stats:snapshot-write"). For now, log
-    // so prod failures are visible in server logs.
-    logOpenStatsError("open stats snapshot write failed:", error);
-  }
+  // A refresh succeeds only when public readers can retrieve the new snapshot.
+  await persistOpenStatsSnapshot(db, liveStats);
 
   return liveStats;
 }
@@ -460,8 +473,20 @@ export async function getOpenStatsForPage(
     logOpenStatsError("open stats snapshot read failed:", snapshotError);
   }
 
-  // Public pages must not run the 50k-row live aggregation path during render.
+  // Public pages must not run live aggregation during render.
   // Return a coherent placeholder until the scheduled/admin refresh writes a
   // new durable snapshot.
   return createPlaceholderOpenStats();
+}
+
+export function getOpenStatsFreshness(stats: Pick<OpenStats, "fetchedAt">, now = Date.now()) {
+  const capturedAt = Date.parse(stats.fetchedAt);
+  if (!Number.isFinite(capturedAt) || capturedAt > now) {
+    return { state: "unavailable" as const, ageHours: null };
+  }
+  const ageHours = (now - capturedAt) / (DAY_MS / 24);
+  return {
+    state: ageHours > OPEN_STATS_STALE_AFTER_HOURS ? "stale" as const : "fresh" as const,
+    ageHours,
+  };
 }

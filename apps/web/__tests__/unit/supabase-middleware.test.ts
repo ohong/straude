@@ -70,7 +70,7 @@ describe("Supabase middleware auth", () => {
       new NextRequest("https://straude.com/messages")
     );
 
-    expect(response.headers.get("location")).toBe("https://straude.com/login");
+    expect(response.headers.get("location")).toBe("https://straude.com/login?next=%2Fmessages");
     expect(response.cookies.get("sb-test-auth-token")?.value).toBe(
       "refreshed-token"
     );

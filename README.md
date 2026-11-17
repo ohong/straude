@@ -18,7 +18,7 @@ Sync your stats with a single command — no install needed:
 npx straude@latest
 ```
 
-The CLI reads your local [ccusage](https://github.com/ccusage/ccusage) data (cost, tokens, models, sessions), uploads it to Straude, and auto-creates a post on your feed. That includes all 16 built-in sources in the bundled ccusage 20.0.20 release: Claude Code, Codex, OpenCode, Amp, Droid, Codebuff, Hermes Agent, pi-agent, Goose, OpenClaw, Kilo, Kimi, Qwen, GitHub Copilot CLI, Gemini CLI, and Grok Build CLI. First run opens a browser login; after that, just run `npx straude@latest` daily. It automatically pushes new stats since your last sync.
+The CLI reads your local [ccusage](https://github.com/ccusage/ccusage) data (cost, tokens, models, sessions), uploads it to Straude, and auto-creates a post on your feed. That includes all 18 built-in sources in the bundled ccusage 20.0.26 release: Claude Code, Codex, OpenCode, Amp, Droid, Codebuff, Hermes Agent, pi-agent, Goose, OpenClaw, Kilo, Kimi, Qwen, GitHub Copilot CLI, Gemini CLI, Grok Build CLI, Antigravity, and Z Code. First run opens a browser login; after that, just run `npx straude@latest` daily. It automatically pushes new stats since your last sync.
 
 The first sync reads three days. Normal smart syncs resume after the last committed date and process up to seven contiguous days per run, so repeated runs catch up without skipping dates. `--days N` can explicitly backfill up to 30 days. Use `--date YYYY-MM-DD` for one day or `--dry-run` to preview without posting. Run `npx straude@latest status` to check your streak and rank.
 
