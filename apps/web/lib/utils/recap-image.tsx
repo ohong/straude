@@ -148,7 +148,7 @@ export function RecapCardImage({
                 letterSpacing: "0.1em",
               }}
             >
-              total spend
+              estimated value at API prices
             </div>
           </div>
 
@@ -329,7 +329,7 @@ export function RecapCardImage({
             letterSpacing: "0.1em",
           }}
         >
-          total spend
+          estimated value at API prices
         </div>
 
         {/* Stats row — 4 across */}

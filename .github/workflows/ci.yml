@@ -90,13 +90,27 @@ jobs:
         run: bunx playwright install --with-deps chromium
         working-directory: apps/web
 
-      - name: E2E tests
+      - name: Build CLI for browser boundary tests
+        run: bun run --cwd packages/cli build
+
+      - name: Prepare isolated native CLI runtime
+        run: docker pull node:22-bookworm-slim
+
+      - name: Browser and CLI boundary tests
         run: bun run test:e2e
         working-directory: apps/web
         env:
           BASE_URL: http://localhost:3000
           # Lambda disables require(ESM); exercise the same route-loading boundary.
           NODE_OPTIONS: --no-experimental-require-module
+
+      - name: Upload sanitized workspace walkthrough evidence
+        if: always()
+        uses: actions/upload-artifact@v7
+        with:
+          name: private-workspace-walkthrough
+          path: apps/web/test-results/private-workspaces-evidence/
+          if-no-files-found: ignore
 
   cli-package:
     name: CLI package

@@ -33,6 +33,7 @@ const navLinks = [
   { href: "/feed", label: "Feed" },
   { href: "/leaderboard", label: "Leaderboard" },
   { href: "/search", label: "Search" },
+  { href: "/workspaces", label: "Workspaces" },
 ] as const;
 
 export function TopHeader({
@@ -362,6 +363,14 @@ export function TopHeader({
                 >
                   <BarChart3 size={16} aria-hidden="true" />
                   Recap
+                </Link>
+                <Link
+                  href="/workspaces"
+                  className="flex items-center gap-3 px-4 py-2.5 text-sm hover:bg-subtle"
+                  onClick={() => setProfileOpen(false)}
+                >
+                  <BarChart3 size={16} aria-hidden="true" />
+                  Private workspaces
                 </Link>
                 <Link
                   href="/settings"

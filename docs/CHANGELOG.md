@@ -50,6 +50,8 @@ The release candidate combines the dashboard timeout/retry fix with account-spec
 
 ### Added
 
+- **Personal and private team weekly reviews.** The personal recap now compares matched UTC weekdays and shows tool/model mix without requiring a public profile. Private workspace setup shows invitations, membership, confirmed first sync, last receipt, and latest data date. A shared report calculation powers the screen and CSV, including contributor changes, the change for continuing contributors, tool/model drivers, and source-day coverage. Dollar figures are labeled estimated value at API prices. `/teams` provides a fictional example, setup/privacy guidance, and the existing inquiry channel; personal use remains free.
+
 - **Private workspaces and work-only sources.** Authenticated users can create a workspace, accept an email-bound invitation, revoke invitations, and remove members without a public profile. Explicitly designated work-only CLI sources start sharing the next UTC day into separate private tables. Source/date snapshots make retries idempotent; removal stops reads and writes while preserving previous contributions. Durable CLI routing keeps personal outboxes and work sync separate, including after sign-in changes and failures. Existing automation is stopped at enrollment; enabling it again requires an installed workspace-capable CLI.
 
 - **Show background sync recovery in `straude auto`.** Report the last confirmed submission time and login guidance after HTTP 401. Account-bound local state preserves the previous success through failures, clears the notice after a successful submission, and does not change on dry runs or empty scans. The packaged E2E exercises recovery, pending-request replay, and account isolation.

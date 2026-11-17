@@ -3,12 +3,65 @@
 import { useState, useEffect, useCallback, useRef } from "react";
 import { Link2, Download, Check } from "lucide-react";
 import { RecapCard } from "@/components/app/recap/RecapCard";
+import type { PersonalWeeklyReview } from "@/lib/utils/personal-review";
 import type { RecapData } from "@/lib/utils/recap";
 import {
   RECAP_BACKGROUNDS,
   DEFAULT_BACKGROUND_ID,
   type RecapBackgroundId,
 } from "@/lib/recap-backgrounds";
+
+
+const money = (value: number) => new Intl.NumberFormat("en-US", { style: "currency", currency: "USD" }).format(value);
+
+function PersonalWeekReview({ review }: { review: PersonalWeeklyReview | null | undefined }) {
+  if (!review) return <p role="status" className="mb-6 text-sm text-muted">Weekly comparison is unavailable. Refresh to try again.</p>;
+  const delta = review.current.estimated_value_usd - review.previous.estimated_value_usd;
+  return (
+    <section aria-labelledby="personal-week-heading" className="mb-8 border border-border p-4 sm:p-6">
+      <h2 id="personal-week-heading" className="text-lg font-semibold">Your personal week</h2>
+      <p className="mt-1 text-sm text-muted">{review.start}–{review.end} · UTC date boundaries · Week in progress, including today’s partial usage.</p>
+      <p className="mt-3 text-sm">Estimated value at API prices. Actual billed charges are unknown. Private workspace contributions appear in your workspace report.</p>
+      <dl className="mt-5 grid gap-4 sm:grid-cols-2">
+        <div>
+          <dt className="text-sm text-muted">Estimated value at API prices</dt>
+          <dd className="mt-1 text-2xl font-semibold tabular-nums">{money(review.current.estimated_value_usd)}</dd>
+        </div>
+        <div>
+          <dt className="text-sm text-muted">Output tokens</dt>
+          <dd className="mt-1 text-2xl font-semibold tabular-nums">{review.current.output_tokens.toLocaleString("en-US")}</dd>
+        </div>
+      </dl>
+      <p className="mt-4 text-sm">
+        {review.previous.received_days > 0
+          ? `${delta > 0 ? "+" : ""}${money(delta)} versus ${money(review.previous.estimated_value_usd)} across the same weekdays last week (${review.previous_start}–${review.previous_end}).`
+          : "No data received for the same weekdays last week; a change cannot be calculated."}
+      </p>
+      <p className="mt-2 text-xs text-muted">Data received for {review.current.received_days} days this week and {review.previous.received_days} comparable days last week. Days without submissions are unknown, not confirmed zero usage. Changes may reflect sync coverage.</p>
+      <div className="mt-5 grid gap-6 sm:grid-cols-2">
+        {([
+          ["Tool mix", review.tools, review.tool_unattributed_usd],
+          ["Model mix", review.models, review.model_unattributed_usd],
+        ] as const).map(([label, entries, unattributed]) => (
+          <div key={label}>
+            <h3 className="text-sm font-semibold">{label} · estimated value</h3>
+            {entries.length === 0 ? <p className="mt-2 text-sm text-muted">No breakdown received.</p> : (
+              <dl className="mt-2 divide-y divide-border">
+                {entries.map((entry) => (
+                  <div key={entry.name} className="flex items-baseline justify-between gap-4 py-2 text-sm">
+                    <dt className="min-w-0 break-words">{entry.name}</dt>
+                    <dd className="shrink-0 tabular-nums">{money(entry.estimated_value_usd)}</dd>
+                  </div>
+                ))}
+              </dl>
+            )}
+            {Math.abs(unattributed) >= 0.005 && <p className="mt-2 text-xs text-muted">{unattributed > 0 ? `${money(unattributed)} has no recorded attribution.` : "Breakdown and recorded total differ; attribution is incomplete."}</p>}
+          </div>
+        ))}
+      </div>
+    </section>
+  );
+}
 
 export function RecapPage({
   initialData,
@@ -115,13 +168,15 @@ export function RecapPage({
   return (
     <>
       <header className="sticky top-0 z-10 flex h-16 items-center border-b border-border bg-background px-6">
-        <h3 className="text-lg font-medium">Recap</h3>
+        <h1 className="text-lg font-medium">Personal recap</h1>
+        <a href="/workspaces" className="ml-auto text-sm font-semibold text-accent hover:underline">Private workspaces</a>
       </header>
 
       <div className="p-6">
         <div className="mb-6 flex gap-2">
           <button
             onClick={() => setPeriod("week")}
+            aria-pressed={period === "week"}
             className={`border px-4 py-1.5 text-sm font-semibold ${
               period === "week"
                 ? "border-foreground bg-foreground text-background"
@@ -133,6 +188,7 @@ export function RecapPage({
           </button>
           <button
             onClick={() => setPeriod("month")}
+            aria-pressed={period === "month"}
             className={`border px-4 py-1.5 text-sm font-semibold ${
               period === "month"
                 ? "border-foreground bg-foreground text-background"
@@ -184,6 +240,7 @@ export function RecapPage({
           <p className="text-sm text-muted">{error}</p>
         ) : data ? (
           <>
+            {period === "week" && <PersonalWeekReview review={data.personal_review} />}
             <RecapCard data={data} backgroundId={backgroundId} />
 
             <div className="mt-4 flex gap-3">
