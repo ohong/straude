@@ -1,3 +1,5 @@
+import { loadWorkspaceSource } from "../lib/workspace-source.js";
+import { durableBackgroundInvocation } from "../lib/background-command.js";
 import { loadConfig, updateConfig } from "../lib/auth.js";
 import type { StraudeConfig } from "../lib/auth.js";
 import {
@@ -77,6 +79,9 @@ export function enableAutoPush(
   time?: string,
   mechanism?: string,
 ): void {
+  if (loadWorkspaceSource() && !durableBackgroundInvocation()) {
+    throw new Error("Private automatic sync requires an installed workspace-capable CLI. Install this CLI build, then run `straude --auto` from it; an older npm version must not collect this source.");
+  }
   const resolvedMechanism = mechanism === "hooks" ? "hooks" : "scheduler";
 
   if (resolvedMechanism === "hooks") {

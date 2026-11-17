@@ -2,6 +2,7 @@ import type { SupabaseClient } from "@supabase/supabase-js";
 import { formatDateKey } from "@/lib/utils/dates";
 
 export interface RecapData {
+  personal_review?: import("./personal-review").PersonalWeeklyReview | null;
   total_cost: number;
   output_tokens: number;
   active_days: number;

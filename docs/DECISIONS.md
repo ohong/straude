@@ -1,5 +1,23 @@
 # Architecture & Design Decisions
 
+## Compare private weekly usage with participation and coverage visible (2026-11-06)
+
+**Decision:** Use UTC Monday-start weeks for private reports. The current week ends at today; its comparison ends on the corresponding weekday of the previous week. Explicitly label the current day and week incomplete. Count people with any received day, including a recorded zero, as contributors. Show total change alongside change for people represented in both periods and counts of new/absent contributors. This avoids implying that participation growth means every person changed behavior. The same-contributor comparison can still have unequal coverage; the report says so.
+
+**Coverage:** Count received versus expected source days from consent through removal, including weekends, and distinguish no source, no receipt, stale receipt, and stale data dates. Retained contributions remain part of historical reports after removal. A receipt confirms locally recorded priced usage only: missing local logs and unpriced external models limit completeness. A source cannot silently replace positive token counts with smaller snapshots; restore its logs to retry. Explicit collector corrections remain separate work.
+
+**Export:** Screen and CSV use one authorized snapshot and aggregation function with identical filters and boundaries. All dollar columns state estimated API-price value; actual billing remains unknown. Export aggregate tool/model figures and participation counts, without employee rankings. Escape spreadsheet formulas in collector labels. Personal recap improvements remain authenticated, while existing community comparisons and public recap behavior remain available.
+
+## Keep work-only collection separate from community usage (2026-11-06)
+
+**Decision:** Private workspaces use explicit owner/member membership and verified-email invitations. Public affiliation badges and email domains confer no access. Store private source/day tool and model aggregates separately from `daily_usage`, posts, recaps, and leaderboard inputs. Only the server can access the tables or call the transactional membership/sync RPC; each scoped operation checks current membership under the workspace lock. Removal revokes sources and outstanding invitations, denies further access, and retains past contributions. Rejoining requires a new source consent window.
+
+**Collection alternatives:** The current collector returns daily aggregates by tool/model without account or project identity. Account filtering on a mixed device cannot reliably recover this distinction. The supported option is an explicitly designated work-only device or OS account. Start at the next UTC midnight and collect in UTC, avoiding accidental inclusion of earlier activity in a partially elapsed daily aggregate. The server rejects earlier dates, future dates, and dates outside the existing 30-day backfill window. A separate durable CLI routing marker survives credential resets and never replays the personal outbox into a workspace. Public storage triggers reject every write from enrolled current, legacy, and canonical source identities, including historical retries. An older sender's local calendar date cannot safely establish whether its aggregate contains post-consent UTC activity. Existing personal records remain stored and other personal sources remain usable.
+
+**Observed state:** Enrollment is not a sync. Successful source/day receipts, including explicit zero records, establish first sync and freshness. No prompts or code are submitted. Stopping older installed automation at enrollment prevents it from invoking a public-only build; private automation requires a durable installed compatible CLI and its existing scheduler diagnostics. A compatible CLI must be installed before source enrollment; no release is performed by this change.
+
+**Limits:** A work-only designation is a user assertion, not account classification. Copies of the same logs enrolled as distinct sources can still double count. The existing collector-accuracy and recovery work in PRs #162–#165 is separate and must be assessed before a release. Private contributions do not change the existing cumulative-spend north-star definition. Dollar estimates describe API-price value, not invoices or employee performance.
+
 ## Reject profile saves after account deletion (2026-11-05)
 
 **Problem:** Account deletion omitted team affiliation fields. Clearing them alone still allowed a PATCH authenticated before deletion to restore affiliation after slow favicon discovery finished.

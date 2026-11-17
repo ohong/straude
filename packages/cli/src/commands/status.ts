@@ -1,8 +1,11 @@
+import { loadWorkspaceSource } from "../lib/workspace-source.js";
+import { workspaceStatus } from "./workspace.js";
 import { requireAuth } from "../lib/auth.js";
 import { apiRequest } from "../lib/api.js";
 import type { DashboardData } from "../components/PushSummary.js";
 
 export async function statusCommand(): Promise<void> {
+  if (loadWorkspaceSource()) return workspaceStatus();
   const config = requireAuth();
 
   let dashboard: DashboardData;
