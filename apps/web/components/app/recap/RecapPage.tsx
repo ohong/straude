@@ -23,6 +23,7 @@ export function RecapPage({
   const [loading, setLoading] = useState(false);
   const initialRender = useRef(true);
   const [copied, setCopied] = useState(false);
+  const [attempt, setAttempt] = useState(0);
   const [downloading, setDownloading] = useState(false);
   const [downloadError, setDownloadError] = useState<string | null>(null);
   const [backgroundId, setBackgroundId] =
@@ -76,7 +77,7 @@ export function RecapPage({
     return () => {
       cancelled = true;
     };
-  }, [period]);
+  }, [period, attempt]);
 
   const handleCopyLink = useCallback(async () => {
     if (!data) return;
@@ -181,7 +182,7 @@ export function RecapPage({
             style={{ height: 380, borderRadius: 8 }}
           />
         ) : error ? (
-          <p className="text-sm text-muted">{error}</p>
+          <p className="text-sm text-muted">{error} <button className="underline" onClick={() => setAttempt(n => n + 1)}>Retry</button></p>
         ) : data ? (
           <>
             <RecapCard data={data} backgroundId={backgroundId} />

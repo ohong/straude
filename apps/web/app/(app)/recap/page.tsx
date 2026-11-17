@@ -1,5 +1,6 @@
 import { redirect } from "next/navigation";
 import { getAuthContext } from "@/lib/supabase/auth";
+import { getServiceClient } from "@/lib/supabase/service";
 import { createClient } from "@/lib/supabase/server";
 import { getRecapData } from "@/lib/utils/recap";
 import { RecapPage } from "@/components/app/recap/RecapPage";
@@ -12,7 +13,7 @@ export default async function RecapRoutePage() {
   }
 
   const supabase = await createClient();
-  const { data: profile } = await supabase
+  const { data: profile } = await getServiceClient()
     .from("users")
     .select("username, is_public, streak_freezes")
     .eq("id", identity.id)
@@ -29,7 +30,7 @@ export default async function RecapRoutePage() {
     profile.is_public,
     "week",
     profile.streak_freezes ?? 0,
-  );
+  ).catch(() => null);
 
-  return <RecapPage initialData={initialData} />;
+  return <RecapPage initialError={initialData ? null : "Unable to load recap statistics."} initialData={initialData} />;
 }
