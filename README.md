@@ -140,9 +140,7 @@ The app will be available at `http://localhost:3000`.
 | [Changelog](docs/CHANGELOG.md) | Release history and what changed |
 | [CLI operations](docs/CLI_OPERATIONS.md) | Protocol rollout, alerts, repair, rollback, and audit closure |
 | [Decisions](docs/DECISIONS.md) | Architecture and design decisions with rationale |
-| [Roadmap](docs/ROADMAP.md) | Planned features and future work |
 | [Security](docs/SECURITY.md) | Security audit findings and status |
-| [Specs](docs/straude-specs-v1.md) | Original v1 product specification |
 
 ## Get started
 

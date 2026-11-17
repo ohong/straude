@@ -2,6 +2,7 @@ import type { StraudeConfig } from "./auth.js";
 import { updateConfig } from "./auth.js";
 import { syncAccountKey } from "./sync-account.js";
 import { isInteractive } from "./prompt.js";
+import { recordSyncHealth } from "./sync-health.js";
 
 export const REFRESHED_TOKEN_HEADER = "x-straude-refreshed-token";
 export const DEFAULT_API_TIMEOUT_MS = 15_000;
@@ -270,10 +271,11 @@ async function doRequest<T>(
   options: ApiRequestOptions,
 ): Promise<T> {
   const accountKey = syncAccountKey(config);
+  const requestToken = config.token;
   const prepared = prepareRequest(options);
   const headers: Record<string, string> = {
     "Content-Type": "application/json",
-    Authorization: `Bearer ${config.token}`,
+    Authorization: `Bearer ${requestToken}`,
     ...(prepared.fetchOptions.headers as Record<string, string> | undefined),
   };
   prepared.fetchOptions = { ...prepared.fetchOptions, headers };
@@ -290,7 +292,10 @@ async function doRequest<T>(
     const skipRefresh = Symbol("authentication changed");
     try {
       updateConfig((current) => {
-        if (!current || syncAccountKey(current) !== accountKey) throw skipRefresh;
+        // A concurrent sign-in may have a new absolute lifetime even when its
+        // account is unchanged. A response from the old chain must not replace it.
+        if (!current || syncAccountKey(current) !== accountKey
+          || current.token !== requestToken) throw skipRefresh;
         return { ...current, token: refreshed };
       });
     } catch (error) {
@@ -311,6 +316,12 @@ export async function apiRequest<T>(
   try {
     return await doRequest<T>(config, path, options);
   } catch (error) {
+    // Usage submission holds the sync lease. Preserve the rejected sign-in
+    // even when the subsequent browser login fails before push sees a 401.
+    // Only a completed, accepted submission may clear this notice.
+    if (error instanceof SessionExpiredError && path === "/api/usage/submit") {
+      recordSyncHealth(config, "auth_required");
+    }
     if (
       error instanceof SessionExpiredError &&
       authRefreshStrategy &&

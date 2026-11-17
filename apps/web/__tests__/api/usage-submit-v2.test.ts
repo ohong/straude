@@ -24,9 +24,10 @@ vi.mock("@/lib/supabase/service", () => ({
   getServiceClient: vi.fn(() => ({ rpc, from })),
 }));
 
-vi.mock("@/lib/analytics/server", () => ({
-  captureServerActivationEvent: vi.fn().mockResolvedValue(true),
-}));
+vi.mock("@/lib/analytics/server", async (importOriginal) => {
+  const actual = await importOriginal<typeof import("@/lib/analytics/server")>();
+  return { ...actual, captureServerActivationEvent: vi.fn().mockResolvedValue(true) };
+});
 
 import ALL_BUILT_IN_CCUSAGE_AGENTS from "../../../../packages/cli/__tests__/fixtures/ccusage-sources.json";
 import { POST } from "@/app/api/usage/submit/route";

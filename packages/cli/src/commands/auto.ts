@@ -12,6 +12,7 @@ import {
   isClaudeCodeHookInstalled,
 } from "../lib/hooks.js";
 import { readLog } from "../lib/auto-push-logger.js";
+import { readSyncHealth } from "../lib/sync-health.js";
 import { AUTO_PUSH_DEFAULT_TIME, AUTO_PUSH_LOG_FILE, LAUNCHD_PLIST_PATH } from "../config.js";
 import { posthog } from "../lib/posthog.js";
 import { getDistinctId } from "../lib/machine-id.js";
@@ -216,5 +217,11 @@ export function autoCommand(subcommand: string | null): void {
   } else {
     console.log("Auto-push: disabled");
     console.log('Run `straude --auto` to sync your stats daily.');
+  }
+
+  const health = readSyncHealth(config);
+  if (health?.last_success_at) console.log(`Last successful sync: ${health.last_success_at}`);
+  if (health?.auth_required_at) {
+    console.log("Sign-in required: run `straude login` in an interactive terminal, then run `straude` to resume syncing.");
   }
 }

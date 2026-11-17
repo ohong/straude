@@ -102,6 +102,8 @@ function config(overrides: Record<string, unknown> = {}) {
     device_name: "work-laptop",
     last_push_date: "2026-03-12",
     usage_protocol_v2_migration_completed_at: "2026-03-01T00:00:00.000Z",
+    // Newer than any installed ccusage, so these tests stay on the incremental path.
+    ccusage_version_pushed: "999.0.0",
     ...overrides,
   };
 }

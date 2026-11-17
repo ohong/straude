@@ -135,5 +135,4 @@ Be kind. Disagree about code, not people. We follow the spirit of the [Contribut
 ## Getting Help
 
 - [Setup guide](docs/SETUP.md) and [local dev](docs/LOCAL_DEV.md) for environment issues.
-- [Roadmap](docs/ROADMAP.md) for what's planned but not yet started.
 - [GitHub issues](https://github.com/ohong/straude/issues) for bugs and feature requests.

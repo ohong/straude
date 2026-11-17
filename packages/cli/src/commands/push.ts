@@ -3,6 +3,7 @@ import { hostname } from "node:os";
 import { performance } from "node:perf_hooks";
 import {
   canonicalizeUsageEntryV2,
+  isSupportedCcusageVersion,
   parseUsageSubmitResponseV2,
   parseUsageSubmitV2,
   type AgentUsageComponent,
@@ -11,6 +12,7 @@ import {
   type UsageSubmitRequestV2,
   type UsageSubmitResultV2,
 } from "@straude/shared/usage-protocol";
+import { isNewerCollectorVersion } from "../lib/collector-version.js";
 import { MAX_BACKFILL_DAYS, DEFAULT_SYNC_DAYS, CLI_VERSION } from "../config.js";
 import { apiRequest, ApiHttpError, ApiTimeoutError } from "../lib/api.js";
 import { loadConfig, updateConfig, type StraudeConfig } from "../lib/auth.js";
@@ -25,6 +27,7 @@ import {
 } from "../lib/calendar.js";
 import {
   CCUSAGE_DEFAULT_PRICING_MODE,
+  getInstalledCcusageVersion,
   PricingUnavailableError,
   collectCcusageUsageAsync,
   resolveLocalTimezone,
@@ -33,6 +36,7 @@ import {
   type CcusageDailyEntry,
 } from "../lib/ccusage.js";
 import { syncAccountKey } from "../lib/sync-account.js";
+import { recordSyncHealth } from "../lib/sync-health.js";
 import { getDistinctId, getInstallationId } from "../lib/machine-id.js";
 import { isInteractive } from "../lib/prompt.js";
 import { posthog } from "../lib/posthog.js";
@@ -41,6 +45,7 @@ import {
   acquireSyncLease,
   loadPendingBatches,
   removePendingBatch,
+  replacePendingBatch,
   upsertPendingBatch,
   type PendingRangeMode,
   type PendingUsageBatch,
@@ -131,6 +136,7 @@ export function resolvePushDateRange(args: {
   options: { date?: string; days?: number };
   lastPushDate?: string;
   shouldRunMigrationBackfill: boolean;
+  shouldRunCollectorUpgrade?: boolean;
 }): DateRangeResolution {
   const { options, shouldRunMigrationBackfill } = args;
   const today = localDateToCalendarDate(args.today);
@@ -185,6 +191,17 @@ export function resolvePushDateRange(args: {
       since: dateFromInput(addCalendarDays(today, -FIRST_OR_MIGRATION_SYNC_DAYS + 1)),
       until: dateFromInput(today),
       mode: "migration",
+    };
+  }
+
+  if (args.shouldRunCollectorUpgrade) {
+    // Re-submit the whole backfill window; the server lets a newer collector
+    // replace rows from an older one.
+    return {
+      ok: true,
+      since: dateFromInput(addCalendarDays(today, -MAX_BACKFILL_DAYS + 1)),
+      until: dateFromInput(today),
+      mode: "collector_upgrade",
     };
   }
 
@@ -310,6 +327,65 @@ function createRequest(args: {
     );
   }
   return parsed.value;
+}
+
+async function recollectUnsupportedPendingBatch(
+  config: StraudeConfig,
+  pending: PendingUsageBatch,
+  timeoutMs?: number,
+): Promise<PendingUsageBatch> {
+  if (!isSupportedCcusageVersion(getInstalledCcusageVersion())) {
+    throw new Error("Update with npx straude@latest before recollecting the saved usage batch.");
+  }
+  if (pending.request.entries.some((entry) => (
+    entry.agents.some((agent) => agent.agent === "legacy-unpartitioned")
+  ))) {
+    throw new Error("Saved legacy usage has no source inventory. Keep the saved batch and restore complete local logs before manual recovery; it cannot be safely recollected automatically.");
+  }
+  const dates = pending.request.entries.map((entry) => entry.date).sort();
+  if (dates.length === 0) throw new Error("Saved usage batch has no dates to recollect.");
+  const collected = await collectCcusageUsageAsync(
+    compactCalendarDate(dates[0]!),
+    compactCalendarDate(dates.at(-1)!),
+    timeoutMs,
+    { pricingMode: CCUSAGE_DEFAULT_PRICING_MODE, timezone: pending.request.timezone },
+  );
+  const byDate = new Map(collected.data.map((entry) => [entry.date, entry]));
+  const entries = pending.request.entries.map((original) => {
+    const fresh = byDate.get(original.date);
+    const sources = new Set(fresh?.agentBreakdown.map((agent) => agent.agent));
+    if (!fresh || original.agents.some((agent) => (
+      !sources.has(agent.agent)
+    ))) {
+      throw new Error(`Saved usage for ${original.date} could not be fully recollected. Restore complete local logs and retry; the saved batch is unchanged.`);
+    }
+    const entry: UsageEntryV2 = {
+      ...createUsageEntry(fresh, false),
+      ...(original.authoritative_correction !== undefined
+        ? { authoritative_correction: original.authoritative_correction } : {}),
+      ...(original.migration_id ? { migration_id: original.migration_id } : {}),
+    };
+    entry.content_hash = createHash("sha256").update(canonicalizeUsageEntryV2(entry)).digest("hex");
+    return entry;
+  });
+  const request = createRequest({
+    config,
+    timezone: pending.request.timezone,
+    collector: collected.collector,
+    entries: pending.request.entries.map((entry) => byDate.get(entry.date)!),
+    migration: false,
+  });
+  const replacement: PendingUsageBatch = {
+    ...pending,
+    request: {
+      ...request,
+      installation: pending.request.installation,
+      entries,
+    },
+    created_at: new Date().toISOString(),
+  };
+  replacePendingBatch(pending, replacement);
+  return replacement;
 }
 
 function classifySubmitError(error: unknown, interactive: boolean): number {
@@ -451,6 +527,9 @@ async function submitBatch(
         await sleep(delay);
       }
     } catch (error) {
+      if (error instanceof ApiHttpError && error.status === 401) {
+        recordSyncHealth(config, "auth_required");
+      }
       const exitCode = classifySubmitError(error, interactive);
       if (exitCode === CLI_EXIT.TEMPORARY && attempt + 1 < PROTOCOL_RETRY_ATTEMPTS) {
         const retryAfter = error instanceof ApiHttpError
@@ -531,7 +610,8 @@ function advanceCompletedBatch(batch: PendingUsageBatch): StraudeConfig {
     } = current;
     const automatic = batch.range_mode === "incremental"
       || batch.range_mode === "first_sync"
-      || batch.range_mode === "migration";
+      || batch.range_mode === "migration"
+      || batch.range_mode === "collector_upgrade";
     const lastDate = batch.watermark_date;
     return {
       ...preserved,
@@ -546,6 +626,14 @@ function advanceCompletedBatch(batch: PendingUsageBatch): StraudeConfig {
         ? { previous_device_id_migrated_at: new Date().toISOString() }
         : {}),
     };
+  });
+}
+
+function recordPushedCcusageVersion(accountKey: string, version: string): void {
+  updateConfig((current) => {
+    if (!current) throw new Error("Authentication disappeared while syncing.");
+    if (syncAccountKey(current) !== accountKey) return current;
+    return { ...current, ccusage_version_pushed: version };
   });
 }
 
@@ -688,6 +776,10 @@ export async function pushCommand(
     options: { date: options.date, days: options.days },
     lastPushDate: config.last_push_date,
     shouldRunMigrationBackfill: migrationPending,
+    shouldRunCollectorUpgrade: isNewerCollectorVersion(
+      getInstalledCcusageVersion(),
+      config.ccusage_version_pushed,
+    ),
   });
   if (!resolution.ok) {
     console.error(resolution.error);
@@ -705,6 +797,7 @@ export async function pushCommand(
     resolution.mode === "incremental"
     || resolution.mode === "first_sync"
     || resolution.mode === "migration"
+    || resolution.mode === "collector_upgrade"
   )
     ? requestedDates.at(-1)
     : undefined;
@@ -736,8 +829,18 @@ export async function pushCommand(
       }
     }
 
-    for (const pending of options.dryRun ? [] : loadPendingBatches()) {
-      if (pending.account_key !== syncAccountKey(config)) continue;
+    for (const saved of options.dryRun ? [] : loadPendingBatches()) {
+      if (saved.account_key !== syncAccountKey(config)) continue;
+      let pending = saved;
+      if (!isSupportedCcusageVersion(pending.request.collector.version)) {
+        console.log("Recollecting a saved usage batch with the upgraded ccusage collector...");
+        try {
+          pending = await recollectUnsupportedPendingBatch(config, pending, options.timeoutMs);
+        } catch (error) {
+          console.error(`Saved usage is preserved. ${errorMessage(error)}`);
+          return error instanceof PricingUnavailableError ? CLI_EXIT.TEMPORARY : CLI_EXIT.PERMANENT;
+        }
+      }
       const pendingResult = await submitBatch(config, pending, !nonInteractive);
       if (!pendingResult.complete) {
         console.error(
@@ -751,6 +854,7 @@ export async function pushCommand(
       }
       advanceCompletedBatch(pending);
       removePendingBatch(pending.request.request_id);
+      recordSyncHealth(config, "success");
     }
 
     const effectiveSince = requestedDates[0]!;
@@ -834,11 +938,16 @@ export async function pushCommand(
         },
         requested_dates: requestedDates,
         ...(automaticWatermarkDate ? { watermark_date: automaticWatermarkDate } : {}),
-        range_mode: resolution.mode,
+        // Reuse the established automatic mode on disk so older CLIs can
+        // preserve and replay a pending upgrade batch after a downgrade.
+        range_mode: resolution.mode === "collector_upgrade" ? "incremental" : resolution.mode,
         migration_pending: isMigrationBatch,
         created_at: new Date().toISOString(),
       };
       advanceCompletedBatch(emptyBatch);
+      if (resolution.mode === "collector_upgrade" || resolution.mode === "first_sync") {
+        recordPushedCcusageVersion(emptyBatch.account_key, collected.version);
+      }
       lease.acknowledgeQueuedDates(queuedDatesToConsume);
       console.log("No usage data found for the specified period.");
       return CLI_EXIT.OK;
@@ -856,11 +965,17 @@ export async function pushCommand(
       request,
       requested_dates: requestedDates,
       ...(automaticWatermarkDate ? { watermark_date: automaticWatermarkDate } : {}),
-      range_mode: resolution.mode,
+      range_mode: resolution.mode === "collector_upgrade" ? "incremental" : resolution.mode,
       migration_pending: isMigrationBatch,
       created_at: new Date().toISOString(),
     };
     upsertPendingBatch(batch);
+    if (resolution.mode === "collector_upgrade" || resolution.mode === "first_sync") {
+      // The batch is durable in the outbox now, so it retries without
+      // recollecting. A date the server rejects for good would not change with
+      // the same collector, so don't repeat the full window on every push.
+      recordPushedCcusageVersion(batch.account_key, collected.version);
+    }
 
     const syncSpinner = new Spinner("sync");
     syncSpinner.start();
@@ -889,6 +1004,7 @@ export async function pushCommand(
     const updatedConfig = advanceCompletedBatch(batch);
     removePendingBatch(batch.request.request_id);
     lease.acknowledgeQueuedDates(queuedDatesToConsume);
+    recordSyncHealth(config, "success");
     printSubmitSuccess(entries, submitted.results);
     const dashboard = await renderDashboard(updatedConfig, submitted.results);
     timings.dashboard_ms = dashboard.durationMs;

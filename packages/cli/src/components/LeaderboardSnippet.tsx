@@ -3,7 +3,7 @@ import { Box, Text } from 'ink';
 import { theme } from './theme.js';
 
 interface LeaderboardEntry {
-  username: string;
+  username: string | null;
   cost: number;
   rank: number;
 }
@@ -14,7 +14,7 @@ interface LeaderboardSnippetProps {
     above: LeaderboardEntry[];
     below: LeaderboardEntry[];
   } | null;
-  username: string;
+  username: string | null;
   userCost: number;
 }
 
@@ -23,8 +23,8 @@ function formatRank(rank: number): string {
   return str.padStart(4);
 }
 
-function formatUsername(name: string): string {
-  return name.padEnd(16);
+function formatUsername(name: string | null, isCurrent: boolean): string {
+  return (name?.trim() || (isCurrent ? 'Your account' : 'Unnamed user')).padEnd(16);
 }
 
 function formatCost(cost: number): string {
@@ -44,7 +44,7 @@ function LeaderboardRow({
 
   return (
     <Text color={color} bold={bold}>
-      {`${prefix}${formatRank(entry.rank)}  ${formatUsername(entry.username)}  ${formatCost(entry.cost)}`}
+      {`${prefix}${formatRank(entry.rank)}  ${formatUsername(entry.username, isCurrent)}  ${formatCost(entry.cost)}`}
     </Text>
   );
 }
