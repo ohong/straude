@@ -134,9 +134,16 @@ export function MessagesInbox({
   const queryClient = useQueryClient();
   const shellMode = useResponsiveShell();
   const [activeUsername, setActiveUsername] = useState(initialUsername);
-  const [draft, setDraft] = useState("");
+  const [drafts, setDrafts] = useState<Record<string, string>>({});
+  const recipient = activeUsername ?? "";
+  const draft = drafts[recipient] ?? "";
+  const setDraft = (value: string) => setDrafts(prev => ({ ...prev, [recipient]: value }));
   const [error, setError] = useState<string | null>(null);
-  const [pendingAttachments, setPendingAttachments] = useState<PendingAttachment[]>([]);
+  const [attachmentsByUser, setAttachmentsByUser] = useState<Record<string, PendingAttachment[]>>({});
+  const pendingAttachments = attachmentsByUser[recipient] ?? [];
+  function setPendingAttachments(value: PendingAttachment[] | ((prev: PendingAttachment[]) => PendingAttachment[])) {
+    setAttachmentsByUser(prev => ({ ...prev, [recipient]: typeof value === "function" ? value(prev[recipient] ?? []) : value }));
+  }
   const [optimisticMessages, setOptimisticMessages] = useState<
     Record<string, LocalDirectMessage[]>
   >({});
@@ -378,7 +385,6 @@ export function MessagesInbox({
   function clearConversation() {
     setActiveUsername(null);
     setError(null);
-    setPendingAttachments([]);
     router.replace("/messages");
   }
 
@@ -482,15 +488,11 @@ export function MessagesInbox({
     },
     onError: (err, variables) => {
       setError((err as Error).message || "Failed to send message");
-      setDraft((prev) => prev || variables.content);
-      setPendingAttachments((prev) =>
-        prev.length > 0
-          ? prev
-          : variables.pending.map((attachment) => ({
-              ...attachment,
-              uploading: false,
-            })),
-      );
+      setDrafts(prev => ({ ...prev, [variables.username]: prev[variables.username] || variables.content }));
+      setAttachmentsByUser(prev => ({
+        ...prev,
+        [variables.username]: [...variables.pending, ...(prev[variables.username] ?? [])],
+      }));
 
       setOptimisticMessages((previous) => ({
         ...previous,
