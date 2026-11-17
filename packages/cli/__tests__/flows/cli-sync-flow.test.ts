@@ -262,7 +262,7 @@ describe("unified ccusage CLI flow", () => {
     expect(nextArgs[nextArgs.indexOf("--since") + 1]).toBe("20260313");
   });
 
-  it("stays incremental when ccusage has not changed since the last push", async () => {
+  it("rechecks the last synced day for late usage when the collector is unchanged", async () => {
     seedConfig({ last_push_date: "2026-03-12", ccusage_version_pushed: TEST_CCUSAGE_VERSION });
     mockSuccessfulSubmit();
 
@@ -272,7 +272,7 @@ describe("unified ccusage CLI flow", () => {
       Array.isArray(args) && args.includes("daily"),
     )!;
     const args = dailyCall[1] as string[];
-    expect(args[args.indexOf("--since") + 1]).toBe("20260313");
+    expect(args[args.indexOf("--since") + 1]).toBe("20260312");
   });
 
   it("respects explicit --days before the migration backfill has completed", async () => {
