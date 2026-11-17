@@ -14,7 +14,8 @@ concurrency:
 
 jobs:
   ci:
-    runs-on: ubuntu-latest
+    # The pinned Playwright release provides Chromium for Ubuntu 24.04.
+    runs-on: ubuntu-24.04
     needs: cli-package
     env:
       NEXT_PUBLIC_POSTHOG_KEY: phc_local_runtime_evidence
@@ -79,7 +80,8 @@ jobs:
       - name: Setup Supabase CLI
         uses: supabase/setup-cli@v3
         with:
-          version: latest
+          # Match the validated local stack; CLI v3 rejects our [inbucket] config.
+          version: 2.75.0
 
       - name: Start local Supabase stack
         run: bunx supabase start --workdir .

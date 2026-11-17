@@ -389,7 +389,7 @@ describe("Migration safety", () => {
   it("latest cli_auth_codes hardening removes public grants and pending-code select policies", () => {
     const latest = getLatestMigrationMatching(
       migrations,
-      /public\.cli_auth_codes[\s\S]*(REVOKE\s+ALL|DROP\s+POLICY)/i
+      /(?:REVOKE\s+ALL\s+ON\s+TABLE|DROP\s+POLICY[^;]+ON)\s+public\.cli_auth_codes/i
     );
 
     expect(latest, "Expected cli_auth_codes hardening migration").toBeTruthy();
@@ -539,7 +539,7 @@ describe("Migration safety", () => {
         // execute a historical repair during migration. Still inspect every
         // top-level statement, including DO blocks, for direct usage writes.
         migration.content.replace(
-          /CREATE\s+OR\s+REPLACE\s+FUNCTION\b[\s\S]*?\bAS\s+(\$[A-Za-z0-9_]*\$)[\s\S]*?\1\s*;/gi,
+          /CREATE\s+(?:OR\s+REPLACE\s+)?FUNCTION\b[\s\S]*?\bAS\s+(\$[A-Za-z0-9_]*\$)[\s\S]*?\1\s*;/gi,
           "",
         ),
         `${migration.name} must not directly rewrite usage totals. Heal incorrect Codex usage by re-pushing from the CLI source logs instead.`,

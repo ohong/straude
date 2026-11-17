@@ -15,7 +15,7 @@ function LoginContent() {
   const [email, setEmail] = useState("");
   const [loading, setLoading] = useState(false);
   const [sent, setSent] = useState(false);
-  const [error, setError] = useState<string | null>(null);
+  const [error, setError] = useState<string | null>(searchParams.get("error") === "auth" ? "Sign-in failed or the link expired. Request a new link." : null);
 
   async function handleMagicLink(e: React.FormEvent) {
     e.preventDefault();
@@ -38,10 +38,11 @@ function LoginContent() {
 
   async function handleGitHub() {
     const supabase = createClient();
-    await supabase.auth.signInWithOAuth({
+    const { error } = await supabase.auth.signInWithOAuth({
       provider: "github",
       options: { redirectTo: `${window.location.origin}${authPathWithNext("/callback", next)}` },
     });
+    if (error) setError(error.message);
   }
 
   return (
@@ -63,6 +64,7 @@ function LoginContent() {
         </Link>
       </p>
 
+      {error && <p role="alert" className="text-sm text-error">{error}</p>}
       {sent ? (
         <div className="border border-border p-4">
           <p className="text-sm font-medium">Check your email</p>
@@ -104,7 +106,7 @@ function LoginContent() {
               placeholder="you@example.com"
               required
             />
-            {error && <p className="text-sm text-error">{error}</p>}
+
             <Button
               type="submit"
               disabled={loading}

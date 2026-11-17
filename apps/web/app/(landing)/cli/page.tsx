@@ -196,12 +196,12 @@ export default function CliReferencePage() {
                 <Flag
                   name="--date YYYY-MM-DD"
                   type="string"
-                  description="Push a specific date. Must be within the last 7 days and not in the future."
+                  description="Push a specific date. Must be within the last 30 days and not in the future."
                 />
                 <Flag
                   name="--days N"
                   type="number"
-                  description="Push the last N days. Capped at 7."
+                  description="Push the last N days. Capped at 30."
                 />
                 <Flag
                   name="--dry-run"
@@ -322,8 +322,7 @@ straude auto logs`}</Pre>
                   date through today.
                 </li>
                 <li>
-                  <strong>Gap &gt; 7 days:</strong> backfills the most recent 7
-                  days (the max window).
+                  <strong>Gap &gt; 7 days:</strong> syncs the earliest available seven-day batch within the 30-day window. Run again to continue.
                 </li>
               </ul>
             </section>

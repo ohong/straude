@@ -15,7 +15,7 @@ function queryResult(result: Record<string, unknown>) {
       reject?: (error: unknown) => unknown
     ) => Promise<unknown>;
   } = {};
-  for (const method of ["select", "eq", "order", "limit", "lt", "gt", "maybeSingle"]) {
+  for (const method of ["select", "eq", "order", "limit", "lt", "gt", "or", "maybeSingle"]) {
     chain[method] = vi.fn(() => chain);
   }
   chain.then = (resolve, reject) => Promise.resolve(result).then(resolve, reject);
@@ -55,7 +55,7 @@ describe("live leaderboard loaders", () => {
     expect(mocks.from.mock.calls.map(([source]) => source))
       .toEqual(["leaderboard_weekly", "leaderboard_weekly"]);
     expect(entry.eq).toHaveBeenCalledWith("region", "europe");
-    expect(above.gt).toHaveBeenCalledWith("total_cost", 10);
+    expect(above.or).toHaveBeenCalledWith("total_cost.gt.10,and(total_cost.eq.10,user_id.lt.new-user)");
     expect(above.eq).toHaveBeenCalledWith("region", "europe");
   });
 

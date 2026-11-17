@@ -598,7 +598,7 @@ export default function SettingsClient({
       {deleteOpen &&
         createPortal(
           <DeleteAccountDialog
-            username={username}
+            username={profile.username ?? ""}
             confirmValue={deleteConfirm}
             onConfirmChange={setDeleteConfirm}
             deleting={deleting}
@@ -612,7 +612,7 @@ export default function SettingsClient({
               const res = await fetch("/api/users/me", {
                 method: "DELETE",
                 headers: { "Content-Type": "application/json" },
-                body: JSON.stringify({ username }),
+                body: JSON.stringify({ username: profile.username ?? null }),
               });
 
               if (!res.ok) {
@@ -652,8 +652,8 @@ function DeleteAccountDialog({
   onClose: () => void;
   onDelete: () => void;
 }) {
-  const confirmSentence = `I, ${username}, wish to delete my Straude account. I understand this cannot be undone.`;
-  const canDelete = confirmValue === confirmSentence && username.length > 0;
+  const confirmSentence = `${username ? `I, ${username},` : "I"} wish to delete my Straude account. I understand this cannot be undone.`;
+  const canDelete = confirmValue === confirmSentence;
 
   useEffect(() => {
     const originalOverflow = document.body.style.overflow;

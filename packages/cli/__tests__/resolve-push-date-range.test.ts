@@ -137,7 +137,7 @@ describe("resolvePushDateRange", () => {
   });
 
   describe("smart-sync from last_push_date", () => {
-    it("starts after the committed watermark", () => {
+    it("rechecks the last synced day for late activity", () => {
       const r = resolvePushDateRange({
         today: dateAt("2026-05-04"),
         options: {},
@@ -146,7 +146,7 @@ describe("resolvePushDateRange", () => {
       });
       expect(r.ok).toBe(true);
       if (!r.ok) return;
-      expect(isoDay(r.since)).toBe("2026-05-02");
+      expect(isoDay(r.since)).toBe("2026-05-01");
       expect(isoDay(r.until)).toBe("2026-05-04");
     });
 
@@ -159,8 +159,8 @@ describe("resolvePushDateRange", () => {
       });
       expect(r.ok).toBe(true);
       if (!r.ok) return;
-      expect(isoDay(r.since)).toBe("2026-04-16");
-      expect(isoDay(r.until)).toBe("2026-04-22");
+      expect(isoDay(r.since)).toBe("2026-04-15");
+      expect(isoDay(r.until)).toBe("2026-04-21");
     });
 
     it("resumes an old installation at the oldest date the server accepts", () => {

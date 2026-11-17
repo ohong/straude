@@ -25,6 +25,8 @@ Published CLI 0.2.3 contains the dashboard timeout/retry fix and account-specifi
 
 ### Fixed
 
+- **Account deletion clears team affiliation and prevents stale profile saves.** Anonymizing a deleted profile removes both its team URL and cached favicon URL. A durable deletion marker prevents an already authenticated profile save from restoring personal fields after deletion; a migration marks previously anonymized, banned accounts and clears any remaining team fields.
+
 - **Recover interrupted sign-in safely.** Preserve the sync-health notice when interactive recovery fails, reject explicit noninteractive login before opening a browser, and prevent delayed rotation from overwriting a newer sign-in. Absolute credential expiry is unchanged.
 - **Recollect outdated pending submissions without discarding them on failure.** Preserve account, dates, source coverage and watermark; atomically replace a successfully recollected batch with a new request ID. Missing dates, missing named sources or an unknown legacy source keep the original batch for recovery. Presence of a source does not prove completeness of its logs. New upgrade batches remain readable by older outbox readers.
 - **Honor browser analytics consent across the full lifecycle.** Essential-only requests create no activation identity or optional server capture. Withdrawal stops SDK capture and proxy forwarding, including queued retries, and removes SDK identity persistence on public and authenticated pages. Renewed consent starts a fresh anonymous SDK identity. Confirmed sync and completed onboarding have separate, stable event identifiers. CLI telemetry retains its separate policy.

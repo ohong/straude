@@ -134,7 +134,7 @@ export async function getRecapData(
 ): Promise<RecapData> {
   const { start, end, totalDays, label } = getPeriodRange(period);
 
-  const [{ data: usageRows }, { data: streakData }] = await Promise.all([
+  const [{ data: usageRows, error: usageError }, { data: streakData, error: streakError }] = await Promise.all([
     supabase
       .from("daily_usage")
       .select("date, cost_usd, output_tokens, session_count, models")
@@ -148,6 +148,7 @@ export async function getRecapData(
     }),
   ]);
 
+  if (usageError || streakError) throw new Error("Unable to load recap statistics.");
   const rows = usageRows ?? [];
 
   let totalCost = 0;
@@ -169,7 +170,7 @@ export async function getRecapData(
   }
 
   // Resolve primary model
-  let primaryModel = "Claude Sonnet";
+  let primaryModel = "";
   if (modelCounts.size > 0) {
     const topModel = [...modelCounts.entries()].sort(
       (a, b) => b[1] - a[1]

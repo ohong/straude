@@ -1,5 +1,17 @@
 # Architecture & Design Decisions
 
+## Reject profile saves after account deletion (2026-11-05)
+
+**Problem:** Account deletion omitted team affiliation fields. Clearing them alone still allowed a PATCH authenticated before deletion to restore affiliation after slow favicon discovery finished.
+
+**Decision:** Clear both team fields and set an internal `users.deleted_at` marker in the same anonymization update. Every profile PATCH atomically requires that marker to be null when Postgres applies the write. A stale save returns 409. The migration recognizes historical deletions using both the exact per-user tombstone username and an Auth ban, and clears their team fields.
+
+**Rollout:** Pause profile writes and drain old PATCH/DELETE workers, apply the migration, deploy the route change, then resume writes. Migration-first alone is insufficient during an overlapping rollout: an old DELETE completing after the backfill would leave an unmarked row. If old workers overlapped the migration, rerun its reconciliation UPDATE after they drain and before resuming writes. The route depends on the new column, so deploy it after the migration.
+
+**Alternatives:** Rechecking Auth before saving leaves a race between that check and the update. A username-prefix guard could reject active users with similar names. A durable marker gives an explicit lifecycle boundary without changing normal concurrent profile saves or deleting retained rows and shared favicon assets.
+
+**Verification:** A real Supabase regression pauses PATCH during favicon discovery, deletes the account, resumes PATCH, and checks that it returns 409 while anonymous readers see null team fields. Wrong username confirmation and ordinary team saves remain covered.
+
 ## Preserve source provenance and explicit device choices (2026-10-28)
 
 **Decision:** Check collector provenance before every overwrite and implicit or authoritative source deletion. A known newer stored collector blocks an older incoming snapshot for the whole date. Keep-separate remains a durable user decision; token overlap updates its evidence but does not reopen or automatically merge it. Matching token totals are evidence under the existing hostname rule, not proof that two physical devices are identical.

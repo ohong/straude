@@ -54,7 +54,7 @@ export function FirstSyncCommandCard({
         )}
       </button>
       <p className="mt-1.5 text-xs text-muted">
-        {copied ? "Copied to clipboard" : "Run this after a Claude Code or Codex session"}
+        {copied ? "Copied to clipboard" : "Run this after a coding session"}
       </p>
 
       <div className="mt-5 flex flex-col items-center gap-3 sm:flex-row">

@@ -189,7 +189,7 @@ export default async function PublicRecapPage({
             className="mt-6 text-xs font-medium"
             style={{ color: palette.textSubtle }}
           >
-            Powered by {data.primary_model}
+            {data.primary_model && `Powered by ${data.primary_model}`}
           </p>
 
           {/* Contribution strip */}

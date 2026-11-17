@@ -266,6 +266,8 @@ describe("GET /api/leaderboard", () => {
     const json = await res.json();
 
     expect(json.next_cursor).toBeDefined();
-    expect(json.next_cursor).toBe("51");
+    expect(json.next_cursor).toBe("offset-50");
+    const second = await GET(makeRequest({ cursor: json.next_cursor }));
+    expect((await second.json()).entries[0].rank).toBe(51);
   });
 });

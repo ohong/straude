@@ -26,27 +26,28 @@ export async function sendWelcomeEmail({
   const appUrl = (
     process.env.NEXT_PUBLIC_APP_URL ?? "https://straude.com"
   ).replace(/\/+$/, "");
-  const profileUrl = username ? `${appUrl}/u/${username}` : appUrl;
+  const profileUrl = username ? `${appUrl}/u/${username}` : `${appUrl}/feed`;
   const unsubscribeToken = createUnsubscribeToken(userId);
   const unsubscribeUrl = `${appUrl}/api/unsubscribe?token=${unsubscribeToken}`;
   const fromEmail =
     process.env.RESEND_FROM_EMAIL ?? "notifications@straude.com";
 
-  await resend.emails.send({
+  const { error: deliveryError } = await resend.emails.send({
     from: `Straude <${fromEmail}>`,
     replyTo: "hey@straude.com",
     to: email,
-    subject: "Welcome to Straude — here's how to log your first session",
+    subject: "Welcome to Straude — your first sync is complete",
     react: WelcomeEmail({
       username,
       profileUrl,
       unsubscribeUrl,
     }),
     headers: {
-      "Idempotency-Key": `welcome/${userId}`,
+
       "List-Unsubscribe": `<${unsubscribeUrl}>`,
       "List-Unsubscribe-Post": "List-Unsubscribe=One-Click",
     },
     tags: [{ name: "type", value: "welcome" }],
-  });
+  }, { idempotencyKey: `welcome/${userId}` });
+  if (deliveryError) throw new Error(deliveryError.message);
 }
