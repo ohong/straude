@@ -40,7 +40,7 @@
     "kbar": "^0.1.0-beta.48",
     "lucide-react": "^0.474",
     "motion": "^12",
-    "next": "16.2.6",
+    "next": "16.4.6",
     "parse5-sax-parser": "8.0.0",
     "posthog-js": "1.383.3",
     "react": "19.2.3",
@@ -54,7 +54,7 @@
     "tailwind-merge": "^3"
   },
   "devDependencies": {
-    "@next/bundle-analyzer": "16.2.6",
+    "@next/bundle-analyzer": "16.4.6",
     "@playwright/test": "^1.58.2",
     "@tailwindcss/postcss": "^4",
     "@testing-library/jest-dom": "^6.9.1",
@@ -68,7 +68,7 @@
     "@types/react-dom": "^19",
     "@vitejs/plugin-react": "^5.2.0",
     "eslint": "^9.39.4",
-    "eslint-config-next": "16.2.6",
+    "eslint-config-next": "16.4.6",
     "pg": "^8.20.0",
     "tailwindcss": "^4",
     "typescript": "5.9.3",
