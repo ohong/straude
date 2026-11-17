@@ -25,17 +25,18 @@ export async function sendEmptyProfileEmail({
   const fromEmail =
     process.env.RESEND_FROM_EMAIL ?? "notifications@straude.com";
 
-  await resend.emails.send({
+  const { error: deliveryError } = await resend.emails.send({
     from: `Straude <${fromEmail}>`,
     replyTo: "hey@straude.com",
     to: email,
     subject: `@${username}, your profile is live but empty`,
     react: EmptyProfileEmail({ username, profileUrl, unsubscribeUrl }),
     headers: {
-      "Idempotency-Key": `empty-profile/${userId}`,
+
       "List-Unsubscribe": `<${unsubscribeUrl}>`,
       "List-Unsubscribe-Post": "List-Unsubscribe=One-Click",
     },
     tags: [{ name: "type", value: "empty-profile" }],
-  });
+  }, { idempotencyKey: `empty-profile/${userId}` });
+  if (deliveryError) throw new Error(deliveryError.message);
 }

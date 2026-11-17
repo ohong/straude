@@ -101,7 +101,7 @@ export async function GET(request: NextRequest) {
     const unsubscribeUrl = `${appUrl}/api/unsubscribe?token=${unsubscribeToken}`;
 
     try {
-      await resend.emails.send({
+      const { error: deliveryError } = await resend.emails.send({
         from: `Straude <${fromEmail}>`,
         replyTo: "hey@straude.com",
         to: email,
@@ -112,12 +112,13 @@ export async function GET(request: NextRequest) {
           unsubscribeUrl,
         }),
         headers: {
-          "Idempotency-Key": `nudge-inactive/${user.id}`,
+
           "List-Unsubscribe": `<${unsubscribeUrl}>`,
           "List-Unsubscribe-Post": "List-Unsubscribe=One-Click",
         },
         tags: [{ name: "type", value: "nudge-inactive" }],
-      });
+      }, { idempotencyKey: `nudge-inactive/${user.id}` });
+      if (deliveryError) throw new Error(deliveryError.message);
       sent++;
     } catch (err) {
       errors.push(

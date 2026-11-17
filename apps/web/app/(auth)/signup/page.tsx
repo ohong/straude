@@ -51,10 +51,11 @@ function SignupContent() {
       is_authenticated: false,
     });
     const supabase = createClient();
-    await supabase.auth.signInWithOAuth({
+    const { error } = await supabase.auth.signInWithOAuth({
       provider: "github",
       options: { redirectTo: `${window.location.origin}${authPathWithNext("/callback", next)}` },
     });
+    if (error) setError(error.message);
   }
 
   return (
@@ -76,6 +77,7 @@ function SignupContent() {
         </Link>
       </p>
 
+      {error && <p role="alert" className="text-sm text-error">{error}</p>}
       {sent ? (
         <div className="border border-border p-4">
           <p className="text-sm font-medium">Check your email</p>
@@ -117,7 +119,7 @@ function SignupContent() {
               placeholder="you@example.com"
               required
             />
-            {error && <p className="text-sm text-error">{error}</p>}
+
             <Button
               type="submit"
               disabled={loading}
