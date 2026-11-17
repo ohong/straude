@@ -252,6 +252,7 @@ describe("Flow: CLI Push", () => {
         ],
         hash: "abc123",
         source: "cli",
+        collector: { ccusage_version: "20.0.26" },
         device_id: "aaaaaaaa-0000-4000-8000-000000000001",
         device_name: "test-device",
       }),
@@ -312,7 +313,7 @@ describe("Flow: CLI Push", () => {
         "Content-Type": "application/json",
         Authorization: "Bearer mock-cli-jwt-token",
       },
-      body: JSON.stringify({ entries: [entry], hash: "def456", source: "cli", device_id: "aaaaaaaa-0000-4000-8000-000000000001", device_name: "test-device" }),
+      body: JSON.stringify({ entries: [entry], hash: "def456", source: "cli", collector: { ccusage_version: "20.0.26" }, device_id: "aaaaaaaa-0000-4000-8000-000000000001", device_name: "test-device" }),
     });
     const res = await POST(req);
     const data = await res.json();
@@ -381,6 +382,7 @@ describe("Flow: CLI Push", () => {
         ],
         hash: "merged-hash-123",
         source: "cli",
+        collector: { ccusage_version: "20.0.26" },
         device_id: "aaaaaaaa-0000-4000-8000-000000000001",
         device_name: "test-device",
       }),
@@ -458,6 +460,7 @@ describe("Flow: CLI Push", () => {
         ],
         hash: "codex-only-hash",
         source: "cli",
+        collector: { ccusage_version: "20.0.26" },
         device_id: "aaaaaaaa-0000-4000-8000-000000000001",
         device_name: "test-device",
       }),
@@ -588,6 +591,7 @@ describe("Flow: CLI Push", () => {
         ],
         hash: "device-2-hash",
         source: "cli",
+        collector: { ccusage_version: "20.0.26" },
         device_id: "22222222-2222-4222-8222-222222222222",
         device_name: "home-desktop",
       }),
@@ -631,6 +635,7 @@ describe("Flow: CLI Push", () => {
           },
         }],
         source: "cli",
+        collector: { ccusage_version: "20.0.26" },
         device_id: "aaaaaaaa-0000-4000-8000-000000000001",
       }),
     });

@@ -47,10 +47,7 @@ export default function OnboardingPage() {
   const [sync, setSync] = useState<SyncState>({ phase: "waiting" });
   const [attempt, setAttempt] = useState(0);
   const [surveyDone, setSurveyDone] = useState(false);
-  const commandCopiedRef = useRef(false);
   const confirmedUsageRef = useRef<UsageStatus | null>(null);
-  const hasExistingUsageRef = useRef(false);
-  const activationTrackedRef = useRef(false);
   const copyTimeoutRef = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
 
   // Profile details are optional and must never delay access to the sync command.
@@ -128,7 +125,6 @@ export default function OnboardingPage() {
           }
           observedUsage = payload as UsageStatus;
           confirmedUsageRef.current = observedUsage;
-          hasExistingUsageRef.current = !commandCopiedRef.current;
         }
 
         setSync({ phase: "confirming", data: observedUsage });
@@ -155,21 +151,6 @@ export default function OnboardingPage() {
           return;
         }
 
-        if (!activationTrackedRef.current) {
-          activationTrackedRef.current = true;
-          trackActivationEvent("activation_completed", {
-            surface: "onboarding",
-            activation_state: "activated",
-            is_authenticated: true,
-            session_count: observedUsage.session_count,
-            total_tokens: observedUsage.total_tokens,
-            total_cost_usd: observedUsage.cost_usd,
-            has_existing_usage: hasExistingUsageRef.current,
-            "$insert_id": observedUsage.latest_usage_id
-              ? `activation_completed:${observedUsage.latest_usage_id}`
-              : "activation_completed:onboarding",
-          });
-        }
         setSync({ phase: "success", data: observedUsage });
       } catch {
         if (!active) return;
@@ -196,7 +177,6 @@ export default function OnboardingPage() {
     setCopyError(false);
     try {
       await navigator.clipboard.writeText(SYNC_COMMAND);
-      commandCopiedRef.current = true;
       trackActivationEvent("sync_command_copied", {
         surface: "onboarding",
         command: SYNC_COMMAND,

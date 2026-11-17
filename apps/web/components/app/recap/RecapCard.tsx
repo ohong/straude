@@ -63,7 +63,7 @@ export function RecapCard({
             className="mt-1 text-xs font-medium uppercase tracking-widest"
             style={{ color: palette.textSubtle }}
           >
-            total spend
+            estimated value at API prices
           </p>
         </div>
 
@@ -141,7 +141,7 @@ export function RecapCard({
           className="mt-6 text-xs font-medium"
           style={{ color: palette.textSubtle }}
         >
-          Powered by {data.primary_model}
+          {data.primary_model && `Powered by ${data.primary_model}`}
         </p>
 
         {/* Contribution strip */}

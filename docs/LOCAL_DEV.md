@@ -16,6 +16,30 @@ writes the managed keys directly into `apps/web/.env.local`.
 
 You do **not** need a hosted Supabase project for normal local UI work.
 
+## Verify private workspace sharing and weekly reports
+
+Use the disposable local stack. These tests refuse non-loopback app/database URLs, create fictional accounts in two workspaces, and remove their own fixtures. They temporarily backdate source consent using the local admin fixture so a historical week can be exercised without waiting a day; the product enrollment API does not permit this.
+
+```bash
+bun run local:up
+bun run local:env
+bun run --cwd packages/cli build
+cd apps/web
+set -a
+. ./.env.local
+set +a
+POSTHOG_API_KEY= NEXT_PUBLIC_POSTHOG_KEY= NEXT_PUBLIC_APP_URL=http://localhost:3099 \
+  PLAYWRIGHT_USE_DEV_SERVER=1 bun run test:e2e e2e/private-workspaces.spec.ts --reporter=list
+```
+
+The browser test covers personal recap → workspace creation → email-bound invitation acceptance → sharing preview → built CLI enrollment/status → setup/weekly report → CSV → removal. It checks direct database/RPC access, revoked invitations, exclusion of personal history and public publication, no-data/zero/stale states, retries, declined token regressions, keyboard forms, and a narrow layout. A separate test runs actual native Codex log collection through the built CLI and private API. CI builds that CLI before browser tests and runs both tests.
+
+The native collector needs online pricing access. Some intercepted cloud networks cannot be trusted by the bundled collector's native TLS implementation. Do not disable certificate checks. For independent local UI/API verification only, set `STRAUDE_E2E_SKIP_NETWORK_COLLECTOR=1`; Playwright explicitly reports the native collection test skipped. Run the default command or hosted CI before claiming that boundary passed.
+
+Sanitized screenshots, CSV and CLI receipts are saved under `apps/web/test-results/private-workspaces-evidence/` and uploaded by CI as `private-workspace-walkthrough`. General Playwright traces can contain authentication material and are not included in that artifact.
+
+For a manual walkthrough, use two local accounts with private profiles. Review `/recap`, create a workspace at `/workspaces`, generate an invitation link for the other account, and accept it after reading the sharing disclosure. On an exclusively work-only device or OS account with the compatible CLI installed, run `straude login`, then `straude workspace connect <workspace-id> --work-only`. Sharing starts at the next UTC midnight. Run `straude` after that date and `straude workspace status` to confirm receipt. Refresh the workspace, compare the weekly figures and CSV, then remove the member and confirm both access and further sync fail. Past contributed totals remain. The published older CLI may lack these commands; install a built candidate for local verification.
+
 ## Quick Start
 
 From the repo root:

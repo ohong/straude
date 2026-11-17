@@ -1,13 +1,13 @@
 import { NextResponse } from "next/server";
 import { after } from "@/lib/utils/after";
-import { captureServerActivationEvent } from "@/lib/analytics/server";
+import { captureServerActivationEvent, hasServerAnalyticsConsent } from "@/lib/analytics/server";
 import { createClient } from "@/lib/supabase/server";
 
 type LatestUsageRow = {
   id: string;
   date: string;
   cost_usd: number | string | null;
-  total_tokens: number | string | null;
+  output_tokens: number | string | null;
   session_count: number | string | null;
   models: unknown;
   created_at: string | null;
@@ -39,7 +39,7 @@ function isWithinFirstSyncConfirmationWindow(createdAt: string | null | undefine
   return ageMs >= 0 && ageMs < FIRST_SYNC_CONFIRMATION_WINDOW_MS;
 }
 
-export async function GET() {
+export async function GET(request: Request) {
   const supabase = await createClient();
   const {
     data: { user },
@@ -52,7 +52,7 @@ export async function GET() {
   const [latestUsageResult, usageTotalsResult, earliestUsageResult] = await Promise.all([
     supabase
       .from("daily_usage")
-      .select("id,date,cost_usd,total_tokens,session_count,models,created_at")
+      .select("id,date,cost_usd,output_tokens,session_count,models,created_at")
       .eq("user_id", user.id)
       .order("date", { ascending: false })
       .limit(1)
@@ -84,8 +84,8 @@ export async function GET() {
     ? Number(latestUsage.cost_usd ?? 0)
     : Number(totals?.total_cost ?? latestUsage.cost_usd ?? 0);
   const total_tokens = usageTotalsResult.error
-    ? Number(latestUsage.total_tokens ?? 0)
-    : Number(totals?.total_tokens ?? latestUsage.total_tokens ?? 0);
+    ? Number(latestUsage.output_tokens ?? 0)
+    : Number(totals?.total_tokens ?? latestUsage.output_tokens ?? 0);
   const session_count = Number(latestUsage.session_count ?? 0);
 
   const { data: latestPost } = await supabase
@@ -96,15 +96,17 @@ export async function GET() {
 
   const earliestUsage = earliestUsageResult.data as EarliestUsageRow | null;
   if (
-    !earliestUsageResult.error
+    hasServerAnalyticsConsent(request)
+    && !earliestUsageResult.error
     && isWithinFirstSyncConfirmationWindow(earliestUsage?.created_at)
   ) {
     after(() => captureServerActivationEvent({
       event: "first_sync_confirmed",
       distinctId: user.id,
+      analyticsConsent: true,
       properties: {
         surface: "usage_status",
-        activation_state: "activated",
+        activation_state: "first_usage_submitted",
         is_authenticated: true,
         session_count,
         total_tokens,

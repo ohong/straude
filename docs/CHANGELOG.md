@@ -2,9 +2,22 @@
 
 ## Unreleased
 
-### CLI 0.2.3
+### Release context
 
-The release candidate combines the dashboard timeout/retry fix with account-specific sync health in `straude auto`. Credential lifetime is unchanged.
+Published CLI 0.2.3 contains the dashboard timeout/retry fix and account-specific sync health in `straude auto`. The accounting and consent changes below remain unreleased. Coordinate a supported-collector CLI release before enforcing the new server collector floor. Credential lifetime is unchanged.
+
+### Added
+
+- **Duplicate devices are detected and merged at submit time.** When a hostname match quarantines a new installation, `submit_usage_day_v2` now compares the incoming per-agent token counts with the other device's stored rows for the same date and records `overlap_dates` (identical) and `divergent_dates` (different) on the reconciliation candidate. Once a pair has two or more identical days and no differing day, it merges through the existing resolve path and the submit continues against the merged identity, so `daily_usage` counts the day once. Otherwise the candidate stays `ambiguous` with the evidence attached. An explicit `kept_separate` decision stays in force while new matching or differing evidence is shown; only a deliberate user merge can reconsider it. Only future pushes are affected; nothing is backfilled.
+
+### Changed
+
+- **Device reconciliation compares tokens, not cost or collector.** `resolve_usage_device_candidate` now treats rows as duplicates when the per-agent token counts match, instead of requiring identical cost, models and collector, which blocked merges whenever two collector versions priced the same tokens differently. The surviving canonical row keeps its own cost and collector. `GET /api/usage/devices` returns `divergent_dates`, and `straude devices` prints `N matching days, M differing days` for each candidate.
+- **Usage from ccusage older than 20.0.26 is rejected.** The minimum lives in `@straude/shared` as `CCUSAGE_MIN_VERSION` and is enforced by both the CLI and `POST /api/usage/submit`. A `source: "cli"` request (protocol v1 or v2) whose collector version is missing, unparseable, a prerelease or below the floor gets HTTP 426 with `code: "collector_outdated"` and `update_command: "npx straude@latest"`. Older releases double-counted Codex fork/subagent history and Claude requests copied across sessions. The `ccusage` dependency is now `>=20.0.26` (lockfile updated). Web JSON imports are exempt because pasted ccusage output carries no version.
+- **Claude 5.x model labels.** `claude-sonnet-*` and `claude-haiku-*` ids now label as Claude Sonnet / Claude Haiku regardless of major version (shared models, recap and post card image).
+- **Source inventory fixture** now lists the `antigravity` and `zcode` sources shipped in ccusage 20.0.26.
+- **A newer ccusage collector can replace rows an older one wrote, up or down.** `submit_usage_day_v2` now accepts a trusted snapshot (ccusage 20.0.18 or later, online pricing) whose collector version is strictly newer than the stored row's, even when its counts are lower, so fixes like the Codex replay double-count correction in 20.0.19 reach stored data. A missing or unparseable stored version counts as older. Same-version snapshots keep the monotonic regression guard. Older collectors cannot overwrite or implicitly delete newer source rows, including when their counts are higher. The semver comparison lives in the new `usage_collector_version()` SQL helper.
+- **The CLI re-submits the 30-day backfill window once after ccusage is upgraded.** `straude` records the ccusage version of its last full-window push in `ccusage_version_pushed` and, when the installed version is newer, collects and pushes the whole window without `authoritative_correction`. Later pushes are incremental again.
 
 ### Removed
 
@@ -13,6 +26,14 @@ The release candidate combines the dashboard timeout/retry fix with account-spec
 ### Fixed
 
 - **Account deletion clears team affiliation and prevents stale profile saves.** Anonymizing a deleted profile removes both its team URL and cached favicon URL. A durable deletion marker prevents an already authenticated profile save from restoring personal fields after deletion; a migration marks previously anonymized, banned accounts and clears any remaining team fields.
+
+- **Recover interrupted sign-in safely.** Preserve the sync-health notice when interactive recovery fails, reject explicit noninteractive login before opening a browser, and prevent delayed rotation from overwriting a newer sign-in. Absolute credential expiry is unchanged.
+- **Recollect outdated pending submissions without discarding them on failure.** Preserve account, dates, source coverage and watermark; atomically replace a successfully recollected batch with a new request ID. Missing dates, missing named sources or an unknown legacy source keep the original batch for recovery. Presence of a source does not prove completeness of its logs. New upgrade batches remain readable by older outbox readers.
+- **Honor browser analytics consent across the full lifecycle.** Essential-only requests create no activation identity or optional server capture. Withdrawal stops SDK capture and proxy forwarding, including queued retries, and removes SDK identity persistence on public and authenticated pages. Renewed consent starts a fresh anonymous SDK identity. Confirmed sync and completed onboarding have separate, stable event identifiers. CLI telemetry retains its separate policy.
+- **Report public snapshot freshness and consistent totals.** Page through all source rows, use consistent seed-account exclusions and actual percentile groups, and fail a refresh if persistence fails. Public pages retain the real capture time, mark snapshots older than 48 hours, and label estimated usage cost and latest streak days accurately. Remove the fixed latency claim.
+- **Allow Settings retry after transport and invalid-response failures.** Save and clear actions leave their pending state on failure. Forms and fieldsets fit a 360px viewport.
+- **Keep sync status token units consistent during a totals-query failure.** The latest-day fallback now reports output tokens, matching the existing aggregate metric, rather than switching to all token categories. Stored accounting totals are unchanged.
+- **Render CLI dashboards before a username is chosen.** New accounts and leaderboard neighbors with no username receive an honest display label instead of crashing the dashboard after a successful sync.
 
 - **Normalize PostHog configuration before capture.** Trim the public project token in both browser entry points and trim server token/host inputs. Reuse the server normalization from prior commit `92c948a`; add bounded failure diagnostics that never log provider response bodies or submitted values. A loopback receiver supports real-app lifecycle verification without injecting production analytics.
 
@@ -49,6 +70,10 @@ The release candidate combines the dashboard timeout/retry fix with account-spec
 - **Team favicon caching supports SVG, PNG and temporary misses.** A service-only `team_favicon_cache` table persists object paths and 15-minute retry times across requests. Existing PNG objects remain valid. Settings saves retain an unchanged team's resolved icon. The team field waits for hydration before accepting edits, preventing early text entry from being lost. Badges use direct Storage images with `object-fit: contain` so prepared PNGs avoid optimizer recompression.
 
 ### Added
+
+- **Personal and private team weekly reviews.** The personal recap now compares matched UTC weekdays and shows tool/model mix without requiring a public profile. Private workspace setup shows invitations, membership, confirmed first sync, last receipt, and latest data date. A shared report calculation powers the screen and CSV, including contributor changes, the change for continuing contributors, tool/model drivers, and source-day coverage. Dollar figures are labeled estimated value at API prices. `/teams` provides a fictional example, setup/privacy guidance, and the existing inquiry channel; personal use remains free.
+
+- **Private workspaces and work-only sources.** Authenticated users can create a workspace, accept an email-bound invitation, revoke invitations, and remove members without a public profile. Explicitly designated work-only CLI sources start sharing the next UTC day into separate private tables. Source/date snapshots make retries idempotent; removal stops reads and writes while preserving previous contributions. Durable CLI routing keeps personal outboxes and work sync separate, including after sign-in changes and failures. Existing automation is stopped at enrollment; enabling it again requires an installed workspace-capable CLI.
 
 - **Show background sync recovery in `straude auto`.** Report the last confirmed submission time and login guidance after HTTP 401. Account-bound local state preserves the previous success through failures, clears the notice after a successful submission, and does not change on dry runs or empty scans. The packaged E2E exercises recovery, pending-request replay, and account isolation.
 

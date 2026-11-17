@@ -1,3 +1,5 @@
+import { loadPersonalWeeklyReview } from "@/lib/utils/personal-review";
+import { getServiceClient } from "@/lib/supabase/service";
 import { NextResponse, type NextRequest } from "next/server";
 import { createClient } from "@/lib/supabase/server";
 import { getRecapData } from "@/lib/utils/recap";
@@ -18,7 +20,7 @@ export async function GET(request: NextRequest) {
     .eq("id", user.id)
     .single();
 
-  if (!profile?.username) {
+  if (!profile) {
     return NextResponse.json(
       { error: "Profile not found" },
       { status: 404 }
@@ -32,10 +34,14 @@ export async function GET(request: NextRequest) {
   const data = await getRecapData(
     supabase,
     user.id,
-    profile.username,
-    profile.is_public,
+    profile.username ?? "Your account",
+    Boolean(profile.username && profile.is_public),
     period
   );
 
-  return NextResponse.json(data);
+  if (period === "week") {
+    data.personal_review = await loadPersonalWeeklyReview(getServiceClient(), user.id);
+  }
+
+  return NextResponse.json(data, { headers: { "Cache-Control": "private, no-store" } });
 }

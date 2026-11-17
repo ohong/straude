@@ -1,6 +1,6 @@
 import { NextResponse, type NextRequest } from "next/server";
 import { after } from "@/lib/utils/after";
-import { captureServerActivationEvent } from "@/lib/analytics/server";
+import { captureServerActivationEvent, hasServerAnalyticsConsent } from "@/lib/analytics/server";
 import { createClient } from "@/lib/supabase/server";
 import { getServiceClient } from "@/lib/supabase/service";
 import { COUNTRY_TO_REGION } from "@/lib/constants/regions";
@@ -414,20 +414,21 @@ export async function PATCH(request: NextRequest) {
 
   // Auto-follow top active users so new users see content in their feed
   if (isOnboardingUpdate) {
-    after(() => captureServerActivationEvent({
-      event: "activation_completed",
-      distinctId: user.id,
-      properties: {
-        surface: "onboarding",
-        activation_state: "activated",
-        is_authenticated: true,
-        session_count: Number(activationUsage?.session_count ?? 0),
-        total_tokens: Number(activationUsage?.total_tokens ?? 0),
-        "$insert_id": activationUsage?.id
-          ? `activation_completed:${activationUsage.id}`
-          : `activation_completed:${user.id}`,
-      },
-    }));
+    if (hasServerAnalyticsConsent(request)) {
+      after(() => captureServerActivationEvent({
+        event: "activation_completed",
+        distinctId: user.id,
+        analyticsConsent: true,
+        properties: {
+          surface: "onboarding",
+          activation_state: "activated",
+          is_authenticated: true,
+          session_count: Number(activationUsage?.session_count ?? 0),
+          total_tokens: Number(activationUsage?.total_tokens ?? 0),
+          "$insert_id": `activation_completed:${user.id}`,
+        },
+      }));
+    }
 
     autoFollowTopUsers(user.id).catch(() => {});
 
@@ -452,115 +453,16 @@ export async function DELETE(request: NextRequest) {
   }
 
   const body = await request.json().catch(() => ({}));
-  const confirmUsername = typeof body.username === "string" ? body.username.trim() : "";
-
-  if (!confirmUsername) {
-    return NextResponse.json(
-      { error: "Username confirmation is required" },
-      { status: 400 },
-    );
+  if (!body || (typeof body.username !== "string" && body.username !== null)) {
+    return NextResponse.json({ error: "Account confirmation is required" }, { status: 400 });
   }
 
-  const { data: profile } = await supabase
-    .from("users")
-    .select("username")
-    .eq("id", user.id)
-    .single();
-
-  if (!profile || profile.username !== confirmUsername) {
-    return NextResponse.json(
-      { error: "Username does not match" },
-      { status: 400 },
-    );
-  }
-
-  // Instead of admin.deleteUser() (which cascades and destroys other users'
-  // data), we selectively delete owned content and anonymize the profile.
-  // This preserves: daily_usage (north star metric), the user's comments on
-  // other posts, their kudos, and DM history for the other party.
-  const db = getServiceClient();
-
-  // 1. Delete owned content and relationships
-  const deletions = [
-    db.from("posts").delete().eq("user_id", user.id),
-    db.from("follows").delete().or(`follower_id.eq.${user.id},following_id.eq.${user.id}`),
-    db.from("notifications").delete().or(`user_id.eq.${user.id},actor_id.eq.${user.id}`),
-    db.from("user_achievements").delete().eq("user_id", user.id),
-    db.from("user_levels").delete().eq("user_id", user.id),
-    db.from("device_usage").delete().eq("user_id", user.id),
-    db.from("usage_installation_aliases").delete().eq("user_id", user.id),
-    db.from("usage_agent_daily").delete().eq("user_id", user.id),
-    db.from("usage_submission_outcomes").delete().eq("user_id", user.id),
-    db.from("usage_device_reconciliation_decisions").delete().eq("user_id", user.id),
-    // Ledger before-images contain private usage data; repair batches can span users.
-    db.from("usage_corrections_ledger").delete().eq("user_id", user.id),
-    db.from("prompt_submissions").delete().eq("user_id", user.id),
-    db.from("cli_auth_codes").delete().eq("user_id", user.id),
-  ];
-
-  const results = await Promise.all(deletions);
-  const deletionError = results.find((r) => r.error);
-  if (deletionError?.error) {
-    return NextResponse.json(
-      { error: "Failed to delete account data" },
-      { status: 500 },
-    );
-  }
-
-  // Decisions restrict candidate deletion, so they must finish successfully first.
-  const { error: candidateDeletionError } = await db
-    .from("usage_device_reconciliation_candidates")
-    .delete()
-    .eq("user_id", user.id);
-  if (candidateDeletionError) {
-    return NextResponse.json(
-      { error: "Failed to delete account data" },
-      { status: 500 },
-    );
-  }
-
-  // 2. Anonymize the profile (keep row for FK integrity with daily_usage, comments, DMs)
-  const { error: updateError } = await db
-    .from("users")
-    .update({
-      username: `deleted_${user.id.slice(0, 8)}`,
-      display_name: null,
-      bio: null,
-      avatar_url: null,
-      country: null,
-      region: null,
-      link: null,
-      github_username: null,
-      team_url: null,
-      team_favicon_url: null,
-      deleted_at: new Date().toISOString(),
-      heard_about: null,
-      heard_about_sources: null,
-      is_public: false,
-      email_notifications: false,
-      email_mention_notifications: false,
-      email_dm_notifications: false,
-    })
-    .eq("id", user.id);
-
-  if (updateError) {
-    return NextResponse.json(
-      { error: "Failed to anonymize account" },
-      { status: 500 },
-    );
-  }
-
-  // 3. Ban the auth user so they cannot sign in again
-  const { error: banError } = await db.auth.admin.updateUserById(user.id, {
-    ban_duration: "876600h",
+  const { data: confirmed, error } = await getServiceClient().rpc("delete_straude_account", {
+    p_user_id: user.id,
+    p_username: body.username,
   });
-
-  if (banError) {
-    return NextResponse.json(
-      { error: "Failed to disable account" },
-      { status: 500 },
-    );
-  }
+  if (error) return NextResponse.json({ error: "Failed to delete account data" }, { status: 500 });
+  if (!confirmed) return NextResponse.json({ error: "Account confirmation does not match" }, { status: 400 });
 
   return NextResponse.json({ ok: true });
 }

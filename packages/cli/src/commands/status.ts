@@ -1,8 +1,11 @@
+import { loadWorkspaceSource } from "../lib/workspace-source.js";
+import { workspaceStatus } from "./workspace.js";
 import { requireAuth } from "../lib/auth.js";
 import { apiRequest } from "../lib/api.js";
 import type { DashboardData } from "../components/PushSummary.js";
 
 export async function statusCommand(): Promise<void> {
+  if (loadWorkspaceSource()) return workspaceStatus();
   const config = requireAuth();
 
   let dashboard: DashboardData;
@@ -24,7 +27,8 @@ export async function statusCommand(): Promise<void> {
     await waitUntilExit();
   } catch (err) {
     // Fallback: plain text if Ink fails
-    console.log(`@${dashboard.username}`);
+    const username = dashboard.username?.trim();
+    console.log(username ? `@${username}` : "Your account");
     console.log(`  Streak: ${dashboard.streak} day${dashboard.streak !== 1 ? "s" : ""}`);
     console.log(`  This week: $${dashboard.week_cost.toFixed(2)}`);
     if (dashboard.leaderboard) {

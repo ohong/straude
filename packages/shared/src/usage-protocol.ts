@@ -1,6 +1,12 @@
 export const USAGE_PROTOCOL_VERSION = 2 as const;
 export const MAX_USAGE_ENTRIES_V2 = 32;
 export const MAX_USAGE_AGENTS_PER_DAY_V2 = 64;
+/**
+ * Oldest ccusage release whose token counts and pricing Straude trusts.
+ * Older releases inflated Codex (fork/subagent replay) and Claude (copied
+ * cross-session requests) usage. Enforced by the CLI and by the server.
+ */
+export const CCUSAGE_MIN_VERSION = "20.0.26";
 export const USAGE_CONTENT_HASH_PATTERN = /^[a-f0-9]{64}$/;
 
 const ISO_DATE_PATTERN = /^(\d{4})-(\d{2})-(\d{2})$/;
@@ -778,4 +784,43 @@ export function parseUsageSubmitResponseV2(value: unknown): UsageResponseParseRe
       outcomes,
     },
   };
+}
+
+export interface StableSemver {
+  major: number;
+  minor: number;
+  patch: number;
+}
+
+/** Parses `x.y.z` with optional `+build` metadata. Prereleases are rejected. */
+export function parseStableSemver(version: string): StableSemver | undefined {
+  const match = /^(0|[1-9]\d*)\.(0|[1-9]\d*)\.(0|[1-9]\d*)(?:\+[0-9A-Za-z-]+(?:\.[0-9A-Za-z-]+)*)?$/
+    .exec(version);
+  if (!match) return undefined;
+  const [major, minor, patch] = match.slice(1, 4).map(Number);
+  if (
+    major === undefined
+    || minor === undefined
+    || patch === undefined
+    || !Number.isSafeInteger(major)
+    || !Number.isSafeInteger(minor)
+    || !Number.isSafeInteger(patch)
+  ) {
+    return undefined;
+  }
+  return { major, minor, patch };
+}
+
+export function compareStableSemver(a: StableSemver, b: StableSemver): number {
+  if (a.major !== b.major) return a.major - b.major;
+  if (a.minor !== b.minor) return a.minor - b.minor;
+  return a.patch - b.patch;
+}
+
+/** True when `version` is a stable semver at or above CCUSAGE_MIN_VERSION. */
+export function isSupportedCcusageVersion(version: unknown): boolean {
+  if (typeof version !== "string") return false;
+  const parsed = parseStableSemver(version);
+  const minimum = parseStableSemver(CCUSAGE_MIN_VERSION);
+  return !!parsed && !!minimum && compareStableSemver(parsed, minimum) >= 0;
 }

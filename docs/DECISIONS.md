@@ -1,5 +1,23 @@
 # Architecture & Design Decisions
 
+## Compare private weekly usage with participation and coverage visible (2026-11-06)
+
+**Decision:** Use UTC Monday-start weeks for private reports. The current week ends at today; its comparison ends on the corresponding weekday of the previous week. Explicitly label the current day and week incomplete. Count people with any received day, including a recorded zero, as contributors. Show total change alongside change for people represented in both periods and counts of new/absent contributors. This avoids implying that participation growth means every person changed behavior. The same-contributor comparison can still have unequal coverage; the report says so.
+
+**Coverage:** Count received versus expected source days from consent through removal, including weekends, and distinguish no source, no receipt, stale receipt, and stale data dates. Retained contributions remain part of historical reports after removal. A receipt confirms locally recorded priced usage only: missing local logs and unpriced external models limit completeness. A source cannot silently replace positive token counts with smaller snapshots; restore its logs to retry. Explicit collector corrections remain separate work.
+
+**Export:** Screen and CSV use one authorized snapshot and aggregation function with identical filters and boundaries. All dollar columns state estimated API-price value; actual billing remains unknown. Export aggregate tool/model figures and participation counts, without employee rankings. Escape spreadsheet formulas in collector labels. Personal recap improvements remain authenticated, while existing community comparisons and public recap behavior remain available.
+
+## Keep work-only collection separate from community usage (2026-11-06)
+
+**Decision:** Private workspaces use explicit owner/member membership and verified-email invitations. Public affiliation badges and email domains confer no access. Store private source/day tool and model aggregates separately from `daily_usage`, posts, recaps, and leaderboard inputs. Only the server can access the tables or call the transactional membership/sync RPC; each scoped operation checks current membership under the workspace lock. Removal revokes sources and outstanding invitations, denies further access, and retains past contributions. Rejoining requires a new source consent window.
+
+**Collection alternatives:** The current collector returns daily aggregates by tool/model without account or project identity. Account filtering on a mixed device cannot reliably recover this distinction. The supported option is an explicitly designated work-only device or OS account. Start at the next UTC midnight and collect in UTC, avoiding accidental inclusion of earlier activity in a partially elapsed daily aggregate. The server rejects earlier dates, future dates, and dates outside the existing 30-day backfill window. A separate durable CLI routing marker survives credential resets and never replays the personal outbox into a workspace. Public storage triggers reject every write from enrolled current, legacy, and canonical source identities, including historical retries. An older sender's local calendar date cannot safely establish whether its aggregate contains post-consent UTC activity. Existing personal records remain stored and other personal sources remain usable.
+
+**Observed state:** Enrollment is not a sync. Successful source/day receipts, including explicit zero records, establish first sync and freshness. No prompts or code are submitted. Stopping older installed automation at enrollment prevents it from invoking a public-only build; private automation requires a durable installed compatible CLI and its existing scheduler diagnostics. A compatible CLI must be installed before source enrollment; no release is performed by this change.
+
+**Limits:** A work-only designation is a user assertion, not account classification. Copies of the same logs enrolled as distinct sources can still double count. The existing collector-accuracy and recovery work in PRs #162–#165 is separate and must be assessed before a release. Private contributions do not change the existing cumulative-spend north-star definition. Dollar estimates describe API-price value, not invoices or employee performance.
+
 ## Reject profile saves after account deletion (2026-11-05)
 
 **Problem:** Account deletion omitted team affiliation fields. Clearing them alone still allowed a PATCH authenticated before deletion to restore affiliation after slow favicon discovery finished.
@@ -11,6 +29,30 @@
 **Alternatives:** Rechecking Auth before saving leaves a race between that check and the update. A username-prefix guard could reject active users with similar names. A durable marker gives an explicit lifecycle boundary without changing normal concurrent profile saves or deleting retained rows and shared favicon assets.
 
 **Verification:** A real Supabase regression pauses PATCH during favicon discovery, deletes the account, resumes PATCH, and checks that it returns 409 while anonymous readers see null team fields. Wrong username confirmation and ordinary team saves remain covered.
+
+## Preserve source provenance and explicit device choices (2026-10-28)
+
+**Decision:** Check collector provenance before every overwrite and implicit or authoritative source deletion. A known newer stored collector blocks an older incoming snapshot for the whole date. Keep-separate remains a durable user decision; token overlap updates its evidence but does not reopen or automatically merge it. Matching token totals are evidence under the existing hostname rule, not proof that two physical devices are identical.
+
+**Pending recovery:** Recollect a below-floor durable payload using its original date and timezone intent. Require every formerly reported date and named source before atomically replacing the payload with a fresh request ID. Preserve the original on collection, pricing, persistence or coverage failure. A source with no partition identity requires manual recovery. Source presence cannot prove that every log within that source remains available; lower corrections still rely on complete source-owned snapshots.
+
+**Alternatives:** Allowing older monotonic growth restores known overcounts. Reopening explicit choices silently changes user intent. Dropping outdated outboxes loses recoverable work. Broad historical repair remains outside the normal submission path. New upgrade batches use the existing incremental outbox mode; finish any earlier `collector_upgrade` batches before downgrading to an older client.
+
+**Rollout:** Apply the existing accounting migrations in dependency order, then `20261028090012_usage_accounting_replay_guards.sql`. Coordinate a supported CLI release before enforcing the server floor. These source changes do not authorize production migrations or historical corrections.
+
+## Make optional lifecycle analytics request-consented (2026-10-28)
+
+**Decision:** Optional web capture requires the current request's accepted analytics cookie and an explicit server-helper consent input. No browser consent is inferred from CLI bearer authentication. SDK capture rechecks the live cookie; withdrawal opts out and clears persistence, while the same-origin ingest proxy also rejects queued requests without consent. Necessary authentication, referral, onboarding and usage writes continue independently.
+
+**Identity and meaning:** Signup, first confirmed web sync and completed onboarding use the authenticated user ID and stable per-user insertion IDs. Confirmation denotes accepted usage; completion is emitted only by the successful profile completion route. Anonymous links are consumed after authentication so account switches cannot reuse them. Raw receiver deliveries and unique insertion IDs are separate counts; local receiver acceptance does not establish provider ingestion or deduplication.
+
+**Alternatives:** Browser-only guards leave server forwarding and retry queues active. Persisting browser consent in CLI credentials would couple independent telemetry policies and make withdrawal stale. Request-local denial is simpler and preserves the documented boundary.
+
+## Keep durable public snapshots truthful (2026-10-28)
+
+**Decision:** Retain the scheduled snapshot design, paginate with stable ordering and exact-count checks, and calculate totals and distributions from one consistent non-seed cohort. Report success only after persistence; invalidate public pages after a successful write. Missing capture time remains unavailable, and an old capture stays visibly stale after 48 hours. Labels distinguish estimated usage cost, people, latest recorded streak days and actual percentile groups.
+
+**Alternatives and limits:** A new database aggregation architecture adds deployment scope. The paginated repair removes the row cap and mismatched RPC exclusions, but separate page queries are not an MVCC snapshot: same-count in-place concurrent edits can still change the read. A local protected refresh proves the route and database path, not external cron scheduling or alert delivery.
 
 ## Expose sync health without changing authentication policy (2026-10-27)
 
@@ -31,6 +73,26 @@
 **Alternatives:** Cleaning only the hosted environment would address one pasted value but leave the same failure reproducible. Logging provider bodies would help debugging but could expose echoed payloads. Boundary normalization and bounded diagnostics address the demonstrated input defect without adding tracking.
 
 **Evidence boundary:** A local HTTP receiver rejected the malformed token before normalization and accepted it afterward. Local evidence does not establish PostHog ingestion or production recovery; those require deployment and observation of a real event.
+
+## Match duplicate devices on tokens, not the full fingerprint (2026-10-08)
+
+**Problem:** One machine can register two installation ids, and both push the same ccusage data, so `daily_usage` double counts. The hostname quarantine created an `ambiguous` candidate with empty `overlap_dates`, because overlap was only computed by the manual repair path, which required an exact fingerprint including `cost_usd` and collector. Two installations on different ccusage versions never matched, and `straude devices` showed "0 matching days".
+
+**Decision:** At quarantine time, fingerprint the incoming day (per agent: input, output, cache creation, cache read, reasoning and total tokens) and compare it with the other device's stored rows. Identical days go to `overlap_dates`, differing days to `divergent_dates`. Two or more identical days with no differing day auto-merge through the existing `resolve_usage_device_candidate`, which now also compares tokens only. Everything else stays `ambiguous`. An explicit `kept_separate` decision remains durable (clarified 2026-10-28): new evidence is displayed, and only an explicit user merge can reconsider it.
+
+**Alternatives:** Keep the exact fingerprint and add cost tolerance: ccusage owns pricing, so any tolerance is a guess. Compare incoming rows after writing them: blocked submits write nothing, so there is nothing to compare. Backfill candidates from existing data: out of scope, and it would rewrite user data without a decision.
+
+**Trade-off:** Two real machines with identical token counts on two or more days and no differing day would auto-merge. Real sessions rarely match across five token fields on several days, and the cost of a wrong merge is bounded because it only occurs with the same hostname. The surviving canonical row keeps its own cost and collector, so a cost difference between versions is dropped, not summed.
+
+## Enforce a minimum ccusage version on the server (2026-10-08)
+
+**Problem:** Token counting and API-equivalent pricing come entirely from ccusage. Releases before 20.0.19 inflated Codex usage roughly 2x through fork/subagent replay, 20.0.21 fixed out-of-window Codex history, 20.0.23 deduped Claude requests copied across sessions, and 20.0.26 scoped requestless Claude dedupe and excluded opencode fork-copied history. The minimum was enforced only in the CLI, so old CLIs and the v1 legacy adapter could still write rows from buggy collectors.
+
+**Decision:** Put `CCUSAGE_MIN_VERSION = "20.0.26"` and a stable-semver compare in `packages/shared/src/usage-protocol.ts`. The route rejects any `source: "cli"` submission, v1 or v2, whose collector version is missing, unparseable, a prerelease or below the floor with request-level HTTP 426 `{error, code: "collector_outdated", update_command: "npx straude@latest"}`. This reuses the shape of the existing `usage_protocol_upgrade_required` response, which old CLIs already surface as an error message. Web JSON imports (`source: "web"`) are exempt.
+
+**Alternatives:** A per-date `permanent_error` outcome would not be parsed by old v1 clients. Enforcing only in the RPC would need a migration and still return an opaque error. Requiring a version on web imports would force users to type one, since `ccusage daily --json` output has none.
+
+**Trade-off:** Raising the floor locks out CLIs whose bundled ccusage is older until the user runs `npx straude@latest`. Web-imported rows are unverified but still count toward `SUM(daily_usage.cost_usd)` with an unknown collector version (see ROADMAP). The RPC does not re-check the version; the route is the only gate.
 
 ## Share the dashboard request budget and parallelize live reads (2026-09-28)
 
@@ -1090,6 +1152,8 @@ Pricing the new-logic numbers at gpt-5.5 rates: $228.68 — matches what OpenAI 
 ---
 **Decision (2026-07-04):** Activation funnel events are captured exclusively server-side; the browser posthog-js duplicate capture in `trackActivationEvent` was removed.
 
+**Updated 2026-10-28:** The request-consented lifecycle decision above supersedes this entry's consent exemption. Server-side ownership remains; sanitized properties do not exempt optional analytics from consent.
+
 **Alternatives considered:** (1) Browser capture as canonical — rejected: it only covers consented users, dropping pre-consent top-of-funnel data. (2) Keep both and filter by a `source` property in funnels — rejected: the two paths use different distinct-id graphs (Supabase user id / activation cookie server-side vs. PostHog device id client-side), so identity fragments and anonymous→signed-up conversion math stays wrong even after filtering.
 
 **Why server-side:** it fires unconditionally (consent-exempt because properties are allowlist-sanitized: no prompts, paths, emails, or raw usage), and it owns `$identify` anonymous→user stitching via the `straude_activation_id` cookie.
@@ -1133,3 +1197,15 @@ Pricing the new-logic numbers at gpt-5.5 rates: $228.68 — matches what OpenAI 
 2. **A blocking step before the sync command** — rejected because it puts a survey in front of the activation action, which the first-sync conversion work set out to shorten.
 
 **Why the inline step:** onboarding still completes on confirmed usage, so no funnel event changes meaning. The survey is the last thing a new user sees before entering the app, and Skip leaves the database untouched.
+
+## A Newer Collector Version Is the Source of Truth for Stored Rows (2026-10-08)
+
+**Decision:** `submit_usage_day_v2` lets a trusted partitioned snapshot replace an existing `usage_agent_daily` row, in either direction, when the snapshot's `collector.version` is strictly newer (semver) than the stored row's `collector.version`. Same-version snapshots keep the monotonic guard. Older collectors are rejected before either overwriting or deleting newer source rows. A stored row with a missing or unparseable version counts as older. The CLI persists `ccusage_version_pushed` and re-submits the existing 30-day backfill window when the installed ccusage is newer.
+
+**Alternatives considered:**
+
+1. **Send `authoritative_correction` on every upgrade** — rejected because the flag is a per-migration server switch (`ccusage-by-agent-v2`) that also deletes agent rows missing from the snapshot. Reusing it for each ccusage release would make that broad override routine.
+2. **Repair stored rows with SQL** — rejected because direct rewrites of usage totals are banned by the migration-safety test and cannot recompute from source logs. Only the user's machine has the logs.
+3. **Drop the regression guard for trusted snapshots** — rejected because a machine that lost its local logs would then silently overwrite good history with smaller numbers.
+
+**Why a version comparison:** it states the actual reason a decrease is safe, which is that a newer collector computes the numbers, not that the numbers are bigger. The monotonic guard remains for equal versions; the collector-provenance fence rejects older versions before any source mutation. Cost: a CLI that moves to a buggy newer ccusage can lower history too, so the ccusage floor and release checks are still the control for collector quality.

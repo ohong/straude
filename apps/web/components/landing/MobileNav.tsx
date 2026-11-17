@@ -9,6 +9,7 @@ const NAV_LINKS = [
   { href: "/feed", label: "Feed" },
   { href: "/leaderboard", label: "Leaderboard" },
   { href: "/token-rich", label: "Prometheus List" },
+  { href: "/teams", label: "Teams" },
 ] as const;
 
 export function MobileNav({ variant = "dark" }: { variant?: "dark" | "light" }) {
@@ -65,7 +66,7 @@ export function MobileNav({ variant = "dark" }: { variant?: "dark" | "light" }) 
     <>
       <button
         type="button"
-        className={`md:hidden ${text}`}
+        className={`lg:hidden ${text}`}
         onClick={() => setMobileOpen((open) => !open)}
         aria-label="Toggle menu"
         aria-expanded={mobileOpen}
@@ -76,7 +77,7 @@ export function MobileNav({ variant = "dark" }: { variant?: "dark" | "light" }) 
       {mobileOpen && (
         <div
           ref={menuRef}
-          className={`md:hidden border-t ${mobileBg} px-8 pb-8 pt-6 backdrop-blur-md`}
+          className={`lg:hidden border-t ${mobileBg} px-8 pb-8 pt-6 backdrop-blur-md`}
           role="dialog"
           aria-label="Mobile navigation"
         >
