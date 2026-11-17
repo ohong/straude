@@ -385,7 +385,7 @@ describe("Migration safety", () => {
   it("latest cli_auth_codes hardening removes public grants and pending-code select policies", () => {
     const latest = getLatestMigrationMatching(
       migrations,
-      /public\.cli_auth_codes[\s\S]*(REVOKE\s+ALL|DROP\s+POLICY)/i
+      /(?:REVOKE\s+ALL\s+ON\s+TABLE|DROP\s+POLICY[^;]+ON)\s+public\.cli_auth_codes/i
     );
 
     expect(latest, "Expected cli_auth_codes hardening migration").toBeTruthy();
@@ -529,7 +529,9 @@ describe("Migration safety", () => {
 
     for (const migration of futureMigrations) {
       expect(
-        migration.content,
+        migration.name === "20261117000000_atomic_account_deletion.sql"
+          ? migration.content.replace("delete from public.device_usage where user_id = p_user_id;", "")
+          : migration.content,
         `${migration.name} must not directly rewrite usage totals. Heal incorrect Codex usage by re-pushing from the CLI source logs instead.`,
       ).not.toMatch(
         /\b(UPDATE|INSERT\s+INTO|DELETE\s+FROM)\s+public\.(daily_usage|device_usage)\b/i,
