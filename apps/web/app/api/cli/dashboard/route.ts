@@ -60,7 +60,7 @@ export async function GET(request: Request) {
   const [
     { data: levelRow },
     { data: usage },
-    { data: lifetimeTokenRows },
+    { data: lifetime, error: lifetimeError },
     { data: breakdownRows },
     { data: streakData },
     { data: userEntry },
@@ -76,10 +76,7 @@ export async function GET(request: Request) {
       .eq("user_id", userId)
       .gte("date", startStr)
       .order("date", { ascending: true }),
-    db
-      .from("daily_usage")
-      .select("output_tokens")
-      .eq("user_id", userId),
+    db.rpc("get_user_usage_totals", { p_user_id: userId }).single<{ total_output_tokens: number | string }>(),
     db
       .from("daily_usage")
       .select("model_breakdown")
@@ -102,10 +99,10 @@ export async function GET(request: Request) {
     cost_usd: Number(d.cost_usd),
   }));
 
-  const total_output_tokens = (lifetimeTokenRows ?? []).reduce(
-    (sum, row) => sum + Number(row.output_tokens),
-    0,
-  );
+  if (lifetimeError || lifetime?.total_output_tokens == null) {
+    return NextResponse.json({ error: "Unable to load lifetime usage" }, { status: 503 });
+  }
+  const total_output_tokens = Number(lifetime.total_output_tokens);
 
   // 3b. Model breakdown (last 7 days aggregate, matching the scorecard window)
   const modelAgg = new Map<string, number>();
