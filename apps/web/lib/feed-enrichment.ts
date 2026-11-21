@@ -5,7 +5,7 @@ import {
   type RawCommentPreviewRow,
 } from "@/lib/feed-normalization";
 import { firstRelation } from "@/lib/utils/first-relation";
-import type { CommentPreviewItem, FeedPostRow, Post, UserSummary } from "@/types";
+import type { FeedPostRow, Post } from "@/types";
 import { PUBLIC_DAILY_USAGE_FIELDS } from "@/lib/data/public-daily-usage";
 
 type QueryClient = {
@@ -26,9 +26,10 @@ interface QueryBuilder<T = unknown> extends PromiseLike<QueryResult<T>> {
   limit: (...args: unknown[]) => QueryBuilder<T>;
 };
 
-type KudosRow = {
-  post_id: string;
-  user: JoinedUserSummary;
+type PostPreviews = {
+  id: string;
+  kudos: { user: JoinedUserSummary }[];
+  comments: RawCommentPreviewRow[];
 };
 
 export function getFeedCursor(posts: Post[], limit: number): string | undefined {
@@ -43,81 +44,51 @@ export async function enrichFeedPosts({
   posts,
   userId,
   userScopedClient,
-  publicReadClient = userScopedClient,
 }: {
   posts: FeedPostRow[];
   userId: string | null;
   userScopedClient: unknown;
-  publicReadClient?: unknown;
 }): Promise<Post[]> {
   const userClient = userScopedClient as QueryClient;
-  const readClient = publicReadClient as QueryClient;
   const normalized = posts.map(normalizeFeedPost);
   const postIds = normalized.map((post) => post.id);
 
   if (postIds.length === 0) return normalized;
 
-  const [{ data: userKudos }, { data: recentKudos, error: kudosError }, { data: recentComments }] =
-    await Promise.all([
-      userId
-        ? userClient
-            .from("kudos")
-            .select("post_id")
-            .eq("user_id", userId)
-            .in("post_id", postIds)
-        : Promise.resolve({ data: [] as { post_id: string }[] }),
-      readClient
-        .from("kudos")
-        .select("post_id, user:users!kudos_user_id_fkey(avatar_url, username)")
-        .in("post_id", postIds)
-        .order("created_at", { ascending: false })
-        .limit(Math.min(postIds.length * 3, 60)),
-      readClient
-        .from("comments")
-        .select("id, post_id, content, created_at, user:users!comments_user_id_fkey(username, avatar_url)")
-        .is("parent_comment_id", null)
-        .in("post_id", postIds)
-        .order("created_at", { ascending: false })
-        .limit(Math.min(postIds.length * 2, 40)),
-    ]);
+  const [{ data: userKudos }, { data: previews, error }] = await Promise.all([
+    userId
+      ? userClient.from("kudos").select("post_id").eq("user_id", userId).in("post_id", postIds)
+      : Promise.resolve({ data: [] }),
+    userClient
+      .from("posts")
+      .select(`
+        id,
+        kudos(user:users!kudos_user_id_fkey(avatar_url, username)),
+        comments(id, post_id, content, created_at, user:users!comments_user_id_fkey(username, avatar_url))
+      `)
+      .in("id", postIds)
+      .is("comments.parent_comment_id", null)
+      .order("created_at", { referencedTable: "kudos", ascending: false })
+      .order("id", { referencedTable: "kudos", ascending: false })
+      .limit(3, { referencedTable: "kudos" })
+      .order("created_at", { referencedTable: "comments", ascending: false })
+      .order("id", { referencedTable: "comments", ascending: false })
+      .limit(2, { referencedTable: "comments" }),
+  ]);
 
-  if (kudosError) {
-    console.error("[feed] kudos users fetch error:", kudosError);
-  }
+  if (error) console.error("[feed] preview query failed:", error.message);
+  const previewsByPost = new Map(((previews ?? []) as PostPreviews[]).map((row) => [row.id, row]));
+  const kudosedSet = new Set(((userKudos ?? []) as { post_id: string }[]).map((row) => row.post_id));
 
-  const kudosedSet = new Set(
-    ((userKudos ?? []) as { post_id: string }[]).map((k) => k.post_id),
-  );
-  const kudosUsersMap = new Map<string, UserSummary[]>();
-
-  for (const kudos of (recentKudos ?? []) as KudosRow[]) {
-    const list = kudosUsersMap.get(kudos.post_id) ?? [];
-    const userSummary = firstRelation(kudos.user);
-    if (list.length < 3 && userSummary) {
-      list.push(userSummary);
-      kudosUsersMap.set(kudos.post_id, list);
-    }
-  }
-
-  const commentsMap = new Map<string, CommentPreviewItem[]>();
-  for (const comment of (recentComments ?? []) as RawCommentPreviewRow[]) {
-    const list = commentsMap.get(comment.post_id) ?? [];
-    if (list.length < 2) {
-      list.push(normalizeCommentPreview(comment));
-      commentsMap.set(comment.post_id, list);
-    }
-  }
-
-  for (const [, list] of commentsMap) {
-    list.reverse();
-  }
-
-  return normalized.map((post) => ({
-    ...post,
-    kudos_users: kudosUsersMap.get(post.id) ?? [],
-    recent_comments: commentsMap.get(post.id) ?? [],
-    has_kudosed: kudosedSet.has(post.id),
-  }));
+  return normalized.map((post) => {
+    const preview = previewsByPost.get(post.id);
+    return {
+      ...post,
+      kudos_users: (preview?.kudos ?? []).map((row) => firstRelation(row.user)).filter(user => user !== null),
+      recent_comments: (preview?.comments ?? []).map(normalizeCommentPreview).reverse(),
+      has_kudosed: kudosedSet.has(post.id),
+    };
+  });
 }
 
 export async function getPendingPosts(
