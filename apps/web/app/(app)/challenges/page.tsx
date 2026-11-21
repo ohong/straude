@@ -16,7 +16,7 @@ export default async function ChallengesPage({ searchParams }: { searchParams: P
   if (!user) redirect(`/login?next=${encodeURIComponent(id ? `/challenges?group=${id}` : "/challenges")}`);
 
   // Group reads use the signed-in client. Embedded posts keep their own row visibility.
-  const list = await db.from("build_challenges").select("id,start_date,organizer:users(username,display_name)").order("start_date", { ascending: false }).order("id");
+  const list = await db.from("build_challenges").select("id,start_date,organizer:users!build_challenges_organizer_id_fkey(username,display_name)").order("start_date", { ascending: false }).order("id");
   if (list.error) throw new Error("Could not load challenges.");
   const groups: ChallengeGroup[] = list.data.map(row => {
     const owner = firstRelation(row.organizer);
