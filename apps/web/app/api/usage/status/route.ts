@@ -90,7 +90,8 @@ export async function GET(request: Request) {
 
   const { data: latestPost } = await supabase
     .from("posts")
-    .select("id")
+    .select("id, usage_generated_title")
+    .eq("user_id", user.id)
     .eq("daily_usage_id", latestUsage.id)
     .maybeSingle();
 
@@ -126,6 +127,7 @@ export async function GET(request: Request) {
     latest_usage_id: latestUsage.id,
     latest_usage_at: latestUsage.created_at ?? latestUsage.date,
     latest_usage_date: latestUsage.date,
+    build_note_post_id: latestPost?.usage_generated_title ? latestPost.id : null,
     latest_post_url: latestPost?.id ? `/post/${latestPost.id}` : null,
   });
 }

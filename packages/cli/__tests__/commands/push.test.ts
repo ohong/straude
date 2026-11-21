@@ -55,6 +55,7 @@ vi.mock("../../src/lib/machine-id.js", () => ({
 
 vi.mock("../../src/lib/prompt.js", () => ({
   isInteractive: () => true,
+  promptBuildNote: vi.fn(async () => ""),
 }));
 
 vi.mock("../../src/lib/sync-state.js", () => ({
