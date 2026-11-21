@@ -1,0 +1,27 @@
+name: Favicon fixture benchmark
+on:
+  push:
+    branches: [oh-favicon-fixture-benchmark]
+permissions:
+  contents: read
+jobs:
+  probe:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v7
+      - uses: oven-sh/setup-bun@v2
+        with: {bun-version: 1.3.3}
+      - uses: actions/setup-node@v7
+        with: {node-version: 22}
+      - uses: supabase/setup-cli@v3
+        with: {version: 2.75.0}
+      - name: Start fresh local database and install locked dependencies
+        run: |
+          supabase start --exclude studio,postgres-meta,logflare,vector,edge-runtime >/dev/null 2>&1 &
+          pid=$!
+          bun install --frozen-lockfile
+          wait "$pid"
+          bun run local:env
+      - name: Exercise Storage uploads and verify each file
+        working-directory: apps/web
+        run: node --env-file=.env.local scripts/probe-favicon.mjs
