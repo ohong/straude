@@ -155,6 +155,36 @@ jobs:
       - name: Prepare isolated native CLI runtime
         run: docker pull node:22-bookworm-slim
 
+      - name: Diagnose mobile WebKit navigation on both loopback hosts
+        working-directory: apps/web
+        run: |
+          bun run start -p 3000 > "$RUNNER_TEMP/straude-webkit-server.log" 2>&1 &
+          server_pid=$!
+          trap 'kill "$server_pid" 2>/dev/null || true' EXIT
+          for attempt in $(seq 1 25); do
+            if curl --silent --fail http://localhost:3000/signup >/dev/null; then break; fi
+            sleep 1
+          done
+          node --input-type=module <<'JS'
+          import { webkit, devices } from "@playwright/test";
+          const browser = await webkit.launch();
+          for (const host of ["localhost", "127.0.0.1"]) {
+            const page = await browser.newPage(devices["iPhone 13"]);
+            const failures = new Set();
+            page.on("requestfailed", req => {
+              const url = new URL(req.url());
+              if (url.hostname === host) failures.add([url.protocol, req.resourceType(), req.failure()?.errorText].join(" "));
+            });
+            page.on("pageerror", e => failures.add(e.name + ": " + e.message.slice(0, 160)));
+            const r = await page.goto(`http://${host}:3000/signup`);
+            const visible = await page.getByRole("heading", {name:"Create your account"}).waitFor({timeout:5000}).then(()=>true,()=>false);
+            console.log(JSON.stringify({host,status:r?.status(), mime:r?.headers()["content-type"], visible,
+              heading:await page.locator("h1").allTextContents(), body:(await page.locator("body").innerText()).slice(0,180), failures:[...failures]}));
+            await page.close();
+          }
+          await browser.close();
+          JS
+
       - name: E2E tests
         run: bun run test:e2e --reporter=html,./e2e/helpers/summary-reporter.ts
         working-directory: apps/web
