@@ -1,7 +1,7 @@
 import { describe, it, expect, beforeEach, afterEach } from "vitest";
 import { createServer } from "node:http";
 import type { AddressInfo } from "node:net";
-import { existsSync, mkdtempSync } from "node:fs";
+import { existsSync, mkdtempSync, statSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join, dirname, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
@@ -106,6 +106,13 @@ describe("straude binary — smoke", () => {
     // must never create an auth config or require a logged-in account.
     const r = await spawnCli({ args: ["--version"], home });
     expect(r.exitCode).toBe(0);
-    expect(existsSync(join(home, ".straude", "config.json"))).toBe(false);
+    const stateDir = join(home, ".straude");
+    expect(existsSync(join(stateDir, "config.json"))).toBe(false);
+    const marker = statSync(join(stateDir, ".first-run"));
+    expect(marker.isFile()).toBe(true);
+    if (process.platform !== "win32") {
+      expect(marker.mode & 0o777).toBe(0o600);
+      expect(statSync(stateDir).mode & 0o777).toBe(0o700);
+    }
   });
 });
