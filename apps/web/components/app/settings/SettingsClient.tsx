@@ -543,7 +543,7 @@ export default function SettingsClient({
             <p className="pl-7 text-xs text-muted">
               {isPublic
                 ? "Your profile, posts, and stats are visible to everyone. You appear on the leaderboard."
-                : "Your profile and activity are only visible to your followers. You will not appear on the leaderboard."}
+                : "Only you and your followers see your activity. Approve new requests in Notifications and remove followers from your profile."}
             </p>
           </div>
         </fieldset>

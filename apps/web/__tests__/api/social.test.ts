@@ -104,6 +104,9 @@ describe("POST /api/follow/[username]", () => {
     };
     useClient(client);
 
+    mockServiceClient.rpc.mockImplementation(async (name: string) => ({
+      data: name === "change_follow" ? "following" : [{ allowed: true, retry_after_seconds: 0 }], error: null,
+    }));
     const res = await followPOST(
       makeRequest("POST", "/api/follow/alice"),
       makeContext("username", "alice")

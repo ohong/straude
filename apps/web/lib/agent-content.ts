@@ -50,7 +50,7 @@ Before contacting support, agents may consult the [CLI reference](${SITE_URL}/cl
 
 Straude does not collect prompts, conversations, source code, or file contents. The CLI aggregates supported local usage logs into daily totals such as token counts, estimated cost, model names, and session count. Users can run \`npx straude --dry-run\` to collect usage without submitting it.
 
-Account information and submitted aggregate usage data are stored to provide profiles, feeds, leaderboards, streaks, and account features. Profiles are public by default and can be made private in Settings. Essential cookies support authentication, security, referral attribution, and cookie preferences. Product analytics remain off unless the user opts in.
+Account information and submitted aggregate usage data are stored to provide profiles, feeds, leaderboards, streaks, and account features. New profiles start private. Owners choose their audience during setup or in Settings. New private followers require approval in Notifications. Essential cookies support authentication, security, referral attribution, and cookie preferences. Product analytics remain off unless the user opts in.
 
 Users may request access, correction, export, or deletion of their data. Questions and privacy requests can be sent to [hey@straude.com](mailto:hey@straude.com).
 

@@ -1,5 +1,7 @@
 import { getServiceClient } from "@/lib/supabase/service";
 import { getProfileAccessContext } from "@/lib/profile-access";
+import { getAuthIdentity } from "@/lib/supabase/auth";
+import { revalidatePath } from "next/cache";
 import { notFound } from "next/navigation";
 import Link from "next/link";
 import { firstRelation } from "@/lib/utils/first-relation";
@@ -20,6 +22,16 @@ type FollowUserRow = {
 };
 type FollowingRelationRow = { following: FollowUserRow[] | null };
 type FollowerRelationRow = { follower: FollowUserRow[] | null };
+
+async function removeFollower(username: string, followerId: string) {
+  "use server";
+  const owner = await getAuthIdentity();
+  if (!owner) throw new Error("Sign in to remove a follower");
+  const { error } = await getServiceClient().from("follows").delete()
+    .eq("following_id", owner.id).eq("follower_id", followerId);
+  if (error) throw new Error("Could not remove follower");
+  revalidatePath(`/u/${username}/follows`);
+}
 
 export async function generateMetadata({
   params,
@@ -117,29 +129,35 @@ export default async function FollowsPage({
           </p>
         ) : (
           users.map((user) => (
-            <Link
-              key={user.id}
-              href={user.username ? `/u/${user.username}` : "#"}
-              className="flex items-center gap-4 border-b border-border px-6 py-4 hover:bg-subtle"
-            >
-              <Avatar
-                src={user.avatar_url}
-                alt={user.username ?? ""}
-                fallback={user.display_name ?? user.username ?? "?"}
-                size="md"
-              />
-              <div className="flex-1 overflow-hidden">
-                <p className="font-medium">
-                  {user.display_name ?? user.username ?? "User"}
-                </p>
-                {user.username && (
-                  <p className="text-sm text-muted">@{user.username}</p>
-                )}
-                {user.bio && (
-                  <p className="mt-0.5 truncate text-sm text-muted">{user.bio}</p>
-                )}
-              </div>
-            </Link>
+            <div key={user.id} className="flex items-center border-b border-border pr-6">
+              <Link
+                href={user.username ? `/u/${user.username}` : "#"}
+                className="flex min-w-0 flex-1 items-center gap-4 px-6 py-4 hover:bg-subtle"
+              >
+                <Avatar
+                  src={user.avatar_url}
+                  alt={user.username ?? ""}
+                  fallback={user.display_name ?? user.username ?? "?"}
+                  size="md"
+                />
+                <div className="flex-1 overflow-hidden">
+                  <p className="font-medium">
+                    {user.display_name ?? user.username ?? "User"}
+                  </p>
+                  {user.username && (
+                    <p className="text-sm text-muted">@{user.username}</p>
+                  )}
+                  {user.bio && (
+                    <p className="mt-0.5 truncate text-sm text-muted">{user.bio}</p>
+                  )}
+                </div>
+              </Link>
+              {access.isOwn && activeTab === "followers" && (
+                <form action={removeFollower.bind(null, username, user.id)}>
+                  <button className="text-sm underline" type="submit" aria-label={`Remove ${user.username ?? "follower"}`}>Remove</button>
+                </form>
+              )}
+            </div>
           ))
         )}
       </div>

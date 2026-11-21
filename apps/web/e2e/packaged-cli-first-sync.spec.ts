@@ -378,6 +378,8 @@ test.describe("installed CLI and browser first sync", () => {
       await expect(page).toHaveURL(/\/onboarding$/);
       const profile = await (await page.request.get("/api/users/me")).json();
       expect(profile.onboarding_completed).toBe(false);
+      expect(profile.is_public).toBe(false);
+      await expect(page.getByRole("region", { name: "Profile audience" })).toContainText("Private profile");
       await expect(page.locator("#sync-command")).toBeVisible();
       const verification = await page.context().newPage();
       await authorize(cli, verification, origin);
@@ -518,6 +520,7 @@ test.describe("installed CLI and browser first sync", () => {
       expect(me.status()).toBe(200);
       expect(me.headers()["content-type"]).toContain("application/json");
       const initialProfile = await me.json();
+      expect(initialProfile.is_public).toBe(false);
       expect(initialProfile.username, "CLI-first account has no claimed handle").toBeNull();
       const config = await cli.state("config");
       const claims = JSON.parse(Buffer.from(config.token.split(".")[1], "base64url").toString());

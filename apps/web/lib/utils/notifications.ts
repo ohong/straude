@@ -4,6 +4,8 @@ export { timeAgo } from "./format";
 export function notificationMessage(n: Notification): string {
   const actor = n.actor?.username ?? "Someone";
   switch (n.type) {
+    case "follow_request":
+      return `${actor} asked to follow you`;
     case "follow":
       return `${actor} started following you`;
     case "kudos":
@@ -23,6 +25,8 @@ export function notificationMessage(n: Notification): string {
 
 export function notificationHref(n: Notification): string {
   switch (n.type) {
+    case "follow_request":
+      return "/notifications";
     case "follow":
       return n.actor?.username ? `/u/${n.actor.username}` : "/notifications";
     case "kudos":

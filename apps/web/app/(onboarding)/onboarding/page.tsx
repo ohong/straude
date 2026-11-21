@@ -8,6 +8,7 @@ import { Check, ArrowRight, Copy } from "lucide-react";
 import { Button } from "@/components/ui/Button";
 import { trackActivationEvent } from "@/lib/analytics/client";
 import { BuildNote } from "@/components/app/onboarding/BuildNote";
+import { UsageAudience } from "@/components/app/onboarding/UsageAudience";
 import { HeardAboutStep } from "@/components/app/onboarding/HeardAboutStep";
 import { formatCurrency } from "@/lib/utils/format";
 
@@ -43,6 +44,7 @@ function formatTokens(n: number): string {
 
 export default function OnboardingPage() {
   const router = useRouter();
+  const [isPublic, setPublic] = useState<boolean | null>(null);
   const [username, setUsername] = useState("");
   const [copied, setCopied] = useState(false);
   const [copyError, setCopyError] = useState(false);
@@ -61,6 +63,7 @@ export default function OnboardingPage() {
         const res = await fetch("/api/users/me", { signal: controller.signal });
         if (!res.ok) return;
         const profile = await res.json();
+        if (!controller.signal.aborted && typeof profile.is_public === "boolean") setPublic(profile.is_public);
         if (!controller.signal.aborted && typeof profile.username === "string") {
           setUsername(profile.username);
         }
@@ -213,6 +216,8 @@ export default function OnboardingPage() {
           ? "Your logged spend and tokens are ready. Keep syncing to build your history and streak."
           : "Run this command in the terminal on the computer where you use your coding agent. Sign in when prompted, then return here."}
       </p>
+
+      {isPublic !== null && <UsageAudience initialPublic={isPublic} />}
 
       {data ? (
         <dl className="grid grid-cols-2 gap-3">
