@@ -18,6 +18,7 @@ WITH
           AND domain(properties.$current_url) = 'straude.com'
           AND (
               (event = '$pageview' AND path(properties.$current_url) IN ('/recap', '/recap/'))
+              OR (event = 'build_note_saved' AND properties.surface = 'onboarding')
               OR (event = 'post_saved' AND properties.has_description = true)
               OR (event = 'comment_posted' AND properties.is_reply = true)
           )
