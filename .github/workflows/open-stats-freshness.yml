@@ -1,0 +1,21 @@
+name: Public stats freshness
+
+on:
+  schedule:
+    - cron: "37 7 * * *"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  check:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 3
+    steps:
+      - uses: actions/checkout@v7
+      - name: Check the capture shown on the public page
+        run: |
+          curl --fail --silent --show-error --retry 2 --max-time 25 https://straude.com/open |
+            python3 scripts/check-open-stats.py
+        shell: bash

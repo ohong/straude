@@ -66,7 +66,7 @@ cp .env.example apps/web/.env.local
 | `UNSUBSCRIBE_SECRET` | No | Signs email unsubscribe tokens |
 | `ANTHROPIC_API_KEY` | No | Claude API key for AI caption generation |
 | `FAL_KEY` | No | Fal AI key for image generation |
-| `CRON_SECRET` | No | Authenticates Vercel cron job requests |
+| `CRON_SECRET` | Production cron jobs | Set a random secret in the Vercel production environment before deploying. Vercel sends it with each scheduled request. |
 | `ADMIN_USER_IDS` | No | Comma-separated Supabase user UUIDs for admin access |
 
 **Important:** This project uses the **new Supabase key model** (publishable + secret), not the legacy `SUPABASE_ANON_KEY` / `SUPABASE_SERVICE_ROLE_KEY`. See the CLAUDE.md Supabase Keys section for details.

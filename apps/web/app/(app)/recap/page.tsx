@@ -33,6 +33,7 @@ export default async function RecapRoutePage() {
     Boolean(profile.username && profile.is_public),
     "week",
     profile.streak_freezes ?? 0,
+    true,
   ).catch(() => null);
 
   return <RecapPage initialReview={review} initialError={initialData ? null : "Unable to load recap statistics."} initialData={initialData} />;

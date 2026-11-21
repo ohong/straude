@@ -1,5 +1,7 @@
 "use client";
 
+import Link from "next/link";
+
 import { formatCurrency, formatTokens, getCellColor } from "@/lib/utils/format";
 import { fillContributionDays, type RecapData } from "@/lib/utils/recap";
 import {
@@ -25,6 +27,8 @@ export function RecapCard({
 
   return (
     <div
+      role="region"
+      aria-label="Recap card"
       className="relative overflow-hidden"
       style={{ borderRadius: 8 }}
     >
@@ -51,6 +55,9 @@ export function RecapCard({
           </p>
         </div>
 
+        {data.highlight && <p className="mt-6 break-words text-xl font-semibold" style={{ color: palette.text }}>
+          <Link href={`/post/${data.highlight.id}`}>{data.highlight.title}</Link>
+        </p>}
         {/* Hero stat */}
         <div className="mt-8">
           <p

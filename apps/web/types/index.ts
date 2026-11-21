@@ -253,7 +253,8 @@ export interface Notification {
   id: string;
   user_id: string;
   actor_id: string;
-  type: "follow" | "kudos" | "comment" | "mention" | "message" | "referral";
+  follow_request_id?: string | null;
+  type: "follow" | "follow_request" | "kudos" | "comment" | "mention" | "message" | "referral";
   post_id: string | null;
   comment_id: string | null;
   read: boolean;

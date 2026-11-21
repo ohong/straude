@@ -2,6 +2,8 @@
 
 The `straude` CLI pushes AI coding-agent usage data to Straude. Published on npm as [`straude`](https://www.npmjs.com/package/straude).
 
+After an interactive sync creates a new post for the latest submitted day, you can give it a one-line title (100 characters). Press Enter to skip. The note uses the post’s existing audience. Scheduled and non-interactive syncs skip this prompt.
+
 ## Installation
 
 ```bash
