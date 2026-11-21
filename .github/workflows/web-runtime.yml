@@ -7,8 +7,15 @@ on:
         type: string
         required: true
 
+    outputs:
+      package-sha:
+        description: SHA-256 of the CLI tarball used by native browser tests
+        value: ${{ jobs.web-runtime.outputs.package-sha }}
+
 jobs:
   web-runtime:
+    outputs:
+      package-sha: ${{ steps.native-package.outputs.sha }}
     runs-on: ubuntu-24.04
     env:
       BROWSER_SHARD: ${{ inputs.shard }}
@@ -109,21 +116,20 @@ jobs:
                       output.write(f"{name}={values[name]}\n")
           PY
 
-      - name: Download the tested CLI package
+      - name: Pack and install the CLI for native browser journeys
         if: inputs.shard == 'native'
-        uses: actions/download-artifact@v8
-        with:
-          name: straude-cli-package
-          path: artifacts
-
-      - name: Install the exact CLI for browser journeys
-        if: inputs.shard == 'native'
+        id: native-package
+        working-directory: packages/cli
         run: |
           set -euo pipefail
-          cli_tarball=$(node -e 'const fs=require("node:fs");const path=require("node:path");const files=fs.readdirSync("artifacts").filter(f=>f.endsWith(".tgz"));if(files.length!==1)throw Error("Expected exactly one CLI package");process.stdout.write(path.resolve("artifacts",files[0]));')
+          # prepack builds dist for the native workspace journey too.
+          npm pack --pack-destination "$RUNNER_TEMP"
+          packages=("$RUNNER_TEMP"/straude-*.tgz)
+          (( ${#packages[@]} == 1 ))
+          cli_tarball=${packages[0]}
           cli_install="$RUNNER_TEMP/straude-browser-cli"
-          mkdir -p "$cli_install"
           npm install --prefix "$cli_install" "$cli_tarball" --no-audit --no-fund
+          echo "sha=$(sha256sum "$cli_tarball" | cut -d' ' -f1)" >> "$GITHUB_OUTPUT"
           echo "STRAUDE_E2E_CLI_INSTALL=$cli_install" >> "$GITHUB_ENV"
           echo "STRAUDE_E2E_CLI_TARBALL=$cli_tarball" >> "$GITHUB_ENV"
           echo "STRAUDE_E2E_CLI_COMMIT=$GITHUB_SHA" >> "$GITHUB_ENV"
@@ -145,10 +151,6 @@ jobs:
         if: inputs.shard == 'global'
         run: bun run test:integration
         working-directory: apps/web
-
-      - name: Build CLI for browser boundary tests
-        if: inputs.shard == 'native'
-        run: bun run --cwd packages/cli build
 
       - name: E2E tests
         run: |
