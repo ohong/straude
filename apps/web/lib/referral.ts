@@ -35,12 +35,9 @@ export async function attributeReferral(
 
   // Auto-follow referrer so the new user sees their activity.
   // Do not create a reverse follow on behalf of the referrer.
-  await db.from("follows").upsert(
-    [
-      { follower_id: newUserId, following_id: referrer.id },
-    ],
-    { onConflict: "follower_id,following_id", ignoreDuplicates: true },
-  );
+  await db.rpc("change_follow", {
+    p_actor: newUserId, p_target: referrer.id, p_action: "suggested",
+  });
 
   // Notify referrer
   await db.from("notifications").insert({
