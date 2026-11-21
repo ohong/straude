@@ -11,6 +11,7 @@ jobs:
   web-runtime:
     runs-on: ubuntu-24.04
     env:
+      SUPABASE_CLI_VERSION: 2.75.0
       BROWSER_SHARD: ${{ inputs.shard }}
       NEXT_PUBLIC_POSTHOG_KEY: phc_local_runtime_evidence
       POSTHOG_API_KEY: phc_local_runtime_evidence
@@ -37,7 +38,14 @@ jobs:
       - name: Setup Supabase CLI
         uses: supabase/setup-cli@v3
         with:
-          version: 2.75.0
+          version: ${{ env.SUPABASE_CLI_VERSION }}
+
+      - name: Restore Supabase server images
+        id: images
+        uses: actions/cache/restore@v6
+        with:
+          path: ${{ runner.temp }}/supabase-images.tar.zst
+          key: supabase-images-v1-${{ runner.os }}-${{ runner.arch }}-${{ env.SUPABASE_CLI_VERSION }}-${{ hashFiles('supabase/config.toml') }}
 
       - name: Prepare isolated runtime
         shell: bash
@@ -45,7 +53,12 @@ jobs:
           BUN_INSTALL_CACHE_DIR: ~/.bun/install/cache
         run: |
           set -euo pipefail
-          supabase start --exclude studio,postgres-meta,logflare,vector,edge-runtime &
+          (
+            if [[ -f "$RUNNER_TEMP/supabase-images.tar.zst" ]]; then
+              zstd -dc "$RUNNER_TEMP/supabase-images.tar.zst" | docker load
+            fi
+            supabase start --exclude studio,postgres-meta,logflare,vector,edge-runtime
+          ) &
           pids=($!)
           if [[ "$BROWSER_SHARD" == native ]]; then
             docker pull node:22-bookworm-slim &
@@ -62,6 +75,22 @@ jobs:
           status=0
           for pid in "${pids[@]}"; do wait "$pid" || status=1; done
           exit "$status"
+
+      # Cache upstream images only. Never snapshot volumes or a migrated test database.
+      - name: Export Supabase server images on a cache miss
+        if: inputs.shard == 'global' && steps.images.outputs.cache-hit != 'true'
+        run: |
+          set -euo pipefail
+          mapfile -t images < <(docker ps --format '{{.Names}} {{.Image}}' | awk '$1 ~ /^supabase_/ {print $2}' | sort -u)
+          (( ${#images[@]} > 0 ))
+          docker save "${images[@]}" | zstd -T2 -1 -o "$RUNNER_TEMP/supabase-images.tar.zst"
+
+      - name: Seed the shared server-image cache
+        if: inputs.shard == 'global' && steps.images.outputs.cache-hit != 'true'
+        uses: actions/cache/save@v6
+        with:
+          path: ${{ runner.temp }}/supabase-images.tar.zst
+          key: ${{ steps.images.outputs.cache-primary-key }}
 
       - name: Configure web for local Supabase
         run: |
