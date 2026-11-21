@@ -1,7 +1,6 @@
 "use client";
 
 import { useState, useEffect, useCallback, useRef } from "react";
-import Link from "next/link";
 import { Link2, Download, Check } from "lucide-react";
 import { RecapCard } from "@/components/app/recap/RecapCard";
 import type { PersonalWeeklyReview } from "@/lib/utils/personal-review";
@@ -11,7 +10,7 @@ import {
   DEFAULT_BACKGROUND_ID,
   type RecapBackgroundId,
 } from "@/lib/recap-backgrounds";
-
+import Link from "next/link";
 
 const money = (value: number) => new Intl.NumberFormat("en-US", { style: "currency", currency: "USD" }).format(value);
 
