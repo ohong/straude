@@ -24,7 +24,7 @@
     "dev": "tsup --watch",
     "typecheck": "bun run build:shared && tsc --noEmit",
     "prepack": "bun run build",
-    "test": "bun run build:shared && vitest run",
+    "test": "vitest run",
     "test:packaged": "node scripts/packaged-cli-e2e.mjs",
     "benchmark": "node scripts/benchmark-cli.mjs",
     "benchmark:collector": "node scripts/benchmark-collector.mjs",
