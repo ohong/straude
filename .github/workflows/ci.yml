@@ -4,6 +4,7 @@ on:
   push:
     branches: [main]
   pull_request:
+  merge_group:
 
 permissions:
   contents: read
@@ -13,15 +14,8 @@ concurrency:
   cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 
 jobs:
-  ci:
-    # The pinned Playwright release provides Chromium for Ubuntu 24.04.
+  web-checks:
     runs-on: ubuntu-24.04
-    needs: cli-package
-    env:
-      NEXT_PUBLIC_POSTHOG_KEY: phc_local_runtime_evidence
-      POSTHOG_API_KEY: phc_local_runtime_evidence
-      POSTHOG_HOST: http://127.0.0.1:3118
-
     steps:
       - uses: actions/checkout@v7
 
@@ -81,14 +75,59 @@ jobs:
           NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY: sb_publishable_placeholder
           SUPABASE_SECRET_KEY: sb_secret_placeholder
 
+  web-runtime:
+    runs-on: ubuntu-24.04
+    needs: cli-package
+    env:
+      NEXT_PUBLIC_POSTHOG_KEY: phc_local_runtime_evidence
+      POSTHOG_API_KEY: phc_local_runtime_evidence
+      POSTHOG_HOST: http://127.0.0.1:3118
+
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: 1.3.3
+
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 22
+
+      - uses: actions/cache@v6
+        with:
+          path: ~/.bun/install/cache
+          key: ${{ runner.os }}-bun-${{ hashFiles('bun.lock') }}
+          restore-keys: |
+            ${{ runner.os }}-bun-
+
+      - name: Install dependencies
+        run: bun install --frozen-lockfile
+        env:
+          BUN_INSTALL_CACHE_DIR: ~/.bun/install/cache
+
       - name: Setup Supabase CLI
         uses: supabase/setup-cli@v3
         with:
           # Match the validated local stack; CLI v3 rejects our [inbucket] config.
           version: 2.75.0
 
-      - name: Start local Supabase stack
-        run: bunx supabase start --workdir .
+      - name: Prepare database, browsers and native CLI runtime
+        shell: bash
+        run: |
+          # Browser journeys need Auth, Mailpit, Storage, Realtime and the API.
+          # Studio, its metadata API, telemetry and the Edge runtime are unused.
+          supabase start --exclude studio,postgres-meta,logflare,vector,edge-runtime &
+          database_pid=$!
+          docker pull node:22-bookworm-slim &
+          image_pid=$!
+          (cd apps/web && bunx playwright install --with-deps chromium webkit) &
+          browsers_pid=$!
+          status=0
+          for pid in "$database_pid" "$image_pid" "$browsers_pid"; do
+            wait "$pid" || status=1
+          done
+          exit "$status"
 
       - name: Configure web for local Supabase
         run: |
@@ -149,15 +188,8 @@ jobs:
         run: bun run test:integration
         working-directory: apps/web
 
-      - name: Install Chromium and WebKit
-        run: bunx playwright install --with-deps chromium webkit
-        working-directory: apps/web
-
       - name: Build CLI for browser boundary tests
         run: bun run --cwd packages/cli build
-
-      - name: Prepare isolated native CLI runtime
-        run: docker pull node:22-bookworm-slim
 
       - name: E2E tests
         run: bun run test:e2e --reporter=html,./e2e/helpers/summary-reporter.ts
@@ -263,3 +295,13 @@ jobs:
           name: straude-cli-evidence-${{ matrix.os }}-node-${{ matrix.node }}
           path: packages/cli/test-results/packaged-cli-e2e.json
           if-no-files-found: warn
+
+  ci:
+    if: always()
+    needs: [web-checks, web-runtime, cli-package-matrix]
+    runs-on: ubuntu-24.04
+    steps:
+      - name: Require every check to pass
+        env:
+          RESULTS: ${{ toJSON(needs) }}
+        run: jq -e 'all(.[]; .result == "success")' <<< "$RESULTS"
