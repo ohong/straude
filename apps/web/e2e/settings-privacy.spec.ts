@@ -236,11 +236,11 @@ test.describe("Settings persistence and privacy with real local Auth", () => {
       await page.getByLabel("Attach files", { exact: true }).setInputFiles({
         name: "notes.txt", mimeType: "text/plain", buffer: bytes,
       });
+      const sent = page.waitForResponse(response => new URL(response.url()).pathname === "/api/messages" && response.request().method() === "POST");
+      await page.getByRole("button", { name: /^Send / }).click();
       const receipt = await uploaded;
       expect(receipt.status()).toBe(200);
       uploadPath = (await receipt.json()).path;
-      const sent = page.waitForResponse(response => new URL(response.url()).pathname === "/api/messages" && response.request().method() === "POST");
-      await page.getByRole("button", { name: /^Send / }).click();
       expect((await sent).status()).toBe(201);
 
       const received = await inbox.newPage();

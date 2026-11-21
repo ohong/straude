@@ -22,7 +22,7 @@ export const test = base.extend<object, { publicBuilder: PublicBuilder }>({
     expect(created.error).toBeNull();
     try {
       const profile = await db.from("users").update({
-        username, timezone: "UTC", is_public: true, onboarding_completed: true, team_url: `https://${teamHost}`,
+        username, display_name: null, timezone: "UTC", is_public: true, onboarding_completed: true, team_url: `https://${teamHost}`,
       }).eq("id", id).select("id").single();
       // A real signup must create the profile that onboarding updates.
       expect(profile.error).toBeNull();

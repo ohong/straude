@@ -1,6 +1,6 @@
 import type { FullConfig, FullResult, Reporter, TestCase, TestResult } from "@playwright/test/reporter";
 import { mkdir, writeFile } from "node:fs/promises";
-import { join } from "node:path";
+import { join, relative } from "node:path";
 
 /** Retain outcomes and skip reasons without trace bodies, credentials or errors. */
 export default class SummaryReporter implements Reporter {
@@ -12,6 +12,10 @@ export default class SummaryReporter implements Reporter {
   }
 
   onTestEnd(test: TestCase, result: TestResult) {
+    if (result.status === "failed" || result.status === "timedOut") {
+      const location = result.error?.location ?? test.location;
+      console.error(`${result.status}: ${relative(process.cwd(), location.file)}:${location.line} (${test.title})`);
+    }
     const entry = this.tests.get(test.id) ?? { test, attempts: [] };
     entry.attempts.push({ status: result.status, retry: result.retry, duration_ms: result.duration });
     this.tests.set(test.id, entry);

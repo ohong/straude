@@ -3,7 +3,7 @@ import { test, expect } from "../helpers/public-builder";
 test("guests see a public builder's identity, follows, contributions and earned badge", async ({ page, publicBuilder }) => {
   const { username } = publicBuilder;
   await page.goto(`/u/${username}`);
-  await expect(page.getByText(`@${username}`, { exact: true })).toBeVisible();
+  await expect(page.getByRole("heading", { name: username, exact: true })).toBeVisible();
   await expect(page.locator(`a[href="/u/${username}/follows?tab=followers"]`)).toBeVisible();
   await expect(page.getByText("Contributions", { exact: true })).toBeVisible();
   await expect(page.getByText("Achievements", { exact: true })).toBeVisible();
