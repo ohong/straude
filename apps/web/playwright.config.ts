@@ -1,4 +1,4 @@
-import { defineConfig } from "@playwright/test";
+import { defineConfig, devices } from "@playwright/test";
 
 const port = process.env.CI ? 3000 : 3099;
 const useDevServer = process.env.PLAYWRIGHT_USE_DEV_SERVER === "1";
@@ -26,6 +26,11 @@ export default defineConfig({
     timeout: useDevServer ? 60_000 : 240_000,
   },
   projects: [
+    {
+      name: "mobile-webkit",
+      use: { ...devices["iPhone 13"], browserName: "webkit" },
+      grep: /@mobile-journey/,
+    },
     {
       name: "chromium",
       use: { browserName: "chromium" },

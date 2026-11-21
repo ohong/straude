@@ -13,6 +13,12 @@ const scriptSrc = [
   "https://va.vercel-scripts.com",
 ].filter(Boolean).join(" ");
 
+// WebKit upgrades loopback asset URLs to HTTPS even when the local server only speaks HTTP.
+const appOrigin = process.env.NEXT_PUBLIC_APP_URL;
+const appUrl = appOrigin && URL.canParse(appOrigin) ? new URL(appOrigin) : null;
+const servesLocalHttp = !process.env.VERCEL && appUrl?.protocol === "http:"
+  && ["localhost", "127.0.0.1", "[::1]"].includes(appUrl.hostname);
+
 const nextConfig: NextConfig = {
   typescript: { tsconfigPath: "tsconfig.check.json" },
   poweredByHeader: false,
@@ -81,7 +87,7 @@ const nextConfig: NextConfig = {
               "frame-ancestors 'none'",
               "base-uri 'self'",
               "form-action 'self'",
-              "upgrade-insecure-requests",
+              ...(servesLocalHttp ? [] : ["upgrade-insecure-requests"]),
             ].join("; "),
           },
           { key: "Cross-Origin-Opener-Policy", value: "same-origin" },

@@ -78,7 +78,7 @@ test.describe("Landing → Signup funnel", () => {
     expect(href === "/signup" || href === "/login").toBeTruthy();
   });
 
-  test("navigating to signup page renders form", async ({ page }) => {
+  test("navigating to signup page renders form", { tag: "@mobile-journey" }, async ({ page }) => {
     await page.goto("/signup");
     await page.waitForLoadState("domcontentloaded");
 
@@ -97,7 +97,7 @@ test.describe("Landing → Signup funnel", () => {
     ).toBeVisible();
   });
 
-  test("signup form validates empty email", async ({ page }) => {
+  test("signup form validates empty email", { tag: "@mobile-journey" }, async ({ page }) => {
     await page.goto("/signup");
     await page.waitForLoadState("domcontentloaded");
 

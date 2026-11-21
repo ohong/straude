@@ -281,9 +281,13 @@ test.describe("first-sync onboarding", () => {
     }
   });
 
-  test("moves from waiting to stored fixture stats and completes onboarding", async ({ page }, testInfo) => {
+  test("confirms synced usage, publishes a title and opens its public permalink", { tag: "@mobile-journey" }, async ({ page, browser }, testInfo) => {
     const user = await createLocalUser(true);
     try {
+      const { data: post, error: postError } = await adminClient()
+        .from("posts").insert({ user_id: user.id, daily_usage_id: user.usage!.id })
+        .select("id").single();
+      expect(postError).toBeNull();
       let statusCalls = 0;
       await page.route("**/api/usage/status", async (route) => {
         statusCalls += 1;
@@ -326,6 +330,25 @@ test.describe("first-sync onboarding", () => {
       expect(profile?.onboarding_completed).toBe(true);
       expect(profile?.heard_about_sources).toEqual(["github"]);
       expect(statusCalls).toBeGreaterThanOrEqual(2);
+
+      await page.getByRole("button", { name: "View synced post" }).click();
+      await page.getByRole("button", { name: "Edit post" }).click();
+      const title = "Shipped a keyboard shortcut";
+      await page.getByPlaceholder(/Refactored the auth flow/).fill(title);
+      await page.getByRole("button", { name: "Save changes" }).click();
+      await expect(page.getByText(title, { exact: true }).first()).toBeVisible();
+      await page.getByRole("button", { name: "Share This Session" }).click();
+      const permalink = new URL(`/post/${post!.id}`, projectBaseUrl(testInfo)).href;
+      await expect(page.getByRole("button", { name: "Copy permalink" })).toHaveText(permalink);
+
+      const guest = await browser.newPage();
+      try {
+        await guest.goto(permalink);
+        await expect(guest.getByText(title, { exact: true }).first()).toBeVisible();
+        await expect(guest.getByRole("button", { name: "Edit post" })).toHaveCount(0);
+      } finally {
+        await guest.close();
+      }
     } finally {
       await deleteLocalUser(user);
     }

@@ -149,8 +149,8 @@ jobs:
         run: bun run test:integration
         working-directory: apps/web
 
-      - name: Install Playwright Chromium
-        run: bunx playwright install --with-deps chromium
+      - name: Install Chromium and WebKit
+        run: bunx playwright install --with-deps chromium webkit
         working-directory: apps/web
 
       - name: Build CLI for browser boundary tests
