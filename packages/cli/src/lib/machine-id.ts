@@ -89,12 +89,6 @@ export function getMachineId(): string {
   }
 }
 
-/** Reset the process cache for isolated tests. */
-export function _resetMachineIdForTests(): void {
-  cachedInstallationId = null;
-  cachedAnalyticsFallback = null;
-}
-
 /**
  * PostHog distinct_id for an event. Falls back to the machine UUID when the
  * user hasn't logged in yet.

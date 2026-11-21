@@ -1,16 +1,6 @@
 import { defineConfig } from "vitest/config";
 import path from "node:path";
 
-/**
- * Separate config for integration tests that exercise the real Supabase
- * stack (Postgres + PostgREST + Storage + GoTrue) booted via
- * `bunx supabase start`. The default `vitest.config.ts` runs the fast
- * mock-based suite; this one opts in via `bun run test:integration`.
- *
- * CI installs the Supabase CLI and runs `bunx supabase start` before
- * invoking this config. Locally, run `bun run local:up` first.
- */
-
 export default defineConfig({
   test: {
     environment: "node",

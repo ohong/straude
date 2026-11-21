@@ -20,12 +20,6 @@ interface RateLimitRpcResult {
   retry_after_seconds: number;
 }
 
-/** Reset all limiter state. Useful in tests. */
-export function resetRateLimiters(): void {
-  // Durable limiter state lives in Supabase. Tests mock the service client
-  // instead of clearing production state.
-}
-
 /**
  * Check rate limit for a user. Returns a 429 NextResponse if the limit
  * is exceeded, or `null` if the request is allowed.

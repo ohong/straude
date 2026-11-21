@@ -89,18 +89,17 @@ A maintainer will review. CI must be green before merge.
 
 The bar is "would this have caught the bug if it had existed before?" — not 100% coverage.
 
-- **Bug fixes** should include a regression test. Vitest unit test in most cases; Playwright e2e if it's a user-visible flow regression.
-- **New behavior** in `apps/web/lib/` or `packages/cli/src/` needs unit tests.
-- **New user-facing flows** (auth, onboarding, posting, leaderboard) should have a Playwright spec under [`apps/web/e2e/`](apps/web/e2e/) when the behavior can reasonably be exercised end-to-end.
+- Extend the closest real user journey when a change exposes a gap. Drive the browser, built CLI, or service through its normal entry point.
+- For behavior that depends on storage, networking, a decoder, or a database migration, exercise that boundary with real fixtures.
 - **UI-only tweaks** (copy, spacing, color) don't need a test — but the pre-push hook still has to pass.
 
 Run tests:
 
 ```bash
-bun --cwd apps/web test                  # unit (vitest + jsdom, mock-based)
+bun --cwd apps/web test                  # runtime (local HTTP transport and native image processing)
 bun --cwd apps/web test:integration      # integration (vitest + real Supabase)
 bun --cwd apps/web test:e2e              # e2e (playwright, chromium)
-bun --cwd packages/cli test              # CLI unit (vitest)
+bun --cwd packages/cli test              # built CLI, native collector, HTTP and disk integration
 ```
 
 Integration tests in `apps/web/__tests__/integration/` exercise the real route handlers against a real local Supabase stack — full migration history, real Postgres, real PostgREST, real CLI JWT signing. Avoid `vi.mock` in this directory; that's the whole point. Start the stack with `bun run local:up` (or `bunx supabase start`) before running them. CI starts it automatically. See `apps/web/__tests__/integration/usage-submit.test.ts` for the pattern.

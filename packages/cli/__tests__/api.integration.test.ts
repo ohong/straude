@@ -48,6 +48,7 @@ interface PlannedResponse {
   body: unknown;
   headers?: Record<string, string>;
   delayMs?: number;
+  disconnect?: boolean;
 }
 
 let server: Server;
@@ -74,6 +75,10 @@ beforeAll(async () => {
       if (!next) {
         res.statusCode = 500;
         res.end(JSON.stringify({ error: "no planned response" }));
+        return;
+      }
+      if (next.disconnect) {
+        req.socket.destroy();
         return;
       }
       const respond = (): void => {
@@ -427,17 +432,12 @@ describe("apiRequest — resilience", () => {
   );
 
   it("retries a transient network error", async () => {
-    const fetch = vi.spyOn(globalThis, "fetch")
-      .mockRejectedValueOnce(new TypeError("connection reset"))
-      .mockResolvedValueOnce(new Response(JSON.stringify({ ok: true }), {
-        status: 200,
-        headers: { "content-type": "application/json" },
-      }));
+    plan.push({ status: 0, body: null, disconnect: true }, { status: 200, body: { ok: true } });
     vi.spyOn(Math, "random").mockReturnValue(0);
 
     await expect(apiRequest(configFor(), "/api/test", { maxRetries: 1 }))
       .resolves.toEqual({ ok: true });
-    expect(fetch).toHaveBeenCalledTimes(2);
+    expect(recorded).toHaveLength(2);
   });
 
   it("does not shorten Retry-After to fit an internal cap", async () => {

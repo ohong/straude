@@ -1343,6 +1343,40 @@ describe("POST /api/usage/submit (real Supabase)", () => {
     }
   });
 
+  it("returns the full CLI dashboard total beyond the PostgREST row cap", async () => {
+    const userId = await insertUser(db, { username: "long_history" });
+    await db.query(
+      `INSERT INTO public.daily_usage (user_id, date, cost_usd, input_tokens, output_tokens, total_tokens)
+       SELECT $1, current_date - i, 1, 0, i, i FROM generate_series(1, 1001) AS i`,
+      [userId],
+    );
+    const { GET } = await import("@/app/api/cli/dashboard/route");
+    const response = await GET(new Request("http://localhost/api/cli/dashboard", {
+      headers: { authorization: `Bearer ${await mintCliToken(userId, "long_history")}` },
+    }));
+    expect(response.status).toBe(200);
+    expect((await response.json()).total_output_tokens).toBe(501_501);
+  });
+
+  it("applies the public API role grants after the full migration chain", async () => {
+    for (const role of ["anon", "authenticated"]) {
+      const result = await db.query(
+        `SELECT has_column_privilege($1::name, 'public.daily_usage', 'output_tokens', 'SELECT') AS visible,
+                has_column_privilege($1::name, 'public.daily_usage', 'collector_meta', 'SELECT') AS collector,
+                has_column_privilege($1::name, 'public.daily_usage', 'raw_hash', 'SELECT') AS fingerprint,
+                has_any_column_privilege($1::name, 'public.users', 'UPDATE') AS edit_profile,
+                has_any_column_privilege($1::name, 'public.posts', 'INSERT') AS insert_post,
+                has_function_privilege($1::name, 'public.admin_top_users(integer)', 'EXECUTE') AS admin_read,
+                has_function_privilege($1::name, 'public.increment_streak_freezes(uuid,integer)', 'EXECUTE') AS award`,
+        [role],
+      );
+      expect(result.rows[0]).toMatchObject({
+        visible: true, collector: false, fingerprint: false, admin_read: false, award: false,
+        ...(role === "authenticated" ? { edit_profile: false, insert_post: false } : {}),
+      });
+    }
+  });
+
   it("rejects unauthenticated requests without writing anything", async () => {
     const before = await db.query("SELECT count(*)::int AS n FROM public.daily_usage");
     const res = await callSubmit(
