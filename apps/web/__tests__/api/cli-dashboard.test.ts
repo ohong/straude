@@ -103,11 +103,11 @@ describe("GET /api/cli/dashboard", () => {
         ],
       }),
     });
-    const lifetimeTokens = chain({
-      eq: vi.fn().mockResolvedValue({
-        data: [{ output_tokens: 12_000_000 }, { output_tokens: 3_000_000 }],
-      }),
-    });
+    mockServiceClient.rpc.mockImplementation((name: string) =>
+      name === "get_user_usage_totals"
+        ? chain({ single: vi.fn().mockResolvedValue({ data: { total_output_tokens: "15000000" } }) })
+        : Promise.resolve({ data: 6, error: null }),
+    );
     const weeklyModelBreakdown = chain({
       not: vi.fn().mockResolvedValue({
         data: [
@@ -133,7 +133,6 @@ describe("GET /api/cli/dashboard", () => {
       .mockReturnValueOnce(profile)
       .mockReturnValueOnce(level)
       .mockReturnValueOnce(daily)
-      .mockReturnValueOnce(lifetimeTokens)
       .mockReturnValueOnce(weeklyModelBreakdown)
       .mockReturnValueOnce(leaderboard);
 
@@ -145,6 +144,7 @@ describe("GET /api/cli/dashboard", () => {
     const json = await response.json();
 
     expect(response.status).toBe(200);
+    expect(json.total_output_tokens).toBe(15_000_000);
     expect(weeklyModelBreakdown.gte).toHaveBeenCalledWith("date", "2026-06-28");
     expect(json.model_breakdown).toEqual([
       { model: "claude-fable-5", cost_usd: 35 },
