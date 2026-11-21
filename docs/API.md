@@ -609,6 +609,16 @@ Weekly signup cohort retention grid (weeks 0–4).
 
 - **Response**: Array of `{ cohort_week, cohort_size, week_0, week_1, week_2, week_3, week_4 }`
 
+#### Week-four deliberate returns
+
+The signup grid above counts days with submitted usage. Scheduled syncs count there. To measure people who return and take an action, run the [week-four returns query](analytics/week-four-returns.sql) in [Straude's PostHog SQL editor](https://us.posthog.com/project/374497/sql). It returns aggregate counts for the most recent 12 UTC Monday cohorts.
+
+The denominator is distinct accounts with a server-side `activation_completed` event carrying the analytics consent marker. Each account enters once, on its first qualifying event. The `unverified_identities` column counts distinct activation IDs without that marker separately. People with no recorded activation are outside the sample.
+
+The fourth week starts exactly 21 days after activation and ends just before day 28. A return requires the same account to open its own `/recap`, save an onboarding build note, save a post with a description, or post a threaded reply on straude.com. Several actions still count as one person. For build notes, only `build_note_saved` with `surface = onboarding` counts. The CLI sends the same event under its separate telemetry controls using a username or machine ID. The report excludes CLI-only notes, blocked telemetry, and activity after browser consent withdrawal. The result is a lower bound on deliberate returns among measured activations.
+
+A cohort closes 35 days after its Monday start so even a Sunday activation gets a full fourth week. Open cohorts, cohorts without consent-tagged activations, and cohorts without any observed return show a blank rate. Missing action telemetry and genuine inactivity look alike. A blank rate cannot establish zero retention.
+
 ### `GET /api/admin/prompts`
 
 List all prompt submissions with status counts.
