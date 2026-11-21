@@ -1,8 +1,47 @@
-import { test, expect } from "@playwright/test";
+import { test as base, expect } from "@playwright/test";
 import { createClient } from "@supabase/supabase-js";
 import { createServerClient } from "@supabase/ssr";
 import sharp from "sharp";
 import { loadWebEnv } from "./perf/env";
+
+type FaviconFormat = "svg" | "png";
+type CachedIcons = Record<FaviconFormat, { domain: string; objectPath: string }>;
+
+const test = base.extend<object, { cachedIcons: CachedIcons }>({
+  cachedIcons: [async ({}, use) => {
+    const env = loadWebEnv();
+    const url = new URL(env.NEXT_PUBLIC_SUPABASE_URL ?? "");
+    if (!["127.0.0.1", "localhost"].includes(url.hostname)) throw new Error("Favicon fixtures require local Supabase");
+    const db = createClient(url.href, env.SUPABASE_SECRET_KEY, { auth: { persistSession: false } });
+    const bucket = db.storage.from("team-favicons");
+    const id = crypto.randomUUID();
+    const icons = {
+      svg: { domain: `svg-${id}.example`, objectPath: `svg-${id}.example.svg` },
+      png: { domain: `png-${id}.example`, objectPath: `png-${id}.example.png` },
+    };
+    const created: string[] = [];
+    try {
+      // Keep both objects until the worker finishes. The local Storage backend
+      // removes empty parent directories when it deletes the last object.
+      for (const format of ["svg", "png"] as const) {
+        const bytes = format === "svg"
+          ? Buffer.from('<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 128 64" width="128" height="64"><rect width="128" height="64" fill="#DF561F"/></svg>')
+          : await sharp({ create: { width: 128, height: 64, channels: 4, background: "#DF561F" } }).png().toBuffer();
+        const { error } = await bucket.upload(icons[format].objectPath, bytes, {
+          contentType: format === "svg" ? "image/svg+xml" : "image/png",
+        });
+        if (error) {
+          console.error("Local favicon upload failed", format, error.name, error.message);
+          throw error;
+        }
+        created.push(icons[format].objectPath);
+      }
+      await use(icons);
+    } finally {
+      if (created.length) expect((await bucket.remove(created)).error).toBeNull();
+    }
+  }, { scope: "worker" }],
+});
 
 test("profile routes reject unauthenticated requests with JSON", async ({ request }) => {
   for (const method of ["GET", "PATCH"]) {
@@ -17,26 +56,21 @@ test("profile routes reject unauthenticated requests with JSON", async ({ reques
   }
 });
 
-for (const format of ["svg", "png"]) {
-  test(`saves and displays a cached rectangular ${format} through settings`, async ({ page, baseURL }, testInfo) => {
+for (const format of ["svg", "png"] as const) {
+  test(`saves and displays a cached rectangular ${format} through settings`, async ({ page, baseURL, cachedIcons }, testInfo) => {
     const env = loadWebEnv();
     const supabaseUrl = new URL(env.NEXT_PUBLIC_SUPABASE_URL ?? "");
     if (!["127.0.0.1", "localhost"].includes(supabaseUrl.hostname)) throw new Error("Team favicon browser tests require local Supabase");
     const db = createClient(supabaseUrl.href, env.SUPABASE_SECRET_KEY, { auth: { persistSession: false, autoRefreshToken: false } });
     const id = crypto.randomUUID();
-    const domain = `favicon-${id}.example`;
-    const objectPath = `${domain}.${format}`;
+    const { domain, objectPath } = cachedIcons[format];
     const email = `favicon-${id}@example.test`;
     const password = crypto.randomUUID();
     const username = `fav_${id.slice(0, 8)}`;
-    const bytes = format === "svg"
-      ? Buffer.from('<svg xmlns="http://www.w3.org/2000/svg" width="128" height="64" viewBox="0 0 128 64"><rect width="128" height="64" fill="#DF561F"/></svg>')
-      : await sharp({ create: { width: 128, height: 64, channels: 4, background: "#DF561F" } }).png().toBuffer();
     let releaseJavaScript = () => {};
     try {
       expect((await db.auth.admin.createUser({ id, email, password, email_confirm: true })).error).toBeNull();
       expect((await db.from("users").upsert({ id, username, timezone: "UTC", onboarding_completed: true, is_public: true })).error).toBeNull();
-      expect((await db.storage.from("team-favicons").upload(objectPath, bytes, { contentType: format === "svg" ? "image/svg+xml" : "image/png" })).error).toBeNull();
       expect((await db.from("team_favicon_cache").upsert({ domain, object_path: objectPath, retry_after: null })).error).toBeNull();
       const jar = new Map<string, string>();
       const member = createServerClient(supabaseUrl.href, env.NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY, {
@@ -94,7 +128,6 @@ for (const format of ["svg", "png"]) {
       await expect(page.getByRole("heading", { name: /leaderboard/i }).first()).toBeVisible();
     } finally {
       releaseJavaScript();
-      await db.storage.from("team-favicons").remove([objectPath]);
       await db.from("team_favicon_cache").delete().eq("domain", domain);
       await db.auth.admin.deleteUser(id);
     }
