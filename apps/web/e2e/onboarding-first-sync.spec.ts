@@ -331,6 +331,29 @@ test.describe("first-sync onboarding", () => {
     }
   });
 
+  test("selects and removes a weekly build highlight across visits", async ({ page }, testInfo) => {
+    const user = await createLocalUser(true);
+    try {
+      const admin = adminClient();
+      const { data: post, error } = await admin.from("posts").upsert({
+        daily_usage_id: user.usage!.id, user_id: user.id, title: "Shipped offline search", usage_generated_title: false,
+      }, { onConflict: "daily_usage_id" }).select("id").single();
+      expect(error).toBeNull();
+      await signInAndSetSsrCookies(page.context(), user, projectBaseUrl(testInfo));
+      await page.goto("/recap");
+      await page.getByLabel("Build of the week").selectOption(post!.id);
+      await expect(page.getByRole("status").filter({ hasText: "Highlight saved." })).toBeVisible();
+      await page.reload();
+      await expect(page.getByLabel("Build of the week")).toHaveValue(post!.id);
+      await expect(page.getByRole("link", { name: "Shipped offline search" })).toHaveAttribute("href", `/post/${post!.id}`);
+      await page.getByLabel("Build of the week").selectOption("");
+      await expect(page.getByRole("status").filter({ hasText: "Highlight removed." })).toBeVisible();
+      await expect(page.getByRole("link", { name: "Shipped offline search" })).toHaveCount(0);
+    } finally {
+      await deleteLocalUser(user);
+    }
+  });
+
   test("shows completion failure and retries setup", async ({ page }, testInfo) => {
     const user = await createLocalUser(true);
     try {

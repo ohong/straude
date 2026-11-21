@@ -1,7 +1,13 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
+import { firstRelation } from "./first-relation";
 import { formatDateKey } from "@/lib/utils/dates";
 
+export interface BuildHighlight { id: string; title: string }
+
 export interface RecapData {
+  highlight?: BuildHighlight;
+  highlight_options?: BuildHighlight[];
+  week_start?: string;
   personal_review?: import("./personal-review").PersonalWeeklyReview | null;
   total_cost: number;
   output_tokens: number;
@@ -37,7 +43,7 @@ function resolveModelName(raw: string): string {
     .replace(/\b\w/g, (c) => c.toUpperCase());
 }
 
-function getPeriodRange(period: "week" | "month"): {
+export function getPeriodRange(period: "week" | "month"): {
   start: string;
   end: string;
   totalDays: number;
@@ -131,14 +137,17 @@ export async function getRecapData(
   username: string,
   isPublic: boolean,
   period: "week" | "month",
-  streakFreezes: number = 0
+  streakFreezes: number = 0,
+  includeHighlightOptions = false
 ): Promise<RecapData> {
   const { start, end, totalDays, label } = getPeriodRange(period);
 
+  const fields = "date, cost_usd, output_tokens, session_count, models";
+  const weeklyFields = `${fields}, posts!posts_daily_usage_id_fkey(id,title,description,images,usage_generated_title,weekly_build_highlights(week_start))`;
   const [{ data: usageRows, error: usageError }, { data: streakData, error: streakError }] = await Promise.all([
     supabase
       .from("daily_usage")
-      .select("date, cost_usd, output_tokens, session_count, models")
+      .select(period === "week" ? weeklyFields : fields)
       .eq("user_id", userId)
       .gte("date", start)
       .lte("date", end)
@@ -150,7 +159,12 @@ export async function getRecapData(
   ]);
 
   if (usageError || streakError) throw new Error("Unable to load recap statistics.");
-  const rows = usageRows ?? [];
+  type RecapDay = { date: string; cost_usd: number; output_tokens: number; session_count: number; models: string[];
+    posts?: { id: string; title: string | null; description: string | null; images: string[]; usage_generated_title: boolean;
+      weekly_build_highlights: { week_start: string } | { week_start: string }[] | null } };
+  const rows = (usageRows ?? []) as unknown as RecapDay[];
+  let highlight: BuildHighlight | undefined;
+  const options: BuildHighlight[] = [];
 
   let totalCost = 0;
   let outputTokens = 0;
@@ -160,6 +174,16 @@ export async function getRecapData(
 
   for (const row of rows) {
     const cost = Number(row.cost_usd);
+    const post = firstRelation(row.posts);
+    if (post) {
+      const title = (!post.usage_generated_title && post.title?.trim()) || post.description?.trim().slice(0, 100)
+        || (post.images?.length ? `Screenshot from ${row.date}` : "");
+      if (title) {
+        const choice = { id: post.id, title };
+        if (includeHighlightOptions) options.push(choice);
+        if (firstRelation(post.weekly_build_highlights)?.week_start === start) highlight = choice;
+      }
+    }
     totalCost += cost;
     outputTokens += Number(row.output_tokens);
     sessionCount += Number(row.session_count);
@@ -180,6 +204,8 @@ export async function getRecapData(
   }
 
   return {
+    ...(period === "week" ? { highlight, week_start: start } : {}),
+    ...(includeHighlightOptions && period === "week" ? { highlight_options: options } : {}),
     total_cost: totalCost,
     output_tokens: outputTokens,
     active_days: rows.length,

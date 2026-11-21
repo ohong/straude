@@ -197,7 +197,7 @@ export function RecapCardImage({
               color: palette.textSubtle,
             }}
           >
-            {data.primary_model && `Powered by ${data.primary_model}`}
+            {data.highlight?.title ?? (data.primary_model && `Powered by ${data.primary_model}`)}
           </div>
 
           {/* Contribution strip */}
@@ -378,7 +378,7 @@ export function RecapCardImage({
             marginTop: 20,
           }}
         >
-          {data.primary_model && `Powered by ${data.primary_model}`}
+          {data.highlight?.title ?? (data.primary_model && `Powered by ${data.primary_model}`)}
         </div>
 
         {/* Contribution strip */}

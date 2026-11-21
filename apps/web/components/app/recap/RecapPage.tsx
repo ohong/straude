@@ -2,6 +2,7 @@
 
 import { useState, useEffect, useCallback, useRef } from "react";
 import { Link2, Download, Check } from "lucide-react";
+import { HighlightPicker } from "./HighlightPicker";
 import { RecapCard } from "@/components/app/recap/RecapCard";
 import type { PersonalWeeklyReview } from "@/lib/utils/personal-review";
 import type { RecapData } from "@/lib/utils/recap";
@@ -242,6 +243,8 @@ export function RecapPage({
         ) : data ? (
           <>
             {period === "week" && <PersonalWeekReview review={data.personal_review} />}
+            {period === "week" && data.week_start && <HighlightPicker week={data.week_start} options={data.highlight_options ?? []} selected={data.highlight}
+              onSave={highlight => setData(current => current && current.period === "week" ? { ...current, highlight } : current)} />}
             <RecapCard data={data} backgroundId={backgroundId} />
 
             <div className="mt-4 flex gap-3">

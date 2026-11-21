@@ -31,6 +31,7 @@ export default async function RecapRoutePage() {
     Boolean(profile.username && profile.is_public),
     "week",
     profile.streak_freezes ?? 0,
+    true,
   ).catch(() => null);
 
   if (initialData) initialData.personal_review = await loadPersonalWeeklyReview(getServiceClient(), identity.id);
