@@ -75,6 +75,8 @@ export default async function ProfilePage({
   const db = getServiceClient();
 
   if (!canView) {
+    const pending = authUserId && await db.from("follow_requests")
+      .select("id").eq("follower_id", authUserId).eq("following_id", profile.id).maybeSingle();
     return (
       <>
         <header className="sticky top-0 z-10 flex h-14 items-center border-b border-border bg-background px-4 sm:px-6">
@@ -89,7 +91,7 @@ export default async function ProfilePage({
                   {profile.display_name ?? profile.username}
                 </h1>
                 {authUserId && (
-                  <FollowButton username={username} initialFollowing={isFollowing} />
+                  <FollowButton username={username} initialFollowing={false} privateProfile initialRequested={Boolean(pending && pending.data)} />
                 )}
               </div>
               {profile.display_name && (
@@ -101,7 +103,7 @@ export default async function ProfilePage({
         <div className="flex flex-col items-center gap-2 px-4 py-16 text-center">
           <Lock size={32} className="text-muted" />
           <p className="text-sm font-medium">This profile is private</p>
-          <p className="text-sm text-muted">Follow @{username} to see their activity.</p>
+          <p className="text-sm text-muted">Ask @{username} to approve your follow request.</p>
         </div>
       </>
     );
@@ -249,6 +251,7 @@ export default async function ProfilePage({
                     <FollowButton
                       username={username}
                       initialFollowing={isFollowing}
+                      privateProfile={!profile.is_public}
                     />
                     <Link
                       href={`/messages?with=${encodeURIComponent(username)}`}

@@ -4,6 +4,7 @@ import Link from "next/link";
 import { useState, useEffect, useCallback, useRef } from "react";
 import { Avatar } from "@/components/ui/Avatar";
 import { cn } from "@/lib/utils/cn";
+import { FollowRequest } from "./FollowRequest";
 import { timeAgo, notificationMessage, notificationHref } from "@/lib/utils/notifications";
 import type { Notification } from "@/types";
 
@@ -202,7 +203,11 @@ export function NotificationsList() {
         </p>
       ) : (
         <div>
-          {notifications.map((n) => (
+          {notifications.map((n) => n.type === "follow_request" && n.follow_request_id ? (
+            <FollowRequest key={n.id} id={n.follow_request_id}
+              name={n.actor?.username ? `@${n.actor.username}` : "A Straude user"}
+              onDecision={() => void fetchNotifications(0, typeFilter, true)} />
+          ) : (
             <Link
               key={n.id}
               href={notificationHref(n)}

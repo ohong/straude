@@ -2,7 +2,7 @@
 
 import { useSearchParams, useRouter } from "next/navigation";
 import { useState, useEffect, Suspense } from "react";
-import { createClient } from "@/lib/supabase/client";
+import { UsageAudience } from "@/components/app/onboarding/UsageAudience";
 import { Button } from "@/components/ui/Button";
 
 // metadata must be in a server component; for this client page, we use a
@@ -22,16 +22,34 @@ function VerifyContent() {
   const [state, setState] = useState<"idle" | "loading" | "success" | "error" | "unauthenticated">("idle");
   const [errorMsg, setErrorMsg] = useState("");
 
-  // Check auth on mount — redirect early if not logged in
+  const [isPublic, setPublic] = useState<boolean | null>(null);
+  const [savingAudience, setSavingAudience] = useState(false);
+  const [retry, setRetry] = useState(0);
   useEffect(() => {
     if (!code || !verifySecret) return;
-    const supabase = createClient();
-    supabase.auth.getUser().then(({ data: { user } }) => {
-      if (!user) {
-        setState("unauthenticated");
+    const controller = new AbortController();
+    async function loadAudience() {
+      try {
+        const res = await fetch("/api/users/me", { signal: controller.signal });
+        if (res.status === 401) {
+          setState("unauthenticated");
+          return;
+        }
+        if (!res.ok) throw new Error("Profile unavailable");
+        const profile = await res.json();
+        if (typeof profile.is_public !== "boolean") throw new Error("Audience unavailable");
+        setPublic(profile.is_public);
+        setState("idle");
+      } catch {
+        if (!controller.signal.aborted) {
+          setErrorMsg("Could not load your profile audience.");
+          setState("error");
+        }
       }
-    });
-  }, [code, verifySecret]);
+    }
+    void loadAudience();
+    return () => controller.abort();
+  }, [code, verifySecret, retry]);
 
   if (!code || !verifySecret) {
     return (
@@ -46,14 +64,6 @@ function VerifyContent() {
     setErrorMsg("");
 
     try {
-      const supabase = createClient();
-      const { data: { user }, error: authError } = await supabase.auth.getUser();
-
-      if (authError || !user) {
-        router.push(`/login?next=${encodeURIComponent(verifyPath)}`);
-        return;
-      }
-
       const verifyRes = await fetch("/api/auth/cli/verify", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -111,9 +121,13 @@ function VerifyContent() {
             {state === "error" && (
               <p className="text-error text-sm">{errorMsg}</p>
             )}
+            {isPublic !== null && <UsageAudience initialPublic={isPublic} onSaving={setSavingAudience} />}
+            {state === "error" && isPublic === null && (
+              <Button onClick={() => setRetry((n) => n + 1)}>Retry loading audience</Button>
+            )}
             <Button
               onClick={handleAuthorize}
-              disabled={state === "loading"}
+              disabled={state === "loading" || savingAudience || isPublic === null}
               className="w-full"
             >
               {state === "loading" ? "Authorizing..." : "Authorize CLI"}

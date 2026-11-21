@@ -252,6 +252,33 @@ test.describe("Settings persistence and privacy with real local Auth", () => {
       await expect(publicPage.getByText("This profile is private", { exact: true })).toBeVisible();
       await expect(publicPage.getByText("Only authorized readers see this fixture biography", { exact: true })).toHaveCount(0);
       await expect(publicPage.getByRole("link", { name: "Edit Profile", exact: true })).toHaveCount(0);
+      const visitor = await outsider.newPage();
+      await visitor.goto(`/u/${owner.username}`);
+      await visitor.getByRole("button", { name: "Request to follow" }).click();
+      await expect(visitor.getByRole("button", { name: "Cancel request" })).toBeEnabled();
+      await visitor.reload();
+      await expect(visitor.getByRole("button", { name: "Cancel request" })).toBeVisible();
+      expect((await outsider.request.get(surfaces[0])).status()).toBe(403);
+      const requests = await page.context().newPage();
+      await requests.goto("/notifications");
+      await expect(requests.getByText(`@${other.username} requests to follow you.`)).toBeVisible();
+      await requests.getByRole("button", { name: "Decline", exact: true }).click();
+      await expect(requests.getByText(`@${other.username} requests to follow you.`)).toHaveCount(0);
+      await visitor.reload();
+      await visitor.getByRole("button", { name: "Request to follow" }).click();
+      await expect(visitor.getByRole("button", { name: "Cancel request" })).toBeEnabled();
+      await requests.reload();
+      await requests.getByRole("button", { name: "Approve", exact: true }).click();
+      await expect(requests.getByText(`@${other.username} requests to follow you.`)).toHaveCount(0);
+      for (const surface of surfaces) expect((await outsider.request.get(surface)).status()).toBe(200);
+      await visitor.reload();
+      await expect(visitor.getByText("Only authorized readers see this fixture biography", { exact: true })).toBeVisible();
+      await requests.goto(`/u/${owner.username}/follows?tab=followers`);
+      await requests.getByRole("button", { name: `Remove ${other.username}` }).click();
+      await expect(requests.getByRole("button", { name: `Remove ${other.username}` })).toHaveCount(0);
+      await visitor.reload();
+      await expect(visitor.getByRole("button", { name: "Request to follow", exact: true })).toBeEnabled();
+      expect((await outsider.request.get(surfaces[0])).status()).toBe(403);
       const targeted = await outsider.request.patch(`/api/users/me?id=${owner.id}`, {
         data: { id: owner.id, user_id: owner.id, display_name: "Other account update" },
       });

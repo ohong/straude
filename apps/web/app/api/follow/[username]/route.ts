@@ -1,12 +1,11 @@
 import { NextResponse, type NextRequest } from "next/server";
-import { after } from "@/lib/utils/after";
 import { createClient } from "@/lib/supabase/server";
 import { getServiceClient } from "@/lib/supabase/service";
 import { rateLimit } from "@/lib/rate-limit";
 
 type RouteContext = { params: Promise<{ username: string }> };
 
-export async function POST(_request: NextRequest, context: RouteContext) {
+async function changeFollow(context: RouteContext, action: "follow" | "unfollow") {
   const { username } = await context.params;
   const supabase = await createClient();
   const {
@@ -17,8 +16,10 @@ export async function POST(_request: NextRequest, context: RouteContext) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
 
-  const limited = await rateLimit("social", user.id, { limit: 30 });
-  if (limited) return limited;
+  if (action === "follow") {
+    const limited = await rateLimit("social", user.id, { limit: 30 });
+    if (limited) return limited;
+  }
 
   const { data: target } = await supabase
     .from("users")
@@ -37,58 +38,17 @@ export async function POST(_request: NextRequest, context: RouteContext) {
     );
   }
 
-  const db = getServiceClient();
-  const { error } = await db.from("follows").insert({
-    follower_id: user.id,
-    following_id: target.id,
+  const { data, error } = await getServiceClient().rpc("change_follow", {
+    p_actor: user.id, p_target: target.id, p_action: action,
   });
-
-  if (error) {
-    // Unique constraint → already following
-    if (error.code === "23505") {
-      return NextResponse.json({ following: true });
-    }
-    return NextResponse.json({ error: error.message }, { status: 500 });
-  }
-
-  // Insert follow notification after the response is sent
-  after(async () => {
-    await db.from("notifications").insert({
-      user_id: target.id,
-      actor_id: user.id,
-      type: "follow",
-    });
-  });
-
-  return NextResponse.json({ following: true });
+  if (error) return NextResponse.json({ error: "Could not update follow status" }, { status: 500 });
+  return NextResponse.json({ following: data === "following", requested: data === "requested" });
 }
 
-export async function DELETE(_request: NextRequest, context: RouteContext) {
-  const { username } = await context.params;
-  const supabase = await createClient();
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
+export function POST(_request: NextRequest, context: RouteContext) {
+  return changeFollow(context, "follow");
+}
 
-  if (!user) {
-    return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
-  }
-
-  const { data: target } = await supabase
-    .from("users")
-    .select("id")
-    .eq("username", username)
-    .single();
-
-  if (!target) {
-    return NextResponse.json({ error: "User not found" }, { status: 404 });
-  }
-
-  await getServiceClient()
-    .from("follows")
-    .delete()
-    .eq("follower_id", user.id)
-    .eq("following_id", target.id);
-
-  return NextResponse.json({ following: false });
+export function DELETE(_request: NextRequest, context: RouteContext) {
+  return changeFollow(context, "unfollow");
 }

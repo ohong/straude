@@ -478,8 +478,7 @@ async function autoFollowTopUsers(userId: string) {
 
   if (!topUsers?.length) return;
 
-  await db.from("follows").upsert(
-    topUsers.map((u) => ({ follower_id: userId, following_id: u.user_id })),
-    { onConflict: "follower_id,following_id", ignoreDuplicates: true },
-  );
+  await Promise.all(topUsers.map((u) => db.rpc("change_follow", {
+    p_actor: userId, p_target: u.user_id, p_action: "suggested",
+  })));
 }

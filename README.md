@@ -95,7 +95,7 @@ No. The data pipeline is: local JSONL logs → ccusage (local aggregation) → d
 
 ### Is my profile public by default?
 
-No. You choose your visibility during onboarding. Private profiles are only visible to approved followers. You can switch between public and private at any time in settings.
+New profiles start private. Choose your audience during onboarding or CLI authorization. You can change it later in Settings. Existing followers keep access when you go private. Review new follow requests in Notifications. Remove a follower from the Followers list on your profile.
 
 ## Hackathon
 

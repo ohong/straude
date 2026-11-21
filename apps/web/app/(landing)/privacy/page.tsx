@@ -18,7 +18,7 @@ export default function PrivacyPage() {
             Privacy Policy
           </h1>
           <p className="mt-2 text-sm text-muted">
-            Last updated: June 2, 2026
+            Last updated: November 21, 2026
           </p>
 
           <div className="mt-10 space-y-8 text-[0.9375rem] leading-relaxed text-foreground/80">
@@ -105,10 +105,10 @@ export default function PrivacyPage() {
                 3. Data Visibility
               </h2>
               <p className="mt-2">
-                Your profile and posts are public by default. You can set your
-                profile to private in Settings, which hides your posts from the
-                feed and removes you from leaderboards. Followers can still see
-                your activity.
+                New profiles start private. During setup or in Settings, you can make your
+                profile and synced posts public and join the leaderboards. Private activity
+                is visible to you and your existing followers. New followers must request
+                access. Review requests in Notifications.
               </p>
             </section>
 
