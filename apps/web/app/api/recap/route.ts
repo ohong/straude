@@ -36,7 +36,9 @@ export async function GET(request: NextRequest) {
     user.id,
     profile.username ?? "Your account",
     Boolean(profile.username && profile.is_public),
-    period
+    period,
+    undefined,
+    true
   );
 
   if (period === "week") {

@@ -99,7 +99,10 @@ export default async function PublicRecapPage({
             </p>
           </div>
 
-          {/* Hero stat */}
+          {data.highlight && <p className="mt-6 break-words text-xl font-semibold" style={{ color: palette.text }}>
+          <Link href={`/post/${data.highlight.id}`}>{data.highlight.title}</Link>
+        </p>}
+        {/* Hero stat */}
           <div className="mt-8">
             <p
               className="font-[family-name:var(--font-mono)] text-5xl font-bold tabular-nums text-accent"

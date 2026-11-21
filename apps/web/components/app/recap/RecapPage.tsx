@@ -2,6 +2,7 @@
 
 import { Suspense, use, useState, useEffect, useCallback, useRef } from "react";
 import { Link2, Download, Check } from "lucide-react";
+import { HighlightPicker } from "./HighlightPicker";
 import { RecapCard } from "@/components/app/recap/RecapCard";
 import type { PersonalWeeklyReview } from "@/lib/utils/personal-review";
 import type { RecapData } from "@/lib/utils/recap";
@@ -78,6 +79,8 @@ export function RecapPage({
 }) {
   const [period, setPeriod] = useState<"week" | "month">("week");
   const [data, setData] = useState<RecapData | null>(initialData);
+  const [selection, setSelection] = useState<{ data: RecapData; highlight: RecapData["highlight"] }>();
+  const card = data && selection?.data === data ? { ...data, highlight: selection.highlight } : data;
   const [error, setError] = useState<string | null>(initialError);
   const [loading, setLoading] = useState(false);
   const initialRender = useRef(true);
@@ -247,7 +250,9 @@ export function RecapPage({
           <p className="text-sm text-muted">{error} <button className="underline" onClick={() => setAttempt(n => n + 1)}>Retry</button></p>
         ) : data ? (
           <>
-            <RecapCard data={data} backgroundId={backgroundId} />
+            {period === "week" && data.week_start && <HighlightPicker week={data.week_start} options={data.highlight_options ?? []} selected={card?.highlight}
+              onSave={highlight => setSelection({ data, highlight })} />}
+            <RecapCard data={card ?? data} backgroundId={backgroundId} />
 
             <div className="mt-4 flex gap-3">
               <button
