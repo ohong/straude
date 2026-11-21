@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect, useCallback, useRef } from "react";
+import { Suspense, use, useState, useEffect, useCallback, useRef } from "react";
 import { Link2, Download, Check } from "lucide-react";
 import { HighlightPicker } from "./HighlightPicker";
 import { RecapCard } from "@/components/app/recap/RecapCard";
@@ -64,15 +64,23 @@ function PersonalWeekReview({ review }: { review: PersonalWeeklyReview | null | 
   );
 }
 
+function StreamingWeekReview({ review }: { review: Promise<PersonalWeeklyReview | null> }) {
+  return <PersonalWeekReview review={use(review)} />;
+}
+
 export function RecapPage({
+  initialReview,
   initialData,
   initialError = null,
 }: {
+  initialReview?: Promise<PersonalWeeklyReview | null>;
   initialData: RecapData | null;
   initialError?: string | null;
 }) {
   const [period, setPeriod] = useState<"week" | "month">("week");
   const [data, setData] = useState<RecapData | null>(initialData);
+  const [selection, setSelection] = useState<{ data: RecapData; highlight: RecapData["highlight"] }>();
+  const card = data && selection?.data === data ? { ...data, highlight: selection.highlight } : data;
   const [error, setError] = useState<string | null>(initialError);
   const [loading, setLoading] = useState(false);
   const initialRender = useRef(true);
@@ -242,10 +250,9 @@ export function RecapPage({
           <p className="text-sm text-muted">{error} <button className="underline" onClick={() => setAttempt(n => n + 1)}>Retry</button></p>
         ) : data ? (
           <>
-            {period === "week" && <PersonalWeekReview review={data.personal_review} />}
-            {period === "week" && data.week_start && <HighlightPicker week={data.week_start} options={data.highlight_options ?? []} selected={data.highlight}
-              onSave={highlight => setData(current => current && current.period === "week" ? { ...current, highlight } : current)} />}
-            <RecapCard data={data} backgroundId={backgroundId} />
+            {period === "week" && data.week_start && <HighlightPicker week={data.week_start} options={data.highlight_options ?? []} selected={card?.highlight}
+              onSave={highlight => setSelection({ data, highlight })} />}
+            <RecapCard data={card ?? data} backgroundId={backgroundId} />
 
             <div className="mt-4 flex gap-3">
               <button
@@ -301,6 +308,15 @@ export function RecapPage({
                 </a>
                 .
               </p>
+            )}
+            {period === "week" && (
+              <div className="mt-6">
+                {initialReview && data === initialData ? (
+                  <Suspense fallback={<p role="status">Loading weekly comparison…</p>}>
+                    <StreamingWeekReview review={initialReview} />
+                  </Suspense>
+                ) : <PersonalWeekReview review={data.personal_review} />}
+              </div>
             )}
           </>
         ) : (
