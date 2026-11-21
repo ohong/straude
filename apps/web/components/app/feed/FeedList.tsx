@@ -81,8 +81,10 @@ export function FeedList({
   const [sentinel, setSentinel] = useState<HTMLDivElement | null>(null);
   const activeRequestRef = useRef<AbortController | null>(null);
 
-  cursorRef.current = cursor;
-  feedTypeRef.current = feedType;
+  useEffect(() => {
+    cursorRef.current = cursor;
+    feedTypeRef.current = feedType;
+  }, [cursor, feedType]);
 
   // Restore scroll position on mount
   useEffect(() => {

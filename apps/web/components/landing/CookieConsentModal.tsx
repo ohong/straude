@@ -1,6 +1,7 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useHydrated } from "@/lib/utils/useHydrated";
+import { useState } from "react";
 import Link from "next/link";
 import { Dialog } from "@base-ui-components/react/dialog";
 import { ShieldCheck } from "lucide-react";
@@ -12,15 +13,10 @@ import {
 } from "@/lib/cookie-consent";
 
 export function CookieConsentModal() {
-  const [checked, setChecked] = useState(false);
-  const [open, setOpen] = useState(false);
+  const hydrated = useHydrated();
+  const [saved, setSaved] = useState(false);
   const [saving, setSaving] = useState<CookieConsentPreference | null>(null);
   const [error, setError] = useState<string | null>(null);
-
-  useEffect(() => {
-    setOpen(getCookieConsentFromCookieString(document.cookie) === null);
-    setChecked(true);
-  }, []);
 
   async function savePreference(preference: CookieConsentPreference) {
     setSaving(preference);
@@ -45,7 +41,7 @@ export function CookieConsentModal() {
           },
         }),
       );
-      setOpen(false);
+      setSaved(true);
     } catch {
       setError("Could not save your preference. Please try again.");
     } finally {
@@ -53,7 +49,7 @@ export function CookieConsentModal() {
     }
   }
 
-  if (!checked || !open) return null;
+  if (!hydrated || saved || getCookieConsentFromCookieString(document.cookie)) return null;
 
   return (
     <Dialog.Root open modal={false}>

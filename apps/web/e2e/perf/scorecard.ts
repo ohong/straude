@@ -102,7 +102,9 @@ export function writeScorecard(
     sample: { runs: RUNS, warmRuns: RUNS - 1, discardedRuns: 1 },
     gate,
     rightSidebarMs,
-    pages: results.map(({ runs: _runs, ...result }) => result),
+    pages: results.map(({ path, ttfb, fcp, lcp, serverTiming, layoutTiming, pass }) => ({
+      path, ttfb, fcp, lcp, serverTiming, layoutTiming, pass,
+    })),
   };
   writeFileSync(
     path.join(RESULTS_DIR, "scorecard.json"),

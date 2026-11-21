@@ -1,7 +1,8 @@
 "use client";
 
+import { useHydrated } from "@/lib/utils/useHydrated";
 import Image from "next/image";
-import { useEffect, useMemo, useState } from "react";
+import { useMemo, useState } from "react";
 import { Check, Copy, Download, ImageIcon } from "lucide-react";
 import { buildProfileIntentUrl } from "@/lib/utils/profile-share";
 
@@ -26,8 +27,9 @@ export function ProfileSharePanel({
   const [busy, setBusy] = useState<"share-x" | "copy-image" | "download" | null>(null);
   const [copied, setCopied] = useState<"image" | "link" | null>(null);
   const [feedback, setFeedback] = useState<string | null>(null);
-  const [publicUrl, setPublicUrl] = useState("");
-  const [supportsClipboardImage, setSupportsClipboardImage] = useState(false);
+  const hydrated = useHydrated();
+  const publicUrl = shareUrlOverride ?? (hydrated ? new URL(`/stats/${username}`, window.location.origin).href : "");
+  const supportsClipboardImage = hydrated && typeof ClipboardItem !== "undefined" && typeof navigator.clipboard?.write === "function";
   const vParam = cacheVersion ? `?v=${cacheVersion}` : "";
   const imageUrl = useMemo(
     () => imageUrlOverride ?? `/api/stats/${username}/image${vParam}`,
@@ -37,17 +39,6 @@ export function ProfileSharePanel({
     () => downloadUrlOverride ?? `/api/stats/${username}/image?download=1${cacheVersion ? `&v=${cacheVersion}` : ""}`,
     [downloadUrlOverride, username, cacheVersion]
   );
-
-  useEffect(() => {
-    setPublicUrl(
-      shareUrlOverride ??
-        new URL(`/stats/${username}`, window.location.origin).toString()
-    );
-    setSupportsClipboardImage(
-      typeof ClipboardItem !== "undefined" &&
-        typeof navigator.clipboard?.write === "function"
-    );
-  }, [shareUrlOverride, username]);
 
   async function shareOnX() {
     if (!isPublic) return;

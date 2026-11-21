@@ -31,14 +31,12 @@ export function NotificationsList() {
   const notificationsLengthRef = useRef(0);
 
   const fetchNotifications = useCallback(
-    async (offset: number, type: string | null, replace: boolean) => {
+    (offset: number, type: string | null, replace: boolean) => {
       if (loadingRef.current && !replace) return;
       activeRequest.current?.abort();
       const controller = new AbortController();
       activeRequest.current = controller;
       loadingRef.current = true;
-      if (replace) setLoading(true);
-      if (replace) setError(null);
 
       const params = new URLSearchParams({
         limit: String(PAGE_SIZE),
@@ -46,8 +44,7 @@ export function NotificationsList() {
       });
       if (type) params.set("type", type);
 
-      try {
-        const res = await fetch(`/api/notifications?${params}`, { signal: controller.signal });
+      return fetch(`/api/notifications?${params}`, { signal: controller.signal }).then(async res => {
         if (!res.ok) {
           const payload = await res
             .json()
@@ -72,29 +69,36 @@ export function NotificationsList() {
         setUnreadCount(data.unread_count ?? 0);
         setHasMore(fetched.length >= PAGE_SIZE);
         setError(null);
-      } catch {
+      }).catch(() => {
         if (controller.signal.aborted) return;
         if (!replace) {
           setHasMore(false);
         }
         setError("Failed to load notifications.");
-      } finally {
+      }).finally(() => {
         if (!controller.signal.aborted) {
           setLoading(false);
           loadingRef.current = false;
         }
-      }
+      });
     },
     [],
   );
 
-  // Initial load and filter change
   useEffect(() => {
+    void fetchNotifications(0, null, true);
+    return () => activeRequest.current?.abort();
+  }, [fetchNotifications]);
+
+  function selectFilter(type: string | null) {
+    if (type === typeFilter) return;
+    setTypeFilter(type);
     setNotifications([]);
     setHasMore(true);
-    fetchNotifications(0, typeFilter, true);
-    return () => activeRequest.current?.abort();
-  }, [typeFilter, fetchNotifications]);
+    setLoading(true);
+    setError(null);
+    void fetchNotifications(0, type, true);
+  }
 
   // Keep length ref in sync so the observer can read it without being in deps
   useEffect(() => {
@@ -152,7 +156,7 @@ export function NotificationsList() {
             <button
               key={label}
               type="button"
-              onClick={() => setTypeFilter(value)}
+              onClick={() => selectFilter(value)}
               className={cn(
                 "shrink-0 border-b-2 border-transparent px-4 py-3 text-sm font-semibold text-muted sm:px-5",
                 typeFilter === value && "border-b-accent text-accent",
