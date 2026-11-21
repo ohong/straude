@@ -29,7 +29,7 @@ export const metadata: Metadata = {
     template: "%s | Straude",
   },
   description:
-    "Strava for Claude Code. Track your AI-assisted coding sessions, share your wins, and compete on the leaderboard.",
+    "Log daily usage from Claude Code, Codex, and other coding tools. Track tokens, estimated API cost, and streaks.",
   alternates: {
     canonical: "/",
   },
@@ -38,7 +38,7 @@ export const metadata: Metadata = {
     siteName: "Straude",
     title: "Straude — Code like an athlete.",
     description:
-      "Track your Claude Code spend. Compete with friends. Share your breakthrough sessions.",
+      "Log daily usage from Claude Code, Codex, and other coding tools. Track tokens, estimated API cost, and streaks.",
     locale: "en_US",
     url: "https://straude.com",
     images: [
@@ -46,7 +46,7 @@ export const metadata: Metadata = {
         url: "/og-image.png?v=2",
         width: 1200,
         height: 630,
-        alt: "Straude — Code like an athlete. Track your Claude Code spend, compete with friends, share your breakthrough sessions.",
+        alt: "Straude — Code like an athlete. Daily coding activity, estimated cost, and streaks.",
         type: "image/png",
       },
     ],
@@ -55,13 +55,13 @@ export const metadata: Metadata = {
     card: "summary_large_image",
     title: "Straude — Code like an athlete.",
     description:
-      "Track your Claude Code spend. Compete with friends. Share your breakthrough sessions.",
+      "Log daily usage from Claude Code, Codex, and other coding tools. Track tokens, estimated API cost, and streaks.",
     images: [
       {
         url: "/og-image.png?v=2",
         width: 1200,
         height: 630,
-        alt: "Straude — Code like an athlete. Track your Claude Code spend, compete with friends, share your breakthrough sessions.",
+        alt: "Straude — Code like an athlete. Daily coding activity, estimated cost, and streaks.",
       },
     ],
   },

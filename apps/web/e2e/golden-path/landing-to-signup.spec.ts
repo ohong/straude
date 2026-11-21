@@ -9,7 +9,7 @@ test.describe("Landing → Signup funnel", () => {
     await expect(page.locator("h1")).toContainText("Code like");
 
     // Comment label
-    await expect(page.getByText("// STRAVA FOR CLAUDE CODE")).toBeVisible();
+    await expect(page.getByText("// YOUR CODING LOG")).toBeVisible();
 
     // Features grid — target headings specifically to avoid substring matches
     await expect(
@@ -37,7 +37,7 @@ test.describe("Landing → Signup funnel", () => {
     await expect(heading).toContainText("athlete");
 
     await expect(
-      page.getByText("One command to log your Claude Code usage")
+      page.getByText("Log daily usage from Claude Code, Codex, and 16 other coding tools.")
     ).toBeVisible();
   });
 

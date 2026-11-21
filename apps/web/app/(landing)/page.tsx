@@ -21,7 +21,7 @@ export const revalidate = 3600; // keep snapshot age visible within an hour
 export const metadata: Metadata = {
   title: "Straude — Code like an athlete.",
   description:
-    "One command to log your Claude Code output. Track your spend, compare your pace, keep the streak alive.",
+    "Log daily usage from Claude Code, Codex, and other coding tools. Track tokens, estimated API cost, and streaks.",
 };
 
 const TICKER_FALLBACK = [
@@ -94,7 +94,7 @@ export default function LandingPage() {
               operatingSystem: "macOS, Linux, Windows",
               url: "https://straude.com",
               description:
-                "One command to log your Claude Code output. Track your spend, compare your pace, keep the streak alive.",
+                "Log daily usage from Claude Code, Codex, and other coding tools. Track tokens, estimated API cost, and streaks.",
               offers: {
                 "@type": "Offer",
                 price: "0",
