@@ -26,19 +26,26 @@ export default class SummaryReporter implements Reporter {
       annotations: test.annotations.filter(({ type }) => type === "skip" || type === "fixme"),
       attempts,
     }));
+    const skipped = tests.filter(test => test.outcome === "skipped").length;
+    const status: FullResult["status"] = process.env.CI && skipped > 0 && result.status === "passed"
+      ? "failed" : result.status;
+    if (status !== result.status) {
+      console.error(`CI skipped ${skipped} browser test(s). See runtime-summary.evidence.json for the reasons.`);
+    }
     await mkdir(this.outputDir, { recursive: true });
     await writeFile(join(this.outputDir, "runtime-summary.evidence.json"), JSON.stringify({
       source_commit: process.env.GITHUB_SHA ?? null,
       node: process.version,
-      status: result.status,
+      status,
       duration_ms: result.duration,
       counts: {
         passed: tests.filter(test => test.outcome === "expected").length,
         failed: tests.filter(test => test.outcome === "unexpected").length,
-        skipped: tests.filter(test => test.outcome === "skipped").length,
+        skipped,
         flaky: tests.filter(test => test.outcome === "flaky").length,
       },
       tests,
     }, null, 2) + "\n", { mode: 0o600 });
+    return { status };
   }
 }
