@@ -12,6 +12,7 @@ import { cn } from "@/lib/utils/cn";
 import { useClipboardFeedback } from "@/lib/utils/useClipboardFeedback";
 import type { Post } from "@/types";
 
+const FEED_LOAD_ERROR = "Couldn’t load feed. Please try again.";
 const SYNC_COMMAND = "npx straude@latest";
 
 function SyncCommandHint() {
@@ -56,7 +57,7 @@ export function FeedList({
   pendingPosts = [],
   profileUserId,
 }: {
-  initialPosts: Post[];
+  initialPosts: Post[] | null;
   initialNextCursor?: string | null;
   userId: string | null;
   feedType?: FeedType;
@@ -69,11 +70,11 @@ export function FeedList({
   const [feedType, setFeedType] = useState<FeedType>(initialFeedType);
   const [dropdownOpen, setDropdownOpen] = useState(false);
   const dropdownRef = useRef<HTMLDivElement>(null);
-  const [posts, setPosts] = useState<Post[]>(initialPosts);
+  const [posts, setPosts] = useState<Post[]>(initialPosts ?? []);
   const [pending, setPending] = useState<Post[]>(pendingPosts);
   const [cursor, setCursor] = useState<string | null>(initialNextCursor ?? null);
   const [loading, setLoading] = useState(false);
-  const [error, setError] = useState<string | null>(null);
+  const [error, setError] = useState<string | null>(initialPosts === null ? FEED_LOAD_ERROR : null);
   const [switching, setSwitching] = useState(false);
   const cursorRef = useRef(cursor);
   const loadingRef = useRef(false);
@@ -194,7 +195,7 @@ export function FeedList({
 
       // Update URL without full page reload
       const url = newType === "global" ? "/feed" : `/feed?tab=${newType}`;
-      router.replace(url);
+      if (!retry) router.replace(url);
 
       try {
         const res = await fetch(`/api/feed?type=${newType}&limit=20`, {
@@ -210,7 +211,7 @@ export function FeedList({
         setPending(data.pending_posts ?? []);
       } catch (err) {
         if (err instanceof DOMException && err.name === "AbortError") return;
-        setError("Couldn\u2019t load feed. Please try again.");
+        setError(FEED_LOAD_ERROR);
       } finally {
         if (activeRequestRef.current === controller) {
           activeRequestRef.current = null;
