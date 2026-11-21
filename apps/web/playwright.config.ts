@@ -1,7 +1,7 @@
 import { defineConfig, devices } from "@playwright/test";
 
 const port = process.env.CI ? 3000 : 3099;
-const snapshotSpec = "**/public-stats-freshness.spec.ts";
+const globalStateSpecs = ["**/public-stats-freshness.spec.ts", "**/analytics-consent.spec.ts"];
 const useDevServer = process.env.PLAYWRIGHT_USE_DEV_SERVER === "1";
 
 export default defineConfig({
@@ -34,13 +34,14 @@ export default defineConfig({
     },
     {
       name: "chromium",
-      testIgnore: ["**/perf/**", snapshotSpec],
+      testIgnore: ["**/perf/**", ...globalStateSpecs],
       use: { browserName: "chromium" },
     },
     {
-      // This test changes the global snapshot and compares totals for every user.
-      name: "snapshot",
-      testMatch: snapshotSpec,
+      // These cases assert global snapshot totals or the absence of all analytics traffic.
+      name: "global-state",
+      testMatch: globalStateSpecs,
+      workers: 1,
       dependencies: process.env.CI ? ["chromium", "mobile-webkit"] : [],
       use: { browserName: "chromium" },
     },
