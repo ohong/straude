@@ -260,6 +260,40 @@ test.describe("first-sync onboarding", () => {
   // installed native collector in packaged-cli-first-sync.spec.ts. The cases
   // below deliberately isolate UI states using local fixture rows.
 
+  test("invited builders explicitly join and contribute a build day", async ({ browser, page }, testInfo) => {
+    const owner = await createLocalUser(true);
+    const friend = await createLocalUser();
+    const guest = await browser.newContext({ baseURL: projectBaseUrl(testInfo) });
+    try {
+      const { error } = await adminClient().from("posts").upsert({
+        daily_usage_id: owner.usage!.id, user_id: owner.id, title: "Shipped offline search", usage_generated_title: false,
+      }, { onConflict: "daily_usage_id" });
+      expect(error).toBeNull();
+      await signInAndSetSsrCookies(page.context(), owner, projectBaseUrl(testInfo));
+      await page.goto("/challenges");
+      await page.getByRole("button", { name: "Start this week’s challenge" }).click();
+      await expect(page.getByRole("heading", { name: "0 of 1 reached three days" })).toBeVisible();
+      const invite = page.url();
+      await page.getByRole("button", { name: "Add build", exact: true }).click();
+      await expect(page.getByRole("region", { name: "Build challenge" }).getByRole("link", { name: "Shipped offline search" })).toBeVisible();
+      await signInAndSetSsrCookies(guest, friend, projectBaseUrl(testInfo));
+      const peer = await guest.newPage();
+      await peer.goto(invite);
+      await expect(peer.getByRole("region", { name: "Build challenge" }).getByRole("link", { name: "Shipped offline search" })).toHaveCount(0);
+      await peer.getByRole("button", { name: "Join challenge" }).click();
+      await expect(peer.getByRole("heading", { name: "0 of 2 reached three days" })).toBeVisible();
+      await expect(peer.getByRole("region", { name: "Build challenge" }).getByRole("link", { name: "Shipped offline search" })).toBeVisible();
+      await peer.getByRole("button", { name: "Leave challenge" }).click();
+      await expect(peer.getByRole("button", { name: "Start this week’s challenge" })).toBeVisible();
+      await peer.goto(invite);
+      await expect(peer.getByRole("button", { name: "Join challenge" })).toBeVisible();
+    } finally {
+      await guest.close();
+      await deleteLocalUser(friend);
+      await deleteLocalUser(owner);
+    }
+  });
+
   test("shows the command immediately and skip keeps activation incomplete", async ({ page }, testInfo) => {
     const user = await createLocalUser();
     try {
