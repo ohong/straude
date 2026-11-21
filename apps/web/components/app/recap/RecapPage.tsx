@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect, useCallback, useRef } from "react";
+import { Suspense, use, useState, useEffect, useCallback, useRef } from "react";
 import { Link2, Download, Check } from "lucide-react";
 import { RecapCard } from "@/components/app/recap/RecapCard";
 import type { PersonalWeeklyReview } from "@/lib/utils/personal-review";
@@ -63,10 +63,16 @@ function PersonalWeekReview({ review }: { review: PersonalWeeklyReview | null | 
   );
 }
 
+function StreamingWeekReview({ review }: { review: Promise<PersonalWeeklyReview | null> }) {
+  return <PersonalWeekReview review={use(review)} />;
+}
+
 export function RecapPage({
+  initialReview,
   initialData,
   initialError = null,
 }: {
+  initialReview?: Promise<PersonalWeeklyReview | null>;
   initialData: RecapData | null;
   initialError?: string | null;
 }) {
@@ -241,7 +247,6 @@ export function RecapPage({
           <p className="text-sm text-muted">{error} <button className="underline" onClick={() => setAttempt(n => n + 1)}>Retry</button></p>
         ) : data ? (
           <>
-            {period === "week" && <PersonalWeekReview review={data.personal_review} />}
             <RecapCard data={data} backgroundId={backgroundId} />
 
             <div className="mt-4 flex gap-3">
@@ -298,6 +303,15 @@ export function RecapPage({
                 </a>
                 .
               </p>
+            )}
+            {period === "week" && (
+              <div className="mt-6">
+                {initialReview && data === initialData ? (
+                  <Suspense fallback={<p role="status">Loading weekly comparison…</p>}>
+                    <StreamingWeekReview review={initialReview} />
+                  </Suspense>
+                ) : <PersonalWeekReview review={data.personal_review} />}
+              </div>
             )}
           </>
         ) : (

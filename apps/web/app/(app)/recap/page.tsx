@@ -1,20 +1,22 @@
 import { loadPersonalWeeklyReview } from "@/lib/utils/personal-review";
 import { redirect } from "next/navigation";
-import { getAuthContext } from "@/lib/supabase/auth";
+import { getAuthIdentity } from "@/lib/supabase/auth";
 import { getServiceClient } from "@/lib/supabase/service";
 import { createClient } from "@/lib/supabase/server";
 import { getRecapData } from "@/lib/utils/recap";
 import { RecapPage } from "@/components/app/recap/RecapPage";
 
 export default async function RecapRoutePage() {
-  const { identity } = await getAuthContext();
+  const identity = await getAuthIdentity();
 
   if (!identity) {
     redirect("/login");
   }
 
+  const db = getServiceClient();
+  const review = loadPersonalWeeklyReview(db, identity.id).catch(() => null);
   const supabase = await createClient();
-  const { data: profile } = await getServiceClient()
+  const { data: profile } = await db
     .from("users")
     .select("username, is_public, streak_freezes")
     .eq("id", identity.id)
@@ -33,6 +35,5 @@ export default async function RecapRoutePage() {
     profile.streak_freezes ?? 0,
   ).catch(() => null);
 
-  if (initialData) initialData.personal_review = await loadPersonalWeeklyReview(getServiceClient(), identity.id);
-  return <RecapPage initialError={initialData ? null : "Unable to load recap statistics."} initialData={initialData} />;
+  return <RecapPage initialReview={review} initialError={initialData ? null : "Unable to load recap statistics."} initialData={initialData} />;
 }
