@@ -7,6 +7,7 @@ import { BoltIcon } from "@/components/landing/icons";
 import { Check, ArrowRight, Copy } from "lucide-react";
 import { Button } from "@/components/ui/Button";
 import { trackActivationEvent } from "@/lib/analytics/client";
+import { BuildNote } from "@/components/app/onboarding/BuildNote";
 import { UsageAudience } from "@/components/app/onboarding/UsageAudience";
 import { HeardAboutStep } from "@/components/app/onboarding/HeardAboutStep";
 import { formatCurrency } from "@/lib/utils/format";
@@ -25,6 +26,7 @@ interface UsageStatus {
   top_model?: string | null;
   latest_usage_id?: string;
   latest_usage_date?: string;
+  build_note_post_id?: string | null;
   latest_post_url?: string | null;
 }
 
@@ -293,6 +295,8 @@ export default function OnboardingPage() {
           </div>
         </div>
       )}
+
+      {sync.phase === "success" && data?.build_note_post_id && <BuildNote postId={data.build_note_post_id} />}
 
       {sync.phase === "success" && !surveyDone && (
         <HeardAboutStep onDone={() => setSurveyDone(true)} />

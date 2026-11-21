@@ -120,7 +120,7 @@ describe("GET /api/usage/status", () => {
         total_cost: 7.75,
         total_tokens: 9000,
       },
-      latestPost: { id: "post-1" },
+      latestPost: { id: "post-1", usage_generated_title: true },
     });
 
     const res = await GET(new Request("http://localhost/api/usage/status", {
@@ -139,6 +139,7 @@ describe("GET /api/usage/status", () => {
       latest_usage_id: "usage-latest",
       latest_usage_at: expect.any(String),
       latest_usage_date: "2026-07-02",
+      build_note_post_id: "post-1",
       latest_post_url: "/post/post-1",
     });
     expect(captureServerActivationEvent).not.toHaveBeenCalled();

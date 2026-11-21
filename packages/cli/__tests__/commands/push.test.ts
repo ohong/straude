@@ -55,6 +55,7 @@ vi.mock("../../src/lib/machine-id.js", () => ({
 
 vi.mock("../../src/lib/prompt.js", () => ({
   isInteractive: () => true,
+  promptBuildNote: vi.fn(async () => ""),
 }));
 
 vi.mock("../../src/lib/sync-state.js", () => ({
@@ -87,6 +88,7 @@ import {
   CLI_EXIT,
   pushCommand,
 } from "../../src/commands/push.js";
+import { promptBuildNote } from "../../src/lib/prompt.js";
 import { PricingUnavailableError } from "../../src/lib/ccusage.js";
 import { CLI_VERSION } from "../../src/config.js";
 
@@ -244,6 +246,19 @@ afterEach(() => {
 });
 
 describe("pushCommand v2", () => {
+  it("keeps a completed sync successful when adding a note fails", async () => {
+    vi.mocked(promptBuildNote).mockResolvedValueOnce("Shipped offline search");
+    apiRequestMock.mockImplementation(async (_config, path, options) => {
+      if (path !== "/api/usage/submit") throw new Error("Temporarily unavailable");
+      const body = JSON.parse(options.body);
+      return outcome(body.request_id, body.entries[0].date);
+    });
+    expect(await pushCommand({})).toBe(CLI_EXIT.OK);
+    expect(releaseMock).toHaveBeenCalledBefore(vi.mocked(promptBuildNote));
+    expect(console.error).toHaveBeenCalledWith(expect.stringContaining("Could not save build note"));
+    expect(pendingBatches).toHaveLength(0);
+  });
+
   it("persists and submits a validated per-agent v2 request", async () => {
     const exitCode = await pushCommand({});
 

@@ -39,7 +39,7 @@ import {
 import { syncAccountKey } from "../lib/sync-account.js";
 import { recordSyncHealth } from "../lib/sync-health.js";
 import { getDistinctId, getInstallationId } from "../lib/machine-id.js";
-import { isInteractive } from "../lib/prompt.js";
+import { isInteractive, promptBuildNote } from "../lib/prompt.js";
 import { posthog } from "../lib/posthog.js";
 import { Spinner } from "../lib/spinner.js";
 import {
@@ -782,6 +782,7 @@ export async function pushCommand(
     : undefined;
   const isMigrationBatch = resolution.mode === "first_sync"
     || resolution.mode === "migration";
+  let noteTarget: DatedUsageResult | undefined;
   const lease = options.dryRun ? { queuedDates: [], acknowledgeQueuedDates() {}, release() {} } : await acquireSyncLease({
     dates: requestedDates,
     interactive: !nonInteractive,
@@ -1016,8 +1017,29 @@ export async function pushCommand(
         }),
       },
     });
-    return CLI_EXIT.OK;
+    if (!nonInteractive) {
+      const latest = submitted.results.reduce<DatedUsageResult | undefined>(
+        (last, row) => !last || row.date > last.date ? row : last, undefined,
+      );
+      if (latest?.action === "created") noteTarget = latest;
+    }
+
   } finally {
     lease.release();
   }
+  if (noteTarget) {
+    try {
+      const title = await promptBuildNote(noteTarget.date);
+      if (title) {
+        await apiRequest(config, `/api/posts/${noteTarget.post_id}/build-note`, {
+          method: "POST", body: JSON.stringify({ title }),
+        });
+        console.log("Build note saved.");
+        posthog.capture({ distinctId: getDistinctId(config), event: "build_note_saved", properties: { surface: "cli" } });
+      }
+    } catch (error) {
+      console.error(`Usage synced. Could not save build note: ${errorMessage(error)}. Edit it at ${noteTarget.post_url}?edit=1`);
+    }
+  }
+  return CLI_EXIT.OK;
 }

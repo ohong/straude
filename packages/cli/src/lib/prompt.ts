@@ -32,3 +32,16 @@ export function promptYesNo(question: string, defaultValue: boolean): Promise<bo
     });
   });
 }
+
+/** Closing stdin or interrupting an optional note leaves the completed sync intact. */
+export function promptBuildNote(date: string): Promise<string> {
+  const rl = createInterface({ input: process.stdin, output: process.stdout });
+  return new Promise((resolve) => {
+    rl.once("close", () => resolve(""));
+    rl.once("SIGINT", () => rl.close());
+    rl.question(`What did you ship, fix, or learn on ${date}? Post title (Enter to skip): `, answer => {
+      resolve(answer.trim());
+      rl.close();
+    });
+  });
+}
