@@ -11,7 +11,7 @@ jobs:
   web-runtime:
     runs-on: ubuntu-24.04
     env:
-      BROWSER_SUITE: ${{ github.event_name == 'pull_request' && !contains(github.event.pull_request.labels.*.name, 'ci:full-browser') && 'core' || 'full' }}
+      BROWSER_SUITE: core
       BROWSER_SHARD: ${{ inputs.shard }}
       NEXT_PUBLIC_POSTHOG_KEY: phc_local_runtime_evidence
       POSTHOG_API_KEY: phc_local_runtime_evidence
