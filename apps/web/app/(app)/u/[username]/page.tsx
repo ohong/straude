@@ -132,7 +132,6 @@ export default async function ProfilePage({
       posts: feedPosts,
       userId: authUserId,
       userScopedClient: supabase,
-      publicReadClient: db,
     });
   });
 

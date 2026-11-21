@@ -68,30 +68,6 @@ function mockSupabase(opts: {
                 error: null,
               }),
             }),
-            in: vi.fn().mockReturnValue({
-              order: vi.fn().mockReturnValue({
-                limit: vi.fn().mockResolvedValue({
-                  data: kudos,
-                  error: null,
-                }),
-              }),
-            }),
-          }),
-        });
-      }
-      if (table === "comments") {
-        return buildChain({
-          select: vi.fn().mockReturnValue({
-            is: vi.fn().mockReturnValue({
-              in: vi.fn().mockReturnValue({
-                order: vi.fn().mockReturnValue({
-                  limit: vi.fn().mockResolvedValue({
-                    data: comments,
-                    error: null,
-                  }),
-                }),
-              }),
-            }),
           }),
         });
       }
@@ -110,12 +86,15 @@ function mockSupabase(opts: {
         });
       }
       if (table === "posts") {
-        return buildChain({
-          limit: vi.fn().mockResolvedValue({
-            data: pendingPosts,
-            error: null,
-          }),
-        });
+        return {
+          select: (fields: string) => fields.includes("comments(")
+            ? buildChain({ data: posts.map((post) => ({
+                id: post.id,
+                kudos: kudos.filter((row) => row.post_id === post.id),
+                comments: comments.filter((row) => row.post_id === post.id),
+              })) })
+            : buildChain({ data: pendingPosts }),
+        };
       }
       return buildChain();
     }),
