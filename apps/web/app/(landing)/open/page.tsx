@@ -334,7 +334,7 @@ export default async function OpenStatsPage() {
 
             {/* ---- Last Updated ------------------------------------------ */}
             <div className="pt-4 text-xs text-muted">
-              {available && <time dateTime={stats.fetchedAt}>
+              {available && <time data-open-stats-capture="" dateTime={stats.fetchedAt}>
                 Last successful capture: {updatedHuman}
               </time>}
             </div>
