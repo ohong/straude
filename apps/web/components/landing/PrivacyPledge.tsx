@@ -7,7 +7,7 @@ const ITEMS = [
   },
   {
     label: "Cost",
-    detail: "Daily spend in USD, straight from your local logs.",
+    detail: "Estimated daily cost at API prices.",
   },
   {
     label: "Model names",
@@ -66,8 +66,7 @@ export function PrivacyPledge() {
             >
               ccusage
             </a>{" "}
-            locally to aggregate daily totals from Claude Code&apos;s log
-            files — only those totals are sent.
+            locally to calculate daily totals from supported coding tools.
           </p>
           <div className="pt-1">
             <Link

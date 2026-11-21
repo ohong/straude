@@ -4,9 +4,9 @@ export function FeaturesGrid() {
       {/* Section title block */}
       <div className="lg:col-span-4 border-b border-r-0 lg:border-r border-landing-border p-8 lg:p-16 flex flex-col justify-end bg-landing-bg">
         <h2 className="text-landing-text text-xl font-medium tracking-[-0.03em] leading-tight text-balance mb-2">
-          Telemetry for
+          Your daily
           <br />
-          Claude Code.
+          coding log.
         </h2>
         <p className="font-[family-name:var(--font-mono)] text-sm uppercase tracking-wider text-landing-muted">
           Core Capabilities
@@ -18,13 +18,13 @@ export function FeaturesGrid() {
         <FeatureCard
           icon="[$]"
           title="Track Spend"
-          description="Real-time token counting and cost attribution per session."
+          description="See daily tokens and estimated cost across your coding tools."
           className="border-b sm:border-r border-landing-border"
         />
         <FeatureCard
           icon="[~]"
           title="Compare Pace"
-          description="Velocity metrics. See how fast you iterate compared to global baselines."
+          description="Compare your daily activity with other builders on the leaderboard."
           className="border-b border-landing-border"
         />
         <FeatureCard

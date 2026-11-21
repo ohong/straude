@@ -13,7 +13,7 @@ export function Hero() {
           <ProductHuntBadge />
         </div>
         <p className="font-[family-name:var(--font-mono)] text-sm uppercase tracking-wider text-landing-muted mb-4">
-          {"// STRAVA FOR CLAUDE CODE"}
+          {"// YOUR CODING LOG"}
         </p>
 
         <h1 className="whitespace-pre-line text-[clamp(3rem,8vw,7rem)] font-medium tracking-[-0.03em] leading-[1.1] text-landing-text text-balance mb-8">
@@ -21,8 +21,8 @@ export function Hero() {
         </h1>
 
         <p className="font-[family-name:var(--font-mono)] text-base text-landing-muted max-w-[500px]">
-          One command to log your Claude Code usage. Track spend, compare
-          pace, keep the streak alive.
+          Log daily usage from Claude Code, Codex, and 16 other coding tools.
+          See your estimated cost and streak. Your code and prompts stay on your machine.
         </p>
 
         <div className="flex flex-wrap gap-4 mt-10">
@@ -40,21 +40,10 @@ export function Hero() {
           <span className="block text-landing-text">
             &gt; {LANDING_SYNC_COMMAND}
           </span>
-          <span className="block">Analyzing ~/.config/claude/projects/...</span>
-          <span className="block">
-            Tokens: <span className="text-landing-text">27.8M</span> (input:{" "}
-            <span className="text-landing-text">963k</span>, output:{" "}
-            <span className="text-landing-text">75k</span>)
-          </span>
-          <span className="block">
-            Models: <span className="text-landing-text">opus-4-6, claude-sonnet-4-6, claude-haiku-4-5</span>
-          </span>
-          <span className="block">
-            Est. Cost: <span className="text-accent">$19.93</span>
-          </span>
-          <span className="block text-accent">
-            [OK] Session logged. Current streak: 18 days
-          </span>
+          <span className="block">Example day · Claude Code + Codex</span>
+          <span className="block">Output tokens: <span className="text-landing-text">75k</span></span>
+          <span className="block">Estimated API cost: <span className="text-accent">$19.93</span></span>
+          <span className="block text-accent">Current streak: 18 days</span>
         </div>
       </div>
     </header>
