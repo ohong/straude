@@ -61,18 +61,22 @@ export default async function FeedPage({
   });
   // Start enrichment as soon as get_feed resolves instead of waiting for the
   // independent pending-post query to finish.
-  const postsPromise = feedPromise.then(({ data: feedData }) =>
-    enrichFeedPosts({
+  const postsPromise = feedPromise.then(({ data: feedData, error }) => {
+    if (error) {
+      console.error("[feed] initial query failed", error.code);
+      return null;
+    }
+    return enrichFeedPosts({
       posts: (feedData ?? []) as FeedPostRow[],
       userId: user?.id ?? null,
       userScopedClient: supabase,
-    }),
-  );
+    });
+  });
   const [posts, pendingPosts] = await Promise.all([
     postsPromise,
     getPendingPosts(supabase, user?.id ?? null),
   ]);
-  const nextCursor = getFeedCursor(posts, 20);
+  const nextCursor = posts ? getFeedCursor(posts, 20) : undefined;
 
   const faqJsonLd = {
     "@context": "https://schema.org",
