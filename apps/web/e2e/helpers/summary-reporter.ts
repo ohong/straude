@@ -1,6 +1,6 @@
 import type { FullConfig, FullResult, Reporter, TestCase, TestResult } from "@playwright/test/reporter";
 import { mkdir, writeFile } from "node:fs/promises";
-import { join } from "node:path";
+import { join, relative } from "node:path";
 
 /** Retain outcomes and skip reasons without trace bodies, credentials or errors. */
 export default class SummaryReporter implements Reporter {
@@ -12,6 +12,10 @@ export default class SummaryReporter implements Reporter {
   }
 
   onTestEnd(test: TestCase, result: TestResult) {
+    if (result.status === "failed" || result.status === "timedOut") {
+      const location = result.error?.location ?? test.location;
+      console.error(`${result.status}: ${relative(process.cwd(), location.file)}:${location.line} (${test.title})`);
+    }
     const entry = this.tests.get(test.id) ?? { test, attempts: [] };
     entry.attempts.push({ status: result.status, retry: result.retry, duration_ms: result.duration });
     this.tests.set(test.id, entry);
@@ -26,19 +30,26 @@ export default class SummaryReporter implements Reporter {
       annotations: test.annotations.filter(({ type }) => type === "skip" || type === "fixme"),
       attempts,
     }));
+    const skipped = tests.filter(test => test.outcome === "skipped").length;
+    const status: FullResult["status"] = process.env.CI && skipped > 0 && result.status === "passed"
+      ? "failed" : result.status;
+    if (status !== result.status) {
+      console.error(`CI skipped ${skipped} browser test(s). See runtime-summary.evidence.json for the reasons.`);
+    }
     await mkdir(this.outputDir, { recursive: true });
     await writeFile(join(this.outputDir, "runtime-summary.evidence.json"), JSON.stringify({
       source_commit: process.env.GITHUB_SHA ?? null,
       node: process.version,
-      status: result.status,
+      status,
       duration_ms: result.duration,
       counts: {
         passed: tests.filter(test => test.outcome === "expected").length,
         failed: tests.filter(test => test.outcome === "unexpected").length,
-        skipped: tests.filter(test => test.outcome === "skipped").length,
+        skipped,
         flaky: tests.filter(test => test.outcome === "flaky").length,
       },
       tests,
     }, null, 2) + "\n", { mode: 0o600 });
+    return { status };
   }
 }

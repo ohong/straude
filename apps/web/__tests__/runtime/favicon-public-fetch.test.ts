@@ -4,7 +4,7 @@ import http, { request as interceptedHttp } from "node:http";
 import { request as interceptedHttps } from "node:https";
 import { once } from "node:events";
 import { lookup } from "node:dns/promises";
-import { createPublicFetch, isPublicAddress, publicHttpUrl } from "@/lib/favicons/public-fetch";
+import { createPublicFetch } from "@/lib/favicons/public-fetch";
 
 vi.mock("node:http", async (original) => ({ ...await original<typeof import("node:http")>(), request: vi.fn() }));
 vi.mock("node:https", async (original) => ({ ...await original<typeof import("node:https")>(), request: vi.fn() }));
@@ -16,6 +16,7 @@ const paths: string[] = [];
 let connectionOptions: http.RequestOptions[] = [];
 
 beforeEach(async () => {
+  vi.clearAllMocks();
   paths.length = 0;
   connectionOptions = [];
   vi.mocked(lookup).mockResolvedValue([{ address: "93.184.216.34", family: 4 }]);
@@ -51,13 +52,18 @@ afterEach(async () => {
 });
 
 describe("public favicon transport", () => {
-  it.each(["127.0.0.1", "0.0.0.0", "10.0.0.1", "172.16.0.1", "192.168.0.1", "169.254.169.254", "168.63.129.16", "100.64.0.1", "192.0.2.1", "198.18.0.1", "224.0.0.1", "255.255.255.255", "::1", "::", "fc00::1", "fe80::1", "ff02::1", "::ffff:127.0.0.1", "2001:db8::1", "2002:7f00:1::", "64:ff9b::7f00:1", "4000::1"])("blocks %s", (address) => {
-    expect(isPublicAddress(address)).toBe(false);
+  it.each(["127.0.0.1", "0.0.0.0", "10.0.0.1", "172.16.0.1", "192.168.0.1", "169.254.169.254", "168.63.129.16", "100.64.0.1", "192.0.2.1", "198.18.0.1", "224.0.0.1", "255.255.255.255", "::1", "::", "fc00::1", "fe80::1", "ff02::1", "::ffff:127.0.0.1", "2001:db8::1", "2002:7f00:1::", "64:ff9b::7f00:1", "4000::1"])("rejects DNS answers for %s before opening a socket", async (address) => {
+    vi.mocked(lookup).mockResolvedValue([{ address, family: address.includes(":") ? 6 : 4 }]);
+    expect(await createPublicFetch(AbortSignal.timeout(1000))(new URL("https://example.com/icon"), 100)).toBeNull();
+    expect(paths).toHaveLength(0);
   });
 
-  it("accepts global v4/v6 and rejects credentials, non-default ports and non-HTTP URLs", () => {
-    for (const address of ["93.184.216.34", "2606:4700:4700::1111", "::ffff:8.8.8.8"]) expect(isPublicAddress(address)).toBe(true);
-    for (const url of ["file:///etc/passwd", "ftp://example.com", "https://user:pass@example.com", "http://example.com:8080"]) expect(publicHttpUrl(url)).toBeNull();
+  it("rejects unsupported URL forms before opening a socket", async () => {
+    const fetch = createPublicFetch(AbortSignal.timeout(1000));
+    for (const url of ["ftp://example.com", "https://user:pass@example.com", "http://example.com:8080"]) {
+      expect(await fetch(new URL(url), 100)).toBeNull();
+    }
+    expect(paths).toHaveLength(0);
   });
 
   it("pins the checked address without a second DNS lookup and preserves TLS hostname", async () => {

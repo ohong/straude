@@ -215,6 +215,53 @@ test.describe("Settings persistence and privacy with real local Auth", () => {
     } finally { await cleanup(fixture); }
   });
 
+  test("a private message and its attachment reach only the intended conversation", async ({ browser, page, baseURL }) => {
+    const accounts: Fixture[] = [];
+    const inbox = await browser.newContext({ baseURL });
+    const unrelated = await browser.newContext({ baseURL });
+    const db = localDatabase();
+    let uploadPath: string | undefined;
+    try {
+      for (let i = 0; i < 3; i++) accounts.push(await createFixture());
+      const [sender, recipient, outsider] = accounts as [Fixture, Fixture, Fixture];
+      expect((await db.from("users").update({ email_dm_notifications: false }).eq("id", recipient.id)).error).toBeNull();
+      await authenticate(page.context(), sender, baseURL!);
+      await authenticate(inbox, recipient, baseURL!);
+      await authenticate(unrelated, outsider, baseURL!);
+      await page.goto(`/messages?with=${recipient.username}`);
+      const text = "Attached are the notes from our fixture.";
+      const bytes = Buffer.from("Synthetic private attachment");
+      await page.getByLabel(`Message @${recipient.username}`).fill(text);
+      const uploaded = page.waitForResponse(response => response.url().includes("/api/upload?bucket=dm-attachments"));
+      await page.getByLabel("Attach files", { exact: true }).setInputFiles({
+        name: "notes.txt", mimeType: "text/plain", buffer: bytes,
+      });
+      const sent = page.waitForResponse(response => new URL(response.url()).pathname === "/api/messages" && response.request().method() === "POST");
+      await page.getByRole("button", { name: /^Send / }).click();
+      const receipt = await uploaded;
+      expect(receipt.status()).toBe(200);
+      uploadPath = (await receipt.json()).path;
+      expect((await sent).status()).toBe(201);
+
+      const received = await inbox.newPage();
+      await received.goto(`/messages?with=${sender.username}`);
+      await expect(received.getByTestId("messages-thread-panel").getByText(text, { exact: true })).toBeVisible();
+      const file = received.getByRole("link", { name: /notes\.txt/ });
+      await expect(file).toBeVisible();
+      const response = await inbox.request.get((await file.getAttribute("href"))!);
+      expect(response.status()).toBe(200);
+      expect(await response.body()).toEqual(bytes);
+
+      const ownThread = await unrelated.request.get(`/api/messages?with=${sender.username}`);
+      expect(ownThread.status()).toBe(200);
+      expect((await ownThread.json()).messages).toEqual([]);
+    } finally {
+      await Promise.all([inbox.close(), unrelated.close()]);
+      if (uploadPath) await db.storage.from("dm-attachments").remove([uploadPath]);
+      for (const account of accounts) await cleanup(account);
+    }
+  });
+
   test("next reads honor privacy after warming public surfaces and another account cannot edit the owner", async ({ browser, page, baseURL }, testInfo) => {
     const owner = await createFixture();
     const other = await createFixture();

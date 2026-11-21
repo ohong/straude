@@ -13,11 +13,11 @@
     "generate:og:athletic": "bun run ./scripts/generate-og-athletic-surge.ts",
     "typecheck": "tsc --noEmit -p tsconfig.check.json",
     "test": "vitest run",
-    "test:integration": "vitest run -c vitest.integration.config.ts",
+    "test:integration": "bun ../../scripts/check-usage-migrations.mjs && vitest run -c vitest.integration.config.ts",
     "test:e2e": "playwright test",
     "perf": "bun run build && playwright test -c playwright.perf.config.ts",
     "perf:check": "bun run build && PERF_GATE=1 playwright test -c playwright.perf.config.ts",
-    "test:favicons": "vitest run __tests__/unit/favicon-*.test.ts __tests__/unit/team-favicon.test.ts __tests__/api/team-affiliation.test.ts"
+    "test:favicons": "vitest run __tests__/runtime"
   },
   "dependencies": {
     "@anthropic-ai/sdk": "^0.39",
@@ -57,8 +57,6 @@
     "@next/bundle-analyzer": "16.4.6",
     "@playwright/test": "^1.58.2",
     "@tailwindcss/postcss": "^4",
-    "@testing-library/jest-dom": "^6.9.1",
-    "@testing-library/react": "^16.3.2",
     "@types/css-tree": "3.2.0",
     "@types/heic-convert": "^2.1.0",
     "@types/jsdom": "28.0.3",
@@ -66,7 +64,6 @@
     "@types/pg": "^8.20.0",
     "@types/react": "^19",
     "@types/react-dom": "^19",
-    "@vitejs/plugin-react": "^5.2.0",
     "eslint": "^9.39.4",
     "eslint-config-next": "16.4.6",
     "pg": "^8.20.0",
