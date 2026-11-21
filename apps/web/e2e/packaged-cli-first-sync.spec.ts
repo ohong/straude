@@ -350,7 +350,7 @@ test.describe("installed CLI and browser first sync", () => {
     analytics.delete(testInfo.testId);
   });
 
-  test("web signup collects native logs, retries completion, and recovers expired CLI sign-in", async ({ page, request }, testInfo) => {
+  test("web signup collects native logs, retries completion, and recovers expired CLI sign-in", { tag: "@core" }, async ({ page, request }, testInfo) => {
     test.setTimeout(300_000);
     const email = `packaged-browser-${randomUUID()}@local.test`;
     const cli = await cliFixture(testInfo);

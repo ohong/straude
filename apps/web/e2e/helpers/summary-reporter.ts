@@ -23,6 +23,7 @@ export default class SummaryReporter implements Reporter {
 
   async onEnd(result: FullResult) {
     const tests = [...this.tests.values()].map(({ test, attempts }) => ({
+      id: test.id,
       title: test.titlePath(),
       location: test.location,
       expected_status: test.expectedStatus,

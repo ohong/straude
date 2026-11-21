@@ -1,0 +1,188 @@
+name: Web runtime
+
+on:
+  workflow_call:
+    inputs:
+      shard:
+        type: string
+        required: true
+
+    outputs:
+      package-sha:
+        description: SHA-256 of the CLI tarball used by native browser tests
+        value: ${{ jobs.web-runtime.outputs.package-sha }}
+
+jobs:
+  web-runtime:
+    outputs:
+      package-sha: ${{ steps.native-package.outputs.sha }}
+    runs-on: ubuntu-24.04
+    env:
+      BROWSER_SUITE: ${{ github.event_name == 'pull_request' && !contains(github.event.pull_request.labels.*.name, 'ci:full-browser') && 'core' || 'full' }}
+      BROWSER_SHARD: ${{ inputs.shard }}
+      NEXT_PUBLIC_POSTHOG_KEY: phc_local_runtime_evidence
+      POSTHOG_API_KEY: phc_local_runtime_evidence
+      POSTHOG_HOST: http://127.0.0.1:3118
+
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: 1.3.3
+
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 22
+
+      - uses: actions/cache@v6
+        with:
+          path: ~/.bun/install/cache
+          key: ${{ runner.os }}-bun-${{ hashFiles('bun.lock') }}
+          restore-keys: |
+            ${{ runner.os }}-bun-
+
+      - name: Setup Supabase CLI
+        uses: supabase/setup-cli@v3
+        with:
+          version: 2.75.0
+
+      - name: Place disposable container storage in memory
+        if: runner.environment == 'github-hosted'
+        shell: bash
+        run: |
+          set -euo pipefail
+          # The public Linux runner has 16 GiB. Keep at least half for Postgres, Next and browsers.
+          if (( $(awk '/^MemTotal:/ {print $2}' /proc/meminfo) < 14500000 )); then
+            echo "Using normal runner storage on this machine."
+            exit 0
+          fi
+          docker_root=$(docker info --format '{{.DockerRootDir}}')
+          store="$RUNNER_TEMP/straude-container-store"
+          mkdir "$store"
+          sudo mount -t tmpfs -o size=7G tmpfs "$store"
+          sudo mkdir "$store/docker" "$store/containerd"
+          sudo systemctl stop docker.socket docker.service containerd.service
+          sudo mount --bind "$store/docker" "$docker_root"
+          sudo mount --bind "$store/containerd" /var/lib/containerd
+          sudo systemctl start containerd.service docker.service
+          docker info --format 'Container storage driver: {{.Driver}}'
+
+      - name: Prepare isolated runtime
+        shell: bash
+        env:
+          BUN_INSTALL_CACHE_DIR: ~/.bun/install/cache
+        run: |
+          set -euo pipefail
+          supabase start --exclude studio,postgres-meta,logflare,vector,edge-runtime &
+          pids=($!)
+          if [[ "$BROWSER_SHARD" == native ]]; then
+            docker pull node:22-bookworm-slim &
+            pids+=($!)
+          fi
+          (
+            bun install --frozen-lockfile
+            cd apps/web
+            browsers=(chromium)
+            if [[ "$BROWSER_SHARD" == app ]]; then browsers+=(webkit); fi
+            bunx playwright install --with-deps "${browsers[@]}"
+          ) &
+          pids+=($!)
+          status=0
+          for pid in "${pids[@]}"; do wait "$pid" || status=1; done
+          exit "$status"
+
+      - name: Configure web for local Supabase
+        run: |
+          bun run local:env
+          # Browser test processes need the same disposable fixture settings as
+          # Next.js. Copy only this local setup's required keys without logging them.
+          python3 - <<'PY'
+          import os
+          from pathlib import Path
+          from urllib.parse import urlparse
+          values = {}
+          for line in Path("apps/web/.env.local").read_text().splitlines():
+              if "=" in line and not line.lstrip().startswith("#"):
+                  key, value = line.split("=", 1)
+                  values[key.strip()] = value.strip().strip('"').strip("'")
+          assert urlparse(values["NEXT_PUBLIC_SUPABASE_URL"]).hostname in {"localhost", "127.0.0.1"}
+          names = ["NEXT_PUBLIC_SUPABASE_URL", "NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY",
+                   "SUPABASE_SECRET_KEY", "CLI_JWT_SECRET", "CRON_SECRET", "NEXT_PUBLIC_APP_URL"]
+          with open(os.environ["GITHUB_ENV"], "a") as output:
+              for name in names:
+                  if name in values:
+                      if name in {"SUPABASE_SECRET_KEY", "CLI_JWT_SECRET", "CRON_SECRET"}:
+                          print(f"::add-mask::{values[name]}")
+                      output.write(f"{name}={values[name]}\n")
+          PY
+
+      - name: Pack and install the CLI for native browser journeys
+        if: inputs.shard == 'native'
+        id: native-package
+        working-directory: packages/cli
+        run: |
+          set -euo pipefail
+          # prepack builds dist for the native workspace journey too.
+          npm pack --pack-destination "$RUNNER_TEMP"
+          packages=("$RUNNER_TEMP"/straude-*.tgz)
+          (( ${#packages[@]} == 1 ))
+          cli_tarball=${packages[0]}
+          cli_install="$RUNNER_TEMP/straude-browser-cli"
+          npm install --prefix "$cli_install" "$cli_tarball" --no-audit --no-fund
+          echo "sha=$(sha256sum "$cli_tarball" | cut -d' ' -f1)" >> "$GITHUB_OUTPUT"
+          echo "STRAUDE_E2E_CLI_INSTALL=$cli_install" >> "$GITHUB_ENV"
+          echo "STRAUDE_E2E_CLI_TARBALL=$cli_tarball" >> "$GITHUB_ENV"
+          echo "STRAUDE_E2E_CLI_COMMIT=$GITHUB_SHA" >> "$GITHUB_ENV"
+
+      - name: Start the local analytics evidence receiver
+        run: |
+          mkdir -p artifacts
+          node apps/web/scripts/capture-activation-evidence.mjs artifacts/activation-receiver.json > artifacts/activation-receiver.log 2>&1 &
+          for attempt in $(seq 1 20); do
+            if curl --fail --silent http://127.0.0.1:3118/health; then exit 0; fi
+            sleep 1
+          done
+          exit 1
+
+      - name: Build web and shared
+        run: bun run build --filter=@straude/web
+
+      - name: Test (web — integration, real Supabase)
+        if: inputs.shard == 'global'
+        run: bun run test:integration
+        working-directory: apps/web
+
+      - name: E2E tests
+        run: |
+          selection=()
+          if [[ "$BROWSER_SUITE" == core ]]; then selection+=(--grep @core); fi
+          echo "Browser suite: $BROWSER_SUITE ($BROWSER_SHARD)"
+          bun run test:e2e "${selection[@]}" --no-deps --list --reporter=./e2e/helpers/shard-reporter.ts
+          bun run test:e2e "${selection[@]}" --no-deps --test-list "$RUNNER_TEMP/browser-shard.txt" --reporter=html,./e2e/helpers/summary-reporter.ts
+          jq -e --slurpfile expected "$RUNNER_TEMP/browser-expected.json" \
+            '([.tests[].id] | sort) == $expected[0] and .counts.skipped == 0 and .counts.flaky == 0' \
+            test-results/runtime-summary.evidence.json
+        working-directory: apps/web
+        env:
+          BASE_URL: http://localhost:3000
+          # Lambda disables require(ESM); exercise the same route-loading boundary.
+          NODE_OPTIONS: --no-experimental-require-module
+
+      - name: Upload sanitized workspace walkthrough evidence
+        if: always() && inputs.shard == 'native'
+        uses: actions/upload-artifact@v7
+        with:
+          name: private-workspace-walkthrough
+          path: apps/web/test-results/private-workspaces-evidence/
+          if-no-files-found: ignore
+      - name: Preserve runtime verification reports
+        if: always()
+        uses: actions/upload-artifact@v7
+        with:
+          name: straude-runtime-evidence-${{ inputs.shard }}
+          path: |
+            apps/web/test-results/**/*.png
+            apps/web/test-results/**/*.evidence.json
+            artifacts/activation-receiver.json
+          if-no-files-found: warn

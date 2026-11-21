@@ -31,7 +31,7 @@ function agent(cost: number, tokens: number, tool = "codex", model = "gpt-5.6") 
   return { agent: tool, models: [model], ...usage, model_breakdown: [{ model, ...usage }] };
 }
 
-test("private workspace browser journey, CLI enrollment, report accuracy and revoked access", async ({ browser, baseURL }, testInfo) => {
+test("private workspace browser journey, CLI enrollment, report accuracy and revoked access", { tag: "@core" }, async ({ browser, baseURL }, testInfo) => {
   test.setTimeout(240_000);
   const env = loadWebEnv();
   for (const url of [env.NEXT_PUBLIC_SUPABASE_URL, baseURL]) {

@@ -215,7 +215,7 @@ test.describe("Settings persistence and privacy with real local Auth", () => {
     } finally { await cleanup(fixture); }
   });
 
-  test("a private message and its attachment reach only the intended conversation", async ({ browser, page, baseURL }) => {
+  test("a private message and its attachment reach only the intended conversation", { tag: "@core" }, async ({ browser, page, baseURL }) => {
     const accounts: Fixture[] = [];
     const inbox = await browser.newContext({ baseURL });
     const unrelated = await browser.newContext({ baseURL });
@@ -262,7 +262,7 @@ test.describe("Settings persistence and privacy with real local Auth", () => {
     }
   });
 
-  test("next reads honor privacy after warming public surfaces and another account cannot edit the owner", async ({ browser, page, baseURL }, testInfo) => {
+  test("next reads honor privacy after warming public surfaces and another account cannot edit the owner", { tag: "@core" }, async ({ browser, page, baseURL }, testInfo) => {
     const owner = await createFixture();
     const other = await createFixture();
     const anonymous = await browser.newContext({ baseURL, viewport: { width: 360, height: 844 }, bypassCSP: false });
