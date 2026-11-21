@@ -1,6 +1,7 @@
 import { defineConfig, devices } from "@playwright/test";
 
 const port = process.env.CI ? 3000 : 3099;
+const globalStateSpecs = ["**/public-stats-freshness.spec.ts", "**/analytics-consent.spec.ts"];
 const useDevServer = process.env.PLAYWRIGHT_USE_DEV_SERVER === "1";
 
 export default defineConfig({
@@ -8,12 +9,12 @@ export default defineConfig({
   testIgnore: "**/perf/**",
   fullyParallel: false,
   forbidOnly: !!process.env.CI,
-  retries: process.env.CI ? 2 : 0,
-  workers: 1,
+  retries: 0,
+  workers: process.env.CI ? 2 : 1,
   reporter: "html",
   use: {
     baseURL: `http://localhost:${port}`,
-    trace: "on-first-retry",
+    trace: "retain-on-failure",
   },
   webServer: {
     command: useDevServer
@@ -33,6 +34,15 @@ export default defineConfig({
     },
     {
       name: "chromium",
+      testIgnore: ["**/perf/**", ...globalStateSpecs],
+      use: { browserName: "chromium" },
+    },
+    {
+      // These cases assert global snapshot totals or the absence of all analytics traffic.
+      name: "global-state",
+      testMatch: globalStateSpecs,
+      workers: 1,
+      dependencies: process.env.CI ? ["chromium", "mobile-webkit"] : [],
       use: { browserName: "chromium" },
     },
   ],
