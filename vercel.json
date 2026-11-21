@@ -3,10 +3,6 @@
     {
       "path": "/api/cron/nudge-inactive",
       "schedule": "0 * * * *"
-    },
-    {
-      "path": "/api/cron/refresh-open-stats",
-      "schedule": "0 5 * * *"
     }
   ]
 }
