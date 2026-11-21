@@ -4,13 +4,8 @@ import { tmpdir } from "node:os";
 import { dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 
-/**
- * Locate the built CLI binary. Tests assume `bun run --cwd packages/cli build`
- * has run — see `e2e/setup.ts`. We don't rebuild from inside each test
- * because tsc takes ~3s and the e2e suite shares one binary.
- */
 const __dirname = dirname(fileURLToPath(import.meta.url));
-export const CLI_DIST_ENTRY = resolve(__dirname, "../../dist/index.js");
+const CLI_DIST_ENTRY = resolve(__dirname, "../../dist/index.js");
 
 export interface SpawnResult {
   /** Full captured stdout (utf-8). */

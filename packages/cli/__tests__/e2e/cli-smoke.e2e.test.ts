@@ -1,12 +1,11 @@
-import { describe, it, expect, beforeAll, beforeEach, afterEach } from "vitest";
-import { spawnSync } from "node:child_process";
+import { describe, it, expect, beforeEach, afterEach } from "vitest";
 import { createServer } from "node:http";
 import type { AddressInfo } from "node:net";
 import { existsSync, mkdtempSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join, dirname, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
-import { spawnCli, rmDir, CLI_DIST_ENTRY } from "./spawn";
+import { spawnCli, rmDir } from "./spawn";
 
 /**
  * Real-binary e2e smoke tests. The previous CLI tests all import functions
@@ -29,18 +28,6 @@ import { spawnCli, rmDir, CLI_DIST_ENTRY } from "./spawn";
  */
 
 const PKG_DIR = resolve(dirname(fileURLToPath(import.meta.url)), "../..");
-
-beforeAll(() => {
-  // The CLI binary is what we're testing, so make sure it exists. If the
-  // suite is run cold (no `bun run build` first), build it now. tsc takes
-  // ~3s; the alternative is a confusing "ENOENT dist/index.js" failure.
-  if (!existsSync(CLI_DIST_ENTRY)) {
-    const built = spawnSync("bun", ["run", "build"], { cwd: PKG_DIR, stdio: "inherit" });
-    if (built.status !== 0) {
-      throw new Error(`failed to build CLI before e2e suite (exit ${built.status})`);
-    }
-  }
-}, 60_000);
 
 let home: string;
 beforeEach(() => {

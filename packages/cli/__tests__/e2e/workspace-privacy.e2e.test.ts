@@ -25,7 +25,8 @@ describe("built CLI private routing", () => {
     const outbox = join(home, ".straude/pending-sync.json");
     writeFileSync(outbox, "must not be read as private usage");
     const result = await spawnCli({ args: ["push", "--non-interactive", "--days", "30"], home });
-    expect(result.exitCode).toBe(0);
+    expect(result.exitCode, result.stderr).toBe(0);
+    expect(result.stdout).toContain("No usage was collected");
     expect(readFileSync(outbox, "utf8")).toBe("must not be read as private usage");
   });
 
@@ -34,6 +35,7 @@ describe("built CLI private routing", () => {
     writeFileSync(join(home, ".straude/config.json"), JSON.stringify({ ...config, token: "other-account" }));
     const result = await spawnCli({ args: ["push", "--non-interactive"], home });
     expect(result.exitCode).toBe(1);
+    expect(result.stderr).toContain("another account or server");
     expect(JSON.parse(readFileSync(join(home, ".straude/workspace.json"), "utf8")).workspace_id).toBe(workspace);
   });
 
@@ -41,7 +43,9 @@ describe("built CLI private routing", () => {
     const path = join(home, ".straude/workspace.json");
     writeFileSync(path, "broken");
     for (let attempt = 0; attempt < 2; attempt++) {
-      expect((await spawnCli({ args: ["push", "--non-interactive"], home })).exitCode).toBe(1);
+      const result = await spawnCli({ args: ["push", "--non-interactive"], home });
+      expect(result.exitCode).toBe(1);
+      expect(result.stderr).toContain("Private workspace routing could not be read");
     }
     expect(readFileSync(path, "utf8")).toBe("broken");
   });
@@ -49,6 +53,7 @@ describe("built CLI private routing", () => {
   it("does not enroll from a preview without affirmative work-only consent", async () => {
     const result = await spawnCli({ args: ["workspace", "connect", workspace], home });
     expect(result.exitCode).toBe(1);
+    expect(result.stderr).toContain("--work-only to confirm");
     expect(() => readFileSync(join(home, ".straude/workspace.json"))).toThrow();
   });
 });
