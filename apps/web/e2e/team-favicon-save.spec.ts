@@ -36,7 +36,9 @@ for (const format of ["svg", "png"]) {
     try {
       expect((await db.auth.admin.createUser({ id, email, password, email_confirm: true })).error).toBeNull();
       expect((await db.from("users").upsert({ id, username, timezone: "UTC", onboarding_completed: true, is_public: true })).error).toBeNull();
-      expect((await db.storage.from("team-favicons").upload(objectPath, bytes, { contentType: format === "svg" ? "image/svg+xml" : "image/png" })).error).toBeNull();
+      const {error: uploadError} = await db.storage.from("team-favicons").upload(objectPath, bytes, {contentType: format === "svg" ? "image/svg+xml" : "image/png"});
+      if (uploadError) console.log("fixture upload failed", format, uploadError.name, uploadError.message, (uploadError as any).statusCode, (uploadError as any).originalError?.cause?.code);
+      expect(uploadError).toBeNull();
       expect((await db.from("team_favicon_cache").upsert({ domain, object_path: objectPath, retry_after: null })).error).toBeNull();
       const jar = new Map<string, string>();
       const member = createServerClient(supabaseUrl.href, env.NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY, {
