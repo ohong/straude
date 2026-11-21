@@ -27,6 +27,8 @@ export function RecapCard({
 
   return (
     <div
+      role="region"
+      aria-label="Recap card"
       className="relative overflow-hidden"
       style={{ borderRadius: 8 }}
     >

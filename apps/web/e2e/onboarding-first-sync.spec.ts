@@ -345,10 +345,10 @@ test.describe("first-sync onboarding", () => {
       await expect(page.getByRole("status").filter({ hasText: "Highlight saved." })).toBeVisible();
       await page.reload();
       await expect(page.getByLabel("Build of the week")).toHaveValue(post!.id);
-      await expect(page.getByRole("link", { name: "Shipped offline search" })).toHaveAttribute("href", `/post/${post!.id}`);
+      await expect(page.getByRole("region", { name: "Recap card" }).getByRole("link", { name: "Shipped offline search" })).toHaveAttribute("href", `/post/${post!.id}`);
       await page.getByLabel("Build of the week").selectOption("");
       await expect(page.getByRole("status").filter({ hasText: "Highlight removed." })).toBeVisible();
-      await expect(page.getByRole("link", { name: "Shipped offline search" })).toHaveCount(0);
+      await expect(page.getByRole("region", { name: "Recap card" }).getByRole("link", { name: "Shipped offline search" })).toHaveCount(0);
     } finally {
       await deleteLocalUser(user);
     }
