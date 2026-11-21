@@ -260,7 +260,7 @@ test.describe("first-sync onboarding", () => {
   // installed native collector in packaged-cli-first-sync.spec.ts. The cases
   // below deliberately isolate UI states using local fixture rows.
 
-  test("invited builders explicitly join and contribute a build day", async ({ browser, page }, testInfo) => {
+  test("invited builders explicitly join and contribute a build day", { tag: "@core" }, async ({ browser, page }, testInfo) => {
     const owner = await createLocalUser(true);
     const friend = await createLocalUser();
     const guest = await browser.newContext({ baseURL: projectBaseUrl(testInfo) });
@@ -315,7 +315,7 @@ test.describe("first-sync onboarding", () => {
     }
   });
 
-  test("confirms synced usage, publishes a title and opens its public permalink", { tag: "@mobile-journey" }, async ({ page, browser }, testInfo) => {
+  test("confirms synced usage, publishes a title and opens its public permalink", { tag: ["@core", "@mobile-journey"] }, async ({ page, browser }, testInfo) => {
     const user = await createLocalUser(true);
     try {
       const { data: post, error: postError } = await adminClient()
@@ -388,7 +388,7 @@ test.describe("first-sync onboarding", () => {
     }
   });
 
-  test("selects and removes a weekly build highlight across visits", async ({ page }, testInfo) => {
+  test("selects and removes a weekly build highlight across visits", { tag: "@core" }, async ({ page }, testInfo) => {
     const user = await createLocalUser(true);
     try {
       const admin = adminClient();

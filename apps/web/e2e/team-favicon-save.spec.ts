@@ -8,7 +8,7 @@ type FaviconFormat = "svg" | "png";
 type CachedIcons = Record<FaviconFormat, { domain: string; objectPath: string }>;
 
 const test = base.extend<object, { cachedIcons: CachedIcons }>({
-  cachedIcons: [async ({}, use) => {
+  cachedIcons: [async ({}, runTest) => {
     const env = loadWebEnv();
     const url = new URL(env.NEXT_PUBLIC_SUPABASE_URL ?? "");
     if (!["127.0.0.1", "localhost"].includes(url.hostname)) throw new Error("Favicon fixtures require local Supabase");
@@ -36,7 +36,7 @@ const test = base.extend<object, { cachedIcons: CachedIcons }>({
         }
         created.push(icons[format].objectPath);
       }
-      await use(icons);
+      await runTest(icons);
     } finally {
       if (created.length) expect((await bucket.remove(created)).error).toBeNull();
     }
@@ -57,7 +57,7 @@ test("profile routes reject unauthenticated requests with JSON", async ({ reques
 });
 
 for (const format of ["svg", "png"] as const) {
-  test(`saves and displays a cached rectangular ${format} through settings`, async ({ page, baseURL, cachedIcons }, testInfo) => {
+  test(`saves and displays a cached rectangular ${format} through settings`, { tag: format === "png" ? ["@core"] : [] }, async ({ page, baseURL, cachedIcons }, testInfo) => {
     const env = loadWebEnv();
     const supabaseUrl = new URL(env.NEXT_PUBLIC_SUPABASE_URL ?? "");
     if (!["127.0.0.1", "localhost"].includes(supabaseUrl.hostname)) throw new Error("Team favicon browser tests require local Supabase");

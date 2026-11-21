@@ -11,7 +11,7 @@ test.describe("Public leaderboard", () => {
     await expect(page.locator('button:has-text("All Time")')).toBeVisible();
   });
 
-  test("switching period updates URL", async ({ page }) => {
+  test("switching period updates URL", { tag: "@core" }, async ({ page }) => {
     await page.goto("/leaderboard");
     await page.waitForLoadState("domcontentloaded");
 

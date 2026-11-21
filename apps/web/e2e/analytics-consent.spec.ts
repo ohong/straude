@@ -204,7 +204,7 @@ test.describe("optional analytics consent and identity", () => {
     test.setTimeout(90_000);
   });
 
-  test("essential-only signup and confirmed sync create no optional traffic or activation cookie", async ({ page }, testInfo) => {
+  test("essential-only signup and confirmed sync create no optional traffic or activation cookie", { tag: "@core" }, async ({ page }, testInfo) => {
     const start = await receiptCount(page);
     const sdk = await sdkBoundary(page);
     const email = `consent-essential-${randomUUID()}@local.test`;

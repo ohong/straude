@@ -16,6 +16,12 @@ writes the managed keys directly into `apps/web/.env.local`.
 
 You do **not** need a hosted Supabase project for normal local UI work.
 
+## Browser checks
+
+Use `bun run --cwd apps/web test:e2e:core` for the everyday journeys on a disposable local stack. Use `bun run --cwd apps/web test:e2e` for the full suite.
+
+Pull requests run the core journeys. Apply the `ci:full-browser` label to run the complete suite on the same PR head before merging. Main and merge-queue runs always use the full suite. Both modes retain the database integration tests and packaged CLI platform checks.
+
 ## Verify private workspace sharing and weekly reports
 
 Use the disposable local stack. These tests refuse non-loopback app/database URLs, create fictional accounts in two workspaces, and remove their own fixtures. They temporarily backdate source consent using the local admin fixture so a historical week can be exercised without waiting a day; the product enrollment API does not permit this.

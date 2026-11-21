@@ -1,6 +1,6 @@
 import { test, expect } from "../helpers/public-builder";
 
-test("guests see a public builder's identity, follows, contributions and earned badge", async ({ page, publicBuilder }) => {
+test("guests see a public builder's identity, follows, contributions and earned badge", { tag: "@core" }, async ({ page, publicBuilder }) => {
   const { username } = publicBuilder;
   await page.goto(`/u/${username}`);
   await expect(page.getByRole("heading", { name: username, exact: true })).toBeVisible();

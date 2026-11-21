@@ -1,7 +1,7 @@
 import { test, expect } from "@playwright/test";
 
 test.describe("Cross-page navigation and theme", () => {
-  test("landing navbar Feed link works", async ({ page }) => {
+  test("landing navbar Feed link works", { tag: "@core" }, async ({ page }) => {
     await page.goto("/");
     await page.waitForLoadState("domcontentloaded");
 
