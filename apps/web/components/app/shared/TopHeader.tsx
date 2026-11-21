@@ -356,6 +356,9 @@ export function TopHeader({
                   <User size={16} aria-hidden="true" />
                   View Profile
                 </Link>
+                <Link href="/challenges" className="flex items-center gap-3 px-4 py-2.5 text-sm hover:bg-subtle" onClick={() => setProfileOpen(false)}>
+                  <User size={16} aria-hidden="true" /> Build challenges
+                </Link>
                 <Link
                   href="/recap"
                   className="flex items-center gap-3 px-4 py-2.5 text-sm hover:bg-subtle"

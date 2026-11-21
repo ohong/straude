@@ -12,6 +12,7 @@ const STATIC_PAGE_PATHS = new Set([
   "/about",
   "/admin",
   "/card",
+  "/challenges",
   "/cli",
   "/cli/verify",
   "/contact",
