@@ -138,7 +138,7 @@ export function MessagesInbox({
   const recipient = activeUsername ?? "";
   const draft = drafts[recipient] ?? "";
   const setDraft = (value: string) => setDrafts(prev => ({ ...prev, [recipient]: value }));
-  const [error, setError] = useState<string | null>(null);
+  const [actionError, setError] = useState<string | null>(null);
   const [attachmentsByUser, setAttachmentsByUser] = useState<Record<string, PendingAttachment[]>>({});
   const pendingAttachments = attachmentsByUser[recipient] ?? [];
   function setPendingAttachments(value: PendingAttachment[] | ((prev: PendingAttachment[]) => PendingAttachment[])) {
@@ -168,13 +168,9 @@ export function MessagesInbox({
   const threads = threadsQuery.data?.threads ?? EMPTY_THREADS;
   const threadsLoading = threadsQuery.isPending && threads.length === 0;
 
-  useEffect(() => {
-    if (threadsLoading) return;
-    if (isPhone) return;
-    if (!activeUsername && threads[0]?.counterpart_username) {
-      setActiveUsername(threads[0].counterpart_username);
-    }
-  }, [activeUsername, isPhone, threads, threadsLoading]);
+  if (!threadsLoading && !isPhone && !activeUsername && threads[0]?.counterpart_username) {
+    setActiveUsername(threads[0].counterpart_username);
+  }
 
   const conversationQuery = useQuery({
     queryKey: activeUsername
@@ -210,13 +206,7 @@ export function MessagesInbox({
   const conversationLoading = conversationQuery.isPending && !conversation;
   const conversationIsCurrent = counterpart?.username === activeUsername;
 
-  useEffect(() => {
-    if (conversationQuery.error) {
-      setError((conversationQuery.error as Error).message);
-    } else if (conversationIsCurrent) {
-      setError(null);
-    }
-  }, [conversationIsCurrent, conversationQuery.error]);
+  const error = actionError ?? conversationQuery.error?.message;
 
   useEffect(() => {
     for (const thread of threads.slice(0, 3)) {
@@ -378,6 +368,7 @@ export function MessagesInbox({
   }
 
   function selectConversation(username: string) {
+    setError(null);
     setActiveUsername(username);
     router.replace(`/messages?with=${encodeURIComponent(username)}`);
   }

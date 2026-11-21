@@ -1,6 +1,7 @@
 "use client";
 
-import { useEffect, useRef, useState, useSyncExternalStore } from "react";
+import { useEffect, useRef, useState } from "react";
+import { useHydrated } from "@/lib/utils/useHydrated";
 import { createPortal } from "react-dom";
 import { useRouter } from "next/navigation";
 import { createClient } from "@/lib/supabase/client";
@@ -52,16 +53,12 @@ export function buildProfileUpdatePayload(input: ProfileUpdatePayloadInput) {
 
 export type SettingsProfile = User & { crew_count: number };
 
-function subscribeToHydration() {
-  return () => {};
-}
-
 export default function SettingsClient({
   initialProfile,
 }: {
   initialProfile: SettingsProfile;
 }) {
-  const hydrated = useSyncExternalStore(subscribeToHydration, () => true, () => false);
+  const hydrated = useHydrated();
   const router = useRouter();
   const [profile, setProfile] = useState<SettingsProfile | null>(initialProfile);
   const [saving, setSaving] = useState(false);

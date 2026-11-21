@@ -10,7 +10,7 @@ import {
   DEFAULT_BACKGROUND_ID,
   type RecapBackgroundId,
 } from "@/lib/recap-backgrounds";
-
+import Link from "next/link";
 
 const money = (value: number) => new Intl.NumberFormat("en-US", { style: "currency", currency: "USD" }).format(value);
 
@@ -176,7 +176,7 @@ export function RecapPage({
     <>
       <header className="sticky top-0 z-10 flex h-16 items-center border-b border-border bg-background px-6">
         <h1 className="text-lg font-medium">Personal recap</h1>
-        <a href="/workspaces" className="ml-auto text-sm font-semibold text-accent hover:underline">Private workspaces</a>
+        <Link href="/workspaces" className="ml-auto text-sm font-semibold text-accent hover:underline">Private workspaces</Link>
       </header>
 
       <div className="p-6">

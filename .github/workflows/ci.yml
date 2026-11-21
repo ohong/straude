@@ -66,6 +66,10 @@ jobs:
           echo "No phantom dependencies."
         working-directory: apps/web
 
+      - name: Lint web
+        run: bun run lint --max-warnings 0
+        working-directory: apps/web
+
       - name: Typecheck web and shared
         run: bun run typecheck --filter=@straude/web
 

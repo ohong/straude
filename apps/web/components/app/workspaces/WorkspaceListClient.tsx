@@ -1,6 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useState } from "react";
+import { useHydrated } from "@/lib/utils/useHydrated";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { Button } from "@/components/ui/Button";
@@ -14,21 +15,25 @@ export function WorkspaceListClient() {
   const [name, setName] = useState("");
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
-  const [ready, setReady] = useState(false);
+  const ready = useHydrated();
 
-  const load = useCallback(async () => {
-    setError(null);
-    try {
-      const response = await fetch("/api/workspaces", { cache: "no-store" });
+  const load = useCallback((signal?: AbortSignal) => {
+    return fetch("/api/workspaces", { cache: "no-store", signal }).then(async response => {
       const payload = await response.json();
       if (!response.ok) throw new Error(payload.error ?? "Could not load workspaces.");
+      if (signal?.aborted) return;
       setWorkspaces(payload.workspaces);
-    } catch (cause) {
-      setError(cause instanceof Error ? cause.message : "Could not load workspaces.");
-    }
+      setError(null);
+    }).catch(cause => {
+      if (!signal?.aborted) setError(cause instanceof Error ? cause.message : "Could not load workspaces.");
+    });
   }, []);
 
-  useEffect(() => { setReady(true); void load(); }, [load]);
+  useEffect(() => {
+    const controller = new AbortController();
+    void load(controller.signal);
+    return () => controller.abort();
+  }, [load]);
 
   async function create(event: React.FormEvent<HTMLFormElement>) {
     event.preventDefault();

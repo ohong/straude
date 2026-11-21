@@ -1,7 +1,8 @@
 "use client";
 
+import { useHydrated } from "@/lib/utils/useHydrated";
 import Image from "next/image";
-import { useEffect, useMemo, useState } from "react";
+import { useMemo, useState } from "react";
 import { Check, ChevronDown, Copy, Download, ImageIcon } from "lucide-react";
 import { buildPostIntentUrl } from "@/lib/utils/post-share";
 
@@ -33,23 +34,13 @@ export function PostSharePanel({
   const [busy, setBusy] = useState<"share-x" | "copy-image" | "download" | null>(null);
   const [copied, setCopied] = useState<"image" | "link" | null>(null);
   const [feedback, setFeedback] = useState<string | null>(null);
-  const [shareUrl, setShareUrl] = useState("");
-  const [supportsClipboardImage, setSupportsClipboardImage] = useState(false);
+  const hydrated = useHydrated();
+  const shareUrl = shareUrlOverride ?? (hydrated ? new URL(`/post/${postId}`, window.location.origin).href : "");
+  const supportsClipboardImage = hydrated && typeof ClipboardItem !== "undefined" && typeof navigator.clipboard?.write === "function";
   const imageUrl = useMemo(
     () => imageUrlOverride ?? `/api/posts/${postId}/share-image?theme=accent`,
     [imageUrlOverride, postId]
   );
-
-  useEffect(() => {
-    setShareUrl(
-      shareUrlOverride ??
-        new URL(`/post/${postId}`, window.location.origin).toString()
-    );
-    setSupportsClipboardImage(
-      typeof ClipboardItem !== "undefined" &&
-        typeof navigator.clipboard?.write === "function"
-    );
-  }, [postId, shareUrlOverride]);
 
   async function copyImage() {
     setBusy("copy-image");

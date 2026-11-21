@@ -9,25 +9,31 @@ const delta = (value: number) => `${value > 0 ? "+" : ""}${money(value)}`;
 
 export default function WeeklyWorkspaceReport({ workspaceId }: { workspaceId: string }) {
   const [week, setWeek] = useState("");
-  const [report, setReport] = useState<WorkspaceReport | null>(null);
-  const [error, setError] = useState("");
   const [refresh, setRefresh] = useState(0);
-  const [loading, setLoading] = useState(true);
   const endpoint = `/api/workspaces/${encodeURIComponent(workspaceId)}/report`;
+  const url = week ? `${endpoint}?week=${encodeURIComponent(week)}` : endpoint;
+  const [result, setResult] = useState<{
+    url: string;
+    refresh: number;
+    data?: WorkspaceReport;
+    error?: string;
+  } | null>(null);
+  const loading = result?.url !== url || result.refresh !== refresh;
+  const report = loading ? null : result.data;
+  const error = loading ? null : result.error;
+
   useEffect(() => {
     const controller = new AbortController();
-    setLoading(true);
-    setError("");
-    setReport(null);
-    fetch(`${endpoint}${week ? `?week=${encodeURIComponent(week)}` : ""}`, { signal: controller.signal, cache: "no-store" })
+    fetch(url, { signal: controller.signal, cache: "no-store" })
       .then(async response => {
         const body = await response.json();
         if (!response.ok) throw new Error(body.error || "Unable to load the weekly report.");
-        setReport(body);
-      }).catch(e => { if (!controller.signal.aborted) setError(e.message); })
-      .finally(() => { if (!controller.signal.aborted) setLoading(false); });
+        if (!controller.signal.aborted) setResult({ url, refresh, data: body });
+      }).catch(e => {
+        if (!controller.signal.aborted) setResult({ url, refresh, error: e.message });
+      });
     return () => controller.abort();
-  }, [endpoint, week, refresh]);
+  }, [url, refresh]);
   return <section aria-labelledby="weekly-report-heading" className="space-y-5 border-t border-border pt-8">
     <div className="flex flex-wrap items-end justify-between gap-4">
       <div><p className="text-xs font-mono uppercase tracking-wider text-muted">Private workspace</p>

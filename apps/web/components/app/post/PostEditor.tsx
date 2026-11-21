@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, useRef, useEffect } from "react";
+import { useHydrated } from "@/lib/utils/useHydrated";
 import { useRouter } from "next/navigation";
 import Image from "next/image";
 import { Pencil, X, Sparkles, Upload, Loader2, Trash2, ChevronLeft, ChevronRight } from "lucide-react";
@@ -12,13 +13,40 @@ import { MentionInput } from "@/components/app/shared/MentionInput";
 import { compressImage } from "@/lib/utils/compress-image";
 import type { Post } from "@/types";
 
-export function PostEditor({ post, autoEdit = false }: { post: Post; autoEdit?: boolean }) {
+type EditorProps = { post: Post; autoEdit?: boolean };
+
+type Draft = { title: string; description: string; images: string[] };
+
+function readDraft(postId: string): Partial<Draft> {
+  try {
+    const saved = JSON.parse(localStorage.getItem(`straude_draft_${postId}`) ?? "null");
+    const draft: Partial<Draft> = {};
+    if (typeof saved?.title === "string") draft.title = saved.title;
+    if (typeof saved?.description === "string") draft.description = saved.description;
+    if (Array.isArray(saved?.images) && saved.images.every((url: unknown) => typeof url === "string")) {
+      draft.images = saved.images;
+    }
+    return draft;
+  } catch {
+    return {};
+  }
+}
+
+export function PostEditor(props: EditorProps) {
+  const hydrated = useHydrated();
+  // An edit deep link must load its saved draft before enabling autosave.
+  if (props.autoEdit && !hydrated) return null;
+  return <Editor key={props.post.id} {...props} />;
+}
+
+function Editor({ post, autoEdit = false }: EditorProps) {
   const router = useRouter();
   const posthog = usePostHog();
   const [editing, setEditing] = useState(autoEdit);
-  const [title, setTitle] = useState(post.title ?? "");
-  const [description, setDescription] = useState(post.description ?? "");
-  const [images, setImages] = useState<string[]>(post.images ?? []);
+  const [initialDraft] = useState(() => autoEdit ? readDraft(post.id) : null);
+  const [title, setTitle] = useState(initialDraft?.title ?? post.title ?? "");
+  const [description, setDescription] = useState(initialDraft?.description ?? post.description ?? "");
+  const [images, setImages] = useState<string[]>(initialDraft?.images ?? post.images ?? []);
   const [saving, setSaving] = useState(false);
   const [generating, setGenerating] = useState(false);
   const [deleting, setDeleting] = useState(false);
@@ -28,19 +56,13 @@ export function PostEditor({ post, autoEdit = false }: { post: Post; autoEdit?: 
   const fileRef = useRef<HTMLInputElement>(null);
   const dragIndexRef = useRef<number | null>(null);
 
-  // Restore draft from localStorage when entering edit mode
-  useEffect(() => {
-    if (!editing) return;
-    const saved = localStorage.getItem(`straude_draft_${post.id}`);
-    if (saved) {
-      try {
-        const draft = JSON.parse(saved);
-        if (draft.title !== undefined) setTitle(draft.title);
-        if (draft.description !== undefined) setDescription(draft.description);
-        if (draft.images !== undefined) setImages(draft.images);
-      } catch {}
-    }
-  }, [editing, post.id]);
+  function startEditing() {
+    const draft = readDraft(post.id);
+    if (draft.title !== undefined) setTitle(draft.title);
+    if (draft.description !== undefined) setDescription(draft.description);
+    if (draft.images) setImages(draft.images);
+    setEditing(true);
+  }
 
   // Debounce-save draft to localStorage while editing
   useEffect(() => {
@@ -205,7 +227,7 @@ export function PostEditor({ post, autoEdit = false }: { post: Post; autoEdit?: 
   if (!editing) {
     return (
       <div className="flex justify-end gap-2 px-4 py-3 border-b border-dashed border-muted/30 sm:px-6">
-        <Button variant="ghost" size="sm" onClick={() => setEditing(true)}>
+        <Button variant="ghost" size="sm" onClick={startEditing}>
           <Pencil size={14} className="mr-1.5" />
           Edit post
         </Button>
