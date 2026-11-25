@@ -9,6 +9,10 @@ export function formatCurrency(n: number | null | undefined): string {
   });
 }
 
+export function formatPercent(value: number): string {
+  return `${(value * 100).toFixed(1).replace(/\.0$/, "")}%`;
+}
+
 export function timeAgo(dateStr: string): string {
   const ms = Date.now() - new Date(dateStr).getTime();
   const mins = Math.floor(ms / 60_000);

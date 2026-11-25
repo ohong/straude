@@ -32,6 +32,7 @@ interface TopHeaderProps {
 const navLinks = [
   { href: "/feed", label: "Feed" },
   { href: "/leaderboard", label: "Leaderboard" },
+  { href: "/usage", label: "Usage" },
   { href: "/search", label: "Search" },
   { href: "/workspaces", label: "Workspaces" },
 ] as const;

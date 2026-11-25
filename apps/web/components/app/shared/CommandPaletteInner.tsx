@@ -125,6 +125,12 @@ export function CommandPaletteInner({
         perform: () => router.push("/recap"),
       },
       {
+        id: "usage",
+        name: "Usage",
+        shortcut: ["g", "u"],
+        perform: () => router.push("/usage"),
+      },
+      {
         id: "prompts",
         name: "Prompts",
         shortcut: ["g", "p"],

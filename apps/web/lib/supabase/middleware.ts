@@ -98,7 +98,7 @@ export async function updateSession(request: NextRequest) {
   }
 
   // Protect app routes
-  const protectedPaths = ["/settings", "/post/new", "/search", "/prompts", "/messages", "/notifications", "/admin"];
+  const protectedPaths = ["/settings", "/post/new", "/search", "/prompts", "/messages", "/notifications", "/admin", "/usage"];
   const isProtected = request.nextUrl.pathname === "/recap" || protectedPaths.some((p) =>
     request.nextUrl.pathname.startsWith(p)
   );
