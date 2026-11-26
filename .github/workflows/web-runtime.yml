@@ -6,6 +6,12 @@ on:
       shard:
         type: string
         required: true
+      supabase-runtime:
+        type: string
+        default: legacy
+      benchmark:
+        type: boolean
+        default: false
 
     outputs:
       package-sha:
@@ -18,13 +24,19 @@ jobs:
       package-sha: ${{ steps.native-package.outputs.sha }}
     runs-on: ubuntu-24.04
     env:
-      BROWSER_SUITE: ${{ github.event_name == 'pull_request' && !contains(github.event.pull_request.labels.*.name, 'ci:full-browser') && 'core' || 'full' }}
+      BROWSER_SUITE: ${{ !inputs.benchmark && github.event_name == 'pull_request' && !contains(github.event.pull_request.labels.*.name, 'ci:full-browser') && 'core' || 'full' }}
       BROWSER_SHARD: ${{ inputs.shard }}
       NEXT_PUBLIC_POSTHOG_KEY: phc_local_runtime_evidence
       POSTHOG_API_KEY: phc_local_runtime_evidence
       POSTHOG_HOST: http://127.0.0.1:3118
 
     steps:
+      - name: Validate benchmark inputs
+        if: (inputs.supabase-runtime != 'legacy' && !inputs.benchmark) || !contains(fromJSON('["legacy","docker","native"]'), inputs.supabase-runtime)
+        run: |
+          echo "::error::Select legacy for normal CI or enable benchmarking for an experimental runtime."
+          exit 1
+
       - uses: actions/checkout@v7
 
       - uses: oven-sh/setup-bun@v2
@@ -45,10 +57,10 @@ jobs:
       - name: Setup Supabase CLI
         uses: supabase/setup-cli@v3
         with:
-          version: 2.75.0
+          version: ${{ inputs.supabase-runtime == 'legacy' && '2.75.0' || '3.4.0' }}
 
       - name: Place disposable container storage in memory
-        if: runner.environment == 'github-hosted'
+        if: runner.environment == 'github-hosted' && (inputs.supabase-runtime != 'native' || inputs.shard == 'native')
         shell: bash
         run: |
           set -euo pipefail
@@ -69,23 +81,41 @@ jobs:
           docker info --format 'Container storage driver: {{.Driver}}'
 
       - name: Prepare isolated runtime
+        timeout-minutes: ${{ inputs.benchmark && 10 || 360 }}
         shell: bash
         env:
           BUN_INSTALL_CACHE_DIR: ~/.bun/install/cache
+          SUPABASE_RUNTIME: ${{ inputs.supabase-runtime }}
+          SUPABASE_BENCHMARK: ${{ inputs.benchmark }}
         run: |
           set -euo pipefail
-          supabase start --exclude studio,postgres-meta,logflare,vector,edge-runtime &
+          if [[ "$SUPABASE_BENCHMARK" == true ]]; then
+            (
+              echo "Starting Supabase $SUPABASE_RUNTIME and checking sign-in and Storage"
+              .github/scripts/measure-supabase.sh "$SUPABASE_RUNTIME" cold
+              echo "Finished Supabase readiness checks"
+            ) &
+          else
+            supabase start --exclude studio,postgres-meta,logflare,vector,edge-runtime &
+          fi
           pids=($!)
           if [[ "$BROWSER_SHARD" == native ]]; then
-            docker pull node:22-bookworm-slim &
+            (
+              if [[ "$SUPABASE_BENCHMARK" == true ]]; then echo "Pulling native CLI test image"; fi
+              docker pull node:22-bookworm-slim
+              if [[ "$SUPABASE_BENCHMARK" == true ]]; then echo "Native CLI test image ready"; fi
+            ) &
             pids+=($!)
           fi
           (
+            if [[ "$SUPABASE_BENCHMARK" == true ]]; then echo "Installing workspace dependencies"; fi
             bun install --frozen-lockfile
+            if [[ "$SUPABASE_BENCHMARK" == true ]]; then echo "Installing Playwright browsers and system dependencies"; fi
             cd apps/web
             browsers=(chromium)
             if [[ "$BROWSER_SHARD" == app ]]; then browsers+=(webkit); fi
             bunx playwright install --with-deps "${browsers[@]}"
+            if [[ "$SUPABASE_BENCHMARK" == true ]]; then echo "Playwright browsers and system dependencies ready"; fi
           ) &
           pids+=($!)
           status=0
@@ -93,8 +123,14 @@ jobs:
           exit "$status"
 
       - name: Configure web for local Supabase
+        env:
+          SUPABASE_BENCHMARK: ${{ inputs.benchmark }}
         run: |
-          bun run local:env
+          if [[ "$SUPABASE_BENCHMARK" == true ]]; then
+            bun run local:env --status-file "$RUNNER_TEMP/supabase.env"
+          else
+            bun run local:env
+          fi
           # Browser test processes need the same disposable fixture settings as
           # Next.js. Copy only this local setup's required keys without logging them.
           python3 - <<'PY'

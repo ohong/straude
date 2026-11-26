@@ -6,6 +6,14 @@ on:
   pull_request:
     types: [opened, synchronize, reopened, labeled, unlabeled]
   merge_group:
+  workflow_call:
+    inputs:
+      supabase-runtime:
+        type: string
+        default: legacy
+      benchmark:
+        type: boolean
+        default: false
 
 permissions:
   contents: read
@@ -88,11 +96,15 @@ jobs:
     uses: ./.github/workflows/web-runtime.yml
     with:
       shard: ${{ matrix.shard }}
+      supabase-runtime: ${{ inputs.supabase-runtime || 'legacy' }}
+      benchmark: ${{ inputs.benchmark || false }}
 
   native-runtime:
     uses: ./.github/workflows/web-runtime.yml
     with:
       shard: native
+      supabase-runtime: ${{ inputs.supabase-runtime || 'legacy' }}
+      benchmark: ${{ inputs.benchmark || false }}
 
   cli-package:
     name: CLI package
@@ -189,3 +201,20 @@ jobs:
           jq -e 'all(.[]; .result == "success")
             and (.["cli-package"].outputs["package-sha"] | test("^[0-9a-f]{64}$"))
             and (.["cli-package"].outputs["package-sha"] == .["native-runtime"].outputs["package-sha"])' <<< "$RESULTS"
+
+      - name: Collect browser evidence
+        if: inputs.benchmark
+        uses: actions/download-artifact@v8
+        with:
+          pattern: straude-runtime-evidence-*
+          path: benchmark-evidence
+
+      - name: Require all 70 browser cases to pass on their first attempt
+        if: inputs.benchmark
+        run: |
+          set -euo pipefail
+          mapfile -t reports < <(find benchmark-evidence -name runtime-summary.evidence.json)
+          (( ${#reports[@]} == 3 ))
+          jq -es 'map(.tests[]) | length == 70
+            and (map(.id) | unique | length == 70)
+            and all(.[]; .outcome == "expected" and (.attempts | length == 1 and .[0].retry == 0 and .[0].status == "passed"))' "${reports[@]}"
