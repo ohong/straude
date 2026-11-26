@@ -3,7 +3,7 @@ name: Runtime benchmark
 on:
   push:
     branches:
-      - oh-ci-runtime-bench
+      - oh-ci-runtime-bench-startup
       - oh-ci-runtime-bench-legacy
       - oh-ci-runtime-bench-docker
       - oh-ci-runtime-bench-native
@@ -13,7 +13,7 @@ permissions:
 
 jobs:
   startup:
-    if: github.ref_name == 'oh-ci-runtime-bench'
+    if: github.ref_name == 'oh-ci-runtime-bench-startup'
     runs-on: ubuntu-24.04
     strategy:
       fail-fast: false
@@ -38,7 +38,7 @@ jobs:
         run: .github/scripts/measure-supabase.sh "$RUNTIME" warm
 
   full:
-    if: github.ref_name != 'oh-ci-runtime-bench'
+    if: github.ref_name != 'oh-ci-runtime-bench-startup'
     uses: ./.github/workflows/ci.yml
     with:
       benchmark: true
