@@ -4,10 +4,11 @@
 
 ### Release context
 
-Published CLI 0.2.3 contains the dashboard timeout/retry fix and account-specific sync health in `straude auto`. The accounting and consent changes below remain unreleased. Coordinate a supported-collector CLI release before enforcing the new server collector floor. Credential lifetime is unchanged.
+Published CLI 0.3.0 includes private workspace sync and requires ccusage 20.0.26 or later. CLI 0.4.0 is prepared for the tag-driven release workflow.
 
 ### Added
 
+- **Optional build note after CLI sync.** When the latest synced day creates a post, the CLI offers a one-line title in an interactive terminal. Press Enter to skip. If saving the title fails, usage stays synced and the CLI prints a link to edit the post.
 - **Duplicate devices are detected and merged at submit time.** When a hostname match quarantines a new installation, `submit_usage_day_v2` now compares the incoming per-agent token counts with the other device's stored rows for the same date and records `overlap_dates` (identical) and `divergent_dates` (different) on the reconciliation candidate. Once a pair has two or more identical days and no differing day, it merges through the existing resolve path and the submit continues against the merged identity, so `daily_usage` counts the day once. Otherwise the candidate stays `ambiguous` with the evidence attached. An explicit `kept_separate` decision stays in force while new matching or differing evidence is shown; only a deliberate user merge can reconsider it. Only future pushes are affected; nothing is backfilled.
 
 ### Changed
