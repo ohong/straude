@@ -16,9 +16,12 @@ jobs:
         runtime: [legacy, docker, native]
     steps:
       - uses: actions/checkout@v7
+      - uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: 1.3.3
       - uses: supabase/setup-cli@v3
         with:
-          version: ${{ matrix.runtime == 'legacy' && '2.75.0' || '3.4.0' }}
+          version: ${{ matrix.runtime == 'legacy' && '2.75.0' || '3.4.1-beta.1' }}
       - name: Start disposable Supabase
         env:
           RUNTIME: ${{ matrix.runtime }}
@@ -31,7 +34,24 @@ jobs:
               ;;
             docker|native)
               export SUPABASE_EXPERIMENTAL_STACK=1
-              time supabase start --runtime "$RUNTIME" >/dev/null
+              bun -e '
+                import { readFileSync, writeFileSync, unlinkSync } from "node:fs";
+                const path = "supabase/config.toml";
+                const config = Bun.TOML.parse(readFileSync(path, "utf8"));
+                config.local_smtp = config.inbucket;
+                delete config.inbucket;
+                delete config.api.tls;
+                delete config.edge_runtime.deno_version;
+                delete config.experimental;
+                delete config.studio.api_url;
+                delete config.studio.openai_api_key;
+                for (const section of [config.api, config.db, config.studio, config.local_smtp]) {
+                  delete section.port;
+                }
+                writeFileSync("supabase/config.jsonc", JSON.stringify(config), "utf8");
+                unlinkSync(path);
+              '
+              time supabase start --runtime "$RUNTIME" --exclude studio,analytics,functions >/dev/null
               supabase status --env --output-format text > "$RUNNER_TEMP/supabase.env"
               ;;
           esac
