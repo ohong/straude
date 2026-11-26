@@ -28,6 +28,7 @@ if [[ "$phase" == warm ]]; then
   fi
 fi
 
+echo "Starting stack mode=$runtime cache=$phase"
 begin=$(date +%s%3N)
 "${start[@]}" > /dev/null
 started=$(date +%s%3N)
@@ -68,6 +69,7 @@ storage_probe() {
   echo "supabase_ready mode=$runtime cache=$phase service=storage duration_ms=$(($(date +%s%3N) - begin))"
 }
 
+echo "Probing Auth and Storage mode=$runtime cache=$phase"
 auth_probe &
 auth_pid=$!
 storage_probe &

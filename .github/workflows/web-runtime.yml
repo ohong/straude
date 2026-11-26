@@ -81,6 +81,7 @@ jobs:
           docker info --format 'Container storage driver: {{.Driver}}'
 
       - name: Prepare isolated runtime
+        timeout-minutes: ${{ inputs.benchmark && 10 || 360 }}
         shell: bash
         env:
           BUN_INSTALL_CACHE_DIR: ~/.bun/install/cache
@@ -89,21 +90,32 @@ jobs:
         run: |
           set -euo pipefail
           if [[ "$SUPABASE_BENCHMARK" == true ]]; then
-            .github/scripts/measure-supabase.sh "$SUPABASE_RUNTIME" cold &
+            (
+              echo "Starting Supabase $SUPABASE_RUNTIME and checking sign-in and Storage"
+              .github/scripts/measure-supabase.sh "$SUPABASE_RUNTIME" cold
+              echo "Finished Supabase readiness checks"
+            ) &
           else
             supabase start --exclude studio,postgres-meta,logflare,vector,edge-runtime &
           fi
           pids=($!)
           if [[ "$BROWSER_SHARD" == native ]]; then
-            docker pull node:22-bookworm-slim &
+            (
+              if [[ "$SUPABASE_BENCHMARK" == true ]]; then echo "Pulling native CLI test image"; fi
+              docker pull node:22-bookworm-slim
+              if [[ "$SUPABASE_BENCHMARK" == true ]]; then echo "Native CLI test image ready"; fi
+            ) &
             pids+=($!)
           fi
           (
+            if [[ "$SUPABASE_BENCHMARK" == true ]]; then echo "Installing workspace dependencies"; fi
             bun install --frozen-lockfile
+            if [[ "$SUPABASE_BENCHMARK" == true ]]; then echo "Installing Playwright browsers and system dependencies"; fi
             cd apps/web
             browsers=(chromium)
             if [[ "$BROWSER_SHARD" == app ]]; then browsers+=(webkit); fi
             bunx playwright install --with-deps "${browsers[@]}"
+            if [[ "$SUPABASE_BENCHMARK" == true ]]; then echo "Playwright browsers and system dependencies ready"; fi
           ) &
           pids+=($!)
           status=0

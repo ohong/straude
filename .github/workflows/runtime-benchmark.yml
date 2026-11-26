@@ -42,10 +42,12 @@ jobs:
         with:
           version: ${{ matrix.runtime == 'legacy' && '2.75.0' || '3.4.0' }}
       - name: Measure cold stack startup and readiness
+        timeout-minutes: 10
         env:
           RUNTIME: ${{ matrix.runtime }}
         run: .github/scripts/measure-supabase.sh "$RUNTIME" cold
       - name: Measure startup and readiness with cached artifacts
+        timeout-minutes: 10
         env:
           RUNTIME: ${{ matrix.runtime }}
         run: .github/scripts/measure-supabase.sh "$RUNTIME" warm
