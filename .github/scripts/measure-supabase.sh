@@ -4,6 +4,7 @@ set -euo pipefail
 runtime=${1:?Supply legacy, docker or native}
 phase=${2:?Supply cold or warm}
 status_file="$RUNNER_TEMP/supabase.env"
+workdir="$RUNNER_TEMP/supabase-benchmark"
 
 case "$runtime" in
   legacy)
@@ -12,8 +13,9 @@ case "$runtime" in
     ;;
   docker|native)
     export SUPABASE_EXPERIMENTAL_STACK=1
-    start=(supabase start --runtime "$runtime" --exclude studio,analytics,functions)
-    status=(supabase status --env --output-format text)
+    start=(supabase stack start --workdir "$workdir" --runtime "$runtime" --exclude studio,analytics,functions)
+    status=(supabase stack status --workdir "$workdir" --env --output-format text)
+    if [[ "$phase" == cold ]]; then bun scripts/prepare-local-supabase-stack.mjs "$workdir"; fi
     ;;
   *) exit 2 ;;
 esac
@@ -22,7 +24,7 @@ if [[ "$phase" == warm ]]; then
   if [[ "$runtime" == legacy ]]; then
     supabase stop --no-backup >/dev/null
   else
-    supabase stack destroy --yes >/dev/null
+    supabase stack destroy --workdir "$workdir" --yes >/dev/null
   fi
 fi
 

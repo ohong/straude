@@ -28,9 +28,6 @@ jobs:
       - uses: supabase/setup-cli@v3
         with:
           version: ${{ matrix.runtime == 'legacy' && '2.75.0' || '3.4.0' }}
-      - name: Prepare experimental configuration
-        if: matrix.runtime != 'legacy'
-        run: bun .github/scripts/prepare-experimental-supabase.ts
       - name: Measure cold stack startup and readiness
         env:
           RUNTIME: ${{ matrix.runtime }}
