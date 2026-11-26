@@ -133,6 +133,36 @@ bun run dev
 
 The app will be available at `http://localhost:3000`.
 
+### Isolated Supabase for Git worktrees
+
+The experimental stack assigns each worktree its own Supabase ports and database.
+The commands use Supabase CLI 3.4.0 and an ignored config derived from
+`supabase/config.toml`. The Docker setup above remains available.
+
+```bash
+bun install --frozen-lockfile
+bun run local:stack:setup
+bun --cwd apps/web dev
+```
+
+Setup uses Docker or Podman when available and falls back to native processes on
+Apple silicon macOS and supported Linux hosts. Choose native explicitly with
+`bun run local:stack:setup --runtime native`. The runtime stays fixed for a stack.
+See [Supabase runtime requirements](https://supabase.com/docs/guides/local-development/docker-and-native-runtimes).
+
+Setup initializes a fresh database from migrations and `supabase/seed.sql`, then
+writes this stack's endpoints to `apps/web/.env.local`. Repeating setup keeps
+existing database rows. Use `bun run local:seed` after setup if you want demo
+accounts and data.
+
+- `bun run local:stack:up` starts the stack without writing the app environment.
+- `bun run local:stack:status` shows the assigned endpoints. Add `--env` to export
+  machine-readable connection settings, including local credentials.
+- `bun run local:stack:down` stops this stack and retains its data. Stop it
+  before switching branches or removing the worktree.
+- `bun run local:stack:reset` rebuilds this stack's database from migrations and
+  `supabase/seed.sql`, deleting existing rows. It requires a running stack.
+
 ## Docs
 
 | Document | Description |
