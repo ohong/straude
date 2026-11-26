@@ -1,6 +1,7 @@
 import { createClient } from "@supabase/supabase-js";
 import { existsSync, readFileSync } from "node:fs";
 import path from "node:path";
+import { assertLocalUrl, parseEnv } from "./local-supabase-status.mjs";
 
 const appDir = process.cwd();
 const envPath = path.join(appDir, ".env.local");
@@ -8,17 +9,6 @@ const envPath = path.join(appDir, ".env.local");
 if (!existsSync(envPath)) {
   console.error("Missing apps/web/.env.local. Run `bun run local:env` first.");
   process.exit(1);
-}
-
-function parseEnv(raw) {
-  const env = new Map();
-  for (const line of raw.split("\n")) {
-    if (!line || line.trim().startsWith("#")) continue;
-    const idx = line.indexOf("=");
-    if (idx === -1) continue;
-    env.set(line.slice(0, idx), line.slice(idx + 1).replace(/^"(.*)"$/, "$1"));
-  }
-  return env;
 }
 
 const env = parseEnv(readFileSync(envPath, "utf8"));
@@ -29,6 +19,8 @@ if (!supabaseUrl || !serviceKey) {
   console.error("Local Supabase URL or secret key is missing from apps/web/.env.local.");
   process.exit(1);
 }
+
+assertLocalUrl(supabaseUrl, "Supabase API", ["http:", "https:"]);
 
 const supabase = createClient(supabaseUrl, serviceKey, {
   auth: {

@@ -14,6 +14,7 @@ import { ANALYTICS_BROWSER_USE, assertAnalyticsBrowser, configureAnalyticsBrowse
 const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL ?? "";
 const publishableKey = process.env.NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY ?? "";
 const secretKey = process.env.SUPABASE_SECRET_KEY ?? "";
+const mailUrl = process.env.SUPABASE_LOCAL_MAIL_URL ?? "";
 const receiverUrl = process.env.ACTIVATION_CAPTURE_URL ?? "http://127.0.0.1:3118";
 const lifecycleEvents = ["signup_completed", "first_sync_confirmed", "activation_completed"];
 type EventReceipt = {
@@ -108,18 +109,18 @@ async function signUp(page: Page, email: string) {
   await page.getByLabel("Email", { exact: true }).fill(email);
   await page.getByRole("button", { name: "Send magic link", exact: true }).click();
   await expect(page.getByText("Check your email", { exact: true })).toBeVisible();
-  const mail = new URL(supabaseUrl);
-  mail.port = String(Number(mail.port) + 3);
   let messageId = "";
   await expect.poll(async () => {
-    const response = await page.request.get(new URL(`/api/v1/search?query=${encodeURIComponent(`to:${email}`)}`, mail).href);
+    const response = await page.request.get(new URL(`/api/v1/search?query=${encodeURIComponent(`to:${email}`)}`, mailUrl).href);
     expect(response.status()).toBe(200);
     messageId = (await response.json()).messages?.[0]?.ID ?? "";
     return Boolean(messageId);
   }).toBe(true);
-  const message = await (await page.request.get(new URL(`/api/v1/message/${messageId}`, mail).href)).json();
+  const message = await (await page.request.get(new URL(`/api/v1/message/${messageId}`, mailUrl).href)).json();
   const link = String(message.HTML).match(/href="([^"]*\/auth\/v1\/verify[^\"]*)"/)?.[1]?.replaceAll("&amp;", "&");
   if (!link) throw new Error("Local signup email is missing verification link");
+  expect(new URL(link).origin, "Magic link uses the selected local Auth endpoint")
+    .toBe(new URL(supabaseUrl).origin);
   await page.goto(link);
   await expect(page).toHaveURL(/\/onboarding$/);
   const profile = await page.request.get("/api/users/me");
@@ -193,7 +194,7 @@ test.describe("optional analytics consent and identity", () => {
     await configureAnalyticsBrowser(page);
     testInfo.annotations.push({ type: "browser_environment",
       description: "Ordinary Chrome UA/CDP client-hint metadata; AutomationControlled disabled; actual SDK bot/consent checks and CSP remain enabled" });
-    for (const [label, value] of [["app", testInfo.project.use.baseURL], ["Supabase", supabaseUrl], ["receiver", receiverUrl]]) {
+    for (const [label, value] of [["app", testInfo.project.use.baseURL], ["Supabase", supabaseUrl], ["Mailpit", mailUrl], ["receiver", receiverUrl]]) {
       if (typeof value !== "string" || !loopback(value)) throw new Error(`Refusing non-loopback or missing ${label} URL`);
     }
     test.skip(!publishableKey || !secretKey, "Real local Supabase credentials required");

@@ -1,6 +1,7 @@
 "use client";
 
 import Image from "next/image";
+import { isLocalSupabaseImage } from "@/lib/supabase/local-url";
 
 interface ImageGridProps {
   images: string[];
@@ -12,7 +13,7 @@ const thumbnailFrameClassName =
   "relative block overflow-hidden rounded border border-border/35 bg-subtle";
 
 function FeedImage({ src, sizes }: { src: string; sizes: string }) {
-  return <Image src={src} alt="" fill className="object-contain" sizes={sizes} />;
+  return <Image src={src} unoptimized={isLocalSupabaseImage(src)} alt="" fill className="object-contain" sizes={sizes} />;
 }
 
 export function ImageGrid({ images, maxVisible = 5, onImageClick }: ImageGridProps) {

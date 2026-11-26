@@ -3,6 +3,7 @@
 import { useState, useEffect, useCallback, useRef } from "react";
 import { createPortal } from "react-dom";
 import Image from "next/image";
+import { isLocalSupabaseImage } from "@/lib/supabase/local-url";
 import { X, ChevronLeft, ChevronRight } from "lucide-react";
 import { useFocusTrap } from "@/components/app/shared/useFocusTrap";
 
@@ -114,6 +115,7 @@ export function ImageLightbox({ images, initialIndex, onClose }: ImageLightboxPr
       <div className="relative max-h-[85vh] max-w-[90vw]" style={{ width: "90vw", height: "85vh" }}>
         <Image
           src={images[index]}
+          unoptimized={isLocalSupabaseImage(images[index])}
           alt=""
           fill
           className="object-contain"

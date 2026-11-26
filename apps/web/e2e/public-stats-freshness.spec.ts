@@ -5,7 +5,7 @@ import { randomUUID } from "node:crypto";
 
 // This suite changes the global LOCAL snapshot. Run with an exclusive DB lease,
 // never alongside integration tests (their helpers truncate application tables).
-const dbUrl = process.env.SUPABASE_TEST_DB_URL ?? "postgres://postgres:postgres@127.0.0.1:54322/postgres";
+const dbUrl = process.env.SUPABASE_TEST_DB_URL ?? "";
 const apiUrl = process.env.NEXT_PUBLIC_SUPABASE_URL ?? "";
 const secretKey = process.env.SUPABASE_SECRET_KEY ?? "";
 const cronSecret = process.env.CRON_SECRET ?? "";
@@ -21,6 +21,7 @@ type Totals = {
 };
 
 function assertLoopback(value: string, label: string) {
+  if (!URL.canParse(value)) throw new Error(`Missing or invalid ${label} URL. Run \`bun run local:env\`.`);
   const hostname = new URL(value).hostname;
   if (!["localhost", "127.0.0.1", "[::1]", "::1"].includes(hostname)) {
     throw new Error(`Refusing public-stats E2E against non-loopback ${label}`);

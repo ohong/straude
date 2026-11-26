@@ -1,62 +1,50 @@
-import { execFileSync } from "node:child_process";
-import { existsSync, readFileSync, writeFileSync } from "node:fs";
+import { lstatSync, mkdtempSync, readFileSync, renameSync, rmSync, writeFileSync } from "node:fs";
 import { randomBytes } from "node:crypto";
 import path from "node:path";
+import { parseArgs } from "node:util";
+import { localSupabaseEndpoints, parseEnv, readLegacyStatus } from "./local-supabase-status.mjs";
 
 const appDir = process.cwd();
 const repoRoot = path.resolve(appDir, "..", "..");
-const envPath = path.join(appDir, ".env.local");
-
-function parseEnv(raw) {
-  const entries = new Map();
-  for (const line of raw.split("\n")) {
-    if (!line || line.trim().startsWith("#")) continue;
-    const idx = line.indexOf("=");
-    if (idx === -1) continue;
-    const key = line.slice(0, idx).trim();
-    const value = line.slice(idx + 1).replace(/^"(.*)"$/, "$1").trim();
-    entries.set(key, value);
-  }
-  return entries;
-}
+const { values: options } = parseArgs({
+  options: {
+    "status-file": { type: "string" },
+    output: { type: "string" },
+  },
+});
+const envPath = options.output ? path.resolve(options.output) : path.join(appDir, ".env.local");
 
 function randomSecret(label) {
   return `${label}-${randomBytes(16).toString("hex")}`;
 }
 
-let statusOutput = "";
+let status;
 try {
-  statusOutput = execFileSync(
-    "bunx",
-    [
-      "supabase",
-      "status",
-      "-o",
-      "env",
-    ],
-    {
-      cwd: repoRoot,
-      encoding: "utf8",
-      stdio: ["ignore", "pipe", "pipe"],
-    }
-  );
+  const statusOutput = options["status-file"]
+    ? readFileSync(options["status-file"], "utf8")
+    : readLegacyStatus(repoRoot);
+  status = localSupabaseEndpoints(parseEnv(statusOutput));
 } catch (error) {
-  const message =
-    error instanceof Error ? error.message : "Failed to read local Supabase status.";
-  console.error(message);
-  console.error("Run `bun run local:up` first.");
+  console.error(error instanceof Error ? error.message : "Failed to read local Supabase status.");
+  if (!options["status-file"]) console.error("Run `bun run local:up` first.");
   process.exit(1);
 }
 
-const localVars = parseEnv(statusOutput);
-const existingVars = existsSync(envPath)
-  ? parseEnv(readFileSync(envPath, "utf8"))
-  : new Map();
+const existingFile = lstatSync(envPath, { throwIfNoEntry: false });
+if (existingFile && !existingFile.isFile()) {
+  throw new Error(`Refusing to write through a non-regular env file: ${envPath}`);
+}
+const existingVars = existingFile ? parseEnv(readFileSync(envPath, "utf8")) : new Map();
 
 const managedEntries = new Map([
-  ["NEXT_PUBLIC_SUPABASE_URL", localVars.get("NEXT_PUBLIC_SUPABASE_URL") ?? localVars.get("API_URL") ?? "http://127.0.0.1:54321"],
-  ["NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY", localVars.get("NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY") ?? localVars.get("PUBLISHABLE_KEY") ?? ""],
-  ["SUPABASE_SECRET_KEY", localVars.get("SUPABASE_SECRET_KEY") ?? localVars.get("SECRET_KEY") ?? ""],
+  ["NEXT_PUBLIC_SUPABASE_URL", status.apiUrl],
+  ["NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY", status.publishableKey],
+  ["SUPABASE_SECRET_KEY", status.secretKey],
+  ["SUPABASE_TEST_API_URL", status.apiUrl],
+  ["SUPABASE_TEST_DB_URL", status.dbUrl],
+  ["SUPABASE_LOCAL_MAIL_URL", status.mailUrl],
+  ["SUPABASE_LOCAL_STORAGE_URL", status.storageUrl],
+  ["SUPABASE_LOCAL_STORAGE_S3_URL", status.storageS3Url],
   ["NEXT_PUBLIC_APP_URL", existingVars.get("NEXT_PUBLIC_APP_URL") ?? "http://localhost:3000"],
   ["PORTLESS_URL", existingVars.get("PORTLESS_URL") ?? "http://localhost:3000"],
   ["CLI_JWT_SECRET", existingVars.get("CLI_JWT_SECRET") ?? randomSecret("straude-local-cli")],
@@ -68,25 +56,6 @@ const managedEntries = new Map([
   ["ANTHROPIC_API_KEY", existingVars.get("ANTHROPIC_API_KEY") ?? ""],
   ["FAL_API_KEY", existingVars.get("FAL_API_KEY") ?? ""],
 ]);
-
-const requiredKeys = [
-  "NEXT_PUBLIC_SUPABASE_URL",
-  "NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY",
-  "SUPABASE_SECRET_KEY",
-];
-
-const missingRequired = requiredKeys.filter((key) => {
-  const value = managedEntries.get(key);
-  return typeof value !== "string" || value.trim() === "";
-});
-
-if (missingRequired.length > 0) {
-  console.error(
-    `Missing required local Supabase values: ${missingRequired.join(", ")}`
-  );
-  console.error("Run `bun run local:up` and retry `bun run local:env`.");
-  process.exit(1);
-}
 
 const managedKeys = new Set(managedEntries.keys());
 const extras = [...existingVars.entries()].filter(([key]) => !managedKeys.has(key));
@@ -105,5 +74,12 @@ if (extras.length > 0) {
   }
 }
 
-writeFileSync(envPath, `${lines.join("\n")}\n`, "utf8");
+const scratch = mkdtempSync(path.join(path.dirname(envPath), ".local-env-"));
+try {
+  const temporaryFile = path.join(scratch, "env");
+  writeFileSync(temporaryFile, `${lines.join("\n")}\n`, { encoding: "utf8", mode: 0o600 });
+  renameSync(temporaryFile, envPath);
+} finally {
+  rmSync(scratch, { recursive: true, force: true });
+}
 console.log(`Wrote ${envPath}`);
