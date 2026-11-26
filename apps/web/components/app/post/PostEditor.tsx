@@ -4,6 +4,7 @@ import { useState, useRef, useEffect } from "react";
 import { useHydrated } from "@/lib/utils/useHydrated";
 import { useRouter } from "next/navigation";
 import Image from "next/image";
+import { isLocalSupabaseImage } from "@/lib/supabase/local-url";
 import { Pencil, X, Sparkles, Upload, Loader2, Trash2, ChevronLeft, ChevronRight } from "lucide-react";
 import { AlertDialog } from "@base-ui-components/react/alert-dialog";
 import { usePostHog } from "posthog-js/react";
@@ -335,6 +336,7 @@ function Editor({ post, autoEdit = false }: EditorProps) {
               >
                 <Image
                   src={url}
+                  unoptimized={isLocalSupabaseImage(url)}
                   alt=""
                   width={112}
                   height={112}

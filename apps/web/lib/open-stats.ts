@@ -1,3 +1,4 @@
+import { loopbackHttpUrl } from "@/lib/supabase/local-url";
 import { prettifyModel } from "@straude/shared/models";
 import { getServiceClient } from "@/lib/supabase/service";
 
@@ -189,11 +190,9 @@ function throwIfSupabaseError(label: string, error: SupabaseErrorLike) {
 
 function isLocalSupabaseConnectionError(error: unknown) {
   const message = error instanceof Error ? error.message : String(error);
-  return (
-    (message.includes("127.0.0.1:54321") ||
-      message.includes("localhost:54321")) &&
-    (message.includes("ECONNREFUSED") || message.includes("fetch failed"))
-  );
+  const api = loopbackHttpUrl(process.env.NEXT_PUBLIC_SUPABASE_URL);
+  return Boolean(api && message.includes(api.host)
+    && (message.includes("ECONNREFUSED") || message.includes("fetch failed")));
 }
 
 function logOpenStatsError(message: string, error: unknown) {
