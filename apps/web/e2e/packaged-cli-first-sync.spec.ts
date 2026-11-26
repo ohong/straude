@@ -3,10 +3,11 @@ import { createClient } from "@supabase/supabase-js";
 import { spawn } from "node:child_process";
 import { createHash, createHmac, randomUUID } from "node:crypto";
 import { cp, mkdir, mkdtemp, readFile, readdir, rm, writeFile } from "node:fs/promises";
-import { readFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
 import { stripVTControlCharacters } from "node:util";
+import { loadWebEnv } from "./perf/env";
+import { loopbackHttpUrl } from "../lib/supabase/local-url";
 import { ANALYTICS_BROWSER_USE, assertAnalyticsBrowser, configureAnalyticsBrowser } from "./helpers/analytics-browser";
 
 // General builds and installs the candidate once. This suite must consume those
@@ -14,17 +15,8 @@ import { ANALYTICS_BROWSER_USE, assertAnalyticsBrowser, configureAnalyticsBrowse
 const install = process.env.STRAUDE_E2E_CLI_INSTALL;
 const tarball = process.env.STRAUDE_E2E_CLI_TARBALL;
 const sourceCommit = process.env.STRAUDE_E2E_CLI_COMMIT;
-const fileEnv = (() => {
-  try {
-    return new Map(readFileSync(resolve(process.cwd(), ".env.local"), "utf8")
-      .split("\n").filter(line => line.trim() && !line.trim().startsWith("#"))
-      .map(line => {
-        const index = line.indexOf("=");
-        return [line.slice(0, index).trim(), line.slice(index + 1).trim().replace(/^"(.*)"$/, "$1")];
-      }));
-  } catch { return new Map<string, string>(); }
-})();
-const value = (key: string) => process.env[key] || fileEnv.get(key) || "";
+const fileEnv = loadWebEnv();
+const value = (key: string) => fileEnv[key] ?? "";
 const supabaseUrl = value("NEXT_PUBLIC_SUPABASE_URL");
 const secretKey = value("SUPABASE_SECRET_KEY");
 
@@ -141,8 +133,8 @@ async function signup(page: Page, request: APIRequestContext, email: string) {
   await page.getByLabel("Email", { exact: true }).fill(email);
   await page.getByRole("button", { name: "Send magic link", exact: true }).click();
   await expect(page.getByText("Check your email", { exact: true })).toBeVisible();
-  const mail = new URL(supabaseUrl);
-  mail.port = String(Number(mail.port) + 3);
+  const mail = loopbackHttpUrl(value("SUPABASE_LOCAL_MAIL_URL"));
+  if (!mail) throw new Error("Packaged CLI signup requires a loopback Mailpit URL. Run local:env first.");
   let id = "";
   await expect.poll(async () => {
     const response = await request.get(new URL(`/api/v1/search?query=${encodeURIComponent(`to:${email}`)}`, mail).href);
