@@ -37,6 +37,7 @@ const STATIC_PAGE_PATHS = new Set([
   "/terms",
   "/teams",
   "/token-rich",
+  "/usage",
   "/workspaces",
 ]);
 

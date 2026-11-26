@@ -8,6 +8,7 @@ Published CLI 0.2.3 contains the dashboard timeout/retry fix and account-specifi
 
 ### Added
 
+- **Personal Usage page at `/usage`.** Spend and tokens by tool, model and day over 7, 30 or 90-day windows, with a daily cost/token chart, totals, share breakdowns and model/day tables.
 - **Duplicate devices are detected and merged at submit time.** When a hostname match quarantines a new installation, `submit_usage_day_v2` now compares the incoming per-agent token counts with the other device's stored rows for the same date and records `overlap_dates` (identical) and `divergent_dates` (different) on the reconciliation candidate. Once a pair has two or more identical days and no differing day, it merges through the existing resolve path and the submit continues against the merged identity, so `daily_usage` counts the day once. Otherwise the candidate stays `ambiguous` with the evidence attached. An explicit `kept_separate` decision stays in force while new matching or differing evidence is shown; only a deliberate user merge can reconsider it. Only future pushes are affected; nothing is backfilled.
 
 ### Changed

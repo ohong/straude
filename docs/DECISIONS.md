@@ -1,5 +1,15 @@
 # Architecture & Design Decisions
 
+## Build the personal Usage page from per-tool daily rows (2026-11-25)
+
+**Decision:** `/usage` reads `usage_agent_daily` for the signed-in member only, through the service client after the session is verified, because that table is closed to browser roles. The server loads the last 90 days once and sends date x tool x model cells summed across devices. The 7, 30 and 90-day windows, the cost/tokens metric and the tool filter are computed in the browser from that one payload, so switching them needs no request. The window ends on today in the member's profile timezone, or on their latest stored date if a device is ahead of it.
+
+**Accounting:** Each stored row's own totals are authoritative. Whatever its model breakdown does not account for is kept in an "Unattributed" cell, so the model table always sums to the headline. Rows synced before per-tool tracking appear as an "Earlier syncs" tool; their remainder tokens count as unattributed, not as reasoning. Unattributed remainders below half a cent with no tokens stay in the totals but get no table row.
+
+**Alternatives:** `daily_usage` is readable by the member directly but has no tool dimension and only model cost, so it cannot split tokens by tool or model. A SQL aggregate per window would send less data but needs a request per control change and a second implementation of the accounting rules. A charting library was already a dependency, but a layered per-tool area chart with a shared crosshair is about 300 lines of SVG and keeps the page's script small.
+
+**Limits:** Cost by token type and cache savings are not shown: cost is stored per model, not per token type, and there is no price table. Sessions are not stored per tool, so the page counts active days. Usage is daily, so there is no hourly window. Dollar figures are API-rate estimates, not invoices.
+
 ## Compare private weekly usage with participation and coverage visible (2026-11-06)
 
 **Decision:** Use UTC Monday-start weeks for private reports. The current week ends at today; its comparison ends on the corresponding weekday of the previous week. Explicitly label the current day and week incomplete. Count people with any received day, including a recorded zero, as contributors. Show total change alongside change for people represented in both periods and counts of new/absent contributors. This avoids implying that participation growth means every person changed behavior. The same-contributor comparison can still have unequal coverage; the report says so.
