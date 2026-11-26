@@ -200,7 +200,7 @@ test("private workspace browser journey, CLI enrollment, report accuracy and rev
         data: {
           protocol_version: 2, request_id: randomUUID(), source: "cli", timezone: "America/Vancouver",
           installation: { id: installationId }, collector: { name: "ccusage", version: "20.0.26", pricing_mode: "online" },
-          entries: [{ date: today, content_hash: "0".repeat(64), agents: [agent(1, 100)] }],
+          entries: [{ date: new Intl.DateTimeFormat("en-CA", { timeZone: "America/Vancouver" }).format(new Date()), content_hash: "0".repeat(64), agents: [agent(1, 100)] }],
         },
       }), 400);
       expect(publicV2.outcomes).toMatchObject([{ status: "permanent_error", error: { code: "42501" } }]);

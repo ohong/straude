@@ -51,7 +51,7 @@ jobs:
       - name: Setup Supabase CLI
         uses: supabase/setup-cli@v3
         with:
-          version: ${{ inputs.supabase-runtime == 'legacy' && '2.75.0' || '3.4.1-beta.1' }}
+          version: ${{ inputs.supabase-runtime == 'legacy' && '2.75.0' || '3.4.0' }}
 
       - name: Place disposable container storage in memory
         if: runner.environment == 'github-hosted' && (inputs.supabase-runtime != 'native' || inputs.shard == 'native')
