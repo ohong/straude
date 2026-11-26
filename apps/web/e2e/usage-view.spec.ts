@@ -159,7 +159,7 @@ test("usage view aggregates spend and tokens by tool, model and day", { tag: "@c
     await expect(hero).toHaveText("35.5k");
     await expect(page).toHaveURL(/range=90&metric=tokens/);
 
-    await page.getByLabel("Tool").selectOption("codex");
+    await page.getByRole("combobox", { name: "Tool", exact: true }).selectOption("codex");
     await expect(hero).toHaveText("25.0k");
 
     await page.getByRole("button", { name: "Day", exact: true }).click();
