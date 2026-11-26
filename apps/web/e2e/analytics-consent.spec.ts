@@ -3,6 +3,7 @@ import { expect, test, type Page, type TestInfo } from "@playwright/test";
 import { createHash, randomUUID } from "node:crypto";
 import { gunzipSync } from "node:zlib";
 import { ANALYTICS_BROWSER_USE, assertAnalyticsBrowser, configureAnalyticsBrowser } from "./helpers/analytics-browser";
+import { loadWebEnv } from "./perf/env";
 
 /**
  * Requires the real loopback app/Auth/database/mail stack, built with the
@@ -11,11 +12,12 @@ import { ANALYTICS_BROWSER_USE, assertAnalyticsBrowser, configureAnalyticsBrowse
  * API usage below is a handcrafted protocol fixture. The separate packaged CLI
  * journey supplies installed-collector proof; this suite isolates consent.
  */
-const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL ?? "";
-const publishableKey = process.env.NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY ?? "";
-const secretKey = process.env.SUPABASE_SECRET_KEY ?? "";
-const mailUrl = process.env.SUPABASE_LOCAL_MAIL_URL ?? "";
-const receiverUrl = process.env.ACTIVATION_CAPTURE_URL ?? "http://127.0.0.1:3118";
+const env = loadWebEnv();
+const supabaseUrl = env.NEXT_PUBLIC_SUPABASE_URL ?? "";
+const publishableKey = env.NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY ?? "";
+const secretKey = env.SUPABASE_SECRET_KEY ?? "";
+const mailUrl = env.SUPABASE_LOCAL_MAIL_URL ?? "";
+const receiverUrl = env.ACTIVATION_CAPTURE_URL ?? "http://127.0.0.1:3118";
 const lifecycleEvents = ["signup_completed", "first_sync_confirmed", "activation_completed"];
 type EventReceipt = {
   event: string;

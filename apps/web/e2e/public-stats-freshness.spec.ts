@@ -2,13 +2,15 @@ import { test, expect, type Page, type TestInfo } from "@playwright/test";
 import { createClient } from "@supabase/supabase-js";
 import { Client } from "pg";
 import { randomUUID } from "node:crypto";
+import { loadWebEnv } from "./perf/env";
 
 // This suite changes the global LOCAL snapshot. Run with an exclusive DB lease,
 // never alongside integration tests (their helpers truncate application tables).
-const dbUrl = process.env.SUPABASE_TEST_DB_URL ?? "";
-const apiUrl = process.env.NEXT_PUBLIC_SUPABASE_URL ?? "";
-const secretKey = process.env.SUPABASE_SECRET_KEY ?? "";
-const cronSecret = process.env.CRON_SECRET ?? "";
+const env = loadWebEnv();
+const dbUrl = env.SUPABASE_TEST_DB_URL ?? "";
+const apiUrl = env.NEXT_PUBLIC_SUPABASE_URL ?? "";
+const secretKey = env.SUPABASE_SECRET_KEY ?? "";
+const cronSecret = env.CRON_SECRET ?? "";
 const seedPrefix = "a0000000-0000-4000-8000-";
 const faultFunction = "public.stats_e2e_reject_snapshot_write";
 const faultTrigger = "stats_e2e_reject_snapshot_write";
