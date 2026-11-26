@@ -1,4 +1,4 @@
-import { mkdirSync, mkdtempSync, renameSync, rmSync, symlinkSync, writeFileSync } from "node:fs";
+import { lstatSync, mkdirSync, mkdtempSync, renameSync, rmSync, symlinkSync, writeFileSync } from "node:fs";
 import path from "node:path";
 
 const root = path.resolve(import.meta.dir, "..");
@@ -18,6 +18,11 @@ if (!(configure && (validRuntime || noArguments))
   && !(["down", "reset"].includes(action) && noArguments)) {
   console.error("Usage: bun run local:stack:{setup,up} [--runtime auto|docker|podman|native]");
   console.error("       bun run local:stack:{down,reset} | bun run local:stack:status [--env]");
+  process.exit(1);
+}
+
+if (action === "setup" && lstatSync(path.join(root, "apps", "web", ".env.local"), { throwIfNoEntry: false })?.isSymbolicLink()) {
+  console.error("Replace the apps/web/.env.local symlink with a worktree-local file before setup.");
   process.exit(1);
 }
 
@@ -69,7 +74,7 @@ function cli(command, { capture = false, format = "text" } = {}) {
   );
   if (result.error) throw result.error;
   if (result.exitCode !== 0) {
-    if (capture) process.stderr.write(result.stdout);
+    console.error(`Supabase ${command.slice(0, 2).join(" ")} failed with exit status ${result.exitCode}.`);
     process.exit(result.exitCode || 1);
   }
   return result.stdout?.toString();
