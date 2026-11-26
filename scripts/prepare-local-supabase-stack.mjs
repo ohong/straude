@@ -1,4 +1,4 @@
-import { mkdirSync, mkdtempSync, renameSync, rmSync, symlinkSync, writeFileSync } from "node:fs";
+import { mkdirSync, mkdtempSync, realpathSync, renameSync, rmSync, symlinkSync, writeFileSync } from "node:fs";
 import path from "node:path";
 
 const source = path.resolve(import.meta.dir, "..", "supabase");
@@ -22,7 +22,7 @@ export async function prepareLocalStack(workdir) {
   mkdirSync(target, { recursive: true });
   for (const name of ["migrations", "seed.sql"]) {
     try {
-      symlinkSync(path.relative(target, path.join(source, name)), path.join(target, name));
+      symlinkSync(path.relative(realpathSync(target), path.join(source, name)), path.join(target, name));
     } catch (error) {
       if (error.code !== "EEXIST") throw error;
     }
