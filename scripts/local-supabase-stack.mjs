@@ -1,10 +1,10 @@
-import { lstatSync, mkdirSync, mkdtempSync, renameSync, rmSync, symlinkSync, writeFileSync } from "node:fs";
+import { lstatSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import path from "node:path";
+import { prepareLocalStack } from "./prepare-local-supabase-stack.mjs";
 
 const root = path.resolve(import.meta.dir, "..");
 const source = path.join(root, "supabase");
 const workdir = path.join(source, ".temp", "worktree-stack");
-const target = path.join(workdir, "supabase");
 
 const [action, ...args] = process.argv.slice(2);
 const configure = action === "up" || action === "setup";
@@ -26,39 +26,7 @@ if (action === "setup" && lstatSync(path.join(root, "apps", "web", ".env.local")
   process.exit(1);
 }
 
-if (configure) {
-  const config = Bun.TOML.parse(await Bun.file(path.join(source, "config.toml")).text());
-  config.local_smtp = config.inbucket;
-  delete config.inbucket;
-  delete config.api.tls;
-  delete config.experimental;
-  delete config.edge_runtime.deno_version;
-  delete config.edge_runtime.inspector_port;
-  delete config.db.shadow_port;
-  delete config.studio.api_url;
-  delete config.studio.openai_api_key;
-  for (const service of [config.api, config.db, config.db.pooler, config.studio, config.local_smtp, config.analytics]) {
-    delete service.port;
-  }
-
-  mkdirSync(target, { recursive: true });
-  for (const name of ["migrations", "seed.sql"]) {
-    try {
-      symlinkSync(path.relative(target, path.join(source, name)), path.join(target, name));
-    } catch (error) {
-      if (error.code !== "EEXIST") throw error;
-    }
-  }
-
-  const scratch = mkdtempSync(path.join(target, ".config-"));
-  try {
-    const configPath = path.join(scratch, "config.jsonc");
-    writeFileSync(configPath, JSON.stringify(config, null, 2) + "\n");
-    renameSync(configPath, path.join(target, "config.jsonc"));
-  } finally {
-    rmSync(scratch, { recursive: true, force: true });
-  }
-}
+if (configure) await prepareLocalStack(workdir);
 
 const env = Object.fromEntries(
   Object.entries(process.env).filter(([key]) =>
