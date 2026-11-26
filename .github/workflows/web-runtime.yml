@@ -128,11 +128,11 @@ jobs:
           names = ["NEXT_PUBLIC_SUPABASE_URL", "NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY",
                    "SUPABASE_SECRET_KEY", "CLI_JWT_SECRET", "CRON_SECRET", "NEXT_PUBLIC_APP_URL",
                    "SUPABASE_TEST_API_URL", "SUPABASE_TEST_DB_URL", "SUPABASE_LOCAL_MAIL_URL",
-                   "SUPABASE_LOCAL_STORAGE_URL"]
+                   "SUPABASE_LOCAL_STORAGE_URL", "SUPABASE_LOCAL_STORAGE_S3_URL"]
           with open(os.environ["GITHUB_ENV"], "a") as output:
               for name in names:
                   if name in values:
-                      if name in {"SUPABASE_SECRET_KEY", "CLI_JWT_SECRET", "CRON_SECRET"}:
+                      if name in {"SUPABASE_SECRET_KEY", "CLI_JWT_SECRET", "CRON_SECRET", "SUPABASE_TEST_DB_URL"}:
                           print(f"::add-mask::{values[name]}")
                       output.write(f"{name}={values[name]}\n")
           PY
