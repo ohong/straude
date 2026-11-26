@@ -31,6 +31,12 @@ jobs:
       POSTHOG_HOST: http://127.0.0.1:3118
 
     steps:
+      - name: Validate benchmark inputs
+        if: (inputs.supabase-runtime != 'legacy' && !inputs.benchmark) || !contains(fromJSON('["legacy","docker","native"]'), inputs.supabase-runtime)
+        run: |
+          echo "::error::Select legacy for normal CI or enable benchmarking for an experimental runtime."
+          exit 1
+
       - uses: actions/checkout@v7
 
       - uses: oven-sh/setup-bun@v2
