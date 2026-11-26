@@ -114,10 +114,13 @@ export function UsageView({
 
   const end = data?.end;
   const start = end === undefined ? "" : windowStart(end, windowDays);
-  const summary =
-    data && end !== undefined
-      ? summarizeUsage(data.rows, { start, end, metric, tool })
-      : null;
+  const summary = useMemo(
+    () =>
+      data && end !== undefined
+        ? summarizeUsage(data.rows, { start, end, metric, tool })
+        : null,
+    [data, end, start, metric, tool],
+  );
 
   const formatValue =
     metric === "cost"
@@ -275,7 +278,7 @@ export function UsageView({
                 </dl>
               </section>
 
-              {summary.totalTokens > 0 ? (
+              {summary.cost > 0 || summary.totalTokens > 0 ? (
                 <section className="grid gap-x-12 gap-y-8 @3xl:grid-cols-2">
                   <UsageShareBar
                     label={

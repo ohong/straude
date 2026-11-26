@@ -40,7 +40,10 @@ export default async function UsageRoutePage({
   ]);
 
   const usage = await loadUsageView(db, identity.id, profile?.timezone).catch(
-    () => null,
+    (error) => {
+      console.error("[usage] Failed to load usage view:", error);
+      return null;
+    },
   );
 
   return (

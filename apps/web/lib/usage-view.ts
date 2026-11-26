@@ -113,6 +113,7 @@ export function buildUsageViewRows(records: readonly AgentDailyRecord[]): UsageV
     let remainingCost = count(record.cost_usd);
 
     for (const entry of record.model_breakdown ?? []) {
+      if (!entry || typeof entry !== "object") continue;
       const model = typeof entry.model === "string" ? entry.model : "";
       if (model === "") continue;
       const tokens = readTokens(entry, legacy);
@@ -259,7 +260,7 @@ export function summarizeUsage(
         costShare: share(totals.cost, cost),
         tokenShare: share(totals.totalTokens, allTokens),
       }))
-      .sort((a, b) => byMetric(a, b) || a.model.localeCompare(b.model)),
+      .sort((a, b) => byMetric(a, b) || a.model.localeCompare(b.model) || a.tool.localeCompare(b.tool)),
     days: [...days.values()],
   };
 }

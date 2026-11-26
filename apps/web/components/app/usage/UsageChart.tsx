@@ -410,7 +410,7 @@ function UsageChartPlot({
         aria-hidden
       >
         {children}
-        {hoverIndex === null ? null : (
+        {hoverIndex === null || hoveredPeriod === undefined ? null : (
           <line
             x1={periods.length < 2 ? VIEW_WIDTH / 2 : hoverIndex * stepX}
             x2={periods.length < 2 ? VIEW_WIDTH / 2 : hoverIndex * stepX}
@@ -452,12 +452,14 @@ function UsageChartPlot({
               </span>
             </div>
           ))}
-          <div className="mt-1 flex items-center justify-between gap-3 border-t border-border pt-1">
-            <span className="text-muted">Total</span>
-            <span className="tabular-nums text-foreground">
-              {formatValue(hoveredColumn?.total ?? 0)}
-            </span>
-          </div>
+          {tools.length !== 1 ? (
+            <div className="mt-1 flex items-center justify-between gap-3 border-t border-border pt-1">
+              <span className="text-muted">Total</span>
+              <span className="tabular-nums text-foreground">
+                {formatValue(hoveredColumn?.total ?? 0)}
+              </span>
+            </div>
+          ) : null}
         </div>
       )}
     </div>
