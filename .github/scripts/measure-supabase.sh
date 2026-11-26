@@ -39,23 +39,36 @@ case "$API_URL" in
   *) exit 2 ;;
 esac
 
-probe() {
-  local service=$1 path=$2 filter=$3 ready
-  if curl --fail --silent --show-error --max-time 90 \
+request() {
+  curl --fail --silent --show-error --max-time 90 \
     --header "apikey: $SERVICE_ROLE_KEY" \
-    --header "Authorization: Bearer $SERVICE_ROLE_KEY" \
-    "$API_URL/$path" | jq -e "$filter" >/dev/null; then
-    ready=$(date +%s%3N)
-    echo "supabase_ready mode=$runtime cache=$phase service=$service duration_ms=$((ready - begin))"
-  else
-    echo "::error::$service readiness request failed ($runtime, $phase)"
-    return 1
-  fi
+    --header "Authorization: Bearer $SERVICE_ROLE_KEY" "$@"
 }
 
-probe auth 'auth/v1/admin/users?page=1&per_page=1' '.users | type == "array"' &
+auth_probe() {
+  local email password
+  email="benchmark-$(openssl rand -hex 12)@example.test"
+  password=$(openssl rand -hex 18)
+  request --json "$(jq -cn --arg email "$email" --arg password "$password" \
+    '{email:$email,password:$password,email_confirm:true}')" \
+    "$API_URL/auth/v1/admin/users" | jq -e '.id | type == "string"' >/dev/null
+  request --json "$(jq -cn --arg email "$email" --arg password "$password" \
+    '{email:$email,password:$password}')" \
+    "$API_URL/auth/v1/token?grant_type=password" | jq -e '.access_token | type == "string"' >/dev/null
+  echo "supabase_ready mode=$runtime cache=$phase service=auth duration_ms=$(($(date +%s%3N) - begin))"
+}
+
+storage_probe() {
+  local object="$API_URL/storage/v1/object/avatars/benchmark-$(openssl rand -hex 12).png"
+  local png=iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+aZ1kAAAAASUVORK5CYII=
+  printf '%s' "$png" | base64 -d | request -H 'content-type: image/png' --data-binary @- "$object" > /dev/null
+  test "$(request "$object" | base64 -w0)" = "$png"
+  echo "supabase_ready mode=$runtime cache=$phase service=storage duration_ms=$(($(date +%s%3N) - begin))"
+}
+
+auth_probe &
 auth_pid=$!
-probe storage 'storage/v1/bucket' 'type == "array" and any(.[]; .id == "avatars")' &
+storage_probe &
 storage_pid=$!
 result=0
 wait "$auth_pid" || result=1
