@@ -2,13 +2,18 @@ name: Runtime benchmark
 
 on:
   push:
-    branches: [oh-ci-runtime-bench]
+    branches:
+      - oh-ci-runtime-bench
+      - oh-ci-runtime-bench-legacy
+      - oh-ci-runtime-bench-docker
+      - oh-ci-runtime-bench-native
 
 permissions:
   contents: read
 
 jobs:
   startup:
+    if: github.ref_name == 'oh-ci-runtime-bench'
     runs-on: ubuntu-24.04
     strategy:
       fail-fast: false
@@ -22,37 +27,21 @@ jobs:
       - uses: supabase/setup-cli@v3
         with:
           version: ${{ matrix.runtime == 'legacy' && '2.75.0' || '3.4.1-beta.1' }}
-      - name: Start disposable Supabase
+      - name: Prepare experimental configuration
+        if: matrix.runtime != 'legacy'
+        run: bun .github/scripts/prepare-experimental-supabase.ts
+      - name: Measure cold stack startup and readiness
         env:
           RUNTIME: ${{ matrix.runtime }}
-        run: |
-          set -euo pipefail
-          case "$RUNTIME" in
-            legacy)
-              time supabase start --exclude studio,postgres-meta,logflare,vector,edge-runtime >/dev/null
-              supabase status -o env > "$RUNNER_TEMP/supabase.env"
-              ;;
-            docker|native)
-              export SUPABASE_EXPERIMENTAL_STACK=1
-              bun -e '
-                import { readFileSync, writeFileSync, unlinkSync } from "node:fs";
-                const path = "supabase/config.toml";
-                const config = Bun.TOML.parse(readFileSync(path, "utf8"));
-                config.local_smtp = config.inbucket;
-                delete config.inbucket;
-                delete config.api.tls;
-                delete config.edge_runtime.deno_version;
-                delete config.experimental;
-                delete config.studio.api_url;
-                delete config.studio.openai_api_key;
-                for (const section of [config.api, config.db, config.studio, config.local_smtp]) {
-                  delete section.port;
-                }
-                writeFileSync("supabase/config.jsonc", JSON.stringify(config), "utf8");
-                unlinkSync(path);
-              '
-              time supabase start --runtime "$RUNTIME" --exclude studio,analytics,functions >/dev/null
-              supabase status --env --output-format text > "$RUNNER_TEMP/supabase.env"
-              ;;
-          esac
-          sed -En 's/^([A-Z_]+)=.*/\1/p' "$RUNNER_TEMP/supabase.env"
+        run: .github/scripts/measure-supabase.sh "$RUNTIME" cold
+      - name: Measure startup and readiness with cached artifacts
+        env:
+          RUNTIME: ${{ matrix.runtime }}
+        run: .github/scripts/measure-supabase.sh "$RUNTIME" warm
+
+  full:
+    if: github.ref_name != 'oh-ci-runtime-bench'
+    uses: ./.github/workflows/ci.yml
+    with:
+      benchmark: true
+      supabase-runtime: ${{ endsWith(github.ref_name, '-legacy') && 'legacy' || endsWith(github.ref_name, '-docker') && 'docker' || 'native' }}

@@ -6,6 +6,12 @@ on:
       shard:
         type: string
         required: true
+      supabase-runtime:
+        type: string
+        default: legacy
+      benchmark:
+        type: boolean
+        default: false
 
     outputs:
       package-sha:
@@ -18,7 +24,7 @@ jobs:
       package-sha: ${{ steps.native-package.outputs.sha }}
     runs-on: ubuntu-24.04
     env:
-      BROWSER_SUITE: ${{ github.event_name == 'pull_request' && !contains(github.event.pull_request.labels.*.name, 'ci:full-browser') && 'core' || 'full' }}
+      BROWSER_SUITE: ${{ !inputs.benchmark && github.event_name == 'pull_request' && !contains(github.event.pull_request.labels.*.name, 'ci:full-browser') && 'core' || 'full' }}
       BROWSER_SHARD: ${{ inputs.shard }}
       NEXT_PUBLIC_POSTHOG_KEY: phc_local_runtime_evidence
       POSTHOG_API_KEY: phc_local_runtime_evidence
@@ -45,10 +51,10 @@ jobs:
       - name: Setup Supabase CLI
         uses: supabase/setup-cli@v3
         with:
-          version: 2.75.0
+          version: ${{ inputs.supabase-runtime == 'legacy' && '2.75.0' || '3.4.1-beta.1' }}
 
       - name: Place disposable container storage in memory
-        if: runner.environment == 'github-hosted'
+        if: runner.environment == 'github-hosted' && (inputs.supabase-runtime != 'native' || inputs.shard == 'native')
         shell: bash
         run: |
           set -euo pipefail
@@ -72,9 +78,18 @@ jobs:
         shell: bash
         env:
           BUN_INSTALL_CACHE_DIR: ~/.bun/install/cache
+          SUPABASE_RUNTIME: ${{ inputs.supabase-runtime }}
+          SUPABASE_BENCHMARK: ${{ inputs.benchmark }}
         run: |
           set -euo pipefail
-          supabase start --exclude studio,postgres-meta,logflare,vector,edge-runtime &
+          if [[ "$SUPABASE_BENCHMARK" == true ]]; then
+            if [[ "$SUPABASE_RUNTIME" != legacy ]]; then
+              bun .github/scripts/prepare-experimental-supabase.ts
+            fi
+            .github/scripts/measure-supabase.sh "$SUPABASE_RUNTIME" cold &
+          else
+            supabase start --exclude studio,postgres-meta,logflare,vector,edge-runtime &
+          fi
           pids=($!)
           if [[ "$BROWSER_SHARD" == native ]]; then
             docker pull node:22-bookworm-slim &
@@ -93,8 +108,14 @@ jobs:
           exit "$status"
 
       - name: Configure web for local Supabase
+        env:
+          SUPABASE_BENCHMARK: ${{ inputs.benchmark }}
         run: |
-          bun run local:env
+          if [[ "$SUPABASE_BENCHMARK" == true ]]; then
+            bun run local:env --status-file "$RUNNER_TEMP/supabase.env"
+          else
+            bun run local:env
+          fi
           # Browser test processes need the same disposable fixture settings as
           # Next.js. Copy only this local setup's required keys without logging them.
           python3 - <<'PY'
@@ -108,7 +129,9 @@ jobs:
                   values[key.strip()] = value.strip().strip('"').strip("'")
           assert urlparse(values["NEXT_PUBLIC_SUPABASE_URL"]).hostname in {"localhost", "127.0.0.1"}
           names = ["NEXT_PUBLIC_SUPABASE_URL", "NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY",
-                   "SUPABASE_SECRET_KEY", "CLI_JWT_SECRET", "CRON_SECRET", "NEXT_PUBLIC_APP_URL"]
+                   "SUPABASE_SECRET_KEY", "CLI_JWT_SECRET", "CRON_SECRET", "NEXT_PUBLIC_APP_URL",
+                   "SUPABASE_TEST_API_URL", "SUPABASE_TEST_DB_URL", "SUPABASE_LOCAL_MAIL_URL",
+                   "SUPABASE_LOCAL_STORAGE_URL"]
           with open(os.environ["GITHUB_ENV"], "a") as output:
               for name in names:
                   if name in values:
