@@ -1,6 +1,7 @@
 "use client";
 
 import Image from "next/image";
+import { isLocalSupabaseImage } from "@/lib/supabase/local-url";
 import { FileText, Loader2, X } from "lucide-react";
 import { cn } from "@/lib/utils/cn";
 import { timeAgo } from "@/lib/utils/format";
@@ -78,6 +79,7 @@ export function MessageBubble({
               >
                 <Image
                   src={attachment.url}
+                  unoptimized={isLocalSupabaseImage(attachment.url)}
                   alt={attachment.name}
                   width={96}
                   height={96}
@@ -215,6 +217,7 @@ export function MessageImageLightbox({
       >
         <Image
           src={imageUrl}
+          unoptimized={isLocalSupabaseImage(imageUrl)}
           alt=""
           fill
           className="object-contain"

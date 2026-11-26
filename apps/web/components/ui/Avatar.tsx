@@ -1,4 +1,5 @@
 import Image from "next/image";
+import { isLocalSupabaseImage } from "@/lib/supabase/local-url";
 import { cn } from "@/lib/utils/cn";
 import { getInitials } from "@/lib/utils/format";
 
@@ -40,6 +41,7 @@ export function Avatar({ src, alt = "", size = "md", fallback, className }: Avat
     return (
       <Image
         src={src}
+        unoptimized={isLocalSupabaseImage(src)}
         alt={alt}
         width={px}
         height={px}

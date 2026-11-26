@@ -9,6 +9,14 @@ The root [`.env.example`](../.env.example) is the canonical list of repo-wide
 secrets and hosted integrations. For local Supabase workflows, `bun run local:env`
 writes the managed keys directly into `apps/web/.env.local`.
 
+Set up a disposable stack, then run `bun run local:env` to write its endpoints into
+`apps/web/.env.local`. Pass `--status-file <path>` to use saved CLI status output
+from a different local stack. Use `--output <path>` to write a separate env file.
+The writer accepts regular files and rejects symlinks so one worktree cannot
+overwrite another worktree's environment. For integration tests that supply
+custom endpoints explicitly, supply both `SUPABASE_TEST_API_URL` (or
+`NEXT_PUBLIC_SUPABASE_URL`) and `SUPABASE_TEST_DB_URL` from the same stack.
+
 ## Prerequisites
 
 - Docker Desktop running
