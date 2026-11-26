@@ -194,13 +194,15 @@ test("private workspace browser journey, CLI enrollment, report accuracy and rev
     // An older client can label post-consent UTC usage with the previous local
     // date. Block public writes for enrolled identities even before start_date,
     // including the legacy config identity, while preserving stored personal history.
+    const timezone = "America/Vancouver";
+    const localToday = new Intl.DateTimeFormat("en-CA", { timeZone: timezone }).format(new Date());
     for (const installationId of [marker.installation_id, legacyDeviceId]) {
       const publicV2 = await json(await member.context.request.post("/api/usage/submit", {
         headers: { Authorization: `Bearer ${authorization.token}` },
         data: {
-          protocol_version: 2, request_id: randomUUID(), source: "cli", timezone: "America/Vancouver",
+          protocol_version: 2, request_id: randomUUID(), source: "cli", timezone,
           installation: { id: installationId }, collector: { name: "ccusage", version: "20.0.26", pricing_mode: "online" },
-          entries: [{ date: new Intl.DateTimeFormat("en-CA", { timeZone: "America/Vancouver" }).format(new Date()), content_hash: "0".repeat(64), agents: [agent(1, 100)] }],
+          entries: [{ date: localToday, content_hash: "0".repeat(64), agents: [agent(1, 100)] }],
         },
       }), 400);
       expect(publicV2.outcomes).toMatchObject([{ status: "permanent_error", error: { code: "42501" } }]);
