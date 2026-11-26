@@ -1,0 +1,38 @@
+name: Runtime benchmark
+
+on:
+  push:
+    branches: [oh-ci-runtime-bench]
+
+permissions:
+  contents: read
+
+jobs:
+  startup:
+    runs-on: ubuntu-24.04
+    strategy:
+      fail-fast: false
+      matrix:
+        runtime: [legacy, docker, native]
+    steps:
+      - uses: actions/checkout@v7
+      - uses: supabase/setup-cli@v3
+        with:
+          version: ${{ matrix.runtime == 'legacy' && '2.75.0' || '3.4.0' }}
+      - name: Start disposable Supabase
+        env:
+          RUNTIME: ${{ matrix.runtime }}
+        run: |
+          set -euo pipefail
+          case "$RUNTIME" in
+            legacy)
+              time supabase start --exclude studio,postgres-meta,logflare,vector,edge-runtime >/dev/null
+              supabase status -o env > "$RUNNER_TEMP/supabase.env"
+              ;;
+            docker|native)
+              export SUPABASE_EXPERIMENTAL_STACK=1
+              time supabase start --runtime "$RUNTIME" >/dev/null
+              supabase status --env --output-format text > "$RUNNER_TEMP/supabase.env"
+              ;;
+          esac
+          sed -En 's/^([A-Z_]+)=.*/\1/p' "$RUNNER_TEMP/supabase.env"
